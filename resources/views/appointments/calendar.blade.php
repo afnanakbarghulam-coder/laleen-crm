@@ -142,16 +142,87 @@
     }
 
     .cal-filter-panel {
-        min-width: 260px;
-        padding: 14px;
+        width: 290px;
+        padding: 16px;
+        border: 1px solid var(--cal-border);
+        border-radius: 14px;
+        box-shadow: 0 12px 32px rgba(16, 24, 40, .12);
     }
 
-    .cal-filter-panel label {
-        font-size: 11.5px;
+    .cal-filter-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--cal-ink);
+        margin-bottom: 14px;
+    }
+
+    .cal-filter-field {
+        margin-bottom: 14px;
+    }
+
+    .cal-filter-field:last-of-type {
+        margin-bottom: 0;
+    }
+
+    .cal-filter-field label {
+        display: block;
+        font-size: 11px;
         font-weight: 700;
         text-transform: uppercase;
         color: #98a2b3;
-        letter-spacing: .03em;
+        letter-spacing: .04em;
+        margin-bottom: 6px;
+    }
+
+    .cal-filter-select {
+        width: 100%;
+        height: 38px;
+        border: 1px solid var(--cal-border-strong);
+        border-radius: 9px;
+        padding: 0 12px;
+        font-size: 13.5px;
+        font-weight: 600;
+        color: var(--cal-ink);
+        background-color: #fff;
+        transition: all .15s ease;
+    }
+
+    .cal-filter-select:hover {
+        border-color: #c8ced8;
+    }
+
+    .cal-filter-select:focus {
+        outline: none;
+        border-color: var(--cal-today);
+        box-shadow: 0 0 0 3px rgba(63, 140, 255, .15);
+    }
+
+    .cal-filter-footer {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 16px;
+        padding-top: 12px;
+        border-top: 1px solid var(--cal-border);
+    }
+
+    .cal-filter-clear {
+        border: none;
+        background: transparent;
+        font-size: 12.5px;
+        font-weight: 700;
+        color: var(--cal-today);
+        padding: 5px 8px;
+        border-radius: 6px;
+        transition: all .15s ease;
+    }
+
+    .cal-filter-clear:hover:not(:disabled) {
+        background: rgba(63, 140, 255, .08);
+    }
+
+    .cal-filter-clear:disabled {
+        color: #c0c5cf;
+        cursor: default;
     }
 
     .cal-filter-badge {
@@ -955,21 +1026,31 @@
                         <span class="cal-filter-badge d-none" id="filterBadge">0</span>
                     </button>
                     <div class="dropdown-menu dropdown-menu-end cal-filter-panel">
-                        <label class="d-block mb-1">Location</label>
-                        <select id="filterBranch" class="form-select form-select-sm mb-3">
-                            <option value="">All Locations</option>
-                            <option value="old_airport">Old Airport</option>
-                            <option value="wakrah">Al Wakrah</option>
-                            <option value="home_service">Home Service</option>
-                        </select>
+                        <div class="cal-filter-title">Filters</div>
 
-                        <label class="d-block mb-1">Team Member</label>
-                        <select id="filterStaff" class="form-select form-select-sm">
-                            <option value="">All Team Members</option>
-                            @foreach ($staffs as $staff)
-                                <option value="{{ $staff->id }}">{{ $staff->name }}</option>
-                            @endforeach
-                        </select>
+                        <div class="cal-filter-field">
+                            <label for="filterBranch">Location</label>
+                            <select id="filterBranch" class="cal-filter-select">
+                                <option value="">All Locations</option>
+                                <option value="old_airport">Old Airport</option>
+                                <option value="wakrah">Al Wakrah</option>
+                                <option value="home_service">Home Service</option>
+                            </select>
+                        </div>
+
+                        <div class="cal-filter-field">
+                            <label for="filterStaff">Team Member</label>
+                            <select id="filterStaff" class="cal-filter-select">
+                                <option value="">All Team Members</option>
+                                @foreach ($staffs as $staff)
+                                    <option value="{{ $staff->id }}">{{ $staff->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="cal-filter-footer">
+                            <button type="button" class="cal-filter-clear" id="filterClearBtn">Clear filters</button>
+                        </div>
                     </div>
                 </div>
 
@@ -1261,6 +1342,7 @@
             const badge = document.getElementById('filterBadge');
             badge.textContent = activeFilters;
             badge.classList.toggle('d-none', activeFilters === 0);
+            document.getElementById('filterClearBtn').disabled = activeFilters === 0;
 
             document.getElementById('zoomControl').style.display = (state.view === 'month') ? 'none' : 'inline-flex';
             document.getElementById('blockDate').value = state.date;
@@ -1631,6 +1713,13 @@
         });
         document.getElementById('filterStaff').addEventListener('change', function() {
             state.staff_id = this.value;
+            saveFilters();
+            syncToolbar();
+            loadCalendar();
+        });
+        document.getElementById('filterClearBtn').addEventListener('click', function() {
+            state.branch = '';
+            state.staff_id = '';
             saveFilters();
             syncToolbar();
             loadCalendar();
