@@ -50,7 +50,7 @@
          <li class="menu-item {{ request()->routeIs('appointments.revenue.*') ? 'active' : '' }}">
              <a href="{{ route('appointments.revenue.index') }}" class="menu-link">
                  <i class="menu-icon tf-icons bx bx-money"></i>
-                 <div class="text-truncate" data-i18n="Tables">Revenue Report</div>
+                 <div class="text-truncate" data-i18n="Tables">Finance</div>
              </a>
          </li>
 
@@ -215,7 +215,7 @@
          <li class="menu-item {{ request()->routeIs('appointments.revenue.*') ? 'active' : '' }}">
              <a href="{{ route('appointments.revenue.index') }}" class="menu-link">
                  <i class="bx bx-money me-2"></i>
-                 <div>Revenue Report</div>
+                 <div>Finance</div>
              </a>
          </li>
 

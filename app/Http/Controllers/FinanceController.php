@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Expense;
 use App\Models\Sale;
 use App\Models\SalePayment;
+use App\Models\Staff;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
@@ -13,7 +14,6 @@ class FinanceController extends Controller
     const BRANCHES = [
         'old_airport' => 'Old Airport',
         'wakrah' => 'Al Wakrah',
-        'home_service' => 'Home Service',
     ];
 
     public function index(Request $request)
@@ -34,15 +34,26 @@ class FinanceController extends Controller
             ? $request->branch
             : null;
 
+        $staffId = $request->filled('staff_id') && Staff::whereKey($request->staff_id)->exists()
+            ? (int) $request->staff_id
+            : null;
+
         $salesQuery = Sale::with(['customer', 'staff', 'payments', 'items'])
             ->whereBetween('created_at', [$from, $to]);
+
+        if ($branch) {
+            $salesQuery->where('branch', $branch);
+        }
+
+        if ($staffId) {
+            $salesQuery->where('staff_id', $staffId);
+        }
 
         $expensesQuery = Expense::with('creator')
             ->whereDate('expense_date', '>=', $from->toDateString())
             ->whereDate('expense_date', '<=', $to->toDateString());
 
         if ($branch) {
-            $salesQuery->where('branch', $branch);
             $expensesQuery->where('branch', $branch);
         }
 
@@ -71,6 +82,8 @@ class FinanceController extends Controller
             'to' => $to,
             'branch' => $branch,
             'branches' => self::BRANCHES,
+            'staffId' => $staffId,
+            'staffList' => Staff::orderBy('name')->get(['id', 'name']),
             'expenseCategories' => Expense::CATEGORIES,
             'sales' => $sales,
             'expenses' => $expenses,
@@ -93,7 +106,7 @@ class FinanceController extends Controller
     public function storeExpense(Request $request)
     {
         $validated = $request->validate([
-            'branch' => 'nullable|in:old_airport,wakrah,home_service',
+            'branch' => 'nullable|in:old_airport,wakrah',
             'category' => 'required|string|max:100',
             'amount' => 'required|numeric|min:0.01',
             'expense_date' => 'required|date',

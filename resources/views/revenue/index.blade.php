@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Financial Reports')
+@section('title', 'Finance')
 
 <style>
     :root {
@@ -300,8 +300,18 @@
 
     <div class="fin-header">
         <div>
-            <h4>Financial Reports &amp; P&amp;L</h4>
+            <h4>Finance</h4>
             <p>Live profit &amp; loss, revenue trends and expense tracking across your branches.</p>
+            @if ($branch || $staffId)
+                <div class="mt-1">
+                    @if ($branch)
+                        <span class="fin-pay-chip">Branch: {{ $branches[$branch] }}</span>
+                    @endif
+                    @if ($staffId)
+                        <span class="fin-pay-chip">Staff: {{ $staffList->firstWhere('id', $staffId)?->name }}</span>
+                    @endif
+                </div>
+            @endif
         </div>
         <button type="button" class="btn btn-primary fin-apply-btn" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
             <i class="bx bx-plus me-1"></i> Add Expense
@@ -335,8 +345,15 @@
                     @endforeach
                 </select>
 
+                <select name="staff_id" class="fin-branch-select">
+                    <option value="">All Staff</option>
+                    @foreach ($staffList as $staffMember)
+                        <option value="{{ $staffMember->id }}" {{ $staffId === $staffMember->id ? 'selected' : '' }}>{{ $staffMember->name }}</option>
+                    @endforeach
+                </select>
+
                 <button type="submit" class="btn btn-primary fin-apply-btn">Apply</button>
-                @if ($branch || request()->hasAny(['from', 'to']))
+                @if ($branch || $staffId || request()->hasAny(['from', 'to']))
                     <a href="{{ route('appointments.revenue.index') }}" class="btn btn-outline-secondary fin-apply-btn">Reset</a>
                 @endif
             </div>
@@ -528,6 +545,20 @@
             <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
                 <i class="bx bx-plus"></i> Add Expense
             </button>
+        </div>
+        <div class="px-3 py-3 border-bottom d-flex flex-wrap align-items-center gap-2" style="background:#f8f9fb;">
+            <form method="GET" action="{{ route('appointments.revenue.index') }}" class="d-flex flex-wrap align-items-center gap-2">
+                <input type="hidden" name="branch" value="{{ $branch }}">
+                <input type="hidden" name="staff_id" value="{{ $staffId }}">
+                <span class="text-muted small fw-semibold">Check total expenses between</span>
+                <input type="date" name="from" class="fin-date-input" style="height:32px;" value="{{ $from->format('Y-m-d') }}">
+                <span class="text-muted small">and</span>
+                <input type="date" name="to" class="fin-date-input" style="height:32px;" value="{{ $to->format('Y-m-d') }}">
+                <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+            </form>
+            <span class="ms-auto fw-bold">
+                Total for {{ $from->format('d M') }} &ndash; {{ $to->format('d M Y') }}: {{ number_format($totalExpenses, 2) }} QAR
+            </span>
         </div>
         <div class="table-responsive">
             <table class="table fin-table">
