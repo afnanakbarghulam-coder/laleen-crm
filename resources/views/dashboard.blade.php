@@ -280,21 +280,6 @@
         </a>
     </div>
 
-    <!-- Target Achievement -->
-    <div class="col-md-4">
-        <div class="card dashboard-card h-100 shadow-sm">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <div class="dashboard-title">Today's Target Achievement</div>
-                    <div class="dashboard-value text-dark">{{ $targetAchieved ?? 0 }}%</div>
-                </div>
-                <div class="icon-circle bg-purple-light text-purple">
-                    <i class="bx bx-target-lock fs-4"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-
 </div>
 
 @endsection

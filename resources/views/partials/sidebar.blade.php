@@ -82,13 +82,6 @@
              </a>
          </li>
 
-         <li class="menu-item {{ request()->routeIs('daily-target.index') ? 'active' : '' }}">
-             <a href="{{ route('daily-target.index') }}" class="menu-link">
-                 <i class="menu-icon tf-icons bx bx-target-lock"></i>
-                 <div class="text-truncate" data-i18n="Tables">Daily Target Tracker</div>
-             </a>
-         </li>
-
      </ul>
  </aside> --}}
 
@@ -273,14 +266,6 @@
              <a href="{{ route('products.index') }}" class="menu-link">
                  <i class="bx bx-package me-2"></i>
                  <div>Products</div>
-             </a>
-         </li>
-
-         <!-- Daily Target -->
-         <li class="menu-item {{ request()->routeIs('daily-target.index') ? 'active' : '' }}">
-             <a href="{{ route('daily-target.index') }}" class="menu-link">
-                 <i class="bx bx-target-lock me-2"></i>
-                 <div>Daily Target Tracker</div>
              </a>
          </li>
 

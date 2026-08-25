@@ -6,7 +6,6 @@ use App\Models\Lead;
 use App\Models\User;
 use App\Models\Staff;
 use App\Models\Appointment;
-use App\Models\DailyTarget;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
@@ -29,36 +28,15 @@ class UserController extends Controller
         $staffOnLeave = Staff::where('availability_status', 'on-leave')->count();
         $availableStaff = Staff::where('availability_status', 'present')->count();
 
-        // Target achievement %
-        $targetAchieved = $this->calculateTodayTarget($today);
-
         return view('dashboard', compact(
             'todayAppointments',
             'totalLeads',
             'pendingFollowups',
             'staffCount',
             'staffOnLeave',
-            'availableStaff',
-            'targetAchieved'
+            'availableStaff'
         ));
     }
-
-    private function calculateTodayTarget($today)
-    {
-        $records = DailyTarget::whereDate('date', $today)->get();
-        if ($records->count() == 0) {
-            return 0;
-        }
-
-        $totalTarget = $records->sum('daily_target');
-        $totalActual = $records->sum('actual_bookings');
-        if ($totalTarget == 0) {
-            return 0;
-        }
-
-        return round(($totalActual / $totalTarget) * 100, 2);
-    }
-
 
     public function index(Request $request)
     {
