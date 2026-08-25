@@ -7,8 +7,6 @@ use App\Models\User;
 use App\Models\Staff;
 use App\Models\Appointment;
 use App\Models\DailyTarget;
-use App\Models\DailyTracker;
-use App\Models\QaCorrection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
@@ -31,9 +29,6 @@ class UserController extends Controller
         $staffOnLeave = Staff::where('availability_status', 'on-leave')->count();
         $availableStaff = Staff::where('availability_status', 'present')->count();
 
-        $pendingQA = QaCorrection::where('status', 'pending')->count();
-        $dailyTrackerCount = DailyTracker::whereDate('created_at', $today)->count();
-
         // Target achievement %
         $targetAchieved = $this->calculateTodayTarget($today);
 
@@ -44,8 +39,6 @@ class UserController extends Controller
             'staffCount',
             'staffOnLeave',
             'availableStaff',
-            'pendingQA',
-            'dailyTrackerCount',
             'targetAchieved'
         ));
     }

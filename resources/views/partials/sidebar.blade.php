@@ -82,20 +82,6 @@
              </a>
          </li>
 
-         <li class="menu-item {{ request()->routeIs('qa.index') ? 'active' : '' }}">
-             <a href="{{ route('qa.index') }}" class="menu-link">
-                 <i class="menu-icon tf-icons bx bx-error-alt"></i>
-                 <div class="text-truncate" data-i18n="Tables">QA / Correction</div>
-             </a>
-         </li>
-
-         <li class="menu-item {{ request()->routeIs('daily-tracker.index') ? 'active' : '' }}">
-             <a href="{{ route('daily-tracker.index') }}" class="menu-link">
-                 <i class="menu-icon tf-icons bx bx-task"></i>
-                 <div class="text-truncate" data-i18n="Tables">Daily Tracker</div>
-             </a>
-         </li>
-
          <li class="menu-item {{ request()->routeIs('daily-target.index') ? 'active' : '' }}">
              <a href="{{ route('daily-target.index') }}" class="menu-link">
                  <i class="menu-icon tf-icons bx bx-target-lock"></i>
@@ -287,22 +273,6 @@
              <a href="{{ route('products.index') }}" class="menu-link">
                  <i class="bx bx-package me-2"></i>
                  <div>Products</div>
-             </a>
-         </li>
-
-         <!-- QA -->
-         <li class="menu-item {{ request()->routeIs('qa.index') ? 'active' : '' }}">
-             <a href="{{ route('qa.index') }}" class="menu-link">
-                 <i class="bx bx-error-alt me-2"></i>
-                 <div>QA / Correction</div>
-             </a>
-         </li>
-
-         <!-- Daily Tracker -->
-         <li class="menu-item {{ request()->routeIs('daily-tracker.index') ? 'active' : '' }}">
-             <a href="{{ route('daily-tracker.index') }}" class="menu-link">
-                 <i class="bx bx-task me-2"></i>
-                 <div>Daily Tracker</div>
              </a>
          </li>
 

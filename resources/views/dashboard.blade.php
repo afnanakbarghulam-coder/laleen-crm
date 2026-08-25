@@ -280,40 +280,6 @@
         </a>
     </div>
 
-    <!-- Pending QA Issues -->
-    <div class="col-md-4">
-        <a href="{{ route('qa.index') }}" class="text-decoration-none">
-            <div class="card dashboard-card h-100 shadow-sm">
-                <div class="card-body d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="dashboard-title">Pending QA Issues</div>
-                        <div class="dashboard-value text-dark">{{ $pendingQA ?? 0 }}</div>
-                    </div>
-                    <div class="icon-circle bg-orange-light text-orange">
-                        <i class="bx bx-error-alt fs-4"></i>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-
-    <!-- Daily Tracker -->
-    <div class="col-md-4">
-        <a href="{{ route('daily-tracker.index') }}" class="text-decoration-none">
-            <div class="card dashboard-card h-100 shadow-sm">
-                <div class="card-body d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="dashboard-title">Daily Tracker Today</div>
-                        <div class="dashboard-value text-dark">{{ $dailyTrackerCount ?? 0 }}</div>
-                    </div>
-                    <div class="icon-circle bg-success-light text-success">
-                        <i class="bx bx-task fs-4"></i>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-
     <!-- Target Achievement -->
     <div class="col-md-4">
         <div class="card dashboard-card h-100 shadow-sm">

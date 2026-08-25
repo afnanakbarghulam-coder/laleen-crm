@@ -3,10 +3,8 @@
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DailyTargetController;
-use App\Http\Controllers\DailyTrackerController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\ProductController;
-use App\Http\Controllers\QaCorrectionController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ServiceCategoryController;
 use App\Http\Controllers\ServiceController;
@@ -69,9 +67,6 @@ Route::middleware(['auth'])->group(function () {
     Route::patch('/customers/{customer}/notes', [CustomerController::class, 'updateNotes'])->name('customers.notes.update');
     Route::patch('/customers/{customer}/allergies', [CustomerController::class, 'updateAllergies'])->name('customers.allergies.update');
     Route::post('/customers/{customer}/redeem', [CustomerController::class, 'redeemPoints'])->name('customers.loyalty.redeem');
-    Route::resource('qa', QaCorrectionController::class);
-    Route::resource('daily-tracker', DailyTrackerController::class)
-        ->parameters(['daily-tracker' => 'daily']);
     Route::resource('daily-target', DailyTargetController::class)->except(['show']);
     Route::middleware('role:admin')->group(function () {
         Route::resource('users', UserController::class)->only(['index', 'store', 'update', 'destroy']);
