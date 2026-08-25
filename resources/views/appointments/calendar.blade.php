@@ -10,13 +10,21 @@
         --cal-ink: #101828;
     }
 
+    .cal-toolbar-card {
+        background: #fff;
+        border: 1px solid var(--cal-border);
+        border-radius: 16px;
+        padding: 14px 18px;
+        margin-bottom: 18px;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+    }
+
     .cal-toolbar {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        margin-bottom: 16px;
     }
 
     .cal-toolbar-left,
@@ -27,20 +35,30 @@
         flex-wrap: wrap;
     }
 
+    .cal-toolbar-divider {
+        width: 1px;
+        align-self: stretch;
+        min-height: 28px;
+        background: var(--cal-border);
+        margin: 0 2px;
+    }
+
     .cal-view-toggle {
         display: inline-flex;
         background: #f1f2f6;
-        border-radius: 8px;
+        border-radius: 9px;
         padding: 3px;
+        height: 38px;
+        box-sizing: border-box;
     }
 
     .cal-view-toggle button {
         border: none;
         background: transparent;
-        padding: 6px 14px;
+        padding: 0 14px;
         font-size: 13px;
         font-weight: 600;
-        border-radius: 6px;
+        border-radius: 7px;
         color: #667085;
         transition: all .15s ease;
         white-space: nowrap;
@@ -55,37 +73,64 @@
     .cal-nav {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
+        gap: 6px;
+        background: #f8f9fb;
+        border-radius: 9px;
+        padding: 3px;
     }
 
-    .cal-nav button, .cal-icon-btn {
+    .cal-nav button {
         width: 32px;
         height: 32px;
-        border: 1px solid var(--cal-border-strong);
-        background: #fff;
-        border-radius: 8px;
+        border: none;
+        background: transparent;
+        border-radius: 6px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         color: #475467;
+        transition: all .15s ease;
     }
 
-    .cal-nav button:hover, .cal-icon-btn:hover {
+    .cal-nav button:hover {
+        background: #fff;
+        color: var(--cal-ink);
+        box-shadow: 0 1px 3px rgba(16, 24, 40, .12);
+    }
+
+    .cal-icon-btn {
+        width: 38px;
+        height: 38px;
+        border: 1px solid var(--cal-border-strong);
+        background: #fff;
+        border-radius: 9px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #475467;
+        transition: all .15s ease;
+    }
+
+    .cal-icon-btn:hover {
         background: #f9fafb;
+        border-color: #c8ced8;
     }
 
     .cal-today-btn {
+        height: 38px;
         border: 1px solid var(--cal-border-strong);
         background: #fff;
-        border-radius: 8px;
-        padding: 6px 14px;
+        border-radius: 9px;
+        padding: 0 16px;
         font-size: 13px;
         font-weight: 600;
         color: #344054;
+        transition: all .15s ease;
     }
 
     .cal-today-btn:hover {
         background: #f9fafb;
+        border-color: #c8ced8;
     }
 
     .cal-date-label {
@@ -93,6 +138,7 @@
         font-size: 16px;
         color: var(--cal-ink);
         min-width: 170px;
+        letter-spacing: -.01em;
     }
 
     .cal-filter-panel {
@@ -122,20 +168,23 @@
         display: inline-flex;
         align-items: center;
         gap: 2px;
+        height: 38px;
+        box-sizing: border-box;
         border: 1px solid var(--cal-border-strong);
-        border-radius: 8px;
-        padding: 2px;
+        border-radius: 9px;
+        padding: 3px;
         background: #fff;
     }
 
     .cal-zoom button {
-        width: 26px;
-        height: 26px;
+        width: 30px;
+        height: 30px;
         border: none;
         background: transparent;
         border-radius: 6px;
         color: #475467;
         font-weight: 700;
+        transition: all .15s ease;
     }
 
     .cal-zoom button:hover {
@@ -143,7 +192,10 @@
     }
 
     .cal-add-btn {
-        border-radius: 8px;
+        height: 38px;
+        display: inline-flex;
+        align-items: center;
+        border-radius: 9px;
         font-weight: 700;
         box-shadow: 0 1px 2px rgba(16, 24, 40, .08);
     }
@@ -151,19 +203,38 @@
     .cal-legend {
         display: flex;
         align-items: center;
-        gap: 14px;
-        margin-bottom: 14px;
-        font-size: 12.5px;
-        color: #475467;
+        gap: 8px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--cal-border);
         flex-wrap: wrap;
+    }
+
+    .cal-legend > span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px 4px 8px;
+        border-radius: 999px;
+        background: #f8f9fb;
+        font-size: 12px;
+        font-weight: 600;
+        color: #475467;
+        white-space: nowrap;
     }
 
     .cal-legend .dot {
         display: inline-block;
-        width: 9px;
-        height: 9px;
+        width: 8px;
+        height: 8px;
         border-radius: 50%;
-        margin-right: 5px;
+        flex-shrink: 0;
+    }
+
+    @media (max-width: 640px) {
+        .cal-toolbar-divider {
+            display: none;
+        }
     }
 
     /* ---------------- DAY / 3-DAY / WEEK GRID VIEW ---------------- */
@@ -852,67 +923,71 @@
 @section('content')
     <div class="cal-toast-container" id="calToastContainer"></div>
 
-    <div class="cal-toolbar">
-        <div class="cal-toolbar-left">
-            <div class="cal-view-toggle">
-                <button type="button" class="cal-view-btn active" data-view="day">Day</button>
-                <button type="button" class="cal-view-btn" data-view="3day">3-Day</button>
-                <button type="button" class="cal-view-btn" data-view="week">Week</button>
-                <button type="button" class="cal-view-btn" data-view="month">Month</button>
+    <div class="cal-toolbar-card">
+        <div class="cal-toolbar">
+            <div class="cal-toolbar-left">
+                <div class="cal-view-toggle">
+                    <button type="button" class="cal-view-btn active" data-view="day">Day</button>
+                    <button type="button" class="cal-view-btn" data-view="3day">3-Day</button>
+                    <button type="button" class="cal-view-btn" data-view="week">Week</button>
+                    <button type="button" class="cal-view-btn" data-view="month">Month</button>
+                </div>
+
+                <div class="cal-toolbar-divider"></div>
+
+                <div class="cal-nav">
+                    <button type="button" id="prevBtn" title="Previous"><i class="bx bx-chevron-left"></i></button>
+                    <button type="button" id="nextBtn" title="Next"><i class="bx bx-chevron-right"></i></button>
+                </div>
+                <button type="button" class="cal-today-btn" id="todayBtn">Today</button>
+                <div class="cal-date-label" id="dateLabel">&nbsp;</div>
             </div>
 
-            <div class="cal-nav">
-                <button type="button" id="prevBtn"><i class="bx bx-chevron-left"></i></button>
-                <button type="button" id="nextBtn"><i class="bx bx-chevron-right"></i></button>
-            </div>
-            <button type="button" class="cal-today-btn" id="todayBtn">Today</button>
-            <div class="cal-date-label" id="dateLabel">&nbsp;</div>
-        </div>
+            <div class="cal-toolbar-right">
+                <div class="cal-zoom" id="zoomControl">
+                    <button type="button" id="zoomOutBtn" title="Zoom out"><i class="bx bx-minus"></i></button>
+                    <button type="button" id="zoomInBtn" title="Zoom in"><i class="bx bx-plus"></i></button>
+                </div>
 
-        <div class="cal-toolbar-right">
-            <div class="cal-zoom" id="zoomControl">
-                <button type="button" id="zoomOutBtn" title="Zoom out"><i class="bx bx-minus"></i></button>
-                <button type="button" id="zoomInBtn" title="Zoom in"><i class="bx bx-plus"></i></button>
-            </div>
+                <div class="dropdown">
+                    <button class="cal-icon-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" title="Filters">
+                        <i class="bx bx-filter-alt"></i>
+                        <span class="cal-filter-badge d-none" id="filterBadge">0</span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end cal-filter-panel">
+                        <label class="d-block mb-1">Location</label>
+                        <select id="filterBranch" class="form-select form-select-sm mb-3">
+                            <option value="">All Locations</option>
+                            <option value="old_airport">Old Airport</option>
+                            <option value="wakrah">Al Wakrah</option>
+                            <option value="home_service">Home Service</option>
+                        </select>
 
-            <div class="dropdown">
-                <button class="cal-icon-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" title="Filters">
-                    <i class="bx bx-filter-alt"></i>
-                    <span class="cal-filter-badge d-none" id="filterBadge">0</span>
-                </button>
-                <div class="dropdown-menu dropdown-menu-end cal-filter-panel">
-                    <label class="d-block mb-1">Location</label>
-                    <select id="filterBranch" class="form-select form-select-sm mb-3">
-                        <option value="">All Locations</option>
-                        <option value="old_airport">Old Airport</option>
-                        <option value="wakrah">Al Wakrah</option>
-                        <option value="home_service">Home Service</option>
-                    </select>
+                        <label class="d-block mb-1">Team Member</label>
+                        <select id="filterStaff" class="form-select form-select-sm">
+                            <option value="">All Team Members</option>
+                            @foreach ($staffs as $staff)
+                                <option value="{{ $staff->id }}">{{ $staff->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
 
-                    <label class="d-block mb-1">Team Member</label>
-                    <select id="filterStaff" class="form-select form-select-sm">
-                        <option value="">All Team Members</option>
-                        @foreach ($staffs as $staff)
-                            <option value="{{ $staff->id }}">{{ $staff->name }}</option>
-                        @endforeach
-                    </select>
+                <div class="dropdown">
+                    <button class="btn btn-primary cal-add-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bx bx-plus me-1"></i> Add
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" id="addNewAppointment"><i class="bx bx-calendar-plus me-2"></i> New Appointment</a></li>
+                        <li><a class="dropdown-item" href="#" id="addBlockTime" data-bs-toggle="modal" data-bs-target="#blockTimeModal"><i class="bx bx-block me-2"></i> Block Time</a></li>
+                        <li><a class="dropdown-item" href="{{ route('sales.create') }}"><i class="bx bx-cart-add me-2"></i> New Sale</a></li>
+                    </ul>
                 </div>
             </div>
-
-            <div class="dropdown">
-                <button class="btn btn-primary cal-add-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                    <i class="bx bx-plus me-1"></i> Add
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="#" id="addNewAppointment"><i class="bx bx-calendar-plus me-2"></i> New Appointment</a></li>
-                    <li><a class="dropdown-item" href="#" id="addBlockTime" data-bs-toggle="modal" data-bs-target="#blockTimeModal"><i class="bx bx-block me-2"></i> Block Time</a></li>
-                    <li><a class="dropdown-item" href="{{ route('sales.create') }}"><i class="bx bx-cart-add me-2"></i> New Sale</a></li>
-                </ul>
-            </div>
         </div>
-    </div>
 
-    <div class="cal-legend" id="calLegend"></div>
+        <div class="cal-legend" id="calLegend"></div>
+    </div>
 
     <div class="cal-scroll">
         <div id="calendarBody"></div>
@@ -1133,6 +1208,13 @@
         const STORAGE_KEY = 'laleen_calendar_filters';
         const ZOOM_LEVELS = [40, 56, 72, 90];
 
+        function toLocalISODate(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
         function loadFilters() {
             let saved = {};
             try {
@@ -1140,7 +1222,7 @@
             } catch (e) {}
             return Object.assign({
                 view: 'day',
-                date: new Date().toISOString().slice(0, 10),
+                date: toLocalISODate(new Date()),
                 branch: '',
                 staff_id: '',
                 zoom: 56
@@ -1524,7 +1606,7 @@
                 const step = state.view === 'week' ? 7 : (state.view === '3day' ? 3 : 1);
                 d.setDate(d.getDate() + delta * step);
             }
-            state.date = d.toISOString().slice(0, 10);
+            state.date = toLocalISODate(d);
             saveFilters();
             syncToolbar();
             loadCalendar();
@@ -1536,7 +1618,7 @@
         document.getElementById('prevBtn').addEventListener('click', () => shiftDate(-1));
         document.getElementById('nextBtn').addEventListener('click', () => shiftDate(1));
         document.getElementById('todayBtn').addEventListener('click', () => {
-            state.date = new Date().toISOString().slice(0, 10);
+            state.date = toLocalISODate(new Date());
             saveFilters();
             syncToolbar();
             loadCalendar();
