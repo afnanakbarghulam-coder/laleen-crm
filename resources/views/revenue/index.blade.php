@@ -548,12 +548,18 @@
         </div>
         <div class="px-3 py-3 border-bottom d-flex flex-wrap align-items-center gap-2" style="background:#f8f9fb;">
             <form method="GET" action="{{ route('appointments.revenue.index') }}" class="d-flex flex-wrap align-items-center gap-2">
-                <input type="hidden" name="branch" value="{{ $branch }}">
                 <input type="hidden" name="staff_id" value="{{ $staffId }}">
                 <span class="text-muted small fw-semibold">Check total expenses between</span>
                 <input type="date" name="from" class="fin-date-input" style="height:32px;" value="{{ $from->format('Y-m-d') }}">
                 <span class="text-muted small">and</span>
                 <input type="date" name="to" class="fin-date-input" style="height:32px;" value="{{ $to->format('Y-m-d') }}">
+                <span class="text-muted small">for</span>
+                <select name="branch" class="fin-branch-select" style="height:32px;">
+                    <option value="">All Branches</option>
+                    @foreach ($branches as $key => $label)
+                        <option value="{{ $key }}" {{ $branch === $key ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
+                </select>
                 <button type="submit" class="btn btn-sm btn-primary">Filter</button>
             </form>
             <span class="ms-auto fw-bold">
