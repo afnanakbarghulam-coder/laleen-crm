@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SaleController;
@@ -39,7 +40,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/appointments/{appointment}/payment', [AppointmentController::class, 'payment'])->name('appointments.revenue.payment');
     Route::post('/appointments/{appointment}/payment', [AppointmentController::class, 'storePayment'])->name('appointments.revenue.storePayment');
     Route::get('/appointments/{appointment}', [AppointmentController::class, 'show'])->name('appointments.show');
-    Route::get('/revenue', [AppointmentController::class, 'revenue'])->name('appointments.revenue.index');
+    Route::get('/revenue', [FinanceController::class, 'index'])->name('appointments.revenue.index');
+    Route::post('/expenses', [FinanceController::class, 'storeExpense'])->name('expenses.store');
+    Route::delete('/expenses/{expense}', [FinanceController::class, 'destroyExpense'])->name('expenses.destroy');
 
     Route::get('/sales/new', [SaleController::class, 'create'])->name('sales.create');
     Route::post('/sales', [SaleController::class, 'store'])->name('sales.store');
