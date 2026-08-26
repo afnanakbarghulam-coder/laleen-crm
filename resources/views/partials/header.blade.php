@@ -9,11 +9,10 @@
     </div>
 
     @php
-        // Back button is clamped per-module: from any sub-page it jumps straight to
-        // that module's index/root page. On the root page itself there is nowhere
-        // "back" to go within the module, so the button is hidden entirely.
-        // Computed as an explicit target URL (not history.back()) so it never
-        // depends on how the user actually navigated here.
+        // Back button steps back one level at a time within the current module,
+        // and is hidden entirely once you're on that module's first/landing page
+        // (e.g. the KPI hub, or Products' index). Computed as an explicit target
+        // per route (not history.back()) so it's independent of navigation path.
         $routeName = request()->route() ? request()->route()->getName() : '';
         $backTarget = null;
 
@@ -21,7 +20,9 @@
             $seg = explode('.', $routeName)[1] ?? 'hub';
             if ($seg !== 'hub') {
                 $rootUrl = route("kpi.$seg.index");
-                $backTarget = $routeName === "kpi.$seg.index" ? null : $rootUrl;
+                // kpi.<seg>.index is one level below the hub, not the module's
+                // first page - so it still gets a back button, targeting the hub.
+                $backTarget = $routeName === "kpi.$seg.index" ? route('kpi.hub') : $rootUrl;
             }
         } elseif (str_starts_with($routeName, 'appointments.revenue')) {
             $backTarget = $routeName === 'appointments.revenue.index' ? null : route('appointments.revenue.index');
