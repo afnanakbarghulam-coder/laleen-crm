@@ -147,7 +147,7 @@
     justify-content: center;
 }
 
-.bg-primary-light { background: rgba(213, 180, 169, 0.14); }
+.bg-primary-light { background: rgba(217, 143, 131, 0.14); }
 .bg-success-light { background: rgba(142, 168, 138, 0.14); }
 .bg-warning-light { background: rgba(201, 166, 107, 0.16); }
 .bg-danger-light { background: rgba(168, 82, 74, 0.14); }

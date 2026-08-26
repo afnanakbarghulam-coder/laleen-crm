@@ -101,12 +101,12 @@
              background: #1a1512;
              color: #cbb8b0;
              width: 260px;
-             border-right: 1px solid rgba(213, 180, 169, 0.14);
+             border-right: 1px solid rgba(217, 143, 131, 0.14);
          }
 
          #layout-menu .app-brand {
              padding: 20px 18px;
-             border-bottom: 1px solid rgba(213, 180, 169, 0.14);
+             border-bottom: 1px solid rgba(217, 143, 131, 0.14);
          }
 
          #layout-menu .app-brand-text {
@@ -139,16 +139,16 @@
          }
 
          #layout-menu .menu-link:hover {
-             background: rgba(213, 180, 169, 0.08);
+             background: rgba(217, 143, 131, 0.08);
              color: #e79a91;
              transform: translateX(4px);
          }
 
          /* ACTIVE ITEM */
          #layout-menu .menu-item.active>.menu-link {
-             background: linear-gradient(135deg, #d5b4a9, #c19a8c);
+             background: linear-gradient(135deg, #d98f83, #c19a8c);
              color: #241a16;
-             box-shadow: 0 6px 18px rgba(213, 180, 169, 0.25);
+             box-shadow: 0 6px 18px rgba(217, 143, 131, 0.25);
          }
 
          #layout-menu .menu-item.active i {
@@ -156,7 +156,7 @@
          }
 
          .menu-divider {
-             border-top: 1px solid rgba(213, 180, 169, 0.14);
+             border-top: 1px solid rgba(217, 143, 131, 0.14);
          }
 
          .layout-menu-toggle {

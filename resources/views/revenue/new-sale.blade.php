@@ -11,7 +11,7 @@
         width: 100%;
         max-width: 520px;
         background: #241e1c;
-        border: 1px solid rgba(213,180,169,0.16);
+        border: 1px solid rgba(217, 143, 131,0.16);
         border-radius: 14px;
         box-shadow: 0 8px 24px rgba(16, 24, 40, .08);
         overflow: hidden;
@@ -19,7 +19,7 @@
 
     .checkout-header, .checkout-section {
         padding: 18px 22px;
-        border-bottom: 1px solid rgba(213,180,169,0.07);
+        border-bottom: 1px solid rgba(217, 143, 131,0.07);
     }
 
     .checkout-section h6 {
@@ -27,7 +27,7 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .04em;
-        color: #b6a49b;
+        color: #c9a39a;
         margin-bottom: 12px;
     }
 
@@ -48,7 +48,7 @@
     .summary-row.total {
         font-size: 18px;
         font-weight: 700;
-        border-top: 1px solid rgba(213,180,169,0.16);
+        border-top: 1px solid rgba(217, 143, 131,0.16);
         margin-top: 8px;
         padding-top: 10px;
     }

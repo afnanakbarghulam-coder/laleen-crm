@@ -3,7 +3,7 @@
 
 <style>
     .svc-cat-rail {
-        border: 1px solid rgba(213,180,169,0.16);
+        border: 1px solid rgba(217, 143, 131,0.16);
         border-radius: 10px;
         overflow: hidden;
         background: #241e1c;
@@ -17,16 +17,16 @@
         font-size: 13.5px;
         color: #e79a91;
         text-decoration: none;
-        border-bottom: 1px solid rgba(213,180,169,0.07);
+        border-bottom: 1px solid rgba(217, 143, 131,0.07);
     }
 
     .svc-cat-row:hover {
-        background: rgba(213,180,169,0.06);
+        background: rgba(217, 143, 131,0.06);
         color: #e79a91;
     }
 
     .svc-cat-row.active {
-        background: rgba(213,180,169,0.1);
+        background: rgba(217, 143, 131,0.1);
         color: #b98ea3;
         font-weight: 700;
     }
@@ -40,7 +40,7 @@
     }
 
     .svc-cat-row .badge {
-        background: rgba(213,180,169,0.16);
+        background: rgba(217, 143, 131,0.16);
         color: #cbb8b0;
         font-weight: 700;
     }
@@ -62,7 +62,7 @@
     }
 
     .svc-card {
-        border: 1px solid rgba(213,180,169,0.16);
+        border: 1px solid rgba(217, 143, 131,0.16);
         border-radius: 10px;
         padding: 14px 16px;
         margin-bottom: 10px;
@@ -78,7 +78,7 @@
         border-radius: 8px;
         object-fit: cover;
         flex-shrink: 0;
-        background: rgba(213,180,169,0.07);
+        background: rgba(217, 143, 131,0.07);
     }
 
     .svc-card .svc-name {
@@ -89,12 +89,12 @@
 
     .svc-card .svc-meta {
         font-size: 12px;
-        color: #b6a49b;
+        color: #c9a39a;
     }
 
     .svc-card .svc-desc {
         font-size: 12.5px;
-        color: #b6a49b;
+        color: #c9a39a;
         margin-top: 4px;
         display: -webkit-box;
         -webkit-line-clamp: 2;
@@ -111,7 +111,7 @@
 
     .svc-card .treatment-badge {
         display: inline-block;
-        background: rgba(213,180,169,0.08);
+        background: rgba(217, 143, 131,0.08);
         border-radius: 999px;
         padding: 2px 10px;
         font-size: 11px;
@@ -238,7 +238,7 @@
                         </div>
                         <div class="mb-1">
                             <label class="form-label">Color</label>
-                            <input type="color" name="color" class="form-control form-control-color" value="#d5b4a9">
+                            <input type="color" name="color" class="form-control form-control-color" value="#d98f83">
                         </div>
                     </div>
                     <div class="modal-footer">

@@ -3,11 +3,11 @@
 
 <style>
     :root {
-        --fin-border: rgba(213,180,169,0.16);
-        --fin-border-strong: rgba(213,180,169,0.3);
-        --fin-muted: #b6a49b;
+        --fin-border: rgba(217, 143, 131,0.16);
+        --fin-border-strong: rgba(217, 143, 131,0.3);
+        --fin-muted: #c9a39a;
         --fin-ink: #e79a91;
-        --fin-primary: #d5b4a9;
+        --fin-primary: #d98f83;
         --fin-success: #8ea88a;
         --fin-danger: #a8524a;
         --fin-warning: #c9a66b;
@@ -54,7 +54,7 @@
 
     .fin-preset-group {
         display: inline-flex;
-        background: rgba(213,180,169,0.08);
+        background: rgba(217, 143, 131,0.08);
         border-radius: 9px;
         padding: 3px;
         flex-wrap: wrap;
@@ -68,7 +68,7 @@
         font-size: 12.5px;
         font-weight: 600;
         border-radius: 7px;
-        color: #b6a49b;
+        color: #c9a39a;
         transition: all .15s ease;
         white-space: nowrap;
     }
@@ -101,7 +101,7 @@
     .fin-date-input:focus, .fin-branch-select:focus {
         outline: none;
         border-color: var(--fin-primary);
-        box-shadow: 0 0 0 3px rgba(213,180,169, .15);
+        box-shadow: 0 0 0 3px rgba(217, 143, 131, .15);
     }
 
     .fin-apply-btn {
@@ -248,7 +248,7 @@
         color: var(--fin-muted);
         font-weight: 700;
         border-top: none;
-        background: rgba(213,180,169,0.05);
+        background: rgba(217, 143, 131,0.05);
         white-space: nowrap;
     }
 
@@ -270,7 +270,7 @@
     }
 
     .fin-item-chip.service {
-        background: rgba(213,180,169, .1);
+        background: rgba(217, 143, 131, .1);
         color: var(--fin-primary);
     }
 
@@ -289,7 +289,7 @@
         border-radius: 999px;
         margin: 1px 2px 1px 0;
         white-space: nowrap;
-        background: rgba(213,180,169,0.08);
+        background: rgba(217, 143, 131,0.08);
         color: #cbb8b0;
     }
 
@@ -374,7 +374,7 @@
             <div class="fin-kpi-card">
                 <div class="fin-kpi-top">
                     <span class="fin-kpi-label">Gross Sales</span>
-                    <span class="fin-kpi-icon" style="background:rgba(213,180,169,.1); color:var(--fin-primary);">
+                    <span class="fin-kpi-icon" style="background:rgba(217, 143, 131,.1); color:var(--fin-primary);">
                         <i class="bx bx-trending-up"></i>
                     </span>
                 </div>
@@ -554,7 +554,7 @@
                 <i class="bx bx-plus"></i> Add Expense
             </button>
         </div>
-        <div class="px-3 py-3 border-bottom d-flex flex-wrap align-items-center gap-2" style="background:rgba(213,180,169,0.05);">
+        <div class="px-3 py-3 border-bottom d-flex flex-wrap align-items-center gap-2" style="background:rgba(217, 143, 131,0.05);">
             <form method="GET" action="{{ route('appointments.revenue.index') }}" class="d-flex flex-wrap align-items-center gap-2">
                 <input type="hidden" name="staff_id" value="{{ $staffId }}">
                 <span class="text-muted small fw-semibold">Check total expenses between</span>
@@ -727,13 +727,13 @@
             ],
             xaxis: { categories: @json($trendLabels), labels: { rotate: -45, style: { fontSize: '11px' } } },
             yaxis: { labels: { formatter: (v) => v.toFixed(0) } },
-            colors: ['#d5b4a9', '#a8524a'],
+            colors: ['#d98f83', '#a8524a'],
             fill: { type: 'gradient', gradient: { opacityFrom: .35, opacityTo: .05 } },
             stroke: { curve: 'smooth', width: 2.5 },
             dataLabels: { enabled: false },
             legend: { position: 'top', horizontalAlign: 'left' },
             tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
-            grid: { borderColor: 'rgba(213,180,169,0.16)' },
+            grid: { borderColor: 'rgba(217, 143, 131,0.16)' },
         }).render();
 
         // Revenue breakdown donut
@@ -741,7 +741,7 @@
             chart: { type: 'donut', height: 320, fontFamily: 'inherit' },
             series: [{{ $grossServices }}, {{ $grossProducts }}],
             labels: ['Services', 'Products'],
-            colors: ['#d5b4a9', '#8aa6ab'],
+            colors: ['#d98f83', '#8aa6ab'],
             dataLabels: { enabled: true, formatter: (val) => val.toFixed(1) + '%' },
             legend: { position: 'bottom' },
             tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
@@ -769,12 +769,12 @@
                 { name: 'Expenses', data: @json(array_column($branchBreakdown, 'expenses')) },
             ],
             xaxis: { categories: @json(array_column($branchBreakdown, 'label')) },
-            colors: ['#d5b4a9', '#a8524a'],
+            colors: ['#d98f83', '#a8524a'],
             plotOptions: { bar: { columnWidth: '45%', borderRadius: 6 } },
             dataLabels: { enabled: false },
             legend: { position: 'top', horizontalAlign: 'left' },
             tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
-            grid: { borderColor: 'rgba(213,180,169,0.16)' },
+            grid: { borderColor: 'rgba(217, 143, 131,0.16)' },
         }).render();
     </script>
 @endsection

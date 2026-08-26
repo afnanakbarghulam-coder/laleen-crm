@@ -3,7 +3,7 @@
 
 <style>
     .profile-stat {
-        border: 1px solid rgba(213,180,169,0.16);
+        border: 1px solid rgba(217, 143, 131,0.16);
         border-radius: 10px;
         padding: 14px 18px;
         text-align: center;
@@ -17,13 +17,13 @@
 
     .profile-stat .label {
         font-size: 12px;
-        color: #b6a49b;
+        color: #c9a39a;
         text-transform: uppercase;
         letter-spacing: .02em;
     }
 
     .appt-row {
-        border: 1px solid rgba(213,180,169,0.16);
+        border: 1px solid rgba(217, 143, 131,0.16);
         border-radius: 8px;
         padding: 10px 14px;
         margin-bottom: 8px;
@@ -44,7 +44,7 @@
 
     .fav-chip {
         display: inline-block;
-        background: rgba(213,180,169,0.08);
+        background: rgba(217, 143, 131,0.08);
         border-radius: 999px;
         padding: 4px 12px;
         font-size: 12.5px;
@@ -65,7 +65,7 @@
         justify-content: space-between;
         font-size: 12.5px;
         padding: 5px 0;
-        border-bottom: 1px solid rgba(213,180,169,0.07);
+        border-bottom: 1px solid rgba(217, 143, 131,0.07);
     }
 
     .loyalty-row .pts-earn { color: #8ea88a; font-weight: 700; }
@@ -140,7 +140,7 @@
                                 <strong>{{ $a->appointment_datetime->format('D, d M Y · h:i A') }}</strong>
                                 <div class="text-muted small">{{ $a->service_name }} · {{ $a->staff->name ?? 'Unassigned' }}</div>
                             </div>
-                            <span class="status-badge" style="background:#d5b4a9">{{ $a->status }}</span>
+                            <span class="status-badge" style="background:#d98f83">{{ $a->status }}</span>
                         </div>
                     @empty
                         <p class="text-muted mb-0">No upcoming appointments.</p>
@@ -152,7 +152,7 @@
                 <div class="card-header fw-semibold">Past Appointments</div>
                 <div class="card-body">
                     @php
-                        $statusColors = ['pending' => '#d5b4a9', 'arrived' => '#b98ea3', 'in_progress' => '#c97b4a', 'completed' => '#8ea88a', 'no_show' => '#b6a49b', 'cancelled' => '#a8524a'];
+                        $statusColors = ['pending' => '#d98f83', 'arrived' => '#b98ea3', 'in_progress' => '#c97b4a', 'completed' => '#8ea88a', 'no_show' => '#c9a39a', 'cancelled' => '#a8524a'];
                     @endphp
                     @forelse ($past as $a)
                         <div class="appt-row">
@@ -165,7 +165,7 @@
                                     @endif
                                 </div>
                             </div>
-                            <span class="status-badge" style="background:{{ $statusColors[$a->status] ?? '#b6a49b' }}">
+                            <span class="status-badge" style="background:{{ $statusColors[$a->status] ?? '#c9a39a' }}">
                                 {{ str_replace('_', ' ', $a->status) }}
                             </span>
                         </div>

@@ -43,7 +43,7 @@
         font-size: 22px;
         font-weight: bold;
         cursor: pointer;
-        color: #b6a49b;
+        color: #c9a39a;
         transition: 0.2s ease;
     }
 

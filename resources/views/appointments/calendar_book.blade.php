@@ -22,7 +22,7 @@
     .fb-rail {
         width: 108px;
         flex-shrink: 0;
-        border-right: 1px solid rgba(213,180,169,0.16);
+        border-right: 1px solid rgba(217, 143, 131,0.16);
         padding: 22px 10px;
         text-align: center;
         cursor: pointer;
@@ -61,7 +61,7 @@
 
     .fb-rail .client-sub {
         font-size: 10.5px;
-        color: #b6a49b;
+        color: #c9a39a;
         line-height: 1.2;
         margin-top: 2px;
     }
@@ -92,7 +92,7 @@
         width: 32px;
         height: 32px;
         border-radius: 8px;
-        border: 1px solid rgba(213,180,169,0.16);
+        border: 1px solid rgba(217, 143, 131,0.16);
         background: #241e1c;
         display: inline-flex;
         align-items: center;
@@ -101,7 +101,7 @@
     }
 
     .fb-back-btn:hover {
-        background: rgba(213,180,169,0.06);
+        background: rgba(217, 143, 131,0.06);
     }
 
     .fb-date-label {
@@ -113,7 +113,7 @@
 
     .fb-date-sub {
         font-size: 12.5px;
-        color: #b6a49b;
+        color: #c9a39a;
     }
 
     .fb-section-title {
@@ -121,13 +121,13 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .03em;
-        color: #b6a49b;
+        color: #c9a39a;
         margin: 22px 0 10px;
     }
 
     .fb-svc-row {
-        border-left: 3px solid #d5b4a9;
-        background: rgba(213,180,169,0.1);
+        border-left: 3px solid #d98f83;
+        background: rgba(217, 143, 131,0.1);
         border-radius: 6px;
         padding: 8px 12px;
         margin-bottom: 8px;
@@ -145,7 +145,7 @@
 
     .fb-svc-row .meta {
         font-size: 11.5px;
-        color: #b6a49b;
+        color: #c9a39a;
     }
 
     .fb-svc-row .price {
@@ -157,7 +157,7 @@
     .fb-svc-row .remove-btn {
         border: none;
         background: transparent;
-        color: #b6a49b;
+        color: #c9a39a;
         font-size: 16px;
         line-height: 1;
         padding: 0 2px;
@@ -178,7 +178,7 @@
     }
 
     .fb-add-pill:hover {
-        background: rgba(213,180,169,0.06);
+        background: rgba(217, 143, 131,0.06);
     }
 
     .fb-search-wrap {
@@ -191,7 +191,7 @@
         left: 12px;
         top: 50%;
         transform: translateY(-50%);
-        color: #b6a49b;
+        color: #c9a39a;
     }
 
     .fb-search-wrap input {
@@ -209,7 +209,7 @@
     }
 
     .fb-client-row:hover, .fb-service-row:hover {
-        background: rgba(213,180,169,0.06);
+        background: rgba(217, 143, 131,0.06);
     }
 
     .fb-client-row.add-new {
@@ -224,7 +224,7 @@
         width: 38px;
         height: 38px;
         border-radius: 50%;
-        background: rgba(213,180,169,0.06);
+        background: rgba(217, 143, 131,0.06);
         color: #cbb8b0;
         display: flex;
         align-items: center;
@@ -240,7 +240,7 @@
     }
 
     .fb-client-row.walkin .fb-client-avatar {
-        background: rgba(213,180,169,0.06);
+        background: rgba(217, 143, 131,0.06);
         color: #cbb8b0;
     }
 
@@ -252,7 +252,7 @@
 
     .fb-client-phone {
         font-size: 12px;
-        color: #b6a49b;
+        color: #c9a39a;
     }
 
     .fb-service-row .svc-info .name {
@@ -263,7 +263,7 @@
 
     .fb-service-row .svc-info .meta {
         font-size: 11.5px;
-        color: #b6a49b;
+        color: #c9a39a;
     }
 
     .fb-service-row .svc-price {
@@ -275,13 +275,13 @@
     .fb-cat-label {
         font-size: 12px;
         font-weight: 700;
-        color: #b6a49b;
+        color: #c9a39a;
         margin-bottom: 8px;
     }
 
     .fb-footer {
         flex-shrink: 0;
-        border-top: 1px solid rgba(213,180,169,0.16);
+        border-top: 1px solid rgba(217, 143, 131,0.16);
         padding: 14px 24px;
         display: flex;
         align-items: center;
@@ -297,7 +297,7 @@
 
     .fb-footer .total-meta {
         font-size: 12px;
-        color: #b6a49b;
+        color: #c9a39a;
     }
 
     .fb-footer .total-price {

@@ -11,7 +11,7 @@
     #addStaffModal .stf-nav {
         width: 200px;
         flex-shrink: 0;
-        border-right: 1px solid rgba(213,180,169,0.16);
+        border-right: 1px solid rgba(217, 143, 131,0.16);
         padding: 16px 10px;
         overflow-y: auto;
     }
@@ -21,7 +21,7 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .03em;
-        color: #b6a49b;
+        color: #c9a39a;
         margin: 14px 10px 6px;
     }
 
@@ -42,16 +42,16 @@
     }
 
     #addStaffModal .stf-nav-item:hover {
-        background: rgba(213,180,169,0.06);
+        background: rgba(217, 143, 131,0.06);
     }
 
     #addStaffModal .stf-nav-item.active {
-        background: rgba(213,180,169,0.1);
+        background: rgba(217, 143, 131,0.1);
         color: #b98ea3;
     }
 
     #addStaffModal .stf-nav-item .badge {
-        background: rgba(213,180,169,0.16);
+        background: rgba(217, 143, 131,0.16);
         color: #cbb8b0;
         font-weight: 700;
     }
@@ -106,19 +106,19 @@
     }
 
     #addStaffModal .svc-catalog-row:hover {
-        background: rgba(213,180,169,0.06);
+        background: rgba(217, 143, 131,0.06);
     }
 
     #addStaffModal .svc-catalog-row .meta {
         font-size: 11px;
-        color: #b6a49b;
+        color: #c9a39a;
     }
 
     #addStaffModal .svc-cat-header {
         font-weight: 700;
         font-size: 12.5px;
         color: #e79a91;
-        background: rgba(213,180,169,0.06);
+        background: rgba(217, 143, 131,0.06);
         border-radius: 6px;
     }
 </style>

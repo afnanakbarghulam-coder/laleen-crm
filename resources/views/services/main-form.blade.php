@@ -11,7 +11,7 @@
     #serviceModal .svc-nav {
         width: 180px;
         flex-shrink: 0;
-        border-right: 1px solid rgba(213,180,169,0.16);
+        border-right: 1px solid rgba(217, 143, 131,0.16);
         padding: 16px 8px;
     }
 
@@ -28,16 +28,16 @@
     }
 
     #serviceModal .svc-nav-item:hover {
-        background: rgba(213,180,169,0.06);
+        background: rgba(217, 143, 131,0.06);
     }
 
     #serviceModal .svc-nav-item.active {
-        background: rgba(213,180,169,0.1);
+        background: rgba(217, 143, 131,0.1);
         color: #b98ea3;
     }
 
     #serviceModal .svc-nav-item .badge {
-        background: rgba(213,180,169,0.16);
+        background: rgba(217, 143, 131,0.16);
         color: #cbb8b0;
         font-weight: 700;
     }
@@ -74,7 +74,7 @@
         align-items: center;
         gap: 10px;
         padding: 8px 4px;
-        border-bottom: 1px solid rgba(213,180,169,0.07);
+        border-bottom: 1px solid rgba(217, 143, 131,0.07);
     }
 
     #serviceModal .team-row img {
@@ -82,7 +82,7 @@
         height: 30px;
         border-radius: 50%;
         object-fit: cover;
-        background: rgba(213,180,169,0.06);
+        background: rgba(217, 143, 131,0.06);
     }
 
     #serviceModal .photo-preview {
@@ -90,8 +90,8 @@
         height: 90px;
         border-radius: 10px;
         object-fit: cover;
-        border: 1px solid rgba(213,180,169,0.16);
-        background: rgba(213,180,169,0.06);
+        border: 1px solid rgba(217, 143, 131,0.16);
+        background: rgba(217, 143, 131,0.06);
     }
 </style>
 

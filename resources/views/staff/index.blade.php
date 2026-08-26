@@ -54,7 +54,7 @@
     }
 
     .access-badge.admin { background: rgba(168, 82, 74, 0.16); color: #d4948c; }
-    .access-badge.agent { background: rgba(213, 180, 169, 0.14); color: var(--luxe-accent); }
+    .access-badge.agent { background: rgba(217, 143, 131, 0.14); color: var(--luxe-accent); }
     .access-badge.staff { background: rgba(142, 168, 138, 0.16); color: #b7cdb3; }
     .access-badge.user { background: var(--luxe-surface-2); color: var(--luxe-muted); }
 </style>
