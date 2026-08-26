@@ -15,7 +15,7 @@ class StaffSalesController extends Controller
 
     public function index()
     {
-        $reports = KpiStaffSalesReport::withCount('entries')
+        $reports = KpiStaffSalesReport::withCount('entries')->with('entries')
             ->orderByDesc('date_to')->orderByDesc('id')->paginate(15);
 
         return view('kpi.staff-sales.index', ['reports' => $reports, 'branches' => self::BRANCHES]);

@@ -10,7 +10,7 @@ class ContentKpiController extends Controller
 {
     public function index()
     {
-        $reports = KpiContentReport::orderByDesc('date_to')->orderByDesc('id')->paginate(15);
+        $reports = KpiContentReport::with('entries')->orderByDesc('date_to')->orderByDesc('id')->paginate(15);
 
         return view('kpi.content.index', compact('reports'));
     }
