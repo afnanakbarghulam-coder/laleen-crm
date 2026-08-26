@@ -46,8 +46,9 @@ class LeadController extends Controller
         $agents = User::where('role', 'agent')->get();
         $services = Service::orderBy('name')->pluck('name');
         $overdueLeads = $this->overdueLeadsQuery()->orderBy('next_followup_date')->get();
+        $unscheduledLeads = $this->unscheduledLeadsQuery()->orderByDesc('created_at')->get();
 
-        return view('leads.index', compact('leads', 'agents', 'services', 'overdueLeads'));
+        return view('leads.index', compact('leads', 'agents', 'services', 'overdueLeads', 'unscheduledLeads'));
     }
 
     public function checkTodaysFollowUps(Request $request)
@@ -287,6 +288,19 @@ class LeadController extends Controller
             ->where(function ($q) {
                 $q->whereNull('category')->orWhere('category', '!=', 'cancel');
             });
+    }
+
+    /**
+     * Cancelled/No-show leads (auto-logged from the Enhanced Calendar with no
+     * follow-up date - see AppointmentController::syncLeadCategoryFromAppointment())
+     * that still haven't had one set. Staff need to actually call the client
+     * to learn their preferred rebooking timeline before a date can go here.
+     */
+    private function unscheduledLeadsQuery()
+    {
+        return Lead::with(['agent', 'customer'])
+            ->whereIn('category', ['no_show', 'cancel'])
+            ->whereNull('next_followup_date');
     }
 
     /**

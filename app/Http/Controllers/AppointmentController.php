@@ -1019,6 +1019,11 @@ class AppointmentController extends Controller
             return;
         }
 
+        // No default follow-up date: staff need to actually contact the
+        // client to learn their preferred rebooking timeline before one can
+        // be set. Left blank, this lead surfaces in the "needs a follow-up
+        // date" warning on the Leads page instead of a guessed date quietly
+        // going stale.
         Lead::create([
             'phone' => $appointment->phone,
             'customer_id' => $appointment->customer_id,
@@ -1026,7 +1031,7 @@ class AppointmentController extends Controller
             'assigned_agent_id' => $appointment->booking_agent_id,
             'category' => $category,
             'service_interest' => $appointment->service_name,
-            'next_followup_date' => now()->addDay(),
+            'next_followup_date' => null,
         ]);
     }
 

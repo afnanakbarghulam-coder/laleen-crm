@@ -147,6 +147,22 @@
         }, 30000); // wait 3 seconds before starting fade
     </script>
 
+    <script>
+        // Any .card in this theme uses backdrop-filter for the glass effect,
+        // which (per spec) makes it a containing block for position:fixed
+        // descendants - so a Bootstrap modal defined inside a card (e.g. one
+        // modal per table row) gets sized/positioned relative to that card
+        // instead of the viewport, and Bootstrap's body-level backdrop can
+        // end up painting on top of it. Relocating the modal to be a direct
+        // child of <body> right before it opens sidesteps this everywhere,
+        // for every current and future modal, without touching each view.
+        document.addEventListener('show.bs.modal', function (e) {
+            if (e.target.parentElement !== document.body) {
+                document.body.appendChild(e.target);
+            }
+        });
+    </script>
+
     @yield('scripts')
 
 

@@ -134,6 +134,28 @@
         </div>
     @endif
 
+    @if ($unscheduledLeads->count())
+        <div class="kpi-alert kpi-alert-amber">
+            <i class="bx bx-calendar-x"></i>
+            <div class="flex-grow-1">
+                <strong>{{ $unscheduledLeads->count() }} Cancelled/No-show {{ Str::plural('lead', $unscheduledLeads->count()) }} need a follow-up date!</strong>
+                <div class="text-muted small mb-2">Contact the client, agree a rebooking timeline, and set Next Follow-up Date.</div>
+                <div style="max-height: 170px; overflow-y: auto;">
+                    @foreach ($unscheduledLeads as $lead)
+                        <div class="d-flex justify-content-between align-items-center small mb-1 pe-2">
+                            <span>
+                                {{ $lead->customer->name ?? 'Unnamed' }} &middot; {{ $lead->phone }}
+                                <span class="lead-badge cat-{{ $lead->category }} ms-1">{{ \App\Models\Lead::CATEGORIES[$lead->category] }}</span>
+                                <span class="text-muted">{{ $lead->service_interest }}</span>
+                            </span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#editLeadModal{{ $lead->id }}">Set date</button>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @endif
+
     <!-- Filter Section -->
     <div class="mb-4">
         <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -286,6 +308,13 @@
         </div>
     </div>
 
+
+    {{-- The unscheduled-leads banner above can link to leads outside the table's own
+         filter/pagination, so their edit modals need rendering here too (skipping any
+         already in $leads to avoid duplicate modal IDs). --}}
+    @foreach ($unscheduledLeads->whereNotIn('id', $leads->pluck('id')) as $lead)
+        @include('leads.edit', ['lead' => $lead])
+    @endforeach
 
     @include('leads.create')
 
