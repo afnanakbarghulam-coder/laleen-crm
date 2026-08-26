@@ -31,6 +31,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::resource('leads', LeadController::class);
     Route::get('/leads-check-followups', [LeadController::class, 'checkTodaysFollowUps'])->name('leads.check.followups');
+    Route::patch('/leads/{lead}/needful-done', [LeadController::class, 'updateNeedfulDone'])->name('leads.needful-done');
 
     Route::resource('appointments', AppointmentController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::get('/appointments-calendar', [AppointmentController::class, 'calendar'])->name('appointments.calendar');

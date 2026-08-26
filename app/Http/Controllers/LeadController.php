@@ -67,15 +67,17 @@ class LeadController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'phone' => 'required|string|max:20',
+            'country_code' => 'required|string|max:5',
+            'phone_number' => 'required|string|max:20',
+            'customer_name' => 'nullable|string|max:255',
             'assigned_agent_id' => 'nullable|exists:users,id',
             'category' => 'nullable|in:' . implode(',', array_keys(Lead::CATEGORIES)),
-            'correction_done' => 'nullable|in:' . implode(',', array_keys(Lead::CORRECTION_STATUSES)),
+            'needful_done' => 'nullable|in:' . implode(',', array_keys(Lead::NEEDFUL_STATUSES)),
             'next_followup_date' => 'nullable|date',
             'customer_id' => 'nullable|exists:customers,id',
         ]);
 
-        $normalizedPhone = preg_replace('/\D+/', '', $request->phone);
+        $normalizedPhone = preg_replace('/\D+/', '', $request->country_code . $request->phone_number);
 
         $existingLead = Lead::whereRaw(
             "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'(',''),')',''),'+','') = ?",
@@ -86,17 +88,16 @@ class LeadController extends Controller
             return redirect()->route('leads.index')->with('existing_lead_id', $existingLead->id)->with('warning', 'Lead already exists. You can update it.');
         }
 
-        $customer = $this->resolveOrCreateCustomer($normalizedPhone, $request->customer_id);
+        $customer = $this->resolveOrCreateCustomer($normalizedPhone, $request->customer_id, $request->customer_name);
 
         Lead::create([
-            'phone' => $request->phone,
+            'phone' => $normalizedPhone,
             'customer_id' => $customer->id,
             'assigned_agent_id' => $request->assigned_agent_id,
             'category' => $request->category,
             'customer_remarks' => $request->customer_remarks,
             'service_interest' => $request->service_interest,
-            'booking_status' => $request->booking_status,
-            'correction_done' => $request->correction_done,
+            'needful_done' => $request->needful_done,
             'next_followup_date' => $request->next_followup_date,
         ]);
 
@@ -116,26 +117,27 @@ class LeadController extends Controller
     public function update(Request $request, Lead $lead)
     {
         $request->validate([
-            'phone' => 'required|string|max:20',
+            'country_code' => 'required|string|max:5',
+            'phone_number' => 'required|string|max:20',
+            'customer_name' => 'nullable|string|max:255',
             'assigned_agent_id' => 'nullable|exists:users,id',
             'category' => 'nullable|in:' . implode(',', array_keys(Lead::CATEGORIES)),
-            'correction_done' => 'nullable|in:' . implode(',', array_keys(Lead::CORRECTION_STATUSES)),
+            'needful_done' => 'nullable|in:' . implode(',', array_keys(Lead::NEEDFUL_STATUSES)),
             'next_followup_date' => 'nullable|date',
             'customer_id' => 'nullable|exists:customers,id',
         ]);
 
-        $normalizedPhone = preg_replace('/\D+/', '', $request->phone);
-        $customer = $this->resolveOrCreateCustomer($normalizedPhone, $request->customer_id);
+        $normalizedPhone = preg_replace('/\D+/', '', $request->country_code . $request->phone_number);
+        $customer = $this->resolveOrCreateCustomer($normalizedPhone, $request->customer_id, $request->customer_name);
 
         $data = [
-            'phone' => $request->phone,
+            'phone' => $normalizedPhone,
             'customer_id' => $customer->id,
             'assigned_agent_id' => $request->assigned_agent_id,
             'category' => $request->category,
             'customer_remarks' => $request->customer_remarks,
             'service_interest' => $request->service_interest,
-            'booking_status' => $request->booking_status,
-            'correction_done' => $request->correction_done,
+            'needful_done' => $request->needful_done,
             'next_followup_date' => $request->next_followup_date,
         ];
 
@@ -159,6 +161,20 @@ class LeadController extends Controller
             ->with('success', 'Lead updated successfully.');
     }
 
+    /**
+     * Quick inline toggle from the leads table - no modal needed.
+     */
+    public function updateNeedfulDone(Request $request, Lead $lead)
+    {
+        $request->validate([
+            'needful_done' => 'nullable|in:' . implode(',', array_keys(Lead::NEEDFUL_STATUSES)),
+        ]);
+
+        $lead->update(['needful_done' => $request->needful_done ?: null]);
+
+        return response()->json(['success' => true]);
+    }
+
     public function destroy(Lead $lead)
     {
         $lead->delete();
@@ -169,17 +185,19 @@ class LeadController extends Controller
     /**
      * Link to the client the browser matched (if it's a real customer), fall
      * back to a phone match done server-side, or create a brand new client
-     * profile so every lead ends up tied to a customer record.
+     * profile so every lead ends up tied to a customer record. Refreshes the
+     * stored name so the directory reflects the latest spelling given.
      */
-    private function resolveOrCreateCustomer(string $normalizedPhone, ?int $requestedCustomerId): Customer
+    private function resolveOrCreateCustomer(string $normalizedPhone, ?int $requestedCustomerId, ?string $name): Customer
     {
-        if ($requestedCustomerId) {
-            $customer = Customer::find($requestedCustomerId);
-            if ($customer) {
-                return $customer;
-            }
+        $customer = $requestedCustomerId ? Customer::find($requestedCustomerId) : null;
+        $customer = $customer ?: Customer::firstOrCreate(['phone' => $normalizedPhone]);
+
+        if ($name) {
+            $customer->name = $name;
+            $customer->save();
         }
 
-        return Customer::firstOrCreate(['phone' => $normalizedPhone]);
+        return $customer;
     }
 }

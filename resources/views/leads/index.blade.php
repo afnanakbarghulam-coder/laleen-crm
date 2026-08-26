@@ -79,9 +79,19 @@
     .lead-badge.cat-no_show { background: rgba(201,166,107,.15); color: #c9a66b; }
     .lead-badge.cat-cancel { background: rgba(168,82,74,.15); color: #a8524a; }
 
-    .lead-badge.corr-yes { background: rgba(142,168,138,.15); color: #8ea88a; }
-    .lead-badge.corr-booked { background: rgba(201,166,107,.15); color: #c9a66b; }
-    .lead-badge.corr-no { background: rgba(138,125,118,.18); color: #8a7d76; }
+    .needful-done-select {
+        border: none;
+        border-radius: 999px;
+        padding: 3px 24px 3px 10px;
+        font-size: 11.5px;
+        font-weight: 600;
+        cursor: pointer;
+        background-color: rgba(138,125,118,.18);
+        color: #8a7d76;
+    }
+
+    .needful-done-select.needful-yes { background-color: rgba(142,168,138,.15); color: #8ea88a; }
+    .needful-done-select.needful-no { background-color: rgba(168,82,74,.12); color: #a8524a; }
 
     .lead-client-link {
         display: inline-flex;
@@ -176,8 +186,7 @@
                     <th>Customer Remarks</th>
                     <th>Service Interest</th>
                     <th>Agent Assign</th>
-                    <th>Booking Status</th>
-                    <th>Correction Done</th>
+                    <th>Needful Done</th>
                     <th>Next Follow-up Date</th>
                     <th>Actions</th>
                 </thead>
@@ -205,13 +214,16 @@
                             <td>{{ $lead->customer_remarks ?? '—' }}</td>
                             <td>{{ $lead->service_interest ?? '—' }}</td>
                             <td>{{ $lead->agent->name ?? '—' }}</td>
-                            <td>{{ $lead->booking_status ?? '—' }}</td>
                             <td>
-                                @if ($lead->correction_done)
-                                    <span class="lead-badge corr-{{ $lead->correction_done }}">{{ \App\Models\Lead::CORRECTION_STATUSES[$lead->correction_done] ?? $lead->correction_done }}</span>
-                                @else
-                                    <span class="text-muted">—</span>
-                                @endif
+                                <select class="needful-done-select {{ $lead->needful_done ? 'needful-' . $lead->needful_done : '' }}"
+                                    data-lead-id="{{ $lead->id }}"
+                                    data-previous="{{ $lead->needful_done }}"
+                                    data-url="{{ route('leads.needful-done', $lead->id) }}">
+                                    <option value="" {{ !$lead->needful_done ? 'selected' : '' }}>—</option>
+                                    @foreach (\App\Models\Lead::NEEDFUL_STATUSES as $key => $label)
+                                        <option value="{{ $key }}" {{ $lead->needful_done === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                    @endforeach
+                                </select>
                             </td>
                             <td>{{ $lead->next_followup_date ? $lead->next_followup_date->format('d M Y') : '—' }}</td>
                             <td>
@@ -237,7 +249,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="text-center text-muted">No leads found</td>
+                            <td colspan="9" class="text-center text-muted">No leads found</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -260,26 +272,28 @@
     @include('leads.create')
 
     <script>
-        // Smart client linking: as the phone field changes in the Add or any Edit
-        // modal, check it against the clients table and surface a match/new badge.
+        // Smart client linking: as the country code / phone number change in the
+        // Add or any Edit modal, check the combined number against the clients
+        // table and surface a match/new badge, auto-filling the customer name.
         (function() {
             let lookupTimer = null;
 
-            document.addEventListener('input', function(e) {
-                if (!e.target.matches('input[name="phone"]')) return;
-
-                const form = e.target.closest('form');
+            function handlePhoneChange(el) {
+                const form = el.closest('form');
                 const matchBox = form.querySelector('.lead-client-match');
                 const newBox = form.querySelector('.lead-client-new');
                 const hiddenId = form.querySelector('.lead-customer-id-input');
-                const digits = e.target.value.replace(/\D/g, '');
+                const nameInput = form.querySelector('.lead-customer-name');
+                const countryCode = form.querySelector('.lead-country-code').value;
+                const numberVal = form.querySelector('.lead-phone-number').value;
+                const digits = (countryCode + numberVal).replace(/\D/g, '');
 
                 clearTimeout(lookupTimer);
                 hiddenId.value = '';
                 matchBox.classList.add('d-none');
                 newBox.classList.add('d-none');
 
-                if (digits.length < 8) return;
+                if (numberVal.replace(/\D/g, '').length < 6) return;
 
                 lookupTimer = setTimeout(() => {
                     fetch(`{{ route('customers.lookup') }}?phone=${encodeURIComponent(digits)}`)
@@ -287,7 +301,7 @@
                         .then(data => {
                             if (data.found) {
                                 hiddenId.value = data.id;
-                                matchBox.querySelector('.lead-client-name').textContent = data.name || 'Unnamed';
+                                if (nameInput && data.name) nameInput.value = data.name;
                                 matchBox.querySelector('.lead-client-visits').textContent = data.visit_count;
                                 matchBox.querySelector('.lead-client-visits-wrap')?.classList.remove('d-none');
                                 matchBox.querySelector('.lead-client-profile-link').href = data.profile_url;
@@ -300,8 +314,43 @@
                         })
                         .catch(() => {});
                 }, 400);
+            }
+
+            document.addEventListener('input', function(e) {
+                if (e.target.matches('.lead-phone-number')) handlePhoneChange(e.target);
+            });
+            document.addEventListener('change', function(e) {
+                if (e.target.matches('.lead-country-code')) handlePhoneChange(e.target);
             });
         })();
+
+        // Inline "Needful Done" toggle straight from the leads table.
+        document.addEventListener('change', function(e) {
+            if (!e.target.matches('.needful-done-select')) return;
+
+            const select = e.target;
+            const previous = select.dataset.previous ?? '';
+
+            fetch(select.dataset.url, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ needful_done: select.value }),
+            })
+                .then(res => {
+                    if (!res.ok) throw new Error();
+                    select.classList.remove('needful-yes', 'needful-no');
+                    if (select.value) select.classList.add('needful-' + select.value);
+                    select.dataset.previous = select.value;
+                })
+                .catch(() => {
+                    select.value = previous;
+                    alert('Could not update Needful Done. Please try again.');
+                });
+        });
 
         document.addEventListener("DOMContentLoaded", function() {
 
