@@ -1,206 +1,499 @@
 @extends('layouts.app')
 
-@section('title', 'Appointment Bookings')
+@section('title', 'Bookings Analytics')
+
+<style>
+    :root {
+        --bk-border: rgba(217, 143, 131,0.16);
+        --bk-border-strong: rgba(217, 143, 131,0.3);
+        --bk-muted: #c9a39a;
+        --bk-ink: #e79a91;
+        --bk-primary: #d98f83;
+        --bk-success: #8ea88a;
+        --bk-danger: #a8524a;
+        --bk-warning: #c9a66b;
+        --bk-info: #8aa6ab;
+    }
+
+    .bk-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .bk-header h4 {
+        margin-bottom: 2px;
+    }
+
+    .bk-header p {
+        color: var(--bk-muted);
+        margin-bottom: 0;
+        font-size: 13.5px;
+    }
+
+    /* ---------------- FILTER BAR ---------------- */
+    .bk-filter-card {
+        background: rgba(36, 30, 28, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--bk-border);
+        border-radius: 16px;
+        padding: 14px 18px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+    }
+
+    .bk-filter-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .bk-preset-group {
+        display: inline-flex;
+        background: rgba(217, 143, 131,0.08);
+        border-radius: 9px;
+        padding: 3px;
+        flex-wrap: wrap;
+    }
+
+    .bk-preset-btn {
+        border: none;
+        background: transparent;
+        padding: 0 12px;
+        height: 36px;
+        font-size: 12.5px;
+        font-weight: 600;
+        border-radius: 7px;
+        color: #c9a39a;
+        transition: all .15s ease;
+        white-space: nowrap;
+    }
+
+    .bk-preset-btn.active {
+        background: #241e1c;
+        color: var(--bk-ink);
+        box-shadow: 0 1px 3px rgba(16, 24, 40, .12);
+    }
+
+    .bk-filter-divider {
+        width: 1px;
+        align-self: stretch;
+        min-height: 26px;
+        background: var(--bk-border);
+        margin: 0 2px;
+    }
+
+    .bk-date-input {
+        height: 36px;
+        border: 1px solid var(--bk-border-strong);
+        border-radius: 9px;
+        padding: 0 10px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--bk-ink);
+        background-color: #241e1c;
+    }
+
+    .bk-date-input:focus {
+        outline: none;
+        border-color: var(--bk-primary);
+        box-shadow: 0 0 0 3px rgba(217, 143, 131, .15);
+    }
+
+    .bk-apply-btn {
+        height: 36px;
+        border-radius: 9px;
+        font-weight: 700;
+        font-size: 13px;
+        padding: 0 16px;
+    }
+
+    /* ---------------- KPI CARDS ---------------- */
+    .bk-kpi-card {
+        background: rgba(36, 30, 28, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--bk-border);
+        border-radius: 16px;
+        padding: 18px 20px;
+        height: 100%;
+        transition: all .2s ease;
+    }
+
+    .bk-kpi-card:hover {
+        box-shadow: 0 8px 24px rgba(16, 24, 40, .08);
+        transform: translateY(-2px);
+    }
+
+    .bk-kpi-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }
+
+    .bk-kpi-label {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: var(--bk-muted);
+    }
+
+    .bk-kpi-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+
+    .bk-kpi-value {
+        font-size: 26px;
+        font-weight: 700;
+        color: var(--bk-ink);
+        letter-spacing: -.01em;
+        line-height: 1.2;
+    }
+
+    .bk-kpi-sub {
+        display: flex;
+        gap: 14px;
+        margin-top: 10px;
+        font-size: 12.5px;
+        color: var(--bk-muted);
+    }
+
+    .bk-kpi-sub b {
+        color: var(--bk-ink);
+        font-weight: 700;
+    }
+
+    /* ---------------- CHART CARDS ---------------- */
+    .bk-chart-card {
+        background: rgba(36, 30, 28, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--bk-border);
+        border-radius: 16px;
+        padding: 18px 20px;
+        height: 100%;
+    }
+
+    .bk-chart-card h6 {
+        font-weight: 700;
+        margin-bottom: 2px;
+    }
+
+    .bk-chart-card .bk-chart-sub {
+        font-size: 12.5px;
+        color: var(--bk-muted);
+        margin-bottom: 10px;
+    }
+
+    /* ---------------- BRANCH TABLE ---------------- */
+    .bk-branch-table th {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: var(--bk-muted);
+        font-weight: 700;
+        border-top: none;
+    }
+
+    .bk-branch-table td {
+        font-size: 13.5px;
+        vertical-align: middle;
+    }
+
+    /* ---------------- LIST CARD ---------------- */
+    .bk-section-card {
+        background: rgba(36, 30, 28, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--bk-border);
+        border-radius: 16px;
+        overflow: hidden;
+        margin-bottom: 20px;
+    }
+
+    .bk-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--bk-border);
+    }
+
+    .bk-section-head h6 {
+        margin-bottom: 0;
+        font-weight: 700;
+    }
+
+    .bk-table {
+        margin-bottom: 0;
+    }
+
+    .bk-table thead th {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: var(--bk-muted);
+        font-weight: 700;
+        border-top: none;
+        background: rgba(217, 143, 131,0.05);
+        white-space: nowrap;
+    }
+
+    .bk-table tbody td {
+        font-size: 13.5px;
+        vertical-align: middle;
+    }
+
+    .bk-status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11.5px;
+        font-weight: 600;
+        padding: 2px 10px;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+</style>
 
 @section('content')
-    <!-- Page Navbar with Add Button -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="fw-bold">Appointment Bookings</h4>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addAppointmentModal">
-            <i class="bx bx-plus me-1"></i> Add Appointment
-        </button>
+
+    <div class="bk-header">
+        <div>
+            <h4>Bookings Analytics</h4>
+            <p>Volume, revenue and status trends across every appointment. Creating, rescheduling and checking out bookings happen on the Enhanced Calendar page.</p>
+        </div>
     </div>
 
-    <!-- Filter Section -->
-    <div class="mb-4">
-        <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse"
-            aria-expanded="false" aria-controls="filterCollapse">
-            <i class="bx bx-filter-alt me-1"></i> Filters
-        </button>
+    <!-- FILTER BAR (date range only) -->
+    <div class="bk-filter-card">
+        <form method="GET" action="{{ route('appointments.index') }}" id="bkFilterForm">
+            <div class="bk-filter-row">
+                <div class="bk-preset-group" id="bkPresetGroup">
+                    <button type="button" class="bk-preset-btn" data-preset="today">Today</button>
+                    <button type="button" class="bk-preset-btn" data-preset="yesterday">Yesterday</button>
+                    <button type="button" class="bk-preset-btn" data-preset="this_week">This Week</button>
+                    <button type="button" class="bk-preset-btn" data-preset="this_month">This Month</button>
+                    <button type="button" class="bk-preset-btn" data-preset="last_month">Last Month</button>
+                </div>
 
-        <div class="collapse mt-3 {{ request()->hasAny(['branch', 'agent_id', 'service_name', 'date', 'status', 'price_from', 'price_to', 'customer_name', 'phone']) ? 'show' : '' }}"
-            id="filterCollapse">
-            <div class="card card-body shadow-sm border-0">
-                <form method="GET" action="{{ route('appointments.index') }}">
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-3">
-                            <label class="form-label">Branch</label>
-                            <select name="branch" class="form-select">
-                                <option value="">All Branches</option>
-                                <option value="old_airport" {{ request('branch') == 'old_airport' ? 'selected' : '' }}>Old
-                                    Airport</option>
-                                <option value="wakrah" {{ request('branch') == 'wakrah' ? 'selected' : '' }}>Wakrah</option>
-                                <option value="home_service" {{ request('branch') == 'home_service' ? 'selected' : '' }}>
-                                    Home Service</option>
-                            </select>
+                <div class="bk-filter-divider"></div>
 
-                        </div>
+                <input type="date" name="from" id="bkFrom" class="bk-date-input" value="{{ $from->format('Y-m-d') }}">
+                <span class="text-muted small">to</span>
+                <input type="date" name="to" id="bkTo" class="bk-date-input" value="{{ $to->format('Y-m-d') }}">
 
-                        <div class="col-md-3">
-                            <label class="form-label">Agent</label>
-                            <select name="agent_id" class="form-select">
-                                <option value="">All Agents</option>
-                                @foreach ($agents as $agent)
-                                    <option value="{{ $agent->id }}"
-                                        {{ request('agent_id') == $agent->id ? 'selected' : '' }}>
-                                        {{ $agent->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
+                <button type="submit" class="btn btn-primary bk-apply-btn">Apply</button>
+                @if (request()->hasAny(['from', 'to']))
+                    <a href="{{ route('appointments.index') }}" class="btn btn-outline-secondary bk-apply-btn">Reset</a>
+                @endif
+            </div>
+        </form>
+    </div>
 
-                        <div class="col-md-3">
-                            <label class="form-label">Service Name</label>
-                            <input type="text" name="service_name" class="form-control" placeholder="Search by Service"
-                                value="{{ request('service_name') }}">
-                        </div>
+    <!-- KPI CARDS -->
+    <div class="row g-3 mb-3">
+        <div class="col-md-6 col-xl-3">
+            <div class="bk-kpi-card">
+                <div class="bk-kpi-top">
+                    <span class="bk-kpi-label">Total Bookings</span>
+                    <span class="bk-kpi-icon" style="background:rgba(217, 143, 131,.1); color:var(--bk-primary);">
+                        <i class="bx bx-calendar-check"></i>
+                    </span>
+                </div>
+                <div class="bk-kpi-value">{{ number_format($totalBookings) }}</div>
+                <div class="bk-kpi-sub">
+                    <span>{{ $from->format('d M Y') }} &ndash; {{ $to->format('d M Y') }}</span>
+                </div>
+            </div>
+        </div>
 
-                        <div class="col-md-3">
-                            <label class="form-label">Appointment Date</label>
-                            <input type="date" name="date" class="form-control" value="{{ request('date') }}">
-                        </div>
+        <div class="col-md-6 col-xl-3">
+            <div class="bk-kpi-card">
+                <div class="bk-kpi-top">
+                    <span class="bk-kpi-label">Total Revenue</span>
+                    <span class="bk-kpi-icon" style="background:rgba(142,168,138,.12); color:#7fa876;">
+                        <i class="bx bx-money"></i>
+                    </span>
+                </div>
+                <div class="bk-kpi-value">{{ number_format($totalRevenue, 2) }} <small class="fs-6 fw-semibold text-muted">QAR</small></div>
+                <div class="bk-kpi-sub">
+                    <span>Across all booking statuses</span>
+                </div>
+            </div>
+        </div>
 
-                        <div class="col-md-3">
-                            <label class="form-label">Min Price (QAR)</label>
-                            <input type="number" name="price_from" class="form-control" step="1" min="0" placeholder="From" value="{{ request('price_from') }}">
-                        </div>
+        <div class="col-md-6 col-xl-3">
+            <div class="bk-kpi-card">
+                <div class="bk-kpi-top">
+                    <span class="bk-kpi-label">Avg. Booking Value</span>
+                    <span class="bk-kpi-icon" style="background:rgba(138,166,171,.1); color:#8aa6ab;">
+                        <i class="bx bx-trending-up"></i>
+                    </span>
+                </div>
+                <div class="bk-kpi-value">{{ number_format($avgBookingValue, 2) }} <small class="fs-6 fw-semibold text-muted">QAR</small></div>
+                <div class="bk-kpi-sub">
+                    <span>Revenue &divide; total bookings</span>
+                </div>
+            </div>
+        </div>
 
-                        <div class="col-md-3">
-                            <label class="form-label">Max Price (QAR)</label>
-                            <input type="number" name="price_to" class="form-control" step="1" min="0" placeholder="To" value="{{ request('price_to') }}">
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="form-label">Customer Name</label>
-                            <input type="text" name="customer_name" class="form-control" placeholder="Search by customer" value="{{ request('customer_name') }}">
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="form-label">Phone Number</label>
-                            <input type="text" name="phone" class="form-control" placeholder="Search by phone" value="{{ request('phone') }}">
-                        </div>
-
-                        <div class="col-md-12 d-flex gap-2 mt-3">
-                            <button type="submit" class="btn btn-primary w-100">Filter</button>
-                            <a href="{{ route('appointments.index') }}" class="btn btn-secondary w-100">Reset</a>
-                        </div>
-                    </div>
-                </form>
+        <div class="col-md-6 col-xl-3">
+            <div class="bk-kpi-card">
+                <div class="bk-kpi-top">
+                    <span class="bk-kpi-label">Unique Customers</span>
+                    <span class="bk-kpi-icon" style="background:rgba(217, 143, 131,.1); color:var(--bk-primary);">
+                        <i class="bx bx-user"></i>
+                    </span>
+                </div>
+                <div class="bk-kpi-value">{{ number_format($uniqueCustomers) }}</div>
+                <div class="bk-kpi-sub">
+                    <span>Distinct phone numbers, excludes walk-ins</span>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Appointment Table -->
-    <div class="card">
-        <h5 class="card-header">All Appointments <span class="badge bg-primary">{{ $appointments->count() }}</span></h5>
-        <div class="table-responsive text-nowrap">
-            <table class="table align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Customer Name</th>
-                        <th>Phone</th>
-                        <th>Service Name</th>
-                        <th>Branch</th>
-                        <th>Appointment Date & Time</th>
-                        <th>Price (QAR)</th>
-                        <th>Staff</th>
-                        {{-- <th>Lifetime Revenue</th> --}}
-                        <th>Status</th>
-                        <th>Agent</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="table-border-bottom-0">
-                    @forelse($appointments as $appointment)
-                        <tr>
-                            {{-- <td>{{ $appointment->customer_name }}</td> --}}
-                            <td>
-                                <button class="btn btn-link p-0"
-                                    onclick="showCustomerProfile('{{ $appointment->phone }}')">
-                                    {{ $appointment->customer_name }}
-                                </button>
-                            </td>
-
-                            <td> {{ $appointment->phone }}</td>
-
-                            <td>{{ $appointment->service_name }}</td>
-                            <td>{{ ucwords(str_replace('_', ' ', $appointment->branch)) }}</td>
-                            <td>{{ \Carbon\Carbon::parse($appointment->appointment_datetime)->format('d M Y, h:i A') }}
-                            </td>
-                            <td>{{ number_format($appointment->price, 2) }}</td>
-                            {{-- <td>{{ number_format($appointment->lifetime_revenue, 2) }}</td> --}}
-                            <td>{{ $appointment->staff?->name ?? 'N/A' }}</td>
-                            <td>
-                                @php
-                                    $statusColors = [
-                                        'pending'     => 'secondary',
-                                        'arrived'     => 'info',
-                                        'in_progress' => 'primary',
-                                        'completed'   => 'success',
-                                        'no_show'     => 'danger',
-                                        'cancelled'   => 'warning',
-                                    ];
-                                @endphp
-
-                                <span class="badge bg-{{ $statusColors[$appointment->status] ?? 'secondary' }}">
-                                    {{ ucwords(str_replace('_', ' ', $appointment->status)) }}
-                                </span>
-                            </td>
-
-                            <td>{{ $appointment->agent->name ?? '—' }}</td>
-                            <td>
-                                <div class="dropdown">
-                                    <button type="button" class="btn p-0 dropdown-toggle" data-bs-toggle="dropdown">
-                                        <i class="fa-solid fa-ellipsis-vertical"></i>
-                                    </button>
-                                    <div class="dropdown-menu">
-                                        @if ($appointment->status !== 'completed' && $appointment->status !== 'cancelled')
-                                            <a class="dropdown-item" href="{{ route('appointments.revenue.payment', $appointment->id) }}">
-                                                <i class="bx bx-credit-card me-1"></i> Checkout
-                                            </a>
-                                        @endif
-                                        <a class="dropdown-item" href="#" data-bs-toggle="modal"
-                                            data-bs-target="#editAppointmentModal{{ $appointment->id }}">
-                                            <i class="bx bx-edit-alt me-1"></i> Edit
-                                        </a>
-                                        <form action="{{ route('appointments.destroy', $appointment->id) }}"
-                                            method="POST">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button class="dropdown-item text-danger" type="submit"
-                                                onclick="return confirm('Delete this appointment?');">
-                                                <i class="bx bx-trash me-1"></i> Delete
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-
-                        <!-- Edit Modal -->
-                        @include('appointments.edit', ['appointment' => $appointment])
-                    @empty
-                        <tr>
-                            <td colspan="10" class="text-center text-muted">No appointments found</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-                <tfoot>
-                    <tr class="table-light">
-                        <th colspan="5" class="text-end">Total:</th>
-                        <th>{{ number_format($total_price, 2) }} QAR</th>
-                        {{-- <th>{{ number_format($total_revenue, 2) }} QAR</th> --}}
-                        <th colspan="3"></th>
-                    </tr>
-                </tfoot>
-
-            </table>
+    <!-- CHARTS ROW 1 -->
+    <div class="row g-3 mb-3">
+        <div class="col-xl-8">
+            <div class="bk-chart-card">
+                <h6>Bookings Trend</h6>
+                <div class="bk-chart-sub">{{ $from->format('d M Y') }} &ndash; {{ $to->format('d M Y') }}</div>
+                <div id="bkTrendChart"></div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="bk-chart-card">
+                <h6>Status Breakdown</h6>
+                <div class="bk-chart-sub">Share of bookings by status</div>
+                <div id="bkStatusChart"></div>
+            </div>
         </div>
     </div>
 
-    @include('appointments.create')
-    @include('appointments.customer_profile')
+    <!-- CHARTS ROW 2: BRANCH COMPARISON -->
+    <div class="row g-3 mb-3">
+        <div class="col-12">
+            <div class="bk-chart-card">
+                <h6>Branch Performance</h6>
+                <div class="bk-chart-sub">Bookings vs. revenue by branch &middot; {{ $from->format('d M Y') }} &ndash; {{ $to->format('d M Y') }}</div>
+                <div class="row g-4 align-items-center">
+                    <div class="col-lg-8">
+                        <div id="bkBranchChart"></div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="table-responsive">
+                            <table class="table bk-branch-table">
+                                <thead>
+                                    <tr>
+                                        <th>Branch</th>
+                                        <th>Bookings</th>
+                                        <th>Revenue</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($branchStats as $stat)
+                                        <tr>
+                                            <td>{{ $stat['label'] }}</td>
+                                            <td>{{ $stat['count'] }}</td>
+                                            <td>{{ number_format($stat['revenue'], 2) }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
+    <!-- BOOKINGS LIST (read-only) -->
+    <div class="bk-section-card">
+        <div class="bk-section-head">
+            <h6>Bookings <span class="badge bg-primary">{{ $appointments->total() }}</span></h6>
+        </div>
+        <div class="table-responsive text-nowrap">
+            <table class="table bk-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th>Phone</th>
+                        <th>Service</th>
+                        <th>Branch</th>
+                        <th>Date &amp; Time</th>
+                        <th>Price (QAR)</th>
+                        <th>Staff</th>
+                        <th>Status</th>
+                        <th>Agent</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @php
+                        $statusColors = [
+                            'pending'     => ['bg' => 'rgba(201,166,107,.12)', 'fg' => '#c9a66b'],
+                            'arrived'     => ['bg' => 'rgba(185,142,163,.12)', 'fg' => '#b98ea3'],
+                            'in_progress' => ['bg' => 'rgba(201,123,74,.12)', 'fg' => '#c97b4a'],
+                            'completed'   => ['bg' => 'rgba(142,168,138,.12)', 'fg' => '#8ea88a'],
+                            'no_show'     => ['bg' => 'rgba(138,125,118,.15)', 'fg' => '#8a7d76'],
+                            'cancelled'   => ['bg' => 'rgba(168,82,74,.12)', 'fg' => '#a8524a'],
+                        ];
+                    @endphp
+                    @forelse($appointments as $appointment)
+                        <tr>
+                            <td>
+                                <button type="button" class="btn btn-link p-0" onclick="showCustomerProfile('{{ $appointment->phone }}')">
+                                    {{ $appointment->customer_name }}
+                                </button>
+                            </td>
+                            <td>{{ $appointment->phone }}</td>
+                            <td>{{ $appointment->service_name }}</td>
+                            <td>{{ ucwords(str_replace('_', ' ', $appointment->branch)) }}</td>
+                            <td>{{ $appointment->appointment_datetime->format('d M Y, h:i A') }}</td>
+                            <td>{{ number_format($appointment->price, 2) }}</td>
+                            <td>{{ $appointment->staff?->name ?? 'N/A' }}</td>
+                            <td>
+                                @php $sc = $statusColors[$appointment->status] ?? ['bg' => 'rgba(138,125,118,.15)', 'fg' => '#8a7d76']; @endphp
+                                <span class="bk-status-chip" style="background:{{ $sc['bg'] }}; color:{{ $sc['fg'] }};">
+                                    {{ ucwords(str_replace('_', ' ', $appointment->status)) }}
+                                </span>
+                            </td>
+                            <td>{{ $appointment->agent->name ?? '—' }}</td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">No bookings in this date range</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+        @if ($appointments->hasPages())
+            <div class="p-3 border-top" style="border-color: var(--bk-border) !important;">
+                {{ $appointments->links() }}
+            </div>
+        @endif
+    </div>
+
+    @include('appointments.customer_profile')
+@endsection
+
+@section('scripts')
     <script>
         function showCustomerProfile(phone) {
             fetch(`/appointments/customer-profile/${phone}`)
@@ -214,7 +507,6 @@
                     document.getElementById('profileVisits').innerText = data.total_visits;
                     document.getElementById('profileFirstVisit').innerText = data.first_visit;
 
-                    // Hide Last Visit if only 1 visit
                     if (data.total_visits <= 1) {
                         document.getElementById('lastVisitRow').style.display = 'none';
                     } else {
@@ -233,94 +525,115 @@
                         fullLink.classList.add('d-none');
                     }
 
-                    // Populate appointments table
                     let tbody = document.getElementById('profileAppointments');
                     tbody.innerHTML = '';
                     data.appointments.forEach(a => {
                         tbody.innerHTML += `
-                    <tr>
-                        <td>${a.appointment_datetime}</td>
-                        <td>${a.service_name}</td>
-                        <td>${a.price}</td>
-                        <td>${a.branch}</td>
-                        <td>${a.agent}</td>
-                    </tr>
-                `;
+                            <tr>
+                                <td>${a.appointment_datetime}</td>
+                                <td>${a.service_name}</td>
+                                <td>${a.price}</td>
+                                <td>${a.branch}</td>
+                                <td>${a.agent}</td>
+                            </tr>
+                        `;
                     });
 
                     new bootstrap.Modal(document.getElementById('customerProfileModal')).show();
                 })
                 .catch(() => alert('No records found'));
         }
-        
 
-        document.addEventListener('DOMContentLoaded', function() {
+        function toLocalISODate(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
 
-        // Loop through all edit modals
-        document.querySelectorAll('.editServiceSelect').forEach(serviceSelect => {
-            const modal = serviceSelect.closest('.modal');
-            const appointmentId = serviceSelect.dataset.appointmentId;
-            const dateInput = modal.querySelector('.editDateInput');
-            const branchSelect = modal.querySelector('.editBranchSelect');
-            const staffSelect = modal.querySelector('.editStaffSelect');
-            const staffHelp = modal.querySelector('.editStaffHelp');
-            const priceInput = modal.querySelector('.editPriceInput');
+        document.querySelectorAll('.bk-preset-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const today = new Date();
+                let from = new Date(today);
+                let to = new Date(today);
 
-            function updateStaff() {
-                const services = Array.from(serviceSelect.selectedOptions).map(o => o.value);
-                const datetime = dateInput.value;
-                const branch = branchSelect.value;
+                switch (this.dataset.preset) {
+                    case 'today':
+                        break;
+                    case 'yesterday':
+                        from.setDate(from.getDate() - 1);
+                        to.setDate(to.getDate() - 1);
+                        break;
+                    case 'this_week':
+                        from.setDate(from.getDate() - from.getDay());
+                        break;
+                    case 'this_month':
+                        from = new Date(today.getFullYear(), today.getMonth(), 1);
+                        break;
+                    case 'last_month':
+                        from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                        to = new Date(today.getFullYear(), today.getMonth(), 0);
+                        break;
+                }
 
-                // Reset staff dropdown
-                staffSelect.innerHTML = '<option value="">-- Select Staff --</option>';
-                staffHelp.classList.add('d-none');
-                staffSelect.disabled = true;
-
-                if (!services.length || !datetime || !branch) return;
-
-                const params = new URLSearchParams();
-                services.forEach(s => params.append('services[]', s));
-                params.append('appointment_datetime', datetime);
-                params.append('branch', branch);
-
-                fetch("{{ route('appointments.availableStaff') }}?" + params.toString())
-                    .then(res => res.json())
-                    .then(data => {
-                        if (!data.length) {
-                            staffHelp.classList.remove('d-none');
-                            return;
-                        }
-
-                        staffSelect.disabled = false;
-                        staffHelp.classList.add('d-none');
-
-                        data.forEach(staff => {
-                            staffSelect.insertAdjacentHTML(
-                                'beforeend',
-                                `<option value="${staff.id}">${staff.name}</option>`
-                            );
-                        });
-                    });
-            }
-
-            function updatePrice() {
-                let total = 0;
-                Array.from(serviceSelect.selectedOptions).forEach(option => {
-                    total += Number(option.dataset.price || 0);
-                });
-                if (priceInput) priceInput.value = total.toFixed(2);
-            }
-
-            // Trigger updates on change
-            serviceSelect.addEventListener('change', function() {
-                updateStaff();
-                updatePrice();
+                document.getElementById('bkFrom').value = toLocalISODate(from);
+                document.getElementById('bkTo').value = toLocalISODate(to);
+                document.getElementById('bkFilterForm').submit();
             });
-            dateInput.addEventListener('change', updateStaff);
-            branchSelect.addEventListener('change', updateStaff);
         });
 
-    });
-    </script>
+        // Bookings trend
+        new ApexCharts(document.querySelector('#bkTrendChart'), {
+            chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'inherit' },
+            series: [{ name: 'Bookings', data: @json($dailyTrend->values()) }],
+            xaxis: { categories: @json($dailyTrend->keys()), labels: { rotate: -45, style: { fontSize: '11px' } } },
+            yaxis: { labels: { formatter: (v) => v.toFixed(0) } },
+            colors: ['#d98f83'],
+            fill: { type: 'gradient', gradient: { opacityFrom: .35, opacityTo: .05 } },
+            stroke: { curve: 'smooth', width: 2.5 },
+            dataLabels: { enabled: false },
+            tooltip: { y: { formatter: (v) => v.toFixed(0) + ' bookings' } },
+            grid: { borderColor: 'rgba(217, 143, 131,0.16)' },
+        }).render();
 
+        // Status breakdown donut
+        new ApexCharts(document.querySelector('#bkStatusChart'), {
+            chart: { type: 'donut', height: 320, fontFamily: 'inherit' },
+            series: @json($statusCounts->values()),
+            labels: @json($statusLabels),
+            colors: ['#c9a66b', '#b98ea3', '#c97b4a', '#8ea88a', '#8a7d76', '#a8524a'],
+            dataLabels: { enabled: true, formatter: (val) => val.toFixed(1) + '%' },
+            legend: { position: 'bottom' },
+            tooltip: { y: { formatter: (v) => v + ' bookings' } },
+            plotOptions: {
+                pie: {
+                    donut: {
+                        labels: {
+                            show: true,
+                            total: { show: true, label: 'Total', formatter: () => '{{ $totalBookings }}' }
+                        }
+                    }
+                }
+            },
+        }).render();
+
+        // Branch comparison
+        new ApexCharts(document.querySelector('#bkBranchChart'), {
+            chart: { type: 'bar', height: 260, toolbar: { show: false }, fontFamily: 'inherit' },
+            series: [
+                { name: 'Bookings', data: @json($branchStats->pluck('count')) },
+                { name: 'Revenue (QAR)', data: @json($branchStats->pluck('revenue')) },
+            ],
+            xaxis: { categories: @json($branchStats->pluck('label')) },
+            yaxis: [
+                { min: 0, title: { text: 'Bookings' }, labels: { formatter: (v) => v.toFixed(0) } },
+                { min: 0, opposite: true, title: { text: 'Revenue (QAR)' }, labels: { formatter: (v) => v.toFixed(0) } },
+            ],
+            colors: ['#d98f83', '#8aa6ab'],
+            plotOptions: { bar: { columnWidth: '45%', borderRadius: 6 } },
+            dataLabels: { enabled: false },
+            legend: { position: 'top', horizontalAlign: 'left' },
+            grid: { borderColor: 'rgba(217, 143, 131,0.16)' },
+        }).render();
+    </script>
 @endsection

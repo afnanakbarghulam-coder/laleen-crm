@@ -18,68 +18,72 @@ use Illuminate\Support\Carbon;
 
 class AppointmentController extends Controller
 {
+    const BRANCH_LABELS = [
+        'old_airport' => 'Old Airport',
+        'wakrah' => 'Al Wakrah',
+    ];
+
+    /**
+     * Bookings Analytics: read-only reporting over appointments, filterable
+     * by date range only. Creating/rescheduling/checking out bookings all
+     * happen on the Enhanced Calendar page.
+     */
     public function index(Request $request)
     {
-        $query = Appointment::query()->with(['agent', 'staff']);
+        $from = $request->filled('from')
+            ? Carbon::parse($request->from)->startOfDay()
+            : now()->startOfMonth();
 
-        // 🔍 Filters
-        if ($request->filled('branch')) {
-            $query->where('branch', $request->branch);
-        }
-        if ($request->filled('service_name')) {
-            $query->where('service_name', 'like', '%' . $request->service_name . '%');
-        }
-        if ($request->filled('agent_id')) {
-            $query->where('booking_agent_id', $request->agent_id);
-        }
-        if ($request->filled('date')) {
-            $query->whereDate('appointment_datetime', $request->date);
-        }
-        if ($request->filled('price_from')) {
-            $query->where('price', '>=', $request->price_from);
-        }
-        if ($request->filled('price_to')) {
-            $query->where('price', '<=', $request->price_to);
-        }
-        if ($request->filled('customer_name')) {
-            $query->where('customer_name', 'like', '%' . $request->customer_name . '%');
-        }
-        if ($request->filled('phone')) {
-            $query->where('phone', 'like', '%' . $request->phone . '%');
+        $to = $request->filled('to')
+            ? Carbon::parse($request->to)->endOfDay()
+            : now()->endOfDay();
+
+        if ($from->gt($to)) {
+            [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
         }
 
-        $appointments = $query->orderBy('appointment_datetime', 'desc')->paginate(25);
-        $agents = User::where('role', 'agent')->select('id', 'name')->get();
-        $staff = Staff::select('id', 'name')->get();
-        $services = Service::orderBy('name')->get();
-        $total_price = $appointments->sum('price');
-        $total_revenue = $appointments->sum('lifetime_revenue');
+        $query = Appointment::query()->with(['agent', 'staff'])
+            ->whereBetween('appointment_datetime', [$from, $to]);
 
-        $allStaff = Staff::all();
-        $availableStaff = [];
+        // Aggregates are computed over the full filtered set, not just the current page.
+        $all = (clone $query)->get();
 
-        foreach ($appointments as $appointment) {
-            $date = Carbon::parse($appointment->appointment_datetime)->startOfDay();
-            $availableStaff[$appointment->id] = $allStaff->filter(function ($staff) use ($appointment, $date) {
+        $totalBookings = $all->count();
+        $totalRevenue = $all->sum('price');
+        $avgBookingValue = $totalBookings ? $totalRevenue / $totalBookings : 0;
+        $uniqueCustomers = $all->pluck('phone')->filter()->unique()->count();
 
-                if ($staff->id == $appointment->staff_id) {
-                    return true;
-                }
+        $statusCounts = $all->groupBy('status')->map->count();
+        $statusLabels = $statusCounts->keys()->map(fn($s) => ucwords(str_replace('_', ' ', $s)))->values();
 
-                if ($staff->availability_status !== 'present') return false;
+        $branchStats = collect(self::BRANCH_LABELS)->map(function ($label, $key) use ($all) {
+            $group = $all->where('branch', $key);
+            return [
+                'label' => $label,
+                'count' => $group->count(),
+                'revenue' => $group->sum('price'),
+            ];
+        })->values();
 
-                if ($staff->off_from && $staff->off_to && $date->between($staff->off_from, $staff->off_to)) {
-                    return false;
-                }
-                if (!empty($staff->weekly_off) && in_array($date->format('l'), (array) $staff->weekly_off)) {
-                    return false;
-                }
+        $byDay = $all->groupBy(fn($a) => $a->appointment_datetime->format('Y-m-d'));
+        $dailyTrend = collect(CarbonPeriod::create($from, $to))
+            ->mapWithKeys(fn($date) => [$date->format('d M') => $byDay->get($date->format('Y-m-d'), collect())->count()]);
 
-                return true;
-            });
-        }
+        $appointments = $query->orderBy('appointment_datetime', 'desc')->paginate(25)->withQueryString();
 
-        return view('appointments.index', compact('appointments', 'agents', 'total_price', 'services', 'total_revenue', 'staff', 'availableStaff'));
+        return view('appointments.index', compact(
+            'appointments',
+            'from',
+            'to',
+            'totalBookings',
+            'totalRevenue',
+            'avgBookingValue',
+            'uniqueCustomers',
+            'statusCounts',
+            'statusLabels',
+            'branchStats',
+            'dailyTrend'
+        ));
     }
 
     public function store(Request $request)
