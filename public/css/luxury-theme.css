@@ -80,22 +80,140 @@ html, body {
     font-family: var(--font-sans);
 }
 
+/* Transparent so the fixed .luxe-bg ambient layer glows through behind
+   the (semi-transparent, blurred) cards and panels. */
 .layout-wrapper,
+.layout-container,
 .layout-page,
 .content-wrapper,
-.layout-menu-fixed .layout-page {
-    background: var(--luxe-bg) !important;
+.layout-menu-fixed .layout-page,
+.authentication-wrapper {
+    background: transparent !important;
+    position: relative;
+    z-index: 1;
 }
 
-body::before {
-    content: '';
+/* ---------------- AMBIENT ORB BACKGROUND ---------------- */
+.luxe-bg {
     position: fixed;
     inset: 0;
-    pointer-events: none;
     z-index: 0;
-    background:
-        radial-gradient(ellipse 900px 500px at 15% 0%, rgba(213, 180, 169, 0.07), transparent 60%),
-        radial-gradient(ellipse 700px 500px at 100% 100%, rgba(213, 180, 169, 0.05), transparent 60%);
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--luxe-bg);
+}
+
+.luxe-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(70px);
+    will-change: transform, opacity;
+    opacity: .45;
+}
+
+.luxe-orb-1 {
+    width: 44vw;
+    height: 44vw;
+    top: -14%;
+    left: -10%;
+    background: radial-gradient(circle at 35% 35%, rgba(213, 180, 169, .38), rgba(201, 166, 107, .14) 55%, transparent 72%);
+    animation: luxeDrift1 46s ease-in-out infinite;
+}
+
+.luxe-orb-2 {
+    width: 36vw;
+    height: 36vw;
+    bottom: -16%;
+    right: -8%;
+    background: radial-gradient(circle at 60% 40%, rgba(201, 166, 107, .32), rgba(213, 180, 169, .12) 55%, transparent 72%);
+    animation: luxeDrift2 58s ease-in-out infinite;
+    animation-delay: -12s;
+}
+
+.luxe-orb-3 {
+    width: 28vw;
+    height: 28vw;
+    top: 32%;
+    left: 58%;
+    background: radial-gradient(circle at 50% 50%, rgba(190, 148, 118, .3), transparent 70%);
+    animation: luxeDrift3 64s ease-in-out infinite;
+    animation-delay: -24s;
+}
+
+.luxe-orb-4 {
+    width: 22vw;
+    height: 22vw;
+    top: 6%;
+    right: 10%;
+    background: radial-gradient(circle at 50% 50%, rgba(213, 180, 169, .24), transparent 70%);
+    animation: luxeDrift4 50s ease-in-out infinite;
+    animation-delay: -34s;
+}
+
+.luxe-orb-5 {
+    width: 30vw;
+    height: 30vw;
+    bottom: 8%;
+    left: 20%;
+    background: radial-gradient(circle at 45% 55%, rgba(201, 166, 107, .2), transparent 70%);
+    animation: luxeDrift5 70s ease-in-out infinite;
+    animation-delay: -6s;
+}
+
+@keyframes luxeDrift1 {
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: .4; }
+    25%      { transform: translate(4vw, 3vh) scale(1.08); opacity: .55; }
+    50%      { transform: translate(2vw, 6vh) scale(.95); opacity: .35; }
+    75%      { transform: translate(-3vw, 2vh) scale(1.04); opacity: .5; }
+}
+
+@keyframes luxeDrift2 {
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: .38; }
+    30%      { transform: translate(-5vw, -4vh) scale(1.1); opacity: .52; }
+    65%      { transform: translate(-2vw, -7vh) scale(.92); opacity: .3; }
+}
+
+@keyframes luxeDrift3 {
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: .28; }
+    40%      { transform: translate(3vw, -3vh) scale(1.14); opacity: .42; }
+    70%      { transform: translate(-3vw, 2vh) scale(.9); opacity: .22; }
+}
+
+@keyframes luxeDrift4 {
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: .22; }
+    50%      { transform: translate(-3vw, 4vh) scale(1.15); opacity: .36; }
+}
+
+@keyframes luxeDrift5 {
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: .2; }
+    45%      { transform: translate(3vw, -4vh) scale(1.1); opacity: .32; }
+    80%      { transform: translate(-2vw, 3vh) scale(.94); opacity: .16; }
+}
+
+/* Delicate gold shimmer sweep */
+.luxe-shimmer {
+    position: absolute;
+    inset: -20%;
+    background: linear-gradient(115deg,
+        transparent 42%,
+        rgba(213, 180, 169, .05) 48%,
+        rgba(245, 224, 224, .08) 50%,
+        rgba(213, 180, 169, .05) 52%,
+        transparent 58%);
+    background-size: 220% 220%;
+    animation: luxeShimmer 22s ease-in-out infinite;
+    mix-blend-mode: screen;
+}
+
+@keyframes luxeShimmer {
+    0%, 100% { background-position: -20% -20%; }
+    50%      { background-position: 100% 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .luxe-orb, .luxe-shimmer {
+        animation: none !important;
+    }
 }
 
 h1, h2, h3, h4, h5, h6,
