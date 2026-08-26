@@ -24,6 +24,7 @@ class AppointmentController extends Controller
 
     const PERIOD_LABELS = [
         'today' => 'Today',
+        'tomorrow' => 'Tomorrow',
         'yesterday' => 'Yesterday',
         'this_week' => 'This Week',
         'this_month' => 'This Month',
@@ -42,6 +43,7 @@ class AppointmentController extends Controller
 
         return match ($period) {
             'today' => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+            'tomorrow' => [$now->copy()->addDay()->startOfDay(), $now->copy()->addDay()->endOfDay()],
             'yesterday' => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
             'this_week' => [$now->copy()->startOfWeek(Carbon::SUNDAY), $now->copy()->endOfDay()],
             'last_month' => [$now->copy()->subMonthNoOverflow()->startOfMonth(), $now->copy()->subMonthNoOverflow()->endOfMonth()],
