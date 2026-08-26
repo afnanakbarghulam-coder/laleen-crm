@@ -29,6 +29,7 @@ class AppointmentController extends Controller
         'this_month' => 'This Month',
         'last_month' => 'Last Month',
         'all_time' => 'All Time',
+        'custom' => 'Custom Range',
     ];
 
     /**
@@ -64,7 +65,16 @@ class AppointmentController extends Controller
         $period = $request->filled('period') && array_key_exists($request->period, self::PERIOD_LABELS)
             ? $request->period
             : 'this_month';
-        [$from, $to] = $this->resolvePeriod($period);
+
+        if ($period === 'custom') {
+            $from = $request->filled('from') ? Carbon::parse($request->from)->startOfDay() : now()->startOfMonth();
+            $to = $request->filled('to') ? Carbon::parse($request->to)->endOfDay() : now()->endOfDay();
+            if ($from->gt($to)) {
+                [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
+            }
+        } else {
+            [$from, $to] = $this->resolvePeriod($period);
+        }
 
         $branch = $request->filled('branch') && array_key_exists($request->branch, self::BRANCH_LABELS)
             ? $request->branch

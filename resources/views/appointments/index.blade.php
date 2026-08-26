@@ -252,11 +252,11 @@
         </div>
     </div>
 
-    <!-- FILTER BAR (period + branch, both dropdowns - no manual date entry) -->
+    <!-- FILTER BAR (period + branch dropdowns; "Custom Range" reveals date pickers) -->
     <div class="bk-filter-card">
         <form method="GET" action="{{ route('appointments.index') }}" id="bkFilterForm">
             <div class="bk-filter-row">
-                <select name="period" class="bk-date-input" onchange="document.getElementById('bkFilterForm').submit()">
+                <select name="period" id="bkPeriod" class="bk-date-input" onchange="bkOnPeriodChange(this)">
                     @foreach (\App\Http\Controllers\AppointmentController::PERIOD_LABELS as $key => $label)
                         <option value="{{ $key }}" {{ $period === $key ? 'selected' : '' }}>{{ $label }}</option>
                     @endforeach
@@ -271,7 +271,15 @@
                     @endforeach
                 </select>
 
-                <span class="text-muted small ms-1">{{ $from->format('d M Y') }} &ndash; {{ $to->format('d M Y') }}</span>
+                <div id="bkCustomDates" style="align-items: center; gap: 8px; {{ $period === 'custom' ? 'display:flex;' : 'display:none;' }}">
+                    <div class="bk-filter-divider"></div>
+                    <input type="date" name="from" id="bkFrom" class="bk-date-input" value="{{ $from->format('Y-m-d') }}">
+                    <span class="text-muted small">to</span>
+                    <input type="date" name="to" id="bkTo" class="bk-date-input" value="{{ $to->format('Y-m-d') }}">
+                    <button type="submit" class="btn btn-primary bk-apply-btn">Apply</button>
+                </div>
+
+                <span class="text-muted small ms-1" id="bkRangeLabel" style="{{ $period === 'custom' ? 'display:none;' : '' }}">{{ $from->format('d M Y') }} &ndash; {{ $to->format('d M Y') }}</span>
 
                 @if ($period !== 'this_month' || $branch)
                     <a href="{{ route('appointments.index') }}" class="btn btn-outline-secondary bk-apply-btn ms-auto">Reset</a>
@@ -517,6 +525,17 @@
                     new bootstrap.Modal(document.getElementById('customerProfileModal')).show();
                 })
                 .catch(() => alert('No records found'));
+        }
+
+        function bkOnPeriodChange(sel) {
+            const customDates = document.getElementById('bkCustomDates');
+            const rangeLabel = document.getElementById('bkRangeLabel');
+            if (sel.value === 'custom') {
+                customDates.style.display = 'flex';
+                rangeLabel.style.display = 'none';
+            } else {
+                document.getElementById('bkFilterForm').submit();
+            }
         }
 
         // Bookings trend
