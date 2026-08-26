@@ -106,9 +106,9 @@ html, body {
 .luxe-orb {
     position: absolute;
     border-radius: 50%;
-    filter: blur(70px);
+    filter: blur(64px);
     will-change: transform, opacity;
-    opacity: .45;
+    opacity: .65;
 }
 
 .luxe-orb-1 {
@@ -116,8 +116,8 @@ html, body {
     height: 44vw;
     top: -14%;
     left: -10%;
-    background: radial-gradient(circle at 35% 35%, rgba(213, 180, 169, .38), rgba(201, 166, 107, .14) 55%, transparent 72%);
-    animation: luxeDrift1 46s ease-in-out infinite;
+    background: radial-gradient(circle at 35% 35%, rgba(213, 180, 169, .58), rgba(201, 166, 107, .24) 55%, transparent 72%);
+    animation: luxeDrift1 20s ease-in-out infinite;
 }
 
 .luxe-orb-2 {
@@ -125,9 +125,9 @@ html, body {
     height: 36vw;
     bottom: -16%;
     right: -8%;
-    background: radial-gradient(circle at 60% 40%, rgba(201, 166, 107, .32), rgba(213, 180, 169, .12) 55%, transparent 72%);
-    animation: luxeDrift2 58s ease-in-out infinite;
-    animation-delay: -12s;
+    background: radial-gradient(circle at 60% 40%, rgba(201, 166, 107, .5), rgba(213, 180, 169, .2) 55%, transparent 72%);
+    animation: luxeDrift2 25s ease-in-out infinite;
+    animation-delay: -6s;
 }
 
 .luxe-orb-3 {
@@ -135,9 +135,9 @@ html, body {
     height: 28vw;
     top: 32%;
     left: 58%;
-    background: radial-gradient(circle at 50% 50%, rgba(190, 148, 118, .3), transparent 70%);
-    animation: luxeDrift3 64s ease-in-out infinite;
-    animation-delay: -24s;
+    background: radial-gradient(circle at 50% 50%, rgba(190, 148, 118, .48), transparent 70%);
+    animation: luxeDrift3 28s ease-in-out infinite;
+    animation-delay: -10s;
 }
 
 .luxe-orb-4 {
@@ -145,9 +145,9 @@ html, body {
     height: 22vw;
     top: 6%;
     right: 10%;
-    background: radial-gradient(circle at 50% 50%, rgba(213, 180, 169, .24), transparent 70%);
-    animation: luxeDrift4 50s ease-in-out infinite;
-    animation-delay: -34s;
+    background: radial-gradient(circle at 50% 50%, rgba(213, 180, 169, .4), transparent 70%);
+    animation: luxeDrift4 22s ease-in-out infinite;
+    animation-delay: -15s;
 }
 
 .luxe-orb-5 {
@@ -155,39 +155,39 @@ html, body {
     height: 30vw;
     bottom: 8%;
     left: 20%;
-    background: radial-gradient(circle at 45% 55%, rgba(201, 166, 107, .2), transparent 70%);
-    animation: luxeDrift5 70s ease-in-out infinite;
-    animation-delay: -6s;
+    background: radial-gradient(circle at 45% 55%, rgba(201, 166, 107, .36), transparent 70%);
+    animation: luxeDrift5 30s ease-in-out infinite;
+    animation-delay: -3s;
 }
 
 @keyframes luxeDrift1 {
-    0%, 100% { transform: translate(0, 0) scale(1); opacity: .4; }
-    25%      { transform: translate(4vw, 3vh) scale(1.08); opacity: .55; }
-    50%      { transform: translate(2vw, 6vh) scale(.95); opacity: .35; }
-    75%      { transform: translate(-3vw, 2vh) scale(1.04); opacity: .5; }
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: .6; }
+    25%      { transform: translate(4vw, 3vh) scale(1.08); opacity: .8; }
+    50%      { transform: translate(2vw, 6vh) scale(.95); opacity: .55; }
+    75%      { transform: translate(-3vw, 2vh) scale(1.04); opacity: .72; }
 }
 
 @keyframes luxeDrift2 {
-    0%, 100% { transform: translate(0, 0) scale(1); opacity: .38; }
-    30%      { transform: translate(-5vw, -4vh) scale(1.1); opacity: .52; }
-    65%      { transform: translate(-2vw, -7vh) scale(.92); opacity: .3; }
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: .55; }
+    30%      { transform: translate(-5vw, -4vh) scale(1.1); opacity: .75; }
+    65%      { transform: translate(-2vw, -7vh) scale(.92); opacity: .45; }
 }
 
 @keyframes luxeDrift3 {
-    0%, 100% { transform: translate(0, 0) scale(1); opacity: .28; }
-    40%      { transform: translate(3vw, -3vh) scale(1.14); opacity: .42; }
-    70%      { transform: translate(-3vw, 2vh) scale(.9); opacity: .22; }
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: .42; }
+    40%      { transform: translate(3vw, -3vh) scale(1.14); opacity: .62; }
+    70%      { transform: translate(-3vw, 2vh) scale(.9); opacity: .34; }
 }
 
 @keyframes luxeDrift4 {
-    0%, 100% { transform: translate(0, 0) scale(1); opacity: .22; }
-    50%      { transform: translate(-3vw, 4vh) scale(1.15); opacity: .36; }
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: .34; }
+    50%      { transform: translate(-3vw, 4vh) scale(1.15); opacity: .52; }
 }
 
 @keyframes luxeDrift5 {
-    0%, 100% { transform: translate(0, 0) scale(1); opacity: .2; }
-    45%      { transform: translate(3vw, -4vh) scale(1.1); opacity: .32; }
-    80%      { transform: translate(-2vw, 3vh) scale(.94); opacity: .16; }
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: .3; }
+    45%      { transform: translate(3vw, -4vh) scale(1.1); opacity: .48; }
+    80%      { transform: translate(-2vw, 3vh) scale(.94); opacity: .24; }
 }
 
 /* Delicate gold shimmer sweep */
@@ -196,12 +196,12 @@ html, body {
     inset: -20%;
     background: linear-gradient(115deg,
         transparent 42%,
-        rgba(213, 180, 169, .05) 48%,
-        rgba(245, 224, 224, .08) 50%,
-        rgba(213, 180, 169, .05) 52%,
+        rgba(213, 180, 169, .09) 48%,
+        rgba(245, 224, 224, .14) 50%,
+        rgba(213, 180, 169, .09) 52%,
         transparent 58%);
     background-size: 220% 220%;
-    animation: luxeShimmer 22s ease-in-out infinite;
+    animation: luxeShimmer 10s ease-in-out infinite;
     mix-blend-mode: screen;
 }
 
