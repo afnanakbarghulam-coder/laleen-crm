@@ -286,7 +286,10 @@
                 const nameInput = form.querySelector('.lead-customer-name');
                 const countryCode = form.querySelector('.lead-country-code').value;
                 const numberVal = form.querySelector('.lead-phone-number').value;
-                const digits = (countryCode + numberVal).replace(/\D/g, '');
+                // Match the server's normalization: Qatar (the default/legacy
+                // convention every existing client record uses) stays
+                // unprefixed; only a non-Qatar code is actually prepended.
+                const digits = (countryCode !== '974' ? countryCode + numberVal : numberVal).replace(/\D/g, '');
 
                 clearTimeout(lookupTimer);
                 hiddenId.value = '';

@@ -59,6 +59,26 @@ class Lead extends Model
     }
 
     /**
+     * Combine a country code + local number into the digits-only phone format
+     * used everywhere else in the app (Customers, Appointments, Calendar all
+     * store bare local numbers with no country code - e.g. "55532347", not
+     * "97455532347"). Qatar is the default/legacy convention, so it's left
+     * unprefixed to match every existing client record; only a non-Qatar code
+     * is actually prepended, since there's no existing data to conflict with
+     * there.
+     */
+    public static function normalizePhone(?string $countryCode, ?string $number): string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $number);
+
+        if ($countryCode && $countryCode !== '974') {
+            $digits = preg_replace('/\D+/', '', $countryCode) . $digits;
+        }
+
+        return $digits;
+    }
+
+    /**
      * Split a stored digits-only phone number into [country_code, local_number]
      * for pre-filling the country code select + number input on edit. Falls
      * back to Qatar with the full number if no known code matches.

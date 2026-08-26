@@ -77,7 +77,7 @@ class LeadController extends Controller
             'customer_id' => 'nullable|exists:customers,id',
         ]);
 
-        $normalizedPhone = preg_replace('/\D+/', '', $request->country_code . $request->phone_number);
+        $normalizedPhone = Lead::normalizePhone($request->country_code, $request->phone_number);
 
         $existingLead = Lead::whereRaw(
             "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'(',''),')',''),'+','') = ?",
@@ -127,7 +127,7 @@ class LeadController extends Controller
             'customer_id' => 'nullable|exists:customers,id',
         ]);
 
-        $normalizedPhone = preg_replace('/\D+/', '', $request->country_code . $request->phone_number);
+        $normalizedPhone = Lead::normalizePhone($request->country_code, $request->phone_number);
         $customer = $this->resolveOrCreateCustomer($normalizedPhone, $request->customer_id, $request->customer_name);
 
         $data = [
