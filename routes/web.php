@@ -29,9 +29,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/profile', [UserController::class, 'profile_edit'])->name('profile.edit');
     Route::put('/profile', [UserController::class, 'profile_update'])->name('profile.update');
 
-    Route::resource('leads', LeadController::class);
+    Route::get('/leads-analytics', [LeadController::class, 'analytics'])->name('leads.analytics');
     Route::get('/leads-check-followups', [LeadController::class, 'checkTodaysFollowUps'])->name('leads.check.followups');
     Route::patch('/leads/{lead}/needful-done', [LeadController::class, 'updateNeedfulDone'])->name('leads.needful-done');
+    Route::resource('leads', LeadController::class);
 
     Route::resource('appointments', AppointmentController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::get('/appointments-calendar', [AppointmentController::class, 'calendar'])->name('appointments.calendar');

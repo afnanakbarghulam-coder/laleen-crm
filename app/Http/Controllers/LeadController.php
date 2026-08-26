@@ -7,16 +7,22 @@ use App\Models\Lead;
 use App\Models\Service;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class LeadController extends Controller
 {
+    const PERIOD_LABELS = [
+        'today' => 'Today',
+        'yesterday' => 'Yesterday',
+        'this_week' => 'This Week',
+        'this_month' => 'This Month',
+        'last_month' => 'Last Month',
+        'all_time' => 'All Time',
+    ];
+
     public function index(Request $request)
     {
         $query = Lead::query()->with(['agent', 'customer']);
-
-        if ($request->filled('agent_id')) {
-            $query->whereIn('assigned_agent_id', (array) $request->agent_id);
-        }
 
         if ($request->filled('category')) {
             $query->whereIn('category', (array) $request->category);
@@ -26,20 +32,22 @@ class LeadController extends Controller
             $query->whereDate('next_followup_date', $request->followup_date);
         }
 
-        if ($request->filled('phone')) {
-            $query->where('phone', 'like', '%' . $request->phone . '%');
+        if ($request->filled('phone_number')) {
+            $normalizedPhone = Lead::normalizePhone($request->country_code, $request->phone_number);
+            $query->where('phone', 'like', '%' . $normalizedPhone . '%');
         }
 
         // With no filters at all, keep the table to recent leads rather than the full history.
-        if (!$request->hasAny(['agent_id', 'category', 'followup_date', 'phone'])) {
+        if (!$request->hasAny(['category', 'followup_date', 'phone_number'])) {
             $query->where('created_at', '>=', now()->subMonth());
         }
 
         $leads = $query->orderBy('created_at', 'desc')->get();
         $agents = User::where('role', 'agent')->get();
         $services = Service::orderBy('name')->pluck('name');
+        $overdueLeads = $this->overdueLeadsQuery()->orderBy('next_followup_date')->get();
 
-        return view('leads.index', compact('leads', 'agents', 'services'));
+        return view('leads.index', compact('leads', 'agents', 'services', 'overdueLeads'));
     }
 
     public function checkTodaysFollowUps(Request $request)
@@ -69,11 +77,11 @@ class LeadController extends Controller
         $request->validate([
             'country_code' => 'required|string|max:5',
             'phone_number' => 'required|string|max:20',
-            'customer_name' => 'nullable|string|max:255',
-            'assigned_agent_id' => 'nullable|exists:users,id',
-            'category' => 'nullable|in:' . implode(',', array_keys(Lead::CATEGORIES)),
-            'needful_done' => 'nullable|in:' . implode(',', array_keys(Lead::NEEDFUL_STATUSES)),
-            'next_followup_date' => 'nullable|date',
+            'customer_name' => 'required|string|max:255',
+            'assigned_agent_id' => 'required|exists:users,id',
+            'category' => 'required|in:' . implode(',', array_keys(Lead::CATEGORIES)),
+            'service_interest' => 'required|string|max:255',
+            'next_followup_date' => 'required|date',
             'customer_id' => 'nullable|exists:customers,id',
         ]);
 
@@ -97,7 +105,6 @@ class LeadController extends Controller
             'category' => $request->category,
             'customer_remarks' => $request->customer_remarks,
             'service_interest' => $request->service_interest,
-            'needful_done' => $request->needful_done,
             'next_followup_date' => $request->next_followup_date,
         ]);
 
@@ -119,17 +126,19 @@ class LeadController extends Controller
         $request->validate([
             'country_code' => 'required|string|max:5',
             'phone_number' => 'required|string|max:20',
-            'customer_name' => 'nullable|string|max:255',
-            'assigned_agent_id' => 'nullable|exists:users,id',
-            'category' => 'nullable|in:' . implode(',', array_keys(Lead::CATEGORIES)),
-            'needful_done' => 'nullable|in:' . implode(',', array_keys(Lead::NEEDFUL_STATUSES)),
-            'next_followup_date' => 'nullable|date',
+            'customer_name' => 'required|string|max:255',
+            'assigned_agent_id' => 'required|exists:users,id',
+            'category' => 'required|in:' . implode(',', array_keys(Lead::CATEGORIES)),
+            'service_interest' => 'required|string|max:255',
+            'next_followup_date' => 'required|date',
             'customer_id' => 'nullable|exists:customers,id',
         ]);
 
         $normalizedPhone = Lead::normalizePhone($request->country_code, $request->phone_number);
         $customer = $this->resolveOrCreateCustomer($normalizedPhone, $request->customer_id, $request->customer_name);
 
+        // needful_done is intentionally left untouched here - it's managed
+        // exclusively via the inline dropdown on the leads list.
         $data = [
             'phone' => $normalizedPhone,
             'customer_id' => $customer->id,
@@ -137,7 +146,6 @@ class LeadController extends Controller
             'category' => $request->category,
             'customer_remarks' => $request->customer_remarks,
             'service_interest' => $request->service_interest,
-            'needful_done' => $request->needful_done,
             'next_followup_date' => $request->next_followup_date,
         ];
 
@@ -180,6 +188,95 @@ class LeadController extends Controller
         $lead->delete();
 
         return redirect()->back()->with('success', 'Lead deleted successfully.');
+    }
+
+    /**
+     * Leads Analytics: category breakdown, needful-done ("conversion") status,
+     * and follow-up performance (overdue/upcoming/completed), scoped to a
+     * chosen creation-date period - except follow-up performance, which is
+     * always a live, all-time snapshot since "overdue" is a right-now concept.
+     */
+    public function analytics(Request $request)
+    {
+        $period = $request->filled('period') && array_key_exists($request->period, self::PERIOD_LABELS)
+            ? $request->period
+            : 'this_month';
+        [$from, $to] = $this->resolvePeriod($period);
+
+        $leads = Lead::whereBetween('created_at', [$from, $to])->get();
+
+        $totalLeads = $leads->count();
+
+        $categoryCounts = [];
+        foreach (Lead::CATEGORIES as $key => $label) {
+            $categoryCounts[$key] = $leads->where('category', $key)->count();
+        }
+        $uncategorized = $leads->whereNull('category')->count();
+
+        $categoryLabels = array_merge(array_values(Lead::CATEGORIES), ['Uncategorized']);
+        $categorySeries = array_merge(array_values($categoryCounts), [$uncategorized]);
+
+        $needfulCounts = [
+            'yes' => $leads->where('needful_done', 'yes')->count(),
+            'no' => $leads->where('needful_done', 'no')->count(),
+            'unset' => $leads->whereNull('needful_done')->count(),
+        ];
+
+        $today = today();
+        $allLeads = Lead::all();
+        $followupPerformance = [
+            'overdue' => $this->overdueLeadsQuery()->count(),
+            'completed' => $allLeads->where('needful_done', 'yes')->count(),
+            'upcoming' => $allLeads->filter(fn($l) => $l->next_followup_date && $l->next_followup_date->gte($today) && $l->needful_done !== 'yes')->count(),
+            'no_date' => $allLeads->whereNull('next_followup_date')->count(),
+        ];
+
+        return view('leads.analytics', compact(
+            'period',
+            'from',
+            'to',
+            'totalLeads',
+            'categoryCounts',
+            'categoryLabels',
+            'categorySeries',
+            'uncategorized',
+            'needfulCounts',
+            'followupPerformance'
+        ));
+    }
+
+    private function resolvePeriod(string $period): array
+    {
+        $now = now();
+
+        return match ($period) {
+            'today' => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+            'yesterday' => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
+            'this_week' => [$now->copy()->startOfWeek(Carbon::SUNDAY), $now->copy()->endOfDay()],
+            'last_month' => [$now->copy()->subMonthNoOverflow()->startOfMonth(), $now->copy()->subMonthNoOverflow()->endOfMonth()],
+            'all_time' => [
+                ($earliest = Lead::min('created_at')) ? Carbon::parse($earliest)->startOfDay() : $now->copy()->startOfMonth(),
+                $now->copy()->endOfDay(),
+            ],
+            default => [$now->copy()->startOfMonth(), $now->copy()->endOfDay()],
+        };
+    }
+
+    /**
+     * Leads whose next follow-up date has passed, haven't been marked
+     * Needful Done = Yes, and aren't already a dead/cancelled lead.
+     */
+    private function overdueLeadsQuery()
+    {
+        return Lead::with(['agent', 'customer'])
+            ->whereNotNull('next_followup_date')
+            ->whereDate('next_followup_date', '<', today())
+            ->where(function ($q) {
+                $q->whereNull('needful_done')->orWhere('needful_done', '!=', 'yes');
+            })
+            ->where(function ($q) {
+                $q->whereNull('category')->orWhere('category', '!=', 'cancel');
+            });
     }
 
     /**

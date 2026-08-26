@@ -106,10 +106,33 @@
     <!-- Page Navbar with Add Button -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h4 class="fw-bold">Lead Management</h4>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addLeadModal">
-            <i class="bx bx-plus me-1"></i> Add Lead
-        </button>
+        <div class="d-flex gap-2">
+            <a href="{{ route('leads.analytics') }}" class="btn btn-outline-secondary">
+                <i class="bx bx-bar-chart-alt-2 me-1"></i> Analytics
+            </a>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addLeadModal">
+                <i class="bx bx-plus me-1"></i> Add Lead
+            </button>
+        </div>
     </div>
+
+    @if ($overdueLeads->count())
+        <div class="kpi-alert kpi-alert-red">
+            <i class="bx bx-error-circle"></i>
+            <div class="flex-grow-1">
+                <strong>{{ $overdueLeads->count() }} {{ Str::plural('lead', $overdueLeads->count()) }} overdue for follow-up!</strong>
+                <div class="text-muted small mb-2">Next Follow-up Date has passed and Needful Done isn't marked Yes.</div>
+                <div style="max-height: 170px; overflow-y: auto;">
+                    @foreach ($overdueLeads as $lead)
+                        <div class="d-flex justify-content-between small mb-1 pe-2">
+                            <span>{{ $lead->customer->name ?? 'Unnamed' }} &middot; {{ $lead->phone }}</span>
+                            <span class="text-muted">Was due {{ $lead->next_followup_date->format('d M Y') }}</span>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @endif
 
     <!-- Filter Section -->
     <div class="mb-4">
@@ -129,26 +152,14 @@
             </form>
         </div>
 
-        <div class="collapse mt-3 {{ request()->hasAny(['agent_id', 'category', 'phone']) ? 'show' : '' }}" id="filterCollapse">
+        <div class="collapse mt-3 {{ request()->hasAny(['category', 'phone_number']) ? 'show' : '' }}" id="filterCollapse">
             <div class="card card-body shadow-sm border-0">
                 <form method="GET" action="{{ route('leads.index') }}">
                     @if (request('followup_date'))
                         <input type="hidden" name="followup_date" value="{{ request('followup_date') }}">
                     @endif
                     <div class="row g-3 align-items-end">
-                        <div class="col-md-4">
-                            <label class="form-label">Agent</label>
-                            <select name="agent_id[]" class="form-select leads-multiselect" multiple data-placeholder="All Agents">
-                                @foreach ($agents as $agent)
-                                    <option value="{{ $agent->id }}"
-                                        {{ in_array($agent->id, (array) request('agent_id', [])) ? 'selected' : '' }}>
-                                        {{ $agent->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="form-label">Category</label>
                             <select name="category[]" class="form-select leads-multiselect" multiple data-placeholder="All Categories">
                                 @foreach (\App\Models\Lead::CATEGORIES as $key => $label)
@@ -157,10 +168,17 @@
                             </select>
                         </div>
 
-                        <div class="col-md-4">
-                            <label class="form-label">Phone Number</label>
-                            <input type="text" name="phone" class="form-control" placeholder="Search phone"
-                                value="{{ request('phone') }}">
+                        <div class="col-md-6">
+                            <label class="form-label">Contact (WhatsApp Number)</label>
+                            <div class="input-group">
+                                <select name="country_code" class="form-select" style="width: 110px; flex: 0 0 110px;">
+                                    @foreach (\App\Models\Lead::COUNTRY_CODES as $code => $label)
+                                        <option value="{{ $code }}" title="{{ $label }}" {{ request('country_code', '974') === $code ? 'selected' : '' }}>+{{ $code }} ({{ $label }})</option>
+                                    @endforeach
+                                </select>
+                                <input type="text" name="phone_number" class="form-control" placeholder="XXXXXXXX"
+                                    value="{{ request('phone_number') }}">
+                            </div>
                         </div>
 
                         <div class="col-md-12 d-flex gap-2">

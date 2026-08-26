@@ -32,13 +32,13 @@
                              </div>
                          </div>
                          <div class="col-md-6">
-                             <label class="form-label">Customer Name</label>
-                             <input type="text" name="customer_name" class="form-control lead-customer-name" placeholder="Customer name">
+                             <label class="form-label">Customer Name <span class="text-danger">*</span></label>
+                             <input type="text" name="customer_name" class="form-control lead-customer-name" placeholder="Customer name" required>
                          </div>
 
                          <div class="col-md-6">
-                             <label class="form-label">Agent Assign</label>
-                             <select name="assigned_agent_id" class="form-select">
+                             <label class="form-label">Agent Assign <span class="text-danger">*</span></label>
+                             <select name="assigned_agent_id" class="form-select" required>
                                  <option value="">-- Select Agent --</option>
                                  @foreach ($agents as $agent)
                                      <option value="{{ $agent->id }}">{{ $agent->name }}</option>
@@ -46,8 +46,8 @@
                              </select>
                          </div>
                          <div class="col-md-6">
-                             <label class="form-label">Category</label>
-                             <select name="category" class="form-select">
+                             <label class="form-label">Category <span class="text-danger">*</span></label>
+                             <select name="category" class="form-select" required>
                                  <option value="">-- Select Category --</option>
                                  @foreach (\App\Models\Lead::CATEGORIES as $key => $label)
                                      <option value="{{ $key }}">{{ $label }}</option>
@@ -56,8 +56,8 @@
                          </div>
 
                          <div class="col-md-6">
-                             <label class="form-label">Service Interest</label>
-                             <select name="service_interest" class="form-select">
+                             <label class="form-label">Service Interest <span class="text-danger">*</span></label>
+                             <select name="service_interest" class="form-select" required>
                                  <option value="">-- Select Service --</option>
                                  @foreach ($services ?? [] as $serviceName)
                                      <option value="{{ $serviceName }}">{{ $serviceName }}</option>
@@ -65,18 +65,8 @@
                              </select>
                          </div>
                          <div class="col-md-6">
-                             <label class="form-label">Needful Done</label>
-                             <select name="needful_done" class="form-select">
-                                 <option value="">-- Select --</option>
-                                 @foreach (\App\Models\Lead::NEEDFUL_STATUSES as $key => $label)
-                                     <option value="{{ $key }}">{{ $label }}</option>
-                                 @endforeach
-                             </select>
-                         </div>
-
-                         <div class="col-md-6">
-                             <label class="form-label">Next Follow-up Date</label>
-                             <input type="date" name="next_followup_date" class="form-control">
+                             <label class="form-label">Next Follow-up Date <span class="text-danger">*</span></label>
+                             <input type="date" name="next_followup_date" class="form-control" required>
                          </div>
 
                          <div class="col-12">
