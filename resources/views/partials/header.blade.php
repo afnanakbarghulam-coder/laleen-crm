@@ -10,51 +10,48 @@
 
     @php
         // Back button is clamped per-module: from any sub-page it jumps straight to
-        // that module's index/root page; from the root page itself it steps up to
-        // the module's parent (a KPI report's hub, or the dashboard). Computed as an
-        // explicit target URL (not history.back()) so it never depends on how the
-        // user actually navigated here.
+        // that module's index/root page. On the root page itself there is nowhere
+        // "back" to go within the module, so the button is hidden entirely.
+        // Computed as an explicit target URL (not history.back()) so it never
+        // depends on how the user actually navigated here.
         $routeName = request()->route() ? request()->route()->getName() : '';
-        $dashboardUrl = route('dashboard');
-        $backTarget = $dashboardUrl;
+        $backTarget = null;
 
         if (str_starts_with($routeName, 'kpi.')) {
             $seg = explode('.', $routeName)[1] ?? 'hub';
-            if ($seg === 'hub') {
-                $backTarget = $dashboardUrl;
-            } else {
+            if ($seg !== 'hub') {
                 $rootUrl = route("kpi.$seg.index");
-                $backTarget = $routeName === "kpi.$seg.index" ? route('kpi.hub') : $rootUrl;
+                $backTarget = $routeName === "kpi.$seg.index" ? null : $rootUrl;
             }
         } elseif (str_starts_with($routeName, 'appointments.revenue')) {
-            $backTarget = $routeName === 'appointments.revenue.index' ? $dashboardUrl : route('appointments.revenue.index');
+            $backTarget = $routeName === 'appointments.revenue.index' ? null : route('appointments.revenue.index');
         } elseif ($routeName === 'appointments.calendar') {
-            $backTarget = $dashboardUrl;
+            $backTarget = null;
         } elseif (str_starts_with($routeName, 'appointments') || str_starts_with($routeName, 'sales') || str_starts_with($routeName, 'staff-blocks')) {
-            $backTarget = $routeName === 'appointments.index' ? $dashboardUrl : route('appointments.index');
+            $backTarget = $routeName === 'appointments.index' ? null : route('appointments.index');
         } elseif (str_starts_with($routeName, 'leads')) {
-            $backTarget = $routeName === 'leads.index' ? $dashboardUrl : route('leads.index');
+            $backTarget = $routeName === 'leads.index' ? null : route('leads.index');
         } elseif (str_starts_with($routeName, 'customers')) {
-            $backTarget = $routeName === 'customers.index' ? $dashboardUrl : route('customers.index');
+            $backTarget = $routeName === 'customers.index' ? null : route('customers.index');
         } elseif (str_starts_with($routeName, 'users')) {
-            $backTarget = $routeName === 'users.index' ? $dashboardUrl : route('users.index');
+            $backTarget = $routeName === 'users.index' ? null : route('users.index');
         } elseif (str_starts_with($routeName, 'staffs') || str_starts_with($routeName, 'shifts')) {
-            $backTarget = $routeName === 'staffs.index' ? $dashboardUrl : route('staffs.index');
+            $backTarget = $routeName === 'staffs.index' ? null : route('staffs.index');
         } elseif (str_starts_with($routeName, 'services') || str_starts_with($routeName, 'service-categories')) {
-            $backTarget = $routeName === 'services.index' ? $dashboardUrl : route('services.index');
+            $backTarget = $routeName === 'services.index' ? null : route('services.index');
         } elseif (str_starts_with($routeName, 'products')) {
-            $backTarget = $routeName === 'products.index' ? $dashboardUrl : route('products.index');
+            $backTarget = $routeName === 'products.index' ? null : route('products.index');
         }
     @endphp
 
     <div class="navbar-nav-right d-flex align-items-center" id="navbar-collapse">
 
-        @unless ($routeName === 'dashboard')
-            <!-- Back (clamped to the current module's first/index page) -->
+        @if ($backTarget)
+            <!-- Back (hidden on each module's own root/index page) -->
             <a href="{{ $backTarget }}" class="navbar-back-btn me-3" title="Go back">
                 <i class="bx bx-arrow-back"></i>
             </a>
-        @endunless
+        @endif
 
         <!-- Search (optional) -->
         {{-- <div class="navbar-nav align-items-center">
