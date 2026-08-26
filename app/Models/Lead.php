@@ -49,6 +49,7 @@ class Lead extends Model
     protected $fillable = [
         'phone',
         'customer_id',
+        'appointment_id',
         'assigned_agent_id',
         'category',
         'customer_remarks',
@@ -69,6 +70,15 @@ class Lead extends Model
     public function customer()
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    /**
+     * The specific appointment that auto-generated this lead (No Show/Cancel
+     * only - manually created leads never have this set). Null for those.
+     */
+    public function appointment()
+    {
+        return $this->belongsTo(Appointment::class);
     }
 
     /**

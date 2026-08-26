@@ -1000,20 +1000,18 @@ class AppointmentController extends Controller
     /**
      * No-show and Cancel are no longer manually selectable when adding a
      * lead - they're driven entirely by staff marking an appointment that
-     * way on the Enhanced Calendar. This finds the customer's most recent
-     * lead (matched by customer_id, falling back to phone) and marks its
-     * category accordingly, or creates a fresh lead if none exists yet so
-     * the no-show/cancellation still shows up in the Leads pipeline.
+     * way on the Enhanced Calendar. This always logs a lead scoped to THIS
+     * specific appointment (via leads.appointment_id), never one shared with
+     * or matched against the client's other leads: a client can have an
+     * independently-active Hair Color follow-up and a Haircut
+     * no-show/cancellation lead side by side, and this action must never
+     * touch the former. Re-toggling the same appointment's status (e.g.
+     * correcting No Show to Cancelled) updates that one dedicated lead
+     * in place rather than spawning a duplicate.
      */
     private function syncLeadCategoryFromAppointment(Appointment $appointment, string $category): void
     {
-        $lead = Lead::where(function ($q) use ($appointment) {
-            if ($appointment->customer_id) {
-                $q->where('customer_id', $appointment->customer_id);
-            } else {
-                $q->where('phone', $appointment->phone);
-            }
-        })->orderByDesc('created_at')->first();
+        $lead = Lead::where('appointment_id', $appointment->id)->first();
 
         if ($lead) {
             $lead->update(['category' => $category]);
@@ -1024,6 +1022,7 @@ class AppointmentController extends Controller
         Lead::create([
             'phone' => $appointment->phone,
             'customer_id' => $appointment->customer_id,
+            'appointment_id' => $appointment->id,
             'assigned_agent_id' => $appointment->booking_agent_id,
             'category' => $category,
             'service_interest' => $appointment->service_name,
