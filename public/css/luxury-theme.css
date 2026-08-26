@@ -117,7 +117,7 @@ html, body {
     top: -14%;
     left: -10%;
     background: radial-gradient(circle at 35% 35%, rgba(213, 180, 169, .58), rgba(201, 166, 107, .24) 55%, transparent 72%);
-    animation: luxeDrift1 14s ease-in-out infinite;
+    animation: luxeDrift1 8s ease-in-out infinite;
 }
 
 .luxe-orb-2 {
@@ -126,7 +126,7 @@ html, body {
     bottom: -16%;
     right: -8%;
     background: radial-gradient(circle at 60% 40%, rgba(201, 166, 107, .5), rgba(213, 180, 169, .2) 55%, transparent 72%);
-    animation: luxeDrift2 17s ease-in-out infinite;
+    animation: luxeDrift2 10s ease-in-out infinite;
     animation-delay: -6s;
 }
 
@@ -136,7 +136,7 @@ html, body {
     top: 32%;
     left: 58%;
     background: radial-gradient(circle at 50% 50%, rgba(190, 148, 118, .48), transparent 70%);
-    animation: luxeDrift3 19s ease-in-out infinite;
+    animation: luxeDrift3 11s ease-in-out infinite;
     animation-delay: -10s;
 }
 
@@ -146,7 +146,7 @@ html, body {
     top: 6%;
     right: 10%;
     background: radial-gradient(circle at 50% 50%, rgba(213, 180, 169, .4), transparent 70%);
-    animation: luxeDrift4 15s ease-in-out infinite;
+    animation: luxeDrift4 9s ease-in-out infinite;
     animation-delay: -15s;
 }
 
@@ -156,7 +156,7 @@ html, body {
     bottom: 8%;
     left: 20%;
     background: radial-gradient(circle at 45% 55%, rgba(201, 166, 107, .36), transparent 70%);
-    animation: luxeDrift5 20s ease-in-out infinite;
+    animation: luxeDrift5 12s ease-in-out infinite;
     animation-delay: -3s;
 }
 
@@ -201,7 +201,7 @@ html, body {
         rgba(213, 180, 169, .09) 52%,
         transparent 58%);
     background-size: 220% 220%;
-    animation: luxeShimmer 7s ease-in-out infinite;
+    animation: luxeShimmer 4s ease-in-out infinite;
     mix-blend-mode: screen;
 }
 
