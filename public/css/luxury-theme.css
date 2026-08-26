@@ -532,6 +532,7 @@ select option {
     border: none;
     flex-shrink: 0;
     font-size: 17px;
+    text-decoration: none;
     transition: all .2s ease;
     cursor: pointer;
 }

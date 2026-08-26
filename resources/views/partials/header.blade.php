@@ -8,12 +8,53 @@
         </a>
     </div>
 
+    @php
+        // Back button is clamped per-module: from any sub-page it jumps straight to
+        // that module's index/root page; from the root page itself it steps up to
+        // the module's parent (a KPI report's hub, or the dashboard). Computed as an
+        // explicit target URL (not history.back()) so it never depends on how the
+        // user actually navigated here.
+        $routeName = request()->route() ? request()->route()->getName() : '';
+        $dashboardUrl = route('dashboard');
+        $backTarget = $dashboardUrl;
+
+        if (str_starts_with($routeName, 'kpi.')) {
+            $seg = explode('.', $routeName)[1] ?? 'hub';
+            if ($seg === 'hub') {
+                $backTarget = $dashboardUrl;
+            } else {
+                $rootUrl = route("kpi.$seg.index");
+                $backTarget = $routeName === "kpi.$seg.index" ? route('kpi.hub') : $rootUrl;
+            }
+        } elseif (str_starts_with($routeName, 'appointments.revenue')) {
+            $backTarget = $routeName === 'appointments.revenue.index' ? $dashboardUrl : route('appointments.revenue.index');
+        } elseif ($routeName === 'appointments.calendar') {
+            $backTarget = $dashboardUrl;
+        } elseif (str_starts_with($routeName, 'appointments') || str_starts_with($routeName, 'sales') || str_starts_with($routeName, 'staff-blocks')) {
+            $backTarget = $routeName === 'appointments.index' ? $dashboardUrl : route('appointments.index');
+        } elseif (str_starts_with($routeName, 'leads')) {
+            $backTarget = $routeName === 'leads.index' ? $dashboardUrl : route('leads.index');
+        } elseif (str_starts_with($routeName, 'customers')) {
+            $backTarget = $routeName === 'customers.index' ? $dashboardUrl : route('customers.index');
+        } elseif (str_starts_with($routeName, 'users')) {
+            $backTarget = $routeName === 'users.index' ? $dashboardUrl : route('users.index');
+        } elseif (str_starts_with($routeName, 'staffs') || str_starts_with($routeName, 'shifts')) {
+            $backTarget = $routeName === 'staffs.index' ? $dashboardUrl : route('staffs.index');
+        } elseif (str_starts_with($routeName, 'services') || str_starts_with($routeName, 'service-categories')) {
+            $backTarget = $routeName === 'services.index' ? $dashboardUrl : route('services.index');
+        } elseif (str_starts_with($routeName, 'products')) {
+            $backTarget = $routeName === 'products.index' ? $dashboardUrl : route('products.index');
+        }
+    @endphp
+
     <div class="navbar-nav-right d-flex align-items-center" id="navbar-collapse">
 
-        <!-- Back -->
-        <button type="button" class="navbar-back-btn me-3" title="Go back" onclick="history.back()">
-            <i class="bx bx-arrow-back"></i>
-        </button>
+        @unless ($routeName === 'dashboard')
+            <!-- Back (clamped to the current module's first/index page) -->
+            <a href="{{ $backTarget }}" class="navbar-back-btn me-3" title="Go back">
+                <i class="bx bx-arrow-back"></i>
+            </a>
+        @endunless
 
         <!-- Search (optional) -->
         {{-- <div class="navbar-nav align-items-center">
