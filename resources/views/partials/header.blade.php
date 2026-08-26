@@ -10,6 +10,11 @@
 
     <div class="navbar-nav-right d-flex align-items-center" id="navbar-collapse">
 
+        <!-- Back -->
+        <button type="button" class="navbar-back-btn me-3" title="Go back" onclick="history.back()">
+            <i class="bx bx-arrow-back"></i>
+        </button>
+
         <!-- Search (optional) -->
         {{-- <div class="navbar-nav align-items-center">
             <span class="fw-bold">Dashboard</span>

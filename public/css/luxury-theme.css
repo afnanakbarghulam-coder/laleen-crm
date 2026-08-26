@@ -520,6 +520,27 @@ select option {
     box-shadow: none !important;
 }
 
+.navbar-back-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(217, 143, 131, 0.1);
+    color: var(--luxe-accent);
+    border: none;
+    flex-shrink: 0;
+    font-size: 17px;
+    transition: all .2s ease;
+    cursor: pointer;
+}
+
+.navbar-back-btn:hover {
+    background: rgba(217, 143, 131, 0.18);
+    color: var(--luxe-accent-hover);
+}
+
 .content-footer {
     background: transparent !important;
     color: var(--luxe-muted);
