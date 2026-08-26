@@ -81,7 +81,13 @@ html, body {
 }
 
 /* Transparent so the fixed .luxe-bg ambient layer glows through behind
-   the (semi-transparent, blurred) cards and panels. */
+   the (semi-transparent, blurred) cards and panels. No z-index here:
+   these render above .luxe-bg from DOM order alone (it's the first
+   child of <body>), and giving this whole subtree an explicit z-index
+   traps it in its own stacking context - no descendant modal can ever
+   out-rank Bootstrap's .modal-backdrop (a plain body-level sibling)
+   once that happens, which silently ate every click on every modal
+   in the app. */
 .layout-wrapper,
 .layout-container,
 .layout-page,
@@ -90,7 +96,6 @@ html, body {
 .authentication-wrapper {
     background: transparent !important;
     position: relative;
-    z-index: 1;
 }
 
 /* ---------------- AMBIENT ORB BACKGROUND ---------------- */
