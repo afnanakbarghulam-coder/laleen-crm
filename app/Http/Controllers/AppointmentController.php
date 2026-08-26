@@ -11,7 +11,6 @@ use App\Models\Product;
 use App\Models\Customer;
 use App\Models\Service;
 use App\Models\AppointmentService;
-use Carbon\CarbonPeriod;
 use App\Models\Appointment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -23,27 +22,60 @@ class AppointmentController extends Controller
         'wakrah' => 'Al Wakrah',
     ];
 
+    const PERIOD_LABELS = [
+        'today' => 'Today',
+        'yesterday' => 'Yesterday',
+        'this_week' => 'This Week',
+        'this_month' => 'This Month',
+        'last_month' => 'Last Month',
+        'all_time' => 'All Time',
+    ];
+
+    /**
+     * Resolve a named period into a [from, to] Carbon range. Picking a date
+     * range is a dropdown choice, not free-hand typing.
+     */
+    private function resolvePeriod(string $period): array
+    {
+        $now = now();
+
+        return match ($period) {
+            'today' => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+            'yesterday' => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
+            'this_week' => [$now->copy()->startOfWeek(Carbon::SUNDAY), $now->copy()->endOfDay()],
+            'last_month' => [$now->copy()->subMonthNoOverflow()->startOfMonth(), $now->copy()->subMonthNoOverflow()->endOfMonth()],
+            'all_time' => [
+                ($earliest = Appointment::min('appointment_datetime'))
+                    ? Carbon::parse($earliest)->startOfDay()
+                    : $now->copy()->startOfMonth(),
+                $now->copy()->endOfDay(),
+            ],
+            default => [$now->copy()->startOfMonth(), $now->copy()->endOfDay()],
+        };
+    }
+
     /**
      * Bookings Analytics: read-only reporting over appointments, filterable
-     * by date range only. Creating/rescheduling/checking out bookings all
-     * happen on the Enhanced Calendar page.
+     * by period and branch only. Creating/rescheduling/checking out bookings
+     * all happen on the Enhanced Calendar page.
      */
     public function index(Request $request)
     {
-        $from = $request->filled('from')
-            ? Carbon::parse($request->from)->startOfDay()
-            : now()->startOfMonth();
+        $period = $request->filled('period') && array_key_exists($request->period, self::PERIOD_LABELS)
+            ? $request->period
+            : 'this_month';
+        [$from, $to] = $this->resolvePeriod($period);
 
-        $to = $request->filled('to')
-            ? Carbon::parse($request->to)->endOfDay()
-            : now()->endOfDay();
-
-        if ($from->gt($to)) {
-            [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
-        }
+        $branch = $request->filled('branch') && array_key_exists($request->branch, self::BRANCH_LABELS)
+            ? $request->branch
+            : null;
 
         $query = Appointment::query()->with(['agent', 'staff'])
             ->whereBetween('appointment_datetime', [$from, $to]);
+
+        if ($branch) {
+            $query->where('branch', $branch);
+        }
 
         // Aggregates are computed over the full filtered set, not just the current page.
         $all = (clone $query)->get();
@@ -65,14 +97,29 @@ class AppointmentController extends Controller
             ];
         })->values();
 
-        $byDay = $all->groupBy(fn($a) => $a->appointment_datetime->format('Y-m-d'));
-        $dailyTrend = collect(CarbonPeriod::create($from, $to))
-            ->mapWithKeys(fn($date) => [$date->format('d M') => $byDay->get($date->format('Y-m-d'), collect())->count()]);
+        // Falls back to weekly buckets once the range is too wide for a legible daily x-axis.
+        $weekly = $from->diffInDays($to) > 62;
+        $bucketKey = fn($date) => $weekly ? $date->format('o-W') : $date->format('Y-m-d');
+        $bucketLabel = fn($date) => $weekly ? 'Wk ' . $date->format('W M') : $date->format('d M');
+
+        $grouped = $all->groupBy(fn($a) => $bucketKey($a->appointment_datetime));
+        $dailyTrend = collect();
+        $cursor = $from->copy()->startOfDay();
+        $end = $to->copy()->startOfDay();
+        while ($cursor->lte($end)) {
+            $key = $bucketKey($cursor);
+            if (!$dailyTrend->has($bucketLabel($cursor))) {
+                $dailyTrend[$bucketLabel($cursor)] = $grouped->get($key, collect())->count();
+            }
+            $cursor->addDay();
+        }
 
         $appointments = $query->orderBy('appointment_datetime', 'desc')->paginate(25)->withQueryString();
 
         return view('appointments.index', compact(
             'appointments',
+            'period',
+            'branch',
             'from',
             'to',
             'totalBookings',

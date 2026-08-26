@@ -53,33 +53,6 @@
         gap: 10px;
     }
 
-    .bk-preset-group {
-        display: inline-flex;
-        background: rgba(217, 143, 131,0.08);
-        border-radius: 9px;
-        padding: 3px;
-        flex-wrap: wrap;
-    }
-
-    .bk-preset-btn {
-        border: none;
-        background: transparent;
-        padding: 0 12px;
-        height: 36px;
-        font-size: 12.5px;
-        font-weight: 600;
-        border-radius: 7px;
-        color: #c9a39a;
-        transition: all .15s ease;
-        white-space: nowrap;
-    }
-
-    .bk-preset-btn.active {
-        background: #241e1c;
-        color: var(--bk-ink);
-        box-shadow: 0 1px 3px rgba(16, 24, 40, .12);
-    }
-
     .bk-filter-divider {
         width: 1px;
         align-self: stretch;
@@ -279,27 +252,29 @@
         </div>
     </div>
 
-    <!-- FILTER BAR (date range only) -->
+    <!-- FILTER BAR (period + branch, both dropdowns - no manual date entry) -->
     <div class="bk-filter-card">
         <form method="GET" action="{{ route('appointments.index') }}" id="bkFilterForm">
             <div class="bk-filter-row">
-                <div class="bk-preset-group" id="bkPresetGroup">
-                    <button type="button" class="bk-preset-btn" data-preset="today">Today</button>
-                    <button type="button" class="bk-preset-btn" data-preset="yesterday">Yesterday</button>
-                    <button type="button" class="bk-preset-btn" data-preset="this_week">This Week</button>
-                    <button type="button" class="bk-preset-btn" data-preset="this_month">This Month</button>
-                    <button type="button" class="bk-preset-btn" data-preset="last_month">Last Month</button>
-                </div>
+                <select name="period" class="bk-date-input" onchange="document.getElementById('bkFilterForm').submit()">
+                    @foreach (\App\Http\Controllers\AppointmentController::PERIOD_LABELS as $key => $label)
+                        <option value="{{ $key }}" {{ $period === $key ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
+                </select>
 
                 <div class="bk-filter-divider"></div>
 
-                <input type="date" name="from" id="bkFrom" class="bk-date-input" value="{{ $from->format('Y-m-d') }}">
-                <span class="text-muted small">to</span>
-                <input type="date" name="to" id="bkTo" class="bk-date-input" value="{{ $to->format('Y-m-d') }}">
+                <select name="branch" class="bk-date-input" onchange="document.getElementById('bkFilterForm').submit()">
+                    <option value="">All Branches</option>
+                    @foreach (\App\Http\Controllers\AppointmentController::BRANCH_LABELS as $key => $label)
+                        <option value="{{ $key }}" {{ $branch === $key ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
+                </select>
 
-                <button type="submit" class="btn btn-primary bk-apply-btn">Apply</button>
-                @if (request()->hasAny(['from', 'to']))
-                    <a href="{{ route('appointments.index') }}" class="btn btn-outline-secondary bk-apply-btn">Reset</a>
+                <span class="text-muted small ms-1">{{ $from->format('d M Y') }} &ndash; {{ $to->format('d M Y') }}</span>
+
+                @if ($period !== 'this_month' || $branch)
+                    <a href="{{ route('appointments.index') }}" class="btn btn-outline-secondary bk-apply-btn ms-auto">Reset</a>
                 @endif
             </div>
         </form>
@@ -543,44 +518,6 @@
                 })
                 .catch(() => alert('No records found'));
         }
-
-        function toLocalISODate(d) {
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${y}-${m}-${day}`;
-        }
-
-        document.querySelectorAll('.bk-preset-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const today = new Date();
-                let from = new Date(today);
-                let to = new Date(today);
-
-                switch (this.dataset.preset) {
-                    case 'today':
-                        break;
-                    case 'yesterday':
-                        from.setDate(from.getDate() - 1);
-                        to.setDate(to.getDate() - 1);
-                        break;
-                    case 'this_week':
-                        from.setDate(from.getDate() - from.getDay());
-                        break;
-                    case 'this_month':
-                        from = new Date(today.getFullYear(), today.getMonth(), 1);
-                        break;
-                    case 'last_month':
-                        from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                        to = new Date(today.getFullYear(), today.getMonth(), 0);
-                        break;
-                }
-
-                document.getElementById('bkFrom').value = toLocalISODate(from);
-                document.getElementById('bkTo').value = toLocalISODate(to);
-                document.getElementById('bkFilterForm').submit();
-            });
-        });
 
         // Bookings trend
         new ApexCharts(document.querySelector('#bkTrendChart'), {
