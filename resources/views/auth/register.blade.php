@@ -12,7 +12,7 @@
         href="{{ asset('design/sneat-admin-template/assets/img/favicon/favicon.ico') }}" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=Poppins:wght@300;400;500;600;700&display=swap"
         rel="stylesheet" />
 
     <link rel="stylesheet" href="{{ asset('design/sneat-admin-template/assets/vendor/fonts/iconify-icons.css') }}" />
@@ -21,6 +21,7 @@
     <link rel="stylesheet"
         href="{{ asset('design/sneat-admin-template/assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css') }}" />
     <link rel="stylesheet" href="{{ asset('design/sneat-admin-template/assets/vendor/css/pages/page-auth.css') }}" />
+    <link rel="stylesheet" href="{{ asset('css/luxury-theme.css') }}?v={{ filemtime(public_path('css/luxury-theme.css')) }}" />
 
     <script src="{{ asset('design/sneat-admin-template/assets/vendor/js/helpers.js') }}"></script>
     <script src="{{ asset('design/sneat-admin-template/assets/js/config.js') }}"></script>

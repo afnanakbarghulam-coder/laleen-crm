@@ -10,8 +10,8 @@
     .checkout-drawer {
         width: 100%;
         max-width: 520px;
-        background: #fff;
-        border: 1px solid #eaecf0;
+        background: #241e1c;
+        border: 1px solid rgba(213,180,169,0.16);
         border-radius: 14px;
         box-shadow: 0 8px 24px rgba(16, 24, 40, .08);
         overflow: hidden;
@@ -19,7 +19,7 @@
 
     .checkout-header, .checkout-section {
         padding: 18px 22px;
-        border-bottom: 1px solid #f2f4f7;
+        border-bottom: 1px solid rgba(213,180,169,0.07);
     }
 
     .checkout-section h6 {
@@ -27,7 +27,7 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .04em;
-        color: #667085;
+        color: #b6a49b;
         margin-bottom: 12px;
     }
 
@@ -48,7 +48,7 @@
     .summary-row.total {
         font-size: 18px;
         font-weight: 700;
-        border-top: 1px solid #eaecf0;
+        border-top: 1px solid rgba(213,180,169,0.16);
         margin-top: 8px;
         padding-top: 10px;
     }
@@ -61,8 +61,8 @@
         font-weight: 700;
     }
 
-    .remaining-ok { background: #e6f7ee; color: #2bb673; }
-    .remaining-due { background: #fdecea; color: #e6493f; }
+    .remaining-ok { background: rgba(142,168,138,0.14); color: #8ea88a; }
+    .remaining-due { background: rgba(168,82,74,0.14); color: #a8524a; }
 </style>
 
 @section('content')

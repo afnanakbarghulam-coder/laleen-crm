@@ -3,7 +3,7 @@
 
 <style>
     .profile-stat {
-        border: 1px solid #eaecf0;
+        border: 1px solid rgba(213,180,169,0.16);
         border-radius: 10px;
         padding: 14px 18px;
         text-align: center;
@@ -12,18 +12,18 @@
     .profile-stat .value {
         font-size: 22px;
         font-weight: 700;
-        color: #101828;
+        color: #f5e0e0;
     }
 
     .profile-stat .label {
         font-size: 12px;
-        color: #667085;
+        color: #b6a49b;
         text-transform: uppercase;
         letter-spacing: .02em;
     }
 
     .appt-row {
-        border: 1px solid #eaecf0;
+        border: 1px solid rgba(213,180,169,0.16);
         border-radius: 8px;
         padding: 10px 14px;
         margin-bottom: 8px;
@@ -44,7 +44,7 @@
 
     .fav-chip {
         display: inline-block;
-        background: #f1f2f6;
+        background: rgba(213,180,169,0.08);
         border-radius: 999px;
         padding: 4px 12px;
         font-size: 12.5px;
@@ -52,12 +52,12 @@
     }
 
     .profile-stat.loyalty {
-        background: linear-gradient(135deg, #fff7ec, #fff);
-        border-color: #ffe4bd;
+        background: linear-gradient(135deg, rgba(201,166,107,0.14), rgba(36,30,28,0.6));
+        border-color: rgba(201,166,107,0.3);
     }
 
     .profile-stat.loyalty .value {
-        color: #b45f06;
+        color: #c97b4a;
     }
 
     .loyalty-row {
@@ -65,11 +65,11 @@
         justify-content: space-between;
         font-size: 12.5px;
         padding: 5px 0;
-        border-bottom: 1px solid #f2f4f7;
+        border-bottom: 1px solid rgba(213,180,169,0.07);
     }
 
-    .loyalty-row .pts-earn { color: #2bb673; font-weight: 700; }
-    .loyalty-row .pts-redeem { color: #e6493f; font-weight: 700; }
+    .loyalty-row .pts-earn { color: #8ea88a; font-weight: 700; }
+    .loyalty-row .pts-redeem { color: #a8524a; font-weight: 700; }
 </style>
 
 @section('content')
@@ -140,7 +140,7 @@
                                 <strong>{{ $a->appointment_datetime->format('D, d M Y · h:i A') }}</strong>
                                 <div class="text-muted small">{{ $a->service_name }} · {{ $a->staff->name ?? 'Unassigned' }}</div>
                             </div>
-                            <span class="status-badge" style="background:#3f8cff">{{ $a->status }}</span>
+                            <span class="status-badge" style="background:#d5b4a9">{{ $a->status }}</span>
                         </div>
                     @empty
                         <p class="text-muted mb-0">No upcoming appointments.</p>
@@ -152,7 +152,7 @@
                 <div class="card-header fw-semibold">Past Appointments</div>
                 <div class="card-body">
                     @php
-                        $statusColors = ['pending' => '#3f8cff', 'arrived' => '#9b59b6', 'in_progress' => '#f2994a', 'completed' => '#2bb673', 'no_show' => '#98a2b3', 'cancelled' => '#e6493f'];
+                        $statusColors = ['pending' => '#d5b4a9', 'arrived' => '#b98ea3', 'in_progress' => '#c97b4a', 'completed' => '#8ea88a', 'no_show' => '#b6a49b', 'cancelled' => '#a8524a'];
                     @endphp
                     @forelse ($past as $a)
                         <div class="appt-row">
@@ -165,7 +165,7 @@
                                     @endif
                                 </div>
                             </div>
-                            <span class="status-badge" style="background:{{ $statusColors[$a->status] ?? '#667085' }}">
+                            <span class="status-badge" style="background:{{ $statusColors[$a->status] ?? '#b6a49b' }}">
                                 {{ str_replace('_', ' ', $a->status) }}
                             </span>
                         </div>

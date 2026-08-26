@@ -3,15 +3,15 @@
 
 <style>
     :root {
-        --fin-border: #eaecf0;
-        --fin-border-strong: #dcdfe4;
-        --fin-muted: #8a94a6;
-        --fin-ink: #101828;
-        --fin-primary: #696cff;
-        --fin-success: #71dd37;
-        --fin-danger: #ff3e1d;
-        --fin-warning: #ffab00;
-        --fin-info: #03c3ec;
+        --fin-border: rgba(213,180,169,0.16);
+        --fin-border-strong: rgba(213,180,169,0.3);
+        --fin-muted: #b6a49b;
+        --fin-ink: #f5e0e0;
+        --fin-primary: #d5b4a9;
+        --fin-success: #8ea88a;
+        --fin-danger: #a8524a;
+        --fin-warning: #c9a66b;
+        --fin-info: #8aa6ab;
     }
 
     .fin-header {
@@ -35,7 +35,9 @@
 
     /* ---------------- FILTER BAR ---------------- */
     .fin-filter-card {
-        background: #fff;
+        background: rgba(36, 30, 28, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
         border: 1px solid var(--fin-border);
         border-radius: 16px;
         padding: 14px 18px;
@@ -52,7 +54,7 @@
 
     .fin-preset-group {
         display: inline-flex;
-        background: #f1f2f6;
+        background: rgba(213,180,169,0.08);
         border-radius: 9px;
         padding: 3px;
         flex-wrap: wrap;
@@ -66,13 +68,13 @@
         font-size: 12.5px;
         font-weight: 600;
         border-radius: 7px;
-        color: #667085;
+        color: #b6a49b;
         transition: all .15s ease;
         white-space: nowrap;
     }
 
     .fin-preset-btn.active {
-        background: #fff;
+        background: #241e1c;
         color: var(--fin-ink);
         box-shadow: 0 1px 3px rgba(16, 24, 40, .12);
     }
@@ -93,13 +95,13 @@
         font-size: 13px;
         font-weight: 600;
         color: var(--fin-ink);
-        background-color: #fff;
+        background-color: #241e1c;
     }
 
     .fin-date-input:focus, .fin-branch-select:focus {
         outline: none;
         border-color: var(--fin-primary);
-        box-shadow: 0 0 0 3px rgba(105, 108, 255, .15);
+        box-shadow: 0 0 0 3px rgba(213,180,169, .15);
     }
 
     .fin-apply-btn {
@@ -112,7 +114,9 @@
 
     /* ---------------- KPI CARDS ---------------- */
     .fin-kpi-card {
-        background: #fff;
+        background: rgba(36, 30, 28, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
         border: 1px solid var(--fin-border);
         border-radius: 16px;
         padding: 18px 20px;
@@ -174,7 +178,9 @@
 
     /* ---------------- CHART CARDS ---------------- */
     .fin-chart-card {
-        background: #fff;
+        background: rgba(36, 30, 28, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
         border: 1px solid var(--fin-border);
         border-radius: 16px;
         padding: 18px 20px;
@@ -209,7 +215,9 @@
 
     /* ---------------- SECTION CARDS / TABLES ---------------- */
     .fin-section-card {
-        background: #fff;
+        background: rgba(36, 30, 28, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
         border: 1px solid var(--fin-border);
         border-radius: 16px;
         overflow: hidden;
@@ -240,7 +248,7 @@
         color: var(--fin-muted);
         font-weight: 700;
         border-top: none;
-        background: #f8f9fb;
+        background: rgba(213,180,169,0.05);
         white-space: nowrap;
     }
 
@@ -262,13 +270,13 @@
     }
 
     .fin-item-chip.service {
-        background: rgba(105, 108, 255, .1);
+        background: rgba(213,180,169, .1);
         color: var(--fin-primary);
     }
 
     .fin-item-chip.product {
-        background: rgba(3, 195, 236, .1);
-        color: #0aa3c2;
+        background: rgba(138,166,171, .1);
+        color: #8aa6ab;
     }
 
     .fin-pay-chip {
@@ -281,8 +289,8 @@
         border-radius: 999px;
         margin: 1px 2px 1px 0;
         white-space: nowrap;
-        background: #f1f2f6;
-        color: #475467;
+        background: rgba(213,180,169,0.08);
+        color: #cbb8b0;
     }
 
     .fin-category-badge {
@@ -291,8 +299,8 @@
         font-weight: 600;
         padding: 3px 10px;
         border-radius: 999px;
-        background: rgba(255, 62, 29, .08);
-        color: #c8320f;
+        background: rgba(168,82,74, .08);
+        color: #c9a66b;
     }
 </style>
 
@@ -366,7 +374,7 @@
             <div class="fin-kpi-card">
                 <div class="fin-kpi-top">
                     <span class="fin-kpi-label">Gross Sales</span>
-                    <span class="fin-kpi-icon" style="background:rgba(105,108,255,.1); color:var(--fin-primary);">
+                    <span class="fin-kpi-icon" style="background:rgba(213,180,169,.1); color:var(--fin-primary);">
                         <i class="bx bx-trending-up"></i>
                     </span>
                 </div>
@@ -382,7 +390,7 @@
             <div class="fin-kpi-card">
                 <div class="fin-kpi-top">
                     <span class="fin-kpi-label">Total Expenses</span>
-                    <span class="fin-kpi-icon" style="background:rgba(255,62,29,.1); color:var(--fin-danger);">
+                    <span class="fin-kpi-icon" style="background:rgba(168,82,74,.1); color:var(--fin-danger);">
                         <i class="bx bx-receipt"></i>
                     </span>
                 </div>
@@ -397,11 +405,11 @@
             <div class="fin-kpi-card">
                 <div class="fin-kpi-top">
                     <span class="fin-kpi-label">Net Profit</span>
-                    <span class="fin-kpi-icon" style="background:rgba(113,221,55,.12); color:#4a9e1a;">
+                    <span class="fin-kpi-icon" style="background:rgba(142,168,138,.12); color:#7fa876;">
                         <i class="bx bx-line-chart"></i>
                     </span>
                 </div>
-                <div class="fin-kpi-value" style="color: {{ $netProfit >= 0 ? '#1a8a3e' : 'var(--fin-danger)' }};">
+                <div class="fin-kpi-value" style="color: {{ $netProfit >= 0 ? '#7fa876' : 'var(--fin-danger)' }};">
                     {{ number_format($netProfit, 2) }} <small class="fs-6 fw-semibold text-muted">QAR</small>
                 </div>
                 <div class="fin-kpi-sub">
@@ -414,7 +422,7 @@
             <div class="fin-kpi-card">
                 <div class="fin-kpi-top">
                     <span class="fin-kpi-label">Profit Margin</span>
-                    <span class="fin-kpi-icon" style="background:rgba(3,195,236,.1); color:#0aa3c2;">
+                    <span class="fin-kpi-icon" style="background:rgba(138,166,171,.1); color:#8aa6ab;">
                         <i class="bx bx-pie-chart-alt-2"></i>
                     </span>
                 </div>
@@ -470,7 +478,7 @@
                                         <tr>
                                             <td class="fw-semibold">{{ $row['label'] }}</td>
                                             <td class="text-end">{{ number_format($row['sales'], 0) }}</td>
-                                            <td class="text-end fw-semibold" style="color: {{ $row['profit'] >= 0 ? '#1a8a3e' : 'var(--fin-danger)' }};">
+                                            <td class="text-end fw-semibold" style="color: {{ $row['profit'] >= 0 ? '#7fa876' : 'var(--fin-danger)' }};">
                                                 {{ number_format($row['profit'], 0) }}
                                             </td>
                                         </tr>
@@ -546,7 +554,7 @@
                 <i class="bx bx-plus"></i> Add Expense
             </button>
         </div>
-        <div class="px-3 py-3 border-bottom d-flex flex-wrap align-items-center gap-2" style="background:#f8f9fb;">
+        <div class="px-3 py-3 border-bottom d-flex flex-wrap align-items-center gap-2" style="background:rgba(213,180,169,0.05);">
             <form method="GET" action="{{ route('appointments.revenue.index') }}" class="d-flex flex-wrap align-items-center gap-2">
                 <input type="hidden" name="staff_id" value="{{ $staffId }}">
                 <span class="text-muted small fw-semibold">Check total expenses between</span>
@@ -719,13 +727,13 @@
             ],
             xaxis: { categories: @json($trendLabels), labels: { rotate: -45, style: { fontSize: '11px' } } },
             yaxis: { labels: { formatter: (v) => v.toFixed(0) } },
-            colors: ['#696cff', '#ff3e1d'],
+            colors: ['#d5b4a9', '#a8524a'],
             fill: { type: 'gradient', gradient: { opacityFrom: .35, opacityTo: .05 } },
             stroke: { curve: 'smooth', width: 2.5 },
             dataLabels: { enabled: false },
             legend: { position: 'top', horizontalAlign: 'left' },
             tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
-            grid: { borderColor: '#eaecf0' },
+            grid: { borderColor: 'rgba(213,180,169,0.16)' },
         }).render();
 
         // Revenue breakdown donut
@@ -733,7 +741,7 @@
             chart: { type: 'donut', height: 320, fontFamily: 'inherit' },
             series: [{{ $grossServices }}, {{ $grossProducts }}],
             labels: ['Services', 'Products'],
-            colors: ['#696cff', '#03c3ec'],
+            colors: ['#d5b4a9', '#8aa6ab'],
             dataLabels: { enabled: true, formatter: (val) => val.toFixed(1) + '%' },
             legend: { position: 'bottom' },
             tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
@@ -761,12 +769,12 @@
                 { name: 'Expenses', data: @json(array_column($branchBreakdown, 'expenses')) },
             ],
             xaxis: { categories: @json(array_column($branchBreakdown, 'label')) },
-            colors: ['#696cff', '#ff3e1d'],
+            colors: ['#d5b4a9', '#a8524a'],
             plotOptions: { bar: { columnWidth: '45%', borderRadius: 6 } },
             dataLabels: { enabled: false },
             legend: { position: 'top', horizontalAlign: 'left' },
             tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
-            grid: { borderColor: '#eaecf0' },
+            grid: { borderColor: 'rgba(213,180,169,0.16)' },
         }).render();
     </script>
 @endsection

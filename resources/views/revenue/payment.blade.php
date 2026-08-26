@@ -5,8 +5,8 @@
     .checkout-shell {
         max-width: 900px;
         margin: 0 auto;
-        background: #fff;
-        border: 1px solid #eaecf0;
+        background: #241e1c;
+        border: 1px solid rgba(213,180,169,0.16);
         border-radius: 14px;
         box-shadow: 0 8px 24px rgba(16, 24, 40, .08);
         overflow: hidden;
@@ -14,7 +14,7 @@
 
     .checkout-header {
         padding: 18px 24px;
-        border-bottom: 1px solid #eaecf0;
+        border-bottom: 1px solid rgba(213,180,169,0.16);
     }
 
     .checkout-split {
@@ -25,13 +25,13 @@
     .checkout-col-left {
         flex: 1 1 380px;
         padding: 20px 24px;
-        border-right: 1px solid #f2f4f7;
+        border-right: 1px solid rgba(213,180,169,0.07);
     }
 
     .checkout-col-right {
         flex: 1 1 320px;
         padding: 20px 24px;
-        background: #fbfbfd;
+        background: #241e1c;
     }
 
     .checkout-col-left h6, .checkout-col-right h6 {
@@ -39,7 +39,7 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .04em;
-        color: #667085;
+        color: #b6a49b;
         margin-bottom: 12px;
     }
 
@@ -52,7 +52,7 @@
     }
 
     .line-item .muted {
-        color: #667085;
+        color: #b6a49b;
         font-size: 12.5px;
     }
 
@@ -73,7 +73,7 @@
     .summary-row.total {
         font-size: 19px;
         font-weight: 700;
-        border-top: 1px solid #eaecf0;
+        border-top: 1px solid rgba(213,180,169,0.16);
         margin-top: 8px;
         padding-top: 10px;
     }
@@ -86,13 +86,13 @@
         font-weight: 700;
     }
 
-    .remaining-ok { background: #e6f7ee; color: #2bb673; }
-    .remaining-due { background: #fdecea; color: #e6493f; }
+    .remaining-ok { background: rgba(142,168,138,0.14); color: #8ea88a; }
+    .remaining-due { background: rgba(168,82,74,0.14); color: #a8524a; }
 
     .loyalty-note {
-        background: #fff7ec;
-        border: 1px solid #ffe4bd;
-        color: #b45f06;
+        background: rgba(201,166,107,0.14);
+        border: 1px solid rgba(201,166,107,0.3);
+        color: #c97b4a;
         border-radius: 8px;
         padding: 8px 12px;
         font-size: 12.5px;

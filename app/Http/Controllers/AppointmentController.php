@@ -328,12 +328,12 @@ class AppointmentController extends Controller
     private function statusColors(): array
     {
         return [
-            'pending'     => '#3f8cff',
-            'arrived'     => '#9b59b6',
-            'in_progress' => '#f2994a',
-            'completed'   => '#2bb673',
-            'no_show'     => '#98a2b3',
-            'cancelled'   => '#e6493f',
+            'pending'     => '#c9a66b',
+            'arrived'     => '#b98ea3',
+            'in_progress' => '#c97b4a',
+            'completed'   => '#8ea88a',
+            'no_show'     => '#8a7d76',
+            'cancelled'   => '#a8524a',
         ];
     }
 

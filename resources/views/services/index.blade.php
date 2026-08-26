@@ -3,10 +3,10 @@
 
 <style>
     .svc-cat-rail {
-        border: 1px solid #eaecf0;
+        border: 1px solid rgba(213,180,169,0.16);
         border-radius: 10px;
         overflow: hidden;
-        background: #fff;
+        background: #241e1c;
     }
 
     .svc-cat-row {
@@ -15,19 +15,19 @@
         align-items: center;
         padding: 10px 14px;
         font-size: 13.5px;
-        color: #344054;
+        color: #f5e0e0;
         text-decoration: none;
-        border-bottom: 1px solid #f2f4f7;
+        border-bottom: 1px solid rgba(213,180,169,0.07);
     }
 
     .svc-cat-row:hover {
-        background: #f9fafb;
-        color: #101828;
+        background: rgba(213,180,169,0.06);
+        color: #f5e0e0;
     }
 
     .svc-cat-row.active {
-        background: #eef2ff;
-        color: #3f37c9;
+        background: rgba(213,180,169,0.1);
+        color: #b98ea3;
         font-weight: 700;
     }
 
@@ -40,13 +40,13 @@
     }
 
     .svc-cat-row .badge {
-        background: #eaecf0;
-        color: #475467;
+        background: rgba(213,180,169,0.16);
+        color: #cbb8b0;
         font-weight: 700;
     }
 
     .svc-cat-row.active .badge {
-        background: #3f37c9;
+        background: #b98ea3;
         color: #fff;
     }
 
@@ -54,7 +54,7 @@
         font-weight: 800;
         font-size: 16px;
         margin: 22px 0 12px;
-        color: #101828;
+        color: #f5e0e0;
     }
 
     .svc-group-title:first-child {
@@ -62,11 +62,11 @@
     }
 
     .svc-card {
-        border: 1px solid #eaecf0;
+        border: 1px solid rgba(213,180,169,0.16);
         border-radius: 10px;
         padding: 14px 16px;
         margin-bottom: 10px;
-        background: #fff;
+        background: #241e1c;
         display: flex;
         gap: 14px;
         align-items: flex-start;
@@ -78,23 +78,23 @@
         border-radius: 8px;
         object-fit: cover;
         flex-shrink: 0;
-        background: #f2f4f7;
+        background: rgba(213,180,169,0.07);
     }
 
     .svc-card .svc-name {
         font-weight: 700;
         font-size: 14.5px;
-        color: #101828;
+        color: #f5e0e0;
     }
 
     .svc-card .svc-meta {
         font-size: 12px;
-        color: #667085;
+        color: #b6a49b;
     }
 
     .svc-card .svc-desc {
         font-size: 12.5px;
-        color: #667085;
+        color: #b6a49b;
         margin-top: 4px;
         display: -webkit-box;
         -webkit-line-clamp: 2;
@@ -105,18 +105,18 @@
     .svc-card .svc-price {
         font-weight: 700;
         font-size: 15px;
-        color: #101828;
+        color: #f5e0e0;
         white-space: nowrap;
     }
 
     .svc-card .treatment-badge {
         display: inline-block;
-        background: #f1f2f6;
+        background: rgba(213,180,169,0.08);
         border-radius: 999px;
         padding: 2px 10px;
         font-size: 11px;
         font-weight: 600;
-        color: #475467;
+        color: #cbb8b0;
         margin-top: 6px;
     }
 </style>
@@ -238,7 +238,7 @@
                         </div>
                         <div class="mb-1">
                             <label class="form-label">Color</label>
-                            <input type="color" name="color" class="form-control form-control-color" value="#3f8cff">
+                            <input type="color" name="color" class="form-control form-control-color" value="#d5b4a9">
                         </div>
                     </div>
                     <div class="modal-footer">

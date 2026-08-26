@@ -3,20 +3,22 @@
 
 <style>
     :root {
-        --cal-border: #eaecf0;
-        --cal-border-strong: #dcdfe4;
-        --cal-muted: #8a94a6;
-        --cal-today: #3f8cff;
-        --cal-ink: #101828;
+        --cal-border: rgba(213,180,169,0.16);
+        --cal-border-strong: rgba(213,180,169,0.3);
+        --cal-muted: #b6a49b;
+        --cal-today: #d5b4a9;
+        --cal-ink: #f5e0e0;
     }
 
     .cal-toolbar-card {
-        background: #fff;
+        background: rgba(36, 30, 28, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
         border: 1px solid var(--cal-border);
         border-radius: 16px;
         padding: 14px 18px;
         margin-bottom: 18px;
-        box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(213, 180, 169, .05);
     }
 
     .cal-toolbar {
@@ -45,7 +47,7 @@
 
     .cal-view-toggle {
         display: inline-flex;
-        background: #f1f2f6;
+        background: rgba(213,180,169,0.08);
         border-radius: 9px;
         padding: 3px;
         height: 38px;
@@ -59,13 +61,13 @@
         font-size: 13px;
         font-weight: 600;
         border-radius: 7px;
-        color: #667085;
+        color: #b6a49b;
         transition: all .15s ease;
         white-space: nowrap;
     }
 
     .cal-view-toggle button.active {
-        background: #fff;
+        background: #241e1c;
         color: var(--cal-ink);
         box-shadow: 0 1px 3px rgba(16, 24, 40, .12);
     }
@@ -74,7 +76,7 @@
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        background: #f8f9fb;
+        background: rgba(213,180,169,0.05);
         border-radius: 9px;
         padding: 3px;
     }
@@ -88,12 +90,12 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: #475467;
+        color: #cbb8b0;
         transition: all .15s ease;
     }
 
     .cal-nav button:hover {
-        background: #fff;
+        background: #241e1c;
         color: var(--cal-ink);
         box-shadow: 0 1px 3px rgba(16, 24, 40, .12);
     }
@@ -102,35 +104,35 @@
         width: 38px;
         height: 38px;
         border: 1px solid var(--cal-border-strong);
-        background: #fff;
+        background: #241e1c;
         border-radius: 9px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: #475467;
+        color: #cbb8b0;
         transition: all .15s ease;
     }
 
     .cal-icon-btn:hover {
-        background: #f9fafb;
-        border-color: #c8ced8;
+        background: rgba(213,180,169,0.06);
+        border-color: rgba(213,180,169,0.32);
     }
 
     .cal-today-btn {
         height: 38px;
         border: 1px solid var(--cal-border-strong);
-        background: #fff;
+        background: #241e1c;
         border-radius: 9px;
         padding: 0 16px;
         font-size: 13px;
         font-weight: 600;
-        color: #344054;
+        color: #f5e0e0;
         transition: all .15s ease;
     }
 
     .cal-today-btn:hover {
-        background: #f9fafb;
-        border-color: #c8ced8;
+        background: rgba(213,180,169,0.06);
+        border-color: rgba(213,180,169,0.32);
     }
 
     .cal-date-label {
@@ -169,7 +171,7 @@
         font-size: 11px;
         font-weight: 700;
         text-transform: uppercase;
-        color: #98a2b3;
+        color: #b6a49b;
         letter-spacing: .04em;
         margin-bottom: 6px;
     }
@@ -183,18 +185,18 @@
         font-size: 13.5px;
         font-weight: 600;
         color: var(--cal-ink);
-        background-color: #fff;
+        background-color: #241e1c;
         transition: all .15s ease;
     }
 
     .cal-filter-select:hover {
-        border-color: #c8ced8;
+        border-color: rgba(213,180,169,0.32);
     }
 
     .cal-filter-select:focus {
         outline: none;
         border-color: var(--cal-today);
-        box-shadow: 0 0 0 3px rgba(63, 140, 255, .15);
+        box-shadow: 0 0 0 3px rgba(213,180,169, .15);
     }
 
     .cal-filter-footer {
@@ -217,17 +219,17 @@
     }
 
     .cal-filter-clear:hover:not(:disabled) {
-        background: rgba(63, 140, 255, .08);
+        background: rgba(213,180,169, .08);
     }
 
     .cal-filter-clear:disabled {
-        color: #c0c5cf;
+        color: #6b5f59;
         cursor: default;
     }
 
     .cal-filter-badge {
         background: var(--cal-today);
-        color: #fff;
+        color: #241a16;
         font-size: 10px;
         font-weight: 700;
         border-radius: 999px;
@@ -244,7 +246,7 @@
         border: 1px solid var(--cal-border-strong);
         border-radius: 9px;
         padding: 3px;
-        background: #fff;
+        background: #241e1c;
     }
 
     .cal-zoom button {
@@ -253,13 +255,13 @@
         border: none;
         background: transparent;
         border-radius: 6px;
-        color: #475467;
+        color: #cbb8b0;
         font-weight: 700;
         transition: all .15s ease;
     }
 
     .cal-zoom button:hover {
-        background: #f1f2f6;
+        background: rgba(213,180,169,0.08);
     }
 
     .cal-add-btn {
@@ -287,10 +289,10 @@
         gap: 6px;
         padding: 4px 10px 4px 8px;
         border-radius: 999px;
-        background: #f8f9fb;
+        background: rgba(213,180,169,0.05);
         font-size: 12px;
         font-weight: 600;
-        color: #475467;
+        color: #cbb8b0;
         white-space: nowrap;
     }
 
@@ -313,7 +315,9 @@
         overflow-x: auto;
         border: 1px solid var(--cal-border);
         border-radius: 12px;
-        background: #fff;
+        background: rgba(36, 30, 28, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
     }
 
     .cal-day-grid {
@@ -327,7 +331,7 @@
         flex-shrink: 0;
         position: sticky;
         left: 0;
-        background: #fff;
+        background: #241e1c;
         z-index: 3;
         border-right: 1px solid var(--cal-border);
     }
@@ -353,7 +357,7 @@
     }
 
     .cal-staff-header {
-        height: 74px;
+        height: 84px;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -362,7 +366,7 @@
         border-bottom: 1px solid var(--cal-border);
         position: sticky;
         top: 0;
-        background: #fff;
+        background: #241e1c;
         z-index: 2;
         padding: 6px;
     }
@@ -402,16 +406,16 @@
     }
 
     .cal-slot-cell:hover {
-        background: #f5f8ff;
+        background: rgba(213,180,169,0.08);
     }
 
     .cal-staff-col.is-off .cal-slot-cell {
         cursor: not-allowed;
-        background: repeating-linear-gradient(135deg, #f7f7f8, #f7f7f8 8px, #efeff1 8px, #efeff1 16px);
+        background: repeating-linear-gradient(135deg, rgba(213,180,169,0.05), rgba(213,180,169,0.05) 8px, rgba(213,180,169,0.06) 8px, rgba(213,180,169,0.06) 16px);
     }
 
     .cal-staff-col.is-off .cal-slot-cell:hover {
-        background: repeating-linear-gradient(135deg, #f7f7f8, #f7f7f8 8px, #efeff1 8px, #efeff1 16px);
+        background: repeating-linear-gradient(135deg, rgba(213,180,169,0.05), rgba(213,180,169,0.05) 8px, rgba(213,180,169,0.06) 8px, rgba(213,180,169,0.06) 16px);
     }
 
     .cal-off-tag {
@@ -422,7 +426,7 @@
         text-align: center;
         font-size: 11.5px;
         font-weight: 600;
-        color: #98a2b3;
+        color: #b6a49b;
         padding: 4px;
     }
 
@@ -476,9 +480,9 @@
         border-radius: 7px;
         font-size: 11px;
         font-weight: 600;
-        color: #667085;
-        background: repeating-linear-gradient(135deg, #f2f3f5, #f2f3f5 6px, #e9eaec 6px, #e9eaec 12px);
-        border: 1px dashed #c8cdd6;
+        color: #b6a49b;
+        background: repeating-linear-gradient(135deg, rgba(213,180,169,0.07), rgba(213,180,169,0.07) 6px, rgba(213,180,169,0.14) 6px, rgba(213,180,169,0.14) 12px);
+        border: 1px dashed rgba(213,180,169,0.28);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -493,7 +497,7 @@
         left: 0;
         right: 0;
         height: 0;
-        border-top: 2px solid #ff4d4f;
+        border-top: 2px solid #c07c73;
         z-index: 5;
         pointer-events: none;
     }
@@ -506,7 +510,7 @@
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: #ff4d4f;
+        background: #c07c73;
     }
 
     /* ---------------- WEEK / 3-DAY GRID (staff rows x day cols) ---------------- */
@@ -519,7 +523,7 @@
     .cal-week-grid .cal-week-daycol {
         position: sticky;
         top: 0;
-        background: #fff;
+        background: #241e1c;
         z-index: 2;
         border-bottom: 1px solid var(--cal-border);
         padding: 10px 8px;
@@ -546,7 +550,7 @@
     }
 
     .cal-week-daycol.is-today .dnum {
-        color: #fff;
+        color: #241a16;
         background: var(--cal-today);
         border-radius: 50%;
         width: 26px;
@@ -559,7 +563,7 @@
     .cal-week-staffcell {
         position: sticky;
         left: 0;
-        background: #fff;
+        background: #241e1c;
         z-index: 1;
         border-right: 1px solid var(--cal-border);
         border-bottom: 1px solid var(--cal-border);
@@ -598,21 +602,21 @@
     }
 
     .cal-week-daycell:hover {
-        background: #f9fafc;
+        background: rgba(213,180,169,0.06);
     }
 
     .cal-week-daycell.is-off {
         cursor: not-allowed;
-        background: repeating-linear-gradient(135deg, #f7f7f8, #f7f7f8 8px, #efeff1 8px, #efeff1 16px);
+        background: repeating-linear-gradient(135deg, rgba(213,180,169,0.05), rgba(213,180,169,0.05) 8px, rgba(213,180,169,0.06) 8px, rgba(213,180,169,0.06) 16px);
     }
 
     .cal-week-daycell.is-off:hover {
-        background: repeating-linear-gradient(135deg, #f7f7f8, #f7f7f8 8px, #efeff1 8px, #efeff1 16px);
+        background: repeating-linear-gradient(135deg, rgba(213,180,169,0.05), rgba(213,180,169,0.05) 8px, rgba(213,180,169,0.06) 8px, rgba(213,180,169,0.06) 16px);
     }
 
     .cal-week-off-label {
         font-size: 10.5px;
-        color: #98a2b3;
+        color: #b6a49b;
         font-weight: 600;
         text-align: center;
         margin-top: 6px;
@@ -645,14 +649,14 @@
         padding: 3px 6px;
         font-size: 10.5px;
         font-weight: 600;
-        color: #667085;
-        background: repeating-linear-gradient(135deg, #f2f3f5, #f2f3f5 6px, #e9eaec 6px, #e9eaec 12px);
-        border: 1px dashed #c8cdd6;
+        color: #b6a49b;
+        background: repeating-linear-gradient(135deg, rgba(213,180,169,0.07), rgba(213,180,169,0.07) 6px, rgba(213,180,169,0.14) 6px, rgba(213,180,169,0.14) 12px);
+        border: 1px dashed rgba(213,180,169,0.28);
     }
 
     .cal-empty-hint {
         font-size: 11px;
-        color: #d0d5dd;
+        color: #8a7d76;
         text-align: center;
         margin: auto 0;
     }
@@ -674,7 +678,7 @@
         padding: 8px 0;
         border-right: 1px solid var(--cal-border);
         border-bottom: 1px solid var(--cal-border);
-        background: #f9fafb;
+        background: rgba(213,180,169,0.06);
     }
 
     .cal-month-cell {
@@ -686,12 +690,12 @@
     }
 
     .cal-month-cell:hover {
-        background: #f9fafc;
+        background: rgba(213,180,169,0.06);
     }
 
     .cal-month-cell.out-month {
-        background: #fbfbfc;
-        color: #c8cdd6;
+        background: #241e1c;
+        color: rgba(213,180,169,0.28);
     }
 
     .cal-month-daynum {
@@ -702,11 +706,11 @@
     }
 
     .cal-month-cell.out-month .cal-month-daynum {
-        color: #d0d5dd;
+        color: #8a7d76;
     }
 
     .cal-month-cell.is-today .cal-month-daynum {
-        color: #fff;
+        color: #241a16;
         background: var(--cal-today);
         border-radius: 50%;
         width: 22px;
@@ -739,10 +743,10 @@
         position: fixed;
         z-index: 1050;
         width: 220px;
-        background: #fff;
+        background: #241e1c;
         border-radius: 10px;
         box-shadow: 0 8px 24px rgba(16, 24, 40, .18);
-        border: 1px solid #eaecf0;
+        border: 1px solid rgba(213,180,169,0.16);
         display: none;
         overflow: hidden;
     }
@@ -751,14 +755,14 @@
         padding: 10px 14px;
         font-weight: 700;
         font-size: 13px;
-        border-bottom: 1px solid #eaecf0;
-        color: #101828;
+        border-bottom: 1px solid rgba(213,180,169,0.16);
+        color: #f5e0e0;
     }
 
     .cal-slot-popover .popover-item {
         padding: 10px 14px;
         font-size: 13px;
-        color: #344054;
+        color: #f5e0e0;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -766,7 +770,7 @@
     }
 
     .cal-slot-popover .popover-item:hover {
-        background: #f9fafb;
+        background: rgba(213,180,169,0.06);
     }
 
     /* ---------------- APPOINTMENT DRAWER ---------------- */
@@ -796,9 +800,9 @@
     }
 
     #apptDrawer .allergy-alert {
-        background: #fff4f2;
-        border: 1px solid #ffd7d0;
-        color: #b3261e;
+        background: rgba(168,82,74,0.14);
+        border: 1px solid rgba(168,82,74,0.3);
+        color: #c07c73;
         border-radius: 8px;
         padding: 8px 12px;
         font-size: 12.5px;
@@ -812,7 +816,7 @@
         justify-content: space-between;
         font-size: 12.5px;
         padding: 4px 0;
-        color: #475467;
+        color: #cbb8b0;
     }
 
     #apptDrawer .visit-row .badge {
@@ -820,8 +824,8 @@
     }
 
     #apptDrawer .svc-item {
-        border-left: 3px solid #3f8cff;
-        background: #f7f9ff;
+        border-left: 3px solid #d5b4a9;
+        background: rgba(213,180,169,0.1);
         border-radius: 6px;
         padding: 8px 10px;
         margin-bottom: 8px;
@@ -834,12 +838,12 @@
     #apptDrawer .svc-item .name {
         font-weight: 700;
         font-size: 13px;
-        color: #101828;
+        color: #f5e0e0;
     }
 
     #apptDrawer .svc-item .meta {
         font-size: 11px;
-        color: #667085;
+        color: #b6a49b;
     }
 
     #apptDrawer .svc-item .price {
@@ -850,7 +854,7 @@
 
     #apptDrawer .svc-item .strike {
         text-decoration: line-through;
-        color: #98a2b3;
+        color: #b6a49b;
         font-weight: 400;
         margin-right: 4px;
     }
@@ -858,47 +862,47 @@
     #apptDrawer .svc-item .icon-btn {
         border: none;
         background: transparent;
-        color: #98a2b3;
+        color: #b6a49b;
         padding: 2px 4px;
         font-size: 15px;
     }
 
     #apptDrawer .svc-item .icon-btn:hover {
-        color: #344054;
+        color: #f5e0e0;
     }
 
     #apptDrawer .svc-item .icon-btn.danger:hover {
-        color: #e6493f;
+        color: #a8524a;
     }
 
     #apptDrawer .drawer-add-pill {
-        border: 1px solid #d0d5dd;
+        border: 1px solid #8a7d76;
         border-radius: 999px;
         padding: 6px 16px;
         font-size: 12.5px;
         font-weight: 600;
-        background: #fff;
-        color: #344054;
+        background: #241e1c;
+        color: #f5e0e0;
     }
 
     #apptDrawer .drawer-add-pill:hover {
-        background: #f9fafb;
+        background: rgba(213,180,169,0.06);
     }
 
     #apptDrawer .drawer-back-btn {
         width: 28px;
         height: 28px;
         border-radius: 7px;
-        border: 1px solid #eaecf0;
-        background: #fff;
+        border: 1px solid rgba(213,180,169,0.16);
+        background: #241e1c;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: #475467;
+        color: #cbb8b0;
     }
 
     #apptDrawer .drawer-back-btn:hover {
-        background: #f9fafb;
+        background: rgba(213,180,169,0.06);
     }
 
     #apptDrawer .svc-catalog-row {
@@ -912,12 +916,12 @@
     }
 
     #apptDrawer .svc-catalog-row:hover {
-        background: #f9fafb;
+        background: rgba(213,180,169,0.06);
     }
 
     #apptDrawer .svc-catalog-row .meta {
         font-size: 11px;
-        color: #667085;
+        color: #b6a49b;
     }
 
     /* ---------------- TOAST NOTIFICATIONS ---------------- */
@@ -935,7 +939,7 @@
     }
 
     .cal-toast {
-        background: #1b1b1f;
+        background: #241e1c;
         color: #fff;
         padding: 10px 18px;
         border-radius: 999px;
@@ -950,7 +954,7 @@
     }
 
     .cal-toast.error {
-        background: #e6493f;
+        background: #a8524a;
     }
 
     .cal-toast .toast-close {
@@ -979,14 +983,14 @@
     }
 
     .cal-slot-cell.drag-over {
-        background: #e8f0ff !important;
-        outline: 2px dashed #3f8cff;
+        background: rgba(213,180,169,0.12) !important;
+        outline: 2px dashed #d5b4a9;
         outline-offset: -2px;
     }
 
     .cal-week-daycell.drag-over {
-        background: #e8f0ff !important;
-        outline: 2px dashed #3f8cff;
+        background: rgba(213,180,169,0.12) !important;
+        outline: 2px dashed #d5b4a9;
         outline-offset: -2px;
     }
 </style>
@@ -1357,7 +1361,7 @@
             Object.keys(statusColors).forEach(key => {
                 html += `<span><span class="dot" style="background:${statusColors[key]}"></span>${labels[key] || key}</span>`;
             });
-            html += `<span><span class="dot" style="background:#c8cdd6"></span>Blocked</span>`;
+            html += `<span><span class="dot" style="background:rgba(213,180,169,0.28)"></span>Blocked</span>`;
             document.getElementById('calLegend').innerHTML = html;
         }
 
@@ -1370,7 +1374,7 @@
 
         /* ---------------- DAY / 3-DAY-AS-COLUMNS RENDER (staff columns, time rows) ---------------- */
         function renderDay(data) {
-            const HEADER_H = 74;
+            const HEADER_H = 84;
             const SLOT_MIN = 30;
             const SLOT_H = state.zoom;
             const PPM = SLOT_H / SLOT_MIN;
@@ -1423,7 +1427,7 @@
                     });
 
                     apts.forEach(a => {
-                        const color = data.status_colors[a.status] || '#667085';
+                        const color = data.status_colors[a.status] || '#b6a49b';
                         const diffMinutes = a.start_minutes - dayStartMinutes;
                         const top = HEADER_H + diffMinutes * PPM;
                         const height = Math.max(a.duration * PPM, 46);
@@ -1572,7 +1576,7 @@
                         });
 
                         dayAppts.forEach(a => {
-                            const color = data.status_colors[a.status] || '#667085';
+                            const color = data.status_colors[a.status] || '#b6a49b';
                             html += `<div class="cal-chip status-${a.status}" data-id="${a.id}"
                                 draggable="${a.status === 'completed' || a.status === 'cancelled' ? 'false' : 'true'}"
                                 ondragstart="event.stopPropagation(); onApptDragStart(event, ${a.id}, ${a.start_minutes})"
@@ -1617,7 +1621,7 @@
                     <div class="cal-month-daynum">${day.day_num}</div>`;
 
                 appts.slice(0, 3).forEach(a => {
-                    const color = data.status_colors[a.status] || '#667085';
+                    const color = data.status_colors[a.status] || '#b6a49b';
                     html += `<div class="cal-month-chip status-${a.status}" data-id="${a.id}"
                         onclick="event.stopPropagation(); openDrawer(${a.id})"
                         style="background:${tint(color, .14)};border-left-color:${color};color:${color};">
@@ -1805,7 +1809,7 @@
 
         function renderDrawer(a) {
             lastDrawerData = a;
-            const color = (latestData && latestData.status_colors[a.status]) || '#667085';
+            const color = (latestData && latestData.status_colors[a.status]) || '#b6a49b';
             const isFinal = ['completed', 'cancelled', 'no_show'].includes(a.status);
 
             document.getElementById('drawerCustomer').textContent = a.customer_name || 'Walk-in';
@@ -1833,7 +1837,7 @@
                 document.getElementById('drawerRecentVisits').innerHTML = a.recent_visits.map(v => `
                     <div class="visit-row">
                         <span>${v.date} · ${v.service_name}</span>
-                        <span class="badge" style="background:${(latestData && latestData.status_colors[v.status]) || '#667085'}">${STATUS_LABELS[v.status] || v.status}</span>
+                        <span class="badge" style="background:${(latestData && latestData.status_colors[v.status]) || '#b6a49b'}">${STATUS_LABELS[v.status] || v.status}</span>
                     </div>
                 `).join('');
                 visitsSection.classList.remove('d-none');

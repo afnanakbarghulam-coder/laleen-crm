@@ -22,22 +22,22 @@
     .fb-rail {
         width: 108px;
         flex-shrink: 0;
-        border-right: 1px solid #eaecf0;
+        border-right: 1px solid rgba(213,180,169,0.16);
         padding: 22px 10px;
         text-align: center;
         cursor: pointer;
     }
 
     .fb-rail:hover {
-        background: #fafbfc;
+        background: #241e1c;
     }
 
     .fb-rail .client-icon {
         width: 52px;
         height: 52px;
         border-radius: 50%;
-        background: #ede9fe;
-        color: #7c5cff;
+        background: rgba(185,142,163,0.14);
+        color: #b98ea3;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -55,13 +55,13 @@
     .fb-rail .client-label {
         font-weight: 700;
         font-size: 12.5px;
-        color: #101828;
+        color: #f5e0e0;
         line-height: 1.2;
     }
 
     .fb-rail .client-sub {
         font-size: 10.5px;
-        color: #98a2b3;
+        color: #b6a49b;
         line-height: 1.2;
         margin-top: 2px;
     }
@@ -92,28 +92,28 @@
         width: 32px;
         height: 32px;
         border-radius: 8px;
-        border: 1px solid #eaecf0;
-        background: #fff;
+        border: 1px solid rgba(213,180,169,0.16);
+        background: #241e1c;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: #475467;
+        color: #cbb8b0;
     }
 
     .fb-back-btn:hover {
-        background: #f9fafb;
+        background: rgba(213,180,169,0.06);
     }
 
     .fb-date-label {
         font-size: 21px;
         font-weight: 800;
-        color: #101828;
+        color: #f5e0e0;
         cursor: pointer;
     }
 
     .fb-date-sub {
         font-size: 12.5px;
-        color: #667085;
+        color: #b6a49b;
     }
 
     .fb-section-title {
@@ -121,13 +121,13 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .03em;
-        color: #667085;
+        color: #b6a49b;
         margin: 22px 0 10px;
     }
 
     .fb-svc-row {
-        border-left: 3px solid #3f8cff;
-        background: #f7f9ff;
+        border-left: 3px solid #d5b4a9;
+        background: rgba(213,180,169,0.1);
         border-radius: 6px;
         padding: 8px 12px;
         margin-bottom: 8px;
@@ -140,12 +140,12 @@
     .fb-svc-row .name {
         font-weight: 700;
         font-size: 13.5px;
-        color: #101828;
+        color: #f5e0e0;
     }
 
     .fb-svc-row .meta {
         font-size: 11.5px;
-        color: #667085;
+        color: #b6a49b;
     }
 
     .fb-svc-row .price {
@@ -157,28 +157,28 @@
     .fb-svc-row .remove-btn {
         border: none;
         background: transparent;
-        color: #98a2b3;
+        color: #b6a49b;
         font-size: 16px;
         line-height: 1;
         padding: 0 2px;
     }
 
     .fb-svc-row .remove-btn:hover {
-        color: #e6493f;
+        color: #a8524a;
     }
 
     .fb-add-pill {
-        border: 1px solid #d0d5dd;
+        border: 1px solid #8a7d76;
         border-radius: 999px;
         padding: 7px 18px;
         font-size: 13px;
         font-weight: 600;
-        background: #fff;
-        color: #344054;
+        background: #241e1c;
+        color: #f5e0e0;
     }
 
     .fb-add-pill:hover {
-        background: #f9fafb;
+        background: rgba(213,180,169,0.06);
     }
 
     .fb-search-wrap {
@@ -191,7 +191,7 @@
         left: 12px;
         top: 50%;
         transform: translateY(-50%);
-        color: #98a2b3;
+        color: #b6a49b;
     }
 
     .fb-search-wrap input {
@@ -209,23 +209,23 @@
     }
 
     .fb-client-row:hover, .fb-service-row:hover {
-        background: #f9fafb;
+        background: rgba(213,180,169,0.06);
     }
 
     .fb-client-row.add-new {
-        background: #f7f5ff;
+        background: rgba(185,142,163,0.08);
     }
 
     .fb-client-row.add-new:hover {
-        background: #f0ebff;
+        background: rgba(185,142,163,0.1);
     }
 
     .fb-client-avatar {
         width: 38px;
         height: 38px;
         border-radius: 50%;
-        background: #eef0f3;
-        color: #475467;
+        background: rgba(213,180,169,0.06);
+        color: #cbb8b0;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -235,35 +235,35 @@
     }
 
     .fb-client-row.add-new .fb-client-avatar {
-        background: #ede9fe;
-        color: #7c5cff;
+        background: rgba(185,142,163,0.14);
+        color: #b98ea3;
     }
 
     .fb-client-row.walkin .fb-client-avatar {
-        background: #eef0f3;
-        color: #475467;
+        background: rgba(213,180,169,0.06);
+        color: #cbb8b0;
     }
 
     .fb-client-name {
         font-weight: 700;
         font-size: 13.5px;
-        color: #101828;
+        color: #f5e0e0;
     }
 
     .fb-client-phone {
         font-size: 12px;
-        color: #667085;
+        color: #b6a49b;
     }
 
     .fb-service-row .svc-info .name {
         font-weight: 700;
         font-size: 13.5px;
-        color: #101828;
+        color: #f5e0e0;
     }
 
     .fb-service-row .svc-info .meta {
         font-size: 11.5px;
-        color: #667085;
+        color: #b6a49b;
     }
 
     .fb-service-row .svc-price {
@@ -275,35 +275,35 @@
     .fb-cat-label {
         font-size: 12px;
         font-weight: 700;
-        color: #667085;
+        color: #b6a49b;
         margin-bottom: 8px;
     }
 
     .fb-footer {
         flex-shrink: 0;
-        border-top: 1px solid #eaecf0;
+        border-top: 1px solid rgba(213,180,169,0.16);
         padding: 14px 24px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        background: #fff;
+        background: #241e1c;
     }
 
     .fb-footer .total-label {
         font-weight: 700;
         font-size: 13.5px;
-        color: #101828;
+        color: #f5e0e0;
     }
 
     .fb-footer .total-meta {
         font-size: 12px;
-        color: #667085;
+        color: #b6a49b;
     }
 
     .fb-footer .total-price {
         font-weight: 800;
         font-size: 16px;
-        color: #101828;
+        color: #f5e0e0;
     }
 
     #calendarBookModal .btn-close {

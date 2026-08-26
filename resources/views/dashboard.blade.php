@@ -127,15 +127,15 @@
 
 <style>
 .dashboard-card {
-    border-radius: 16px;
+    border-radius: 18px;
     transition: all 0.25s ease-in-out;
-    background: #ffffff;
-    border: 1px solid #f1f1f1;
+    background: var(--luxe-surface);
+    border: 1px solid var(--luxe-border);
 }
 
 .dashboard-card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.35);
 }
 
 .icon-circle {
@@ -147,26 +147,27 @@
     justify-content: center;
 }
 
-.bg-primary-light { background: rgba(13,110,253,0.1); }
-.bg-success-light { background: rgba(25,135,84,0.1); }
-.bg-warning-light { background: rgba(255,193,7,0.2); }
-.bg-danger-light { background: rgba(220,53,69,0.1); }
-.bg-info-light { background: rgba(13,202,240,0.1); }
-.bg-purple-light { background: rgba(111,66,193,0.1); }
-.bg-orange-light { background: rgba(255,87,34,0.15); }
+.bg-primary-light { background: rgba(213, 180, 169, 0.14); }
+.bg-success-light { background: rgba(142, 168, 138, 0.14); }
+.bg-warning-light { background: rgba(201, 166, 107, 0.16); }
+.bg-danger-light { background: rgba(168, 82, 74, 0.14); }
+.bg-info-light { background: rgba(138, 166, 171, 0.14); }
+.bg-purple-light { background: rgba(185, 142, 163, 0.14); }
+.bg-orange-light { background: rgba(201, 123, 74, 0.16); }
 
-.text-purple { color: #6f42c1; }
-.text-orange { color: #f4511e; }
+.text-purple { color: #b98ea3; }
+.text-orange { color: #c97b4a; }
 
 .dashboard-title {
     font-size: 14px;
-    color: #6c757d;
+    color: var(--luxe-muted);
     margin-bottom: 5px;
 }
 
 .dashboard-value {
     font-size: 22px;
     font-weight: 700;
+    color: var(--luxe-ink);
 }
 </style>
 

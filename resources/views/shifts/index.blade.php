@@ -9,8 +9,8 @@
     .roster-table { border-collapse: separate; border-spacing: 0; min-width: 900px; width: 100%; }
 
     .roster-table th, .roster-table td {
-        border-bottom: 1px solid #eaecf0;
-        border-right: 1px solid #eaecf0;
+        border-bottom: 1px solid rgba(213,180,169,0.16);
+        border-right: 1px solid rgba(213,180,169,0.16);
         padding: 10px 12px;
         vertical-align: top;
     }
@@ -18,30 +18,30 @@
     .roster-table th:last-child, .roster-table td:last-child { border-right: none; }
 
     .roster-table thead th {
-        background: #f9fafb;
+        background: rgba(213,180,169,0.06);
         text-align: left;
         min-width: 120px;
     }
 
-    .roster-table thead th .day-name { font-size: 12.5px; font-weight: 700; color: #101828; }
-    .roster-table thead th .day-total { font-size: 11px; color: #98a2b3; }
+    .roster-table thead th .day-name { font-size: 12.5px; font-weight: 700; color: #f5e0e0; }
+    .roster-table thead th .day-total { font-size: 11px; color: #b6a49b; }
 
-    .roster-member-col { min-width: 190px; position: sticky; left: 0; background: #fff; z-index: 1; }
+    .roster-member-col { min-width: 190px; position: sticky; left: 0; background: #241e1c; z-index: 1; }
 
     .roster-member { display: flex; align-items: center; gap: 8px; }
     .roster-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-    .roster-member-name { font-weight: 700; font-size: 13px; color: #101828; }
-    .roster-member-hours { font-size: 11.5px; color: #98a2b3; }
+    .roster-member-name { font-weight: 700; font-size: 13px; color: #f5e0e0; }
+    .roster-member-hours { font-size: 11.5px; color: #b6a49b; }
 
     .roster-edit-btn {
-        border: none; background: transparent; color: #98a2b3; padding: 4px;
+        border: none; background: transparent; color: #b6a49b; padding: 4px;
     }
-    .roster-edit-btn:hover { color: #3f37c9; }
+    .roster-edit-btn:hover { color: #b98ea3; }
 
     .shift-pill {
         display: block;
-        background: #eef2ff;
-        color: #3f37c9;
+        background: rgba(213,180,169,0.1);
+        color: #b98ea3;
         border-radius: 6px;
         font-size: 11.5px;
         font-weight: 600;
@@ -51,12 +51,12 @@
         white-space: nowrap;
     }
 
-    .shift-pill.timeoff { background: #f2f4f7; color: #667085; }
-    .shift-pill.timeoff.sick { background: #fdecea; color: #b3261e; }
+    .shift-pill.timeoff { background: rgba(213,180,169,0.07); color: #b6a49b; }
+    .shift-pill.timeoff.sick { background: rgba(168,82,74,0.14); color: #c07c73; }
 
     .roster-info-banner {
-        background: #eef2ff;
-        color: #3f37c9;
+        background: rgba(213,180,169,0.1);
+        color: #b98ea3;
         border-radius: 10px;
         padding: 12px 16px;
         font-size: 13px;
@@ -65,12 +65,12 @@
 
     /* Shift modal */
     #shiftModal .modal-dialog { max-width: 720px; }
-    #shiftModal .nav-tabs .nav-link { color: #667085; font-weight: 600; font-size: 13.5px; }
-    #shiftModal .nav-tabs .nav-link.active { color: #3f37c9; border-color: #eaecf0 #eaecf0 #fff; }
+    #shiftModal .nav-tabs .nav-link { color: #b6a49b; font-weight: 600; font-size: 13.5px; }
+    #shiftModal .nav-tabs .nav-link.active { color: #b98ea3; border-color: rgba(213,180,169,0.16) rgba(213,180,169,0.16) #241e1c; }
     #shiftModal .shift-tab-pane { display: none; }
     #shiftModal .shift-tab-pane.active { display: block; }
 
-    .shift-day-row { border: 1px solid #eaecf0; border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; }
+    .shift-day-row { border: 1px solid rgba(213,180,169,0.16); border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; }
     .shift-day-header { display: flex; justify-content: space-between; align-items: center; }
     .shift-blocks { margin-top: 8px; }
     .shift-blocks:empty { margin-top: 0; }
@@ -79,11 +79,11 @@
 
     .timeoff-row {
         display: flex; justify-content: space-between; align-items: center;
-        border: 1px solid #eaecf0; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; font-size: 13px;
+        border: 1px solid rgba(213,180,169,0.16); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; font-size: 13px;
     }
-    .timeoff-row .badge.on-leave { background: #fef3e2; color: #b54708; }
-    .timeoff-row .badge.sick { background: #fdecea; color: #b3261e; }
-    .timeoff-row .badge.unpaid, .timeoff-row .badge.other { background: #f2f4f7; color: #475467; }
+    .timeoff-row .badge.on-leave { background: rgba(201,166,107,0.16); color: #c9a66b; }
+    .timeoff-row .badge.sick { background: rgba(168,82,74,0.14); color: #c07c73; }
+    .timeoff-row .badge.unpaid, .timeoff-row .badge.other { background: rgba(213,180,169,0.07); color: #cbb8b0; }
 </style>
 
 @section('content')

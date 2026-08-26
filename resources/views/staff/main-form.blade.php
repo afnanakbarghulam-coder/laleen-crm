@@ -11,7 +11,7 @@
     #addStaffModal .stf-nav {
         width: 200px;
         flex-shrink: 0;
-        border-right: 1px solid #eaecf0;
+        border-right: 1px solid rgba(213,180,169,0.16);
         padding: 16px 10px;
         overflow-y: auto;
     }
@@ -21,7 +21,7 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .03em;
-        color: #98a2b3;
+        color: #b6a49b;
         margin: 14px 10px 6px;
     }
 
@@ -37,27 +37,27 @@
         border-radius: 8px;
         font-size: 13px;
         font-weight: 600;
-        color: #475467;
+        color: #cbb8b0;
         cursor: pointer;
     }
 
     #addStaffModal .stf-nav-item:hover {
-        background: #f9fafb;
+        background: rgba(213,180,169,0.06);
     }
 
     #addStaffModal .stf-nav-item.active {
-        background: #eef2ff;
-        color: #3f37c9;
+        background: rgba(213,180,169,0.1);
+        color: #b98ea3;
     }
 
     #addStaffModal .stf-nav-item .badge {
-        background: #eaecf0;
-        color: #475467;
+        background: rgba(213,180,169,0.16);
+        color: #cbb8b0;
         font-weight: 700;
     }
 
     #addStaffModal .stf-nav-item.active .badge {
-        background: #3f37c9;
+        background: #b98ea3;
         color: #fff;
     }
 
@@ -79,11 +79,11 @@
         width: 84px;
         height: 84px;
         border-radius: 50%;
-        background: #ede9fe;
+        background: rgba(185,142,163,0.14);
         display: flex;
         align-items: center;
         justify-content: center;
-        color: #7c5cff;
+        color: #b98ea3;
         font-size: 24px;
         cursor: pointer;
         overflow: hidden;
@@ -106,19 +106,19 @@
     }
 
     #addStaffModal .svc-catalog-row:hover {
-        background: #f9fafb;
+        background: rgba(213,180,169,0.06);
     }
 
     #addStaffModal .svc-catalog-row .meta {
         font-size: 11px;
-        color: #667085;
+        color: #b6a49b;
     }
 
     #addStaffModal .svc-cat-header {
         font-weight: 700;
         font-size: 12.5px;
-        color: #344054;
-        background: #f9fafb;
+        color: #f5e0e0;
+        background: rgba(213,180,169,0.06);
         border-radius: 6px;
     }
 </style>

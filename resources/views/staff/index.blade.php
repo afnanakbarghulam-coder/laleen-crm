@@ -10,8 +10,8 @@
         font-size: 11.5px;
         text-transform: uppercase;
         letter-spacing: .03em;
-        color: #667085;
-        border-bottom: 1px solid #eaecf0;
+        color: var(--luxe-muted);
+        border-bottom: 1px solid var(--luxe-border-strong);
     }
 
     .team-table td {
@@ -27,22 +27,22 @@
 
     .team-name {
         font-weight: 700;
-        color: #101828;
+        color: var(--luxe-ink);
     }
 
     .team-contact a {
         display: block;
         font-size: 12.5px;
-        color: #3f8cff;
+        color: var(--luxe-accent);
         text-decoration: none;
     }
 
     .team-contact .phone {
-        color: #667085;
+        color: var(--luxe-muted);
     }
 
     .team-rating {
-        color: #98a2b3;
+        color: var(--luxe-muted);
         font-size: 12.5px;
     }
 
@@ -53,10 +53,10 @@
         border-radius: 999px;
     }
 
-    .access-badge.admin { background: #fdecea; color: #b3261e; }
-    .access-badge.agent { background: #eef2ff; color: #3f37c9; }
-    .access-badge.staff { background: #e6f7ee; color: #1b7a4d; }
-    .access-badge.user { background: #f1f2f6; color: #475467; }
+    .access-badge.admin { background: rgba(168, 82, 74, 0.16); color: #d4948c; }
+    .access-badge.agent { background: rgba(213, 180, 169, 0.14); color: var(--luxe-accent); }
+    .access-badge.staff { background: rgba(142, 168, 138, 0.16); color: #b7cdb3; }
+    .access-badge.user { background: var(--luxe-surface-2); color: var(--luxe-muted); }
 </style>
 
 @section('content')

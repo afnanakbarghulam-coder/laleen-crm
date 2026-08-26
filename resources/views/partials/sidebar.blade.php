@@ -98,20 +98,21 @@
          /* ===== SIDEBAR MODERN DESIGN ===== */
 
          #layout-menu {
-             background: #111827;
-             color: #cbd5e1;
+             background: #1a1512;
+             color: #cbb8b0;
              width: 260px;
-             border-right: 1px solid rgba(255, 255, 255, 0.05);
+             border-right: 1px solid rgba(213, 180, 169, 0.14);
          }
 
          #layout-menu .app-brand {
              padding: 20px 18px;
-             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+             border-bottom: 1px solid rgba(213, 180, 169, 0.14);
          }
 
          #layout-menu .app-brand-text {
-             color: #ffffff;
-             font-weight: 600;
+             color: #f5e0e0;
+             font-family: 'Playfair Display', serif;
+             font-weight: 700;
              font-size: 18px;
          }
 
@@ -120,7 +121,7 @@
          }
 
          #layout-menu .menu-header-text {
-             color: #6b7280;
+             color: #8a7d76;
              font-size: 11px;
              letter-spacing: 1px;
          }
@@ -130,7 +131,7 @@
              margin: 3px 0;
              padding: 10px 14px;
              transition: all 0.25s ease;
-             color: #cbd5e1;
+             color: #cbb8b0;
          }
 
          #layout-menu .menu-link i {
@@ -138,28 +139,28 @@
          }
 
          #layout-menu .menu-link:hover {
-             background: rgba(255, 255, 255, 0.06);
-             color: #ffffff;
+             background: rgba(213, 180, 169, 0.08);
+             color: #f5e0e0;
              transform: translateX(4px);
          }
 
          /* ACTIVE ITEM */
          #layout-menu .menu-item.active>.menu-link {
-             background: linear-gradient(135deg, #2563eb, #3b82f6);
-             color: #ffffff;
-             box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
+             background: linear-gradient(135deg, #d5b4a9, #c19a8c);
+             color: #241a16;
+             box-shadow: 0 6px 18px rgba(213, 180, 169, 0.25);
          }
 
          #layout-menu .menu-item.active i {
-             color: #ffffff;
+             color: #241a16;
          }
 
          .menu-divider {
-             border-top: 1px solid rgba(255, 255, 255, 0.05);
+             border-top: 1px solid rgba(213, 180, 169, 0.14);
          }
 
          .layout-menu-toggle {
-             color: #ffffff;
+             color: #f5e0e0;
          }
      </style>
 

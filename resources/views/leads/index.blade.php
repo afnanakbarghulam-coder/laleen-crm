@@ -8,11 +8,11 @@
         bottom: 25px;
         right: 25px;
         width: 310px;
-        background: #ffffff;
+        background: #241e1c;
         border-radius: 12px;
         padding: 20px 18px;
         box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
-        border-left: 6px solid #ff9800;
+        border-left: 6px solid #c9a66b;
         animation: popupFade 0.35s ease-out;
         display: none;
         z-index: 9999;
@@ -21,7 +21,7 @@
     .popup-content h4 {
         font-size: 18px;
         font-weight: 600;
-        color: #d35400;
+        color: #c97b4a;
         margin-bottom: 10px;
         padding-left: 5px;
     }
@@ -43,12 +43,12 @@
         font-size: 22px;
         font-weight: bold;
         cursor: pointer;
-        color: #444;
+        color: #b6a49b;
         transition: 0.2s ease;
     }
 
     .close-icon:hover {
-        color: #000;
+        color: #f5e0e0;
         transform: scale(1.1);
     }
 
