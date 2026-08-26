@@ -208,32 +208,49 @@
 
 @section('scripts')
 <script>
+    // Explicit colors everywhere text can appear - ApexCharts' own light/dark
+    // heuristics can't be trusted against this theme's near-black cards, and
+    // an animated entrance risks a screenshot landing on a mid-animation,
+    // near-invisible frame. Both are switched off here.
+    const laTextColor = '#f2e6e2';
+    const laMutedColor = '#c9a39a';
+
+    const laDonutBase = {
+        chart: { type: 'donut', height: 300, fontFamily: 'inherit', foreColor: laTextColor, animations: { enabled: false } },
+        dataLabels: {
+            enabled: true,
+            formatter: (v) => v.toFixed(1) + '%',
+            style: { colors: ['#ffffff'] },
+            dropShadow: { enabled: true, top: 0, left: 0, blur: 2, opacity: 0.65 },
+        },
+        legend: { position: 'bottom', labels: { colors: laTextColor } },
+        stroke: { colors: ['#241e1c'] },
+    };
+
     new ApexCharts(document.querySelector('#laCategoryChart'), {
-        chart: { type: 'donut', height: 300, fontFamily: 'inherit' },
+        ...laDonutBase,
         series: @json($categorySeries),
         labels: @json($categoryLabels),
         colors: ['#8ea88a', '#8aa6ab', '#c9a66b', '#a8524a', '#8a7d76'],
-        dataLabels: { enabled: true, formatter: (v) => v.toFixed(1) + '%' },
-        legend: { position: 'bottom' },
-        plotOptions: { pie: { donut: { labels: { show: true, total: { show: true, label: 'Total', formatter: () => '{{ $totalLeads }}' } } } } },
+        plotOptions: { pie: { donut: { labels: { show: true,
+            name: { color: laTextColor },
+            value: { color: laTextColor },
+            total: { show: true, label: 'Total', color: laMutedColor, formatter: () => '{{ $totalLeads }}' },
+        } } } },
     }).render();
 
     new ApexCharts(document.querySelector('#laNeedfulChart'), {
-        chart: { type: 'donut', height: 300, fontFamily: 'inherit' },
+        ...laDonutBase,
         series: [{{ $needfulCounts['yes'] }}, {{ $needfulCounts['no'] }}, {{ $needfulCounts['unset'] }}],
         labels: ['Yes', 'No', 'Not Set'],
         colors: ['#8ea88a', '#a8524a', '#8a7d76'],
-        dataLabels: { enabled: true, formatter: (v) => v.toFixed(1) + '%' },
-        legend: { position: 'bottom' },
     }).render();
 
     new ApexCharts(document.querySelector('#laFollowupChart'), {
-        chart: { type: 'donut', height: 300, fontFamily: 'inherit' },
+        ...laDonutBase,
         series: [{{ $followupPerformance['completed'] }}, {{ $followupPerformance['overdue'] }}, {{ $followupPerformance['upcoming'] }}, {{ $followupPerformance['no_date'] }}],
         labels: ['Completed', 'Overdue', 'Upcoming', 'No Date Set'],
         colors: ['#8ea88a', '#a8524a', '#c9a66b', '#8a7d76'],
-        dataLabels: { enabled: true, formatter: (v) => v.toFixed(1) + '%' },
-        legend: { position: 'bottom' },
     }).render();
 </script>
 @endsection
