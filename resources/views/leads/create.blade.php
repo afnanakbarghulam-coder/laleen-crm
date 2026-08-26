@@ -49,7 +49,7 @@
                              <label class="form-label">Category <span class="text-danger">*</span></label>
                              <select name="category" class="form-select" required>
                                  <option value="">-- Select Category --</option>
-                                 @foreach (\App\Models\Lead::CATEGORIES as $key => $label)
+                                 @foreach (\App\Models\Lead::MANUAL_CATEGORIES as $key => $label)
                                      <option value="{{ $key }}">{{ $label }}</option>
                                  @endforeach
                              </select>

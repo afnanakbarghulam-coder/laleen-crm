@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\Lead;
 use App\Models\Staff;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -979,6 +980,10 @@ class AppointmentController extends Controller
         $request->validate(['status' => 'required|in:arrived,in_progress,completed,no_show,cancelled',]);
         $appointment->update(['status' => $request->status,]);
 
+        if (in_array($request->status, ['no_show', 'cancelled'])) {
+            $this->syncLeadCategoryFromAppointment($appointment, $request->status === 'no_show' ? 'no_show' : 'cancel');
+        }
+
         if ($request->status === 'completed') {
             return response()->json([
                 'success' => true,
@@ -989,6 +994,40 @@ class AppointmentController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Appointment status updated successfully.',
+        ]);
+    }
+
+    /**
+     * No-show and Cancel are no longer manually selectable when adding a
+     * lead - they're driven entirely by staff marking an appointment that
+     * way on the Enhanced Calendar. This finds the customer's most recent
+     * lead (matched by customer_id, falling back to phone) and marks its
+     * category accordingly, or creates a fresh lead if none exists yet so
+     * the no-show/cancellation still shows up in the Leads pipeline.
+     */
+    private function syncLeadCategoryFromAppointment(Appointment $appointment, string $category): void
+    {
+        $lead = Lead::where(function ($q) use ($appointment) {
+            if ($appointment->customer_id) {
+                $q->where('customer_id', $appointment->customer_id);
+            } else {
+                $q->where('phone', $appointment->phone);
+            }
+        })->orderByDesc('created_at')->first();
+
+        if ($lead) {
+            $lead->update(['category' => $category]);
+
+            return;
+        }
+
+        Lead::create([
+            'phone' => $appointment->phone,
+            'customer_id' => $appointment->customer_id,
+            'assigned_agent_id' => $appointment->booking_agent_id,
+            'category' => $category,
+            'service_interest' => $appointment->service_name,
+            'next_followup_date' => now()->addDay(),
         ]);
     }
 

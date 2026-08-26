@@ -79,7 +79,7 @@ class LeadController extends Controller
             'phone_number' => 'required|string|max:20',
             'customer_name' => 'required|string|max:255',
             'assigned_agent_id' => 'required|exists:users,id',
-            'category' => 'required|in:' . implode(',', array_keys(Lead::CATEGORIES)),
+            'category' => 'required|in:' . implode(',', array_keys(Lead::MANUAL_CATEGORIES)),
             'service_interest' => 'required|string|max:255',
             'next_followup_date' => 'required|date',
             'customer_id' => 'nullable|exists:customers,id',
@@ -123,12 +123,22 @@ class LeadController extends Controller
 
     public function update(Request $request, Lead $lead)
     {
+        // A lead already auto-marked No-show/Cancel keeps that category as a
+        // read-only badge in the edit form (see edit.blade.php) rather than a
+        // choosable option, so it round-trips via a hidden input. Allow that
+        // one extra value through validation without opening the dropdown
+        // itself up to staff picking No-show/Cancel for any other lead.
+        $allowedCategories = array_keys(Lead::MANUAL_CATEGORIES);
+        if ($lead->category && !array_key_exists($lead->category, Lead::MANUAL_CATEGORIES)) {
+            $allowedCategories[] = $lead->category;
+        }
+
         $request->validate([
             'country_code' => 'required|string|max:5',
             'phone_number' => 'required|string|max:20',
             'customer_name' => 'required|string|max:255',
             'assigned_agent_id' => 'required|exists:users,id',
-            'category' => 'required|in:' . implode(',', array_keys(Lead::CATEGORIES)),
+            'category' => 'required|in:' . implode(',', $allowedCategories),
             'service_interest' => 'required|string|max:255',
             'next_followup_date' => 'required|date',
             'customer_id' => 'nullable|exists:customers,id',

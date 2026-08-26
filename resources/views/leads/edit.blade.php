@@ -54,12 +54,20 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Category <span class="text-danger">*</span></label>
-                            <select name="category" class="form-select" required>
-                                <option value="">-- Select Category --</option>
-                                @foreach (\App\Models\Lead::CATEGORIES as $key => $label)
-                                    <option value="{{ $key }}" {{ $lead->category === $key ? 'selected' : '' }}>{{ $label }}</option>
-                                @endforeach
-                            </select>
+                            @if ($lead->category && !array_key_exists($lead->category, \App\Models\Lead::MANUAL_CATEGORIES))
+                                <div>
+                                    <span class="lead-badge cat-{{ $lead->category }}">{{ \App\Models\Lead::CATEGORIES[$lead->category] }}</span>
+                                </div>
+                                <div class="form-text">Set automatically from the Enhanced Calendar &mdash; not manually editable.</div>
+                                <input type="hidden" name="category" value="{{ $lead->category }}">
+                            @else
+                                <select name="category" class="form-select" required>
+                                    <option value="">-- Select Category --</option>
+                                    @foreach (\App\Models\Lead::MANUAL_CATEGORIES as $key => $label)
+                                        <option value="{{ $key }}" {{ $lead->category === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            @endif
                         </div>
 
                         <div class="col-md-6">

@@ -13,6 +13,19 @@ class Lead extends Model
         'cancel' => 'Cancel',
     ];
 
+    /**
+     * Categories staff can pick by hand when adding/editing a lead.
+     * No-show and Cancel are excluded on purpose - those are set
+     * automatically when an appointment is marked No Show or Cancelled
+     * on the Enhanced Calendar (see AppointmentController::updateStatus()),
+     * never chosen manually. They still appear in CATEGORIES above for
+     * filtering, badges, and analytics.
+     */
+    const MANUAL_CATEGORIES = [
+        'follow_up' => 'Follow up',
+        'inquiry' => 'Inquiry',
+    ];
+
     const NEEDFUL_STATUSES = [
         'yes' => 'Yes',
         'no' => 'No',
