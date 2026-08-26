@@ -23,14 +23,14 @@
         min-width: 120px;
     }
 
-    .roster-table thead th .day-name { font-size: 12.5px; font-weight: 700; color: #f5e0e0; }
+    .roster-table thead th .day-name { font-size: 12.5px; font-weight: 700; color: #e79a91; }
     .roster-table thead th .day-total { font-size: 11px; color: #b6a49b; }
 
     .roster-member-col { min-width: 190px; position: sticky; left: 0; background: #241e1c; z-index: 1; }
 
     .roster-member { display: flex; align-items: center; gap: 8px; }
     .roster-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-    .roster-member-name { font-weight: 700; font-size: 13px; color: #f5e0e0; }
+    .roster-member-name { font-weight: 700; font-size: 13px; color: #e79a91; }
     .roster-member-hours { font-size: 11.5px; color: #b6a49b; }
 
     .roster-edit-btn {

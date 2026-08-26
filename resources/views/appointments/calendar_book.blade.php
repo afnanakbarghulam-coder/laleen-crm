@@ -55,7 +55,7 @@
     .fb-rail .client-label {
         font-weight: 700;
         font-size: 12.5px;
-        color: #f5e0e0;
+        color: #e79a91;
         line-height: 1.2;
     }
 
@@ -107,7 +107,7 @@
     .fb-date-label {
         font-size: 21px;
         font-weight: 800;
-        color: #f5e0e0;
+        color: #e79a91;
         cursor: pointer;
     }
 
@@ -140,7 +140,7 @@
     .fb-svc-row .name {
         font-weight: 700;
         font-size: 13.5px;
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     .fb-svc-row .meta {
@@ -174,7 +174,7 @@
         font-size: 13px;
         font-weight: 600;
         background: #241e1c;
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     .fb-add-pill:hover {
@@ -247,7 +247,7 @@
     .fb-client-name {
         font-weight: 700;
         font-size: 13.5px;
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     .fb-client-phone {
@@ -258,7 +258,7 @@
     .fb-service-row .svc-info .name {
         font-weight: 700;
         font-size: 13.5px;
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     .fb-service-row .svc-info .meta {
@@ -292,7 +292,7 @@
     .fb-footer .total-label {
         font-weight: 700;
         font-size: 13.5px;
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     .fb-footer .total-meta {
@@ -303,7 +303,7 @@
     .fb-footer .total-price {
         font-weight: 800;
         font-size: 16px;
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     #calendarBookModal .btn-close {

@@ -12,7 +12,7 @@
     .profile-stat .value {
         font-size: 22px;
         font-weight: 700;
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     .profile-stat .label {

@@ -110,7 +110,7 @@
          }
 
          #layout-menu .app-brand-text {
-             color: #f5e0e0;
+             color: #e79a91;
              font-family: 'Playfair Display', serif;
              font-weight: 700;
              font-size: 18px;
@@ -140,7 +140,7 @@
 
          #layout-menu .menu-link:hover {
              background: rgba(213, 180, 169, 0.08);
-             color: #f5e0e0;
+             color: #e79a91;
              transform: translateX(4px);
          }
 
@@ -160,7 +160,7 @@
          }
 
          .layout-menu-toggle {
-             color: #f5e0e0;
+             color: #e79a91;
          }
      </style>
 

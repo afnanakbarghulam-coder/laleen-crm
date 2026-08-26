@@ -6,7 +6,7 @@
         --fin-border: rgba(213,180,169,0.16);
         --fin-border-strong: rgba(213,180,169,0.3);
         --fin-muted: #b6a49b;
-        --fin-ink: #f5e0e0;
+        --fin-ink: #e79a91;
         --fin-primary: #d5b4a9;
         --fin-success: #8ea88a;
         --fin-danger: #a8524a;

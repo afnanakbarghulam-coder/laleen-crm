@@ -117,7 +117,7 @@
     #addStaffModal .svc-cat-header {
         font-weight: 700;
         font-size: 12.5px;
-        color: #f5e0e0;
+        color: #e79a91;
         background: rgba(213,180,169,0.06);
         border-radius: 6px;
     }

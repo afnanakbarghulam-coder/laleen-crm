@@ -48,7 +48,7 @@
     }
 
     .close-icon:hover {
-        color: #f5e0e0;
+        color: #e79a91;
         transform: scale(1.1);
     }
 

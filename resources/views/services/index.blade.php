@@ -15,14 +15,14 @@
         align-items: center;
         padding: 10px 14px;
         font-size: 13.5px;
-        color: #f5e0e0;
+        color: #e79a91;
         text-decoration: none;
         border-bottom: 1px solid rgba(213,180,169,0.07);
     }
 
     .svc-cat-row:hover {
         background: rgba(213,180,169,0.06);
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     .svc-cat-row.active {
@@ -54,7 +54,7 @@
         font-weight: 800;
         font-size: 16px;
         margin: 22px 0 12px;
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     .svc-group-title:first-child {
@@ -84,7 +84,7 @@
     .svc-card .svc-name {
         font-weight: 700;
         font-size: 14.5px;
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     .svc-card .svc-meta {
@@ -105,7 +105,7 @@
     .svc-card .svc-price {
         font-weight: 700;
         font-size: 15px;
-        color: #f5e0e0;
+        color: #e79a91;
         white-space: nowrap;
     }
 

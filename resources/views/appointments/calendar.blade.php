@@ -7,7 +7,7 @@
         --cal-border-strong: rgba(213,180,169,0.3);
         --cal-muted: #b6a49b;
         --cal-today: #d5b4a9;
-        --cal-ink: #f5e0e0;
+        --cal-ink: #e79a91;
     }
 
     .cal-toolbar-card {
@@ -126,7 +126,7 @@
         padding: 0 16px;
         font-size: 13px;
         font-weight: 600;
-        color: #f5e0e0;
+        color: #e79a91;
         transition: all .15s ease;
     }
 
@@ -756,13 +756,13 @@
         font-weight: 700;
         font-size: 13px;
         border-bottom: 1px solid rgba(213,180,169,0.16);
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     .cal-slot-popover .popover-item {
         padding: 10px 14px;
         font-size: 13px;
-        color: #f5e0e0;
+        color: #e79a91;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -838,7 +838,7 @@
     #apptDrawer .svc-item .name {
         font-weight: 700;
         font-size: 13px;
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     #apptDrawer .svc-item .meta {
@@ -868,7 +868,7 @@
     }
 
     #apptDrawer .svc-item .icon-btn:hover {
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     #apptDrawer .svc-item .icon-btn.danger:hover {
@@ -882,7 +882,7 @@
         font-size: 12.5px;
         font-weight: 600;
         background: #241e1c;
-        color: #f5e0e0;
+        color: #e79a91;
     }
 
     #apptDrawer .drawer-add-pill:hover {
