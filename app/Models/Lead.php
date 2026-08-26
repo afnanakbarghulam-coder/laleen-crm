@@ -9,6 +9,7 @@ class Lead extends Model
     const CATEGORIES = [
         'follow_up' => 'Follow up',
         'inquiry' => 'Inquiry',
+        'no_show' => 'No-show',
         'cancel' => 'Cancel',
     ];
 
@@ -20,6 +21,7 @@ class Lead extends Model
 
     protected $fillable = [
         'phone',
+        'customer_id',
         'assigned_agent_id',
         'category',
         'customer_remarks',
@@ -36,5 +38,10 @@ class Lead extends Model
     public function agent()
     {
         return $this->belongsTo(User::class, 'assigned_agent_id');
+    }
+
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
     }
 }

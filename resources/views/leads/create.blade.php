@@ -14,6 +14,15 @@
                          <div class="col-md-6">
                              <label class="form-label">Contact (WhatsApp Number)</label>
                              <input type="text" name="phone" class="form-control" placeholder="974XXXXXXXX" value="974" required>
+                             <input type="hidden" name="customer_id" class="lead-customer-id-input" value="">
+                             <div class="lead-client-match alert alert-success py-2 px-3 mt-2 mb-0 d-none" style="font-size:12.5px;">
+                                 <i class="bx bx-check-circle me-1"></i> Existing client: <strong class="lead-client-name"></strong>
+                                 &middot; <span class="lead-client-visits"></span> visit(s) &mdash;
+                                 <a href="#" target="_blank" class="lead-client-profile-link">View profile</a>
+                             </div>
+                             <div class="lead-client-new text-muted small mt-2 d-none">
+                                 <i class="bx bx-info-circle me-1"></i> New number &mdash; a client profile will be created automatically.
+                             </div>
                          </div>
                          <div class="col-md-6">
                              <label class="form-label">Agent Assign</label>

@@ -76,11 +76,21 @@
 
     .lead-badge.cat-follow_up { background: rgba(142,168,138,.15); color: #8ea88a; }
     .lead-badge.cat-inquiry { background: rgba(138,166,171,.15); color: #8aa6ab; }
+    .lead-badge.cat-no_show { background: rgba(201,166,107,.15); color: #c9a66b; }
     .lead-badge.cat-cancel { background: rgba(168,82,74,.15); color: #a8524a; }
 
     .lead-badge.corr-yes { background: rgba(142,168,138,.15); color: #8ea88a; }
     .lead-badge.corr-booked { background: rgba(201,166,107,.15); color: #c9a66b; }
     .lead-badge.corr-no { background: rgba(138,125,118,.18); color: #8a7d76; }
+
+    .lead-client-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11.5px;
+        color: #8ea88a;
+        margin-top: 3px;
+    }
 </style>
 @section('content')
     <!-- Page Navbar with Add Button -->
@@ -116,36 +126,34 @@
                         <input type="hidden" name="followup_date" value="{{ request('followup_date') }}">
                     @endif
                     <div class="row g-3 align-items-end">
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <label class="form-label">Agent</label>
-                            <select name="agent_id" class="form-select">
-                                <option value="">All Agents</option>
+                            <select name="agent_id[]" class="form-select leads-multiselect" multiple data-placeholder="All Agents">
                                 @foreach ($agents as $agent)
                                     <option value="{{ $agent->id }}"
-                                        {{ request('agent_id') == $agent->id ? 'selected' : '' }}>
+                                        {{ in_array($agent->id, (array) request('agent_id', [])) ? 'selected' : '' }}>
                                         {{ $agent->name }}
                                     </option>
                                 @endforeach
                             </select>
                         </div>
 
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <label class="form-label">Category</label>
-                            <select name="category" class="form-select">
-                                <option value="">All</option>
+                            <select name="category[]" class="form-select leads-multiselect" multiple data-placeholder="All Categories">
                                 @foreach (\App\Models\Lead::CATEGORIES as $key => $label)
-                                    <option value="{{ $key }}" {{ request('category') == $key ? 'selected' : '' }}>{{ $label }}</option>
+                                    <option value="{{ $key }}" {{ in_array($key, (array) request('category', [])) ? 'selected' : '' }}>{{ $label }}</option>
                                 @endforeach
                             </select>
                         </div>
 
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <label class="form-label">Phone Number</label>
                             <input type="text" name="phone" class="form-control" placeholder="Search phone"
                                 value="{{ request('phone') }}">
                         </div>
 
-                        <div class="col-md-3 d-flex gap-2">
+                        <div class="col-md-12 d-flex gap-2">
                             <button type="submit" class="btn btn-primary w-100">Filter</button>
                             <a href="{{ route('leads.index') }}" class="btn btn-secondary w-100">Reset</a>
                         </div>
@@ -179,7 +187,14 @@
 
                         <tr>
                             <td>{{ $lead->created_at->format('d M Y') }}</td>
-                            <td>{{ $lead->phone }}</td>
+                            <td>
+                                {{ $lead->phone }}
+                                @if ($lead->customer)
+                                    <a href="{{ route('customers.show', $lead->customer_id) }}" target="_blank" class="lead-client-link">
+                                        <i class="bx bx-check-circle"></i> {{ $lead->customer->name ?: 'Linked client' }}
+                                    </a>
+                                @endif
+                            </td>
                             <td>
                                 @if ($lead->category)
                                     <span class="lead-badge cat-{{ $lead->category }}">{{ \App\Models\Lead::CATEGORIES[$lead->category] ?? $lead->category }}</span>
@@ -245,6 +260,49 @@
     @include('leads.create')
 
     <script>
+        // Smart client linking: as the phone field changes in the Add or any Edit
+        // modal, check it against the clients table and surface a match/new badge.
+        (function() {
+            let lookupTimer = null;
+
+            document.addEventListener('input', function(e) {
+                if (!e.target.matches('input[name="phone"]')) return;
+
+                const form = e.target.closest('form');
+                const matchBox = form.querySelector('.lead-client-match');
+                const newBox = form.querySelector('.lead-client-new');
+                const hiddenId = form.querySelector('.lead-customer-id-input');
+                const digits = e.target.value.replace(/\D/g, '');
+
+                clearTimeout(lookupTimer);
+                hiddenId.value = '';
+                matchBox.classList.add('d-none');
+                newBox.classList.add('d-none');
+
+                if (digits.length < 8) return;
+
+                lookupTimer = setTimeout(() => {
+                    fetch(`{{ route('customers.lookup') }}?phone=${encodeURIComponent(digits)}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.found) {
+                                hiddenId.value = data.id;
+                                matchBox.querySelector('.lead-client-name').textContent = data.name || 'Unnamed';
+                                matchBox.querySelector('.lead-client-visits').textContent = data.visit_count;
+                                matchBox.querySelector('.lead-client-visits-wrap')?.classList.remove('d-none');
+                                matchBox.querySelector('.lead-client-profile-link').href = data.profile_url;
+                                matchBox.classList.remove('d-none');
+                                newBox.classList.add('d-none');
+                            } else {
+                                newBox.classList.remove('d-none');
+                                matchBox.classList.add('d-none');
+                            }
+                        })
+                        .catch(() => {});
+                }, 400);
+            });
+        })();
+
         document.addEventListener("DOMContentLoaded", function() {
 
             fetch("{{ route('leads.check.followups') }}")
@@ -298,4 +356,16 @@
         </script>
     @endif
 
+@endsection
+
+@section('scripts')
+    <script>
+        $(document).ready(function() {
+            $('.leads-multiselect').select2({
+                width: '100%',
+                allowClear: true,
+                closeOnSelect: false,
+            });
+        });
+    </script>
 @endsection
