@@ -88,13 +88,10 @@ class LeadController extends Controller
 
         $normalizedPhone = Lead::normalizePhone($request->country_code, $request->phone_number);
 
-        $existingLead = Lead::whereRaw(
-            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'(',''),')',''),'+','') = ?",
-            [$normalizedPhone]
-        )->first();
+        $existingLead = $this->findDuplicateLead($normalizedPhone, $request->category, $request->service_interest);
 
         if ($existingLead) {
-            return redirect()->route('leads.index')->with('existing_lead_id', $existingLead->id)->with('warning', 'Lead already exists. You can update it.');
+            return redirect()->route('leads.index')->with('existing_lead_id', $existingLead->id)->with('warning', 'This client already has an open lead for the same category and service. You can update it.');
         }
 
         $customer = $this->resolveOrCreateCustomer($normalizedPhone, $request->customer_id, $request->customer_name);
@@ -160,12 +157,9 @@ class LeadController extends Controller
             'next_followup_date' => $request->next_followup_date,
         ];
 
-        $existingLead = Lead::whereRaw(
-            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'(',''),')',''),'+','') = ?",
-            [$normalizedPhone]
-        )->where('id', '!=', $lead->id)->first();
+        $existingLead = $this->findDuplicateLead($normalizedPhone, $request->category, $request->service_interest, $lead->id);
 
-        // If another lead already has this phone number, update that one instead of creating a duplicate.
+        // If another lead already covers this exact phone/category/service, update that one instead of creating a duplicate.
         if ($existingLead) {
             $existingLead->update($data);
 
@@ -301,6 +295,26 @@ class LeadController extends Controller
         return Lead::with(['agent', 'customer'])
             ->whereIn('category', ['no_show', 'cancel'])
             ->whereNull('next_followup_date');
+    }
+
+    /**
+     * A client can legitimately have several independent, simultaneous leads
+     * (e.g. an active Follow up for Hair Color and a separate Inquiry for a
+     * Manicure) - so matching on phone alone would wrongly treat a genuinely
+     * new lead as a duplicate of an unrelated one and silently discard it.
+     * Only phone + category + service_interest together mean "this exact
+     * open lead already exists"; anything else is a distinct lead.
+     */
+    private function findDuplicateLead(string $normalizedPhone, ?string $category, ?string $serviceInterest, ?int $excludeLeadId = null)
+    {
+        return Lead::whereRaw(
+            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'(',''),')',''),'+','') = ?",
+            [$normalizedPhone]
+        )
+            ->where('category', $category)
+            ->where('service_interest', $serviceInterest)
+            ->when($excludeLeadId, fn($q) => $q->where('id', '!=', $excludeLeadId))
+            ->first();
     }
 
     /**
