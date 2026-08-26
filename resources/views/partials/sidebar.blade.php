@@ -159,8 +159,68 @@
              border-top: 1px solid rgba(217, 143, 131, 0.14);
          }
 
-         .layout-menu-toggle {
+         /* Minimal sidebar collapse toggle */
+         .sidebar-toggle-btn {
+             width: 30px;
+             height: 30px;
+             border-radius: 8px;
+             display: inline-flex;
+             align-items: center;
+             justify-content: center;
+             background: rgba(217, 143, 131, 0.1);
              color: #e79a91;
+             border: none;
+             flex-shrink: 0;
+             transition: all .2s ease;
+             cursor: pointer;
+         }
+
+         .sidebar-toggle-btn:hover {
+             background: rgba(217, 143, 131, 0.18);
+         }
+
+         .sidebar-toggle-btn i {
+             font-size: 16px;
+             transition: transform .3s ease;
+         }
+
+         html.sidebar-collapsed .sidebar-toggle-btn i {
+             transform: rotate(180deg);
+         }
+
+         /* Collapsed sidebar state */
+         html.sidebar-collapsed #layout-menu {
+             width: 78px;
+             overflow: hidden;
+         }
+
+         html.sidebar-collapsed #layout-menu .app-brand-link,
+         html.sidebar-collapsed #layout-menu .menu-link > div,
+         html.sidebar-collapsed #layout-menu .menu-header-text {
+             display: none !important;
+         }
+
+         html.sidebar-collapsed #layout-menu .app-brand {
+             justify-content: center;
+             padding: 16px 0;
+         }
+
+         html.sidebar-collapsed #layout-menu .app-brand .sidebar-toggle-btn {
+             margin-left: 0 !important;
+         }
+
+         html.sidebar-collapsed #layout-menu .menu-link {
+             justify-content: center;
+             padding: 10px 0;
+         }
+
+         html.sidebar-collapsed #layout-menu .menu-link i {
+             margin-right: 0 !important;
+             font-size: 20px;
+         }
+
+         html.sidebar-collapsed.layout-menu-fixed .layout-page {
+             padding-inline-start: 78px !important;
          }
      </style>
 
@@ -171,9 +231,9 @@
              <span class="app-brand-text ms-2">Laleen Ops</span>
          </a>
 
-         <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto">
+         <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn ms-auto" title="Collapse sidebar">
              <i class="bx bx-chevron-left"></i>
-         </a>
+         </button>
      </div>
 
      <div class="menu-divider mt-0"></div>
@@ -280,3 +340,14 @@
 
      </ul>
  </aside>
+
+ <script>
+     (function () {
+         var btn = document.getElementById('sidebarToggleBtn');
+         if (!btn) return;
+         btn.addEventListener('click', function () {
+             var collapsed = document.documentElement.classList.toggle('sidebar-collapsed');
+             try { localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0'); } catch (e) {}
+         });
+     })();
+ </script>

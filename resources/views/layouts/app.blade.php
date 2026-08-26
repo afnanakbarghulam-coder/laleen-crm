@@ -7,6 +7,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="{{ asset('images/laleen logo1.PNG') }}">
 
+    <script>
+        try {
+            if (localStorage.getItem('sidebarCollapsed') === '1') {
+                document.documentElement.classList.add('sidebar-collapsed');
+            }
+        } catch (e) {}
+    </script>
+
     <title>@yield('title', 'Laleen Ops')</title>
 
     <!-- Boxicons Icons -->
