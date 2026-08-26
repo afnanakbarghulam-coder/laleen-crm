@@ -270,5 +270,13 @@
              </a>
          </li>
 
+         <!-- KPIs -->
+         <li class="menu-item {{ request()->routeIs('kpi.*') ? 'active' : '' }}">
+             <a href="{{ route('kpi.hub') }}" class="menu-link">
+                 <i class="bx bx-line-chart me-2"></i>
+                 <div>KPIs</div>
+             </a>
+         </li>
+
      </ul>
  </aside>

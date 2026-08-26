@@ -3,6 +3,11 @@
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\FinanceController;
+use App\Http\Controllers\Kpi\AdsConversionController;
+use App\Http\Controllers\Kpi\AgentTargetController;
+use App\Http\Controllers\Kpi\ChatEvaluationController;
+use App\Http\Controllers\Kpi\ContentKpiController;
+use App\Http\Controllers\Kpi\StaffSalesController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SaleController;
@@ -71,5 +76,41 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/customers/{customer}/redeem', [CustomerController::class, 'redeemPoints'])->name('customers.loyalty.redeem');
     Route::middleware('role:admin')->group(function () {
         Route::resource('users', UserController::class)->only(['index', 'store', 'update', 'destroy']);
+    });
+
+    Route::prefix('kpis')->name('kpi.')->group(function () {
+        Route::get('/', function () {
+            return view('kpi.hub');
+        })->name('hub');
+
+        Route::get('/ads', [AdsConversionController::class, 'index'])->name('ads.index');
+        Route::get('/ads/create', [AdsConversionController::class, 'create'])->name('ads.create');
+        Route::post('/ads', [AdsConversionController::class, 'store'])->name('ads.store');
+        Route::get('/ads/{report}', [AdsConversionController::class, 'show'])->name('ads.show');
+        Route::delete('/ads/{report}', [AdsConversionController::class, 'destroy'])->name('ads.destroy');
+
+        Route::get('/agents', [AgentTargetController::class, 'index'])->name('agents.index');
+        Route::get('/agents/create', [AgentTargetController::class, 'create'])->name('agents.create');
+        Route::post('/agents', [AgentTargetController::class, 'store'])->name('agents.store');
+        Route::get('/agents/{report}', [AgentTargetController::class, 'show'])->name('agents.show');
+        Route::delete('/agents/{report}', [AgentTargetController::class, 'destroy'])->name('agents.destroy');
+
+        Route::get('/staff-sales', [StaffSalesController::class, 'index'])->name('staff-sales.index');
+        Route::get('/staff-sales/create', [StaffSalesController::class, 'create'])->name('staff-sales.create');
+        Route::post('/staff-sales', [StaffSalesController::class, 'store'])->name('staff-sales.store');
+        Route::get('/staff-sales/{report}', [StaffSalesController::class, 'show'])->name('staff-sales.show');
+        Route::delete('/staff-sales/{report}', [StaffSalesController::class, 'destroy'])->name('staff-sales.destroy');
+
+        Route::get('/chat-eval', [ChatEvaluationController::class, 'index'])->name('chat-eval.index');
+        Route::get('/chat-eval/create', [ChatEvaluationController::class, 'create'])->name('chat-eval.create');
+        Route::post('/chat-eval', [ChatEvaluationController::class, 'store'])->name('chat-eval.store');
+        Route::get('/chat-eval/{report}', [ChatEvaluationController::class, 'show'])->name('chat-eval.show');
+        Route::delete('/chat-eval/{report}', [ChatEvaluationController::class, 'destroy'])->name('chat-eval.destroy');
+
+        Route::get('/content', [ContentKpiController::class, 'index'])->name('content.index');
+        Route::get('/content/create', [ContentKpiController::class, 'create'])->name('content.create');
+        Route::post('/content', [ContentKpiController::class, 'store'])->name('content.store');
+        Route::get('/content/{report}', [ContentKpiController::class, 'show'])->name('content.show');
+        Route::delete('/content/{report}', [ContentKpiController::class, 'destroy'])->name('content.destroy');
     });
 });
