@@ -14,16 +14,12 @@
                 <div class="modal-body">
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="form-label">Customer Name</label>
-                            <input type="text" name="name" class="form-control" value="{{ $lead->name }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Phone Number</label>
+                            <label class="form-label">Contact (WhatsApp Number)</label>
                             <input type="text" name="phone" class="form-control" value="{{ $lead->phone }}"
                                 required>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Assigned Agent</label>
+                            <label class="form-label">Agent Assign</label>
                             <select name="assigned_agent_id" class="form-select">
                                 <option value="">-- Select Agent --</option>
                                 @foreach ($agents as $agent)
@@ -36,26 +32,43 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label">Lead Source</label>
-                            <input type="text" name="lead_source" class="form-control"
-                                value="{{ $lead->lead_source }}">
+                            <label class="form-label">Category</label>
+                            <select name="category" class="form-select">
+                                <option value="">-- Select Category --</option>
+                                @foreach (\App\Models\Lead::CATEGORIES as $key => $label)
+                                    <option value="{{ $key }}" {{ $lead->category === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                @endforeach
+                            </select>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Follow-up Date</label>
-                            <input type="date" name="followup_date" class="form-control"
-                                value="{{ $lead->followup_date }}">
+                            <label class="form-label">Service Interest</label>
+                            <input type="text" name="service_interest" class="form-control" list="serviceInterestOptions"
+                                value="{{ $lead->service_interest }}">
                         </div>
-                        <div class="col-12">
-                            <label class="form-label">Notes</label>
-                            <textarea name="notes" class="form-control" rows="3">{{ $lead->notes }}</textarea>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Booking Status</label>
+                            <input type="text" name="booking_status" class="form-control" value="{{ $lead->booking_status }}">
                         </div>
-                        <div class="col-12">
-                            <label class="form-label">Status</label>
-                            <select name="status" class="form-select">
-                                <option value="pending" {{ $lead->status == 'pending' ? 'selected' : '' }}>Pending
-                                </option>
-                                <option value="done" {{ $lead->status == 'done' ? 'selected' : '' }}>Done</option>
+                        <div class="col-md-6">
+                            <label class="form-label">Correction Done</label>
+                            <select name="correction_done" class="form-select">
+                                <option value="">-- Select --</option>
+                                @foreach (\App\Models\Lead::CORRECTION_STATUSES as $key => $label)
+                                    <option value="{{ $key }}" {{ $lead->correction_done === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                @endforeach
                             </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Next Follow-up Date</label>
+                            <input type="date" name="next_followup_date" class="form-control"
+                                value="{{ optional($lead->next_followup_date)->format('Y-m-d') }}">
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Customer Remarks</label>
+                            <textarea name="customer_remarks" class="form-control" rows="3">{{ $lead->customer_remarks }}</textarea>
                         </div>
                     </div>
                 </div>

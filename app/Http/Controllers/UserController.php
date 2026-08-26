@@ -22,7 +22,9 @@ class UserController extends Controller
         // Fetch all dashboard stats
         $todayAppointments = Appointment::whereDate('appointment_datetime', $today)->count();
         $totalLeads = Lead::count();
-        $pendingFollowups = Lead::where('status', 'pending')->count();
+        $pendingFollowups = Lead::where(function ($q) {
+            $q->whereNull('category')->orWhere('category', '!=', 'cancel');
+        })->count();
 
         $staffCount = Staff::count();
         $staffOnLeave = Staff::where('availability_status', 'on-leave')->count();

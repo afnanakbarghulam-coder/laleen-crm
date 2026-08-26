@@ -12,15 +12,11 @@
                  <div class="modal-body">
                      <div class="row g-3">
                          <div class="col-md-6">
-                             <label class="form-label">Customer Name</label>
-                             <input type="text" name="name" class="form-control">
+                             <label class="form-label">Contact (WhatsApp Number)</label>
+                             <input type="text" name="phone" class="form-control" placeholder="974XXXXXXXX" value="974" required>
                          </div>
                          <div class="col-md-6">
-                             <label class="form-label">Phone Number</label>
-                             <input type="text" name="phone" class="form-control" required>
-                         </div>
-                         <div class="col-md-6">
-                             <label class="form-label">Assigned Agent</label>
+                             <label class="form-label">Agent Assign</label>
                              <select name="assigned_agent_id" class="form-select">
                                  <option value="">-- Select Agent --</option>
                                  @foreach ($agents as $agent)
@@ -30,16 +26,41 @@
                          </div>
 
                          <div class="col-md-6">
-                             <label class="form-label">Lead Source</label>
-                             <input type="text" name="lead_source" class="form-control">
+                             <label class="form-label">Category</label>
+                             <select name="category" class="form-select">
+                                 <option value="">-- Select Category --</option>
+                                 @foreach (\App\Models\Lead::CATEGORIES as $key => $label)
+                                     <option value="{{ $key }}">{{ $label }}</option>
+                                 @endforeach
+                             </select>
                          </div>
                          <div class="col-md-6">
-                             <label class="form-label">Follow-up Date</label>
-                             <input type="date" name="followup_date" class="form-control">
+                             <label class="form-label">Service Interest</label>
+                             <input type="text" name="service_interest" class="form-control" list="serviceInterestOptions" placeholder="e.g. Highlights, Hydra Facial">
                          </div>
+
+                         <div class="col-md-6">
+                             <label class="form-label">Booking Status</label>
+                             <input type="text" name="booking_status" class="form-control" placeholder="e.g. Yes, Confirmed">
+                         </div>
+                         <div class="col-md-6">
+                             <label class="form-label">Correction Done</label>
+                             <select name="correction_done" class="form-select">
+                                 <option value="">-- Select --</option>
+                                 @foreach (\App\Models\Lead::CORRECTION_STATUSES as $key => $label)
+                                     <option value="{{ $key }}">{{ $label }}</option>
+                                 @endforeach
+                             </select>
+                         </div>
+
+                         <div class="col-md-6">
+                             <label class="form-label">Next Follow-up Date</label>
+                             <input type="date" name="next_followup_date" class="form-control">
+                         </div>
+
                          <div class="col-12">
-                             <label class="form-label">Notes</label>
-                             <textarea name="notes" class="form-control" rows="3"></textarea>
+                             <label class="form-label">Customer Remarks</label>
+                             <textarea name="customer_remarks" class="form-control" rows="3"></textarea>
                          </div>
                      </div>
                  </div>
@@ -52,3 +73,9 @@
          </div>
      </div>
  </div>
+
+ <datalist id="serviceInterestOptions">
+     @foreach ($services ?? [] as $serviceName)
+         <option value="{{ $serviceName }}"></option>
+     @endforeach
+ </datalist>

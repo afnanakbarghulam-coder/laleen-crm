@@ -63,6 +63,24 @@
             transform: translateY(0) scale(1);
         }
     }
+
+    .lead-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .lead-badge.cat-follow_up { background: rgba(142,168,138,.15); color: #8ea88a; }
+    .lead-badge.cat-inquiry { background: rgba(138,166,171,.15); color: #8aa6ab; }
+    .lead-badge.cat-cancel { background: rgba(168,82,74,.15); color: #a8524a; }
+
+    .lead-badge.corr-yes { background: rgba(142,168,138,.15); color: #8ea88a; }
+    .lead-badge.corr-booked { background: rgba(201,166,107,.15); color: #c9a66b; }
+    .lead-badge.corr-no { background: rgba(138,125,118,.18); color: #8a7d76; }
 </style>
 @section('content')
     <!-- Page Navbar with Add Button -->
@@ -75,16 +93,30 @@
 
     <!-- Filter Section -->
     <div class="mb-4">
-        <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse"
-            aria-expanded="false" aria-controls="filterCollapse">
-            <i class="bx bx-filter-alt me-1"></i> Filters
-        </button>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse"
+                aria-expanded="false" aria-controls="filterCollapse">
+                <i class="bx bx-filter-alt me-1"></i> Filters
+            </button>
 
-        <div class="collapse mt-3" id="filterCollapse">
+            <form method="GET" action="{{ route('leads.index') }}" id="followupDateForm" class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 small text-muted">Next Follow-up Date</label>
+                <input type="date" name="followup_date" class="form-control form-control-sm" style="width: auto;"
+                    value="{{ request('followup_date') }}" onchange="this.form.submit()">
+                @if (request('followup_date'))
+                    <a href="{{ route('leads.index') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+                @endif
+            </form>
+        </div>
+
+        <div class="collapse mt-3 {{ request()->hasAny(['agent_id', 'category', 'phone']) ? 'show' : '' }}" id="filterCollapse">
             <div class="card card-body shadow-sm border-0">
                 <form method="GET" action="{{ route('leads.index') }}">
+                    @if (request('followup_date'))
+                        <input type="hidden" name="followup_date" value="{{ request('followup_date') }}">
+                    @endif
                     <div class="row g-3 align-items-end">
-                        <div class="col-md-2">
+                        <div class="col-md-3">
                             <label class="form-label">Agent</label>
                             <select name="agent_id" class="form-select">
                                 <option value="">All Agents</option>
@@ -97,33 +129,23 @@
                             </select>
                         </div>
 
-                        <div class="col-md-2">
-                            <label class="form-label">Status</label>
-                            <select name="status" class="form-select">
+                        <div class="col-md-3">
+                            <label class="form-label">Category</label>
+                            <select name="category" class="form-select">
                                 <option value="">All</option>
-                                <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending
-                                </option>
-                                <option value="done" {{ request('status') == 'done' ? 'selected' : '' }}>Done</option>
+                                @foreach (\App\Models\Lead::CATEGORIES as $key => $label)
+                                    <option value="{{ $key }}" {{ request('category') == $key ? 'selected' : '' }}>{{ $label }}</option>
+                                @endforeach
                             </select>
                         </div>
 
-                        <div class="col-md-2">
+                        <div class="col-md-3">
                             <label class="form-label">Phone Number</label>
                             <input type="text" name="phone" class="form-control" placeholder="Search phone"
                                 value="{{ request('phone') }}">
                         </div>
 
-                        <div class="col-md-2">
-                            <label class="form-label">From</label>
-                            <input type="date" name="from_date" class="form-control" value="{{ request('from_date') }}">
-                        </div>
-
-                        <div class="col-md-2">
-                            <label class="form-label">To</label>
-                            <input type="date" name="to_date" class="form-control" value="{{ request('to_date') }}">
-                        </div>
-
-                        <div class="col-md-2 d-flex gap-2">
+                        <div class="col-md-3 d-flex gap-2">
                             <button type="submit" class="btn btn-primary w-100">Filter</button>
                             <a href="{{ route('leads.index') }}" class="btn btn-secondary w-100">Reset</a>
                         </div>
@@ -140,13 +162,15 @@
         <div class="table-responsive text-nowrap">
             <table class="table">
                 <thead>
-                    <th>Customer Name</th>
-                    <th>Phone Number</th>
-                    <th>Assigned Agent</th>
-                    <th>Lead Source</th>
-                    <th>Follow-up Date</th>
-                    <th>Notes</th>
-                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Contact</th>
+                    <th>Category</th>
+                    <th>Customer Remarks</th>
+                    <th>Service Interest</th>
+                    <th>Agent Assign</th>
+                    <th>Booking Status</th>
+                    <th>Correction Done</th>
+                    <th>Next Follow-up Date</th>
                     <th>Actions</th>
                 </thead>
                 <tbody class="table-border-bottom-0">
@@ -154,44 +178,28 @@
                         @include('leads.edit', ['lead' => $lead])
 
                         <tr>
-                            <td>
-                                <i class="icon-base bx bx-user icon-md text-primary me-2"></i>
-                                <span>{{ $lead->name }}</span>
-                            </td>
+                            <td>{{ $lead->created_at->format('d M Y') }}</td>
                             <td>{{ $lead->phone }}</td>
+                            <td>
+                                @if ($lead->category)
+                                    <span class="lead-badge cat-{{ $lead->category }}">{{ \App\Models\Lead::CATEGORIES[$lead->category] ?? $lead->category }}</span>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td>{{ $lead->customer_remarks ?? '—' }}</td>
+                            <td>{{ $lead->service_interest ?? '—' }}</td>
                             <td>{{ $lead->agent->name ?? '—' }}</td>
-                            <td>{{ $lead->lead_source ?? '—' }}</td>
-                            <td>{{ $lead->followup_date ? \Carbon\Carbon::parse($lead->followup_date)->format('d M Y') : '—' }}
-                            </td>
-                            <td>{{ $lead->notes ?? '—' }}</td>
+                            <td>{{ $lead->booking_status ?? '—' }}</td>
                             <td>
-                                <span
-                                    class="badge 
-                                @if ($lead->status == 'pending') bg-label-warning 
-                                @else bg-label-success @endif">
-                                    {{ ucfirst($lead->status) ?? $lead->status }}
-                                </span>
+                                @if ($lead->correction_done)
+                                    <span class="lead-badge corr-{{ $lead->correction_done }}">{{ \App\Models\Lead::CORRECTION_STATUSES[$lead->correction_done] ?? $lead->correction_done }}</span>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
                             </td>
+                            <td>{{ $lead->next_followup_date ? $lead->next_followup_date->format('d M Y') : '—' }}</td>
                             <td>
-                                {{-- <div class="dropdown">
-                                    <button type="button" class="btn p-0 dropdown-toggle" data-bs-toggle="dropdown">
-                                        <i class="fa-solid fa-ellipsis-vertical"></i>
-                                    </button>
-                                    <div class="dropdown-menu">
-                                        <a class="dropdown-item" href="javascript:void(0);" data-bs-toggle="modal"
-                                            data-bs-target="#editLeadModal{{ $lead->id }}">
-                                            <i class="icon-base bx bx-edit-alt me-1"></i> Edit
-                                        </a>
-                                        <form action="{{ route('leads.destroy', $lead->id) }}" method="POST">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button class="dropdown-item text-danger" type="submit">
-                                                <i class="icon-base bx bx-trash me-1"></i> Delete
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div> --}}
-
                                 <div class="d-flex gap-2 justify-content-center">
                                     <!-- Edit Button -->
                                     <button type="button" class="btn btn-sm btn-outline-primary" title="Edit Lead"
@@ -214,7 +222,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center text-muted">No leads found</td>
+                            <td colspan="10" class="text-center text-muted">No leads found</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -254,12 +262,12 @@
 
             let listHTML = "<ul>";
             leads.forEach(lead => {
-                listHTML += `<li><strong>${lead.name}</strong> — ${lead.phone}</li>`;
+                listHTML += `<li><strong>${lead.phone}</strong></li>`;
             });
             listHTML += "</ul>";
 
             document.getElementById("followupMessage").innerHTML =
-                `You have <strong>${leads.length}</strong> pending follow-ups today:<br><br>${listHTML}`;
+                `You have <strong>${leads.length}</strong> lead(s) due for follow-up today:<br><br>${listHTML}`;
 
             popup.style.display = "block";
         }
