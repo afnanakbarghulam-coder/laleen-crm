@@ -71,6 +71,8 @@ class UserController extends Controller
             'profile_photo' => 'nullable|image|max:2048',
         ]);
 
+        $permissions = $this->validatedPermissions($request);
+
         $profilePath = null;
         if ($request->hasFile('profile_photo')) {
             $destinationPath = public_path('user/profile-picture');
@@ -88,10 +90,35 @@ class UserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => $request->role,
+            'permissions' => $permissions,
             'profile_photo' => $profilePath,
         ]);
 
         return redirect()->route('users.index')->with('success', 'Staff member added successfully');
+    }
+
+    /**
+     * Validate the submitted module permission levels and normalize them to
+     * exactly the modules defined in config('modules'), defaulting anything
+     * missing or invalid to 'none' (secure by default).
+     */
+    private function validatedPermissions(Request $request): array
+    {
+        $request->validate([
+            'permissions' => 'nullable|array',
+            'permissions.*' => 'in:none,view,edit',
+        ]);
+
+        $submitted = $request->input('permissions', []);
+        $permissions = [];
+
+        foreach (array_keys(config('modules')) as $slug) {
+            $permissions[$slug] = in_array($submitted[$slug] ?? 'none', ['none', 'view', 'edit'], true)
+                ? $submitted[$slug] ?? 'none'
+                : 'none';
+        }
+
+        return $permissions;
     }
 
     public function destroy(User $user)
@@ -110,9 +137,12 @@ class UserController extends Controller
             'password' => 'nullable|string|min:8|confirmed',
         ]);
 
+        $permissions = $this->validatedPermissions($request);
+
         $user->name = $request->name;
         $user->email = $request->email;
         $user->role = $request->role;
+        $user->permissions = $permissions;
 
         if ($request->hasFile('profile_photo')) {
             $destinationPath = public_path('user/profile-picture');

@@ -3,9 +3,11 @@
 @section('content')
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4>Retail Products</h4>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#productModal">
-            + Add Product
-        </button>
+        @moduleEdit('products')
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#productModal">
+                + Add Product
+            </button>
+        @endmoduleEdit
     </div>
 
     <table class="table table-bordered">
@@ -24,14 +26,18 @@
                     <td>{{ $product->sku ?? '—' }}</td>
                     <td>{{ number_format($product->price, 2) }}</td>
                     <td class="text-nowrap">
-                        <button type="button" class="btn btn-sm btn-outline-warning edit-btn" data-product='@json($product)' title="Edit">
-                            <i class="bi bi-pencil-square"></i></button>
+                        @moduleEdit('products')
+                            <button type="button" class="btn btn-sm btn-outline-warning edit-btn" data-product='@json($product)' title="Edit">
+                                <i class="bi bi-pencil-square"></i></button>
 
-                        <form action="{{ route('products.destroy', $product->id) }}" method="POST" class="d-inline">
-                            @csrf @method('DELETE')
-                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete" onclick="return confirm('Delete this product?')">
-                                <i class="bi bi-trash"></i></button>
-                        </form>
+                            <form action="{{ route('products.destroy', $product->id) }}" method="POST" class="d-inline">
+                                @csrf @method('DELETE')
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete" onclick="return confirm('Delete this product?')">
+                                    <i class="bi bi-trash"></i></button>
+                            </form>
+                        @else
+                            <span class="text-muted small">—</span>
+                        @endmoduleEdit
                     </td>
                 </tr>
             @empty
@@ -42,34 +48,36 @@
         </tbody>
     </table>
 
-    @include('products.main-form')
+    @moduleEdit('products')
+        @include('products.main-form')
 
-    <script>
-        document.querySelectorAll('.edit-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                editProduct(JSON.parse(this.dataset.product));
+        <script>
+            document.querySelectorAll('.edit-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    editProduct(JSON.parse(this.dataset.product));
+                });
             });
-        });
 
-        function editProduct(product) {
-            const modal = new bootstrap.Modal(document.getElementById('productModal'));
+            function editProduct(product) {
+                const modal = new bootstrap.Modal(document.getElementById('productModal'));
 
-            document.getElementById('modalTitle').innerText = 'Edit Product';
-            document.getElementById('productForm').action = `/products/${product.id}`;
-            document.getElementById('formMethod').value = 'PUT';
+                document.getElementById('modalTitle').innerText = 'Edit Product';
+                document.getElementById('productForm').action = `/products/${product.id}`;
+                document.getElementById('formMethod').value = 'PUT';
 
-            document.getElementById('productName').value = product.name;
-            document.getElementById('productSku').value = product.sku ?? '';
-            document.getElementById('productPrice').value = product.price;
+                document.getElementById('productName').value = product.name;
+                document.getElementById('productSku').value = product.sku ?? '';
+                document.getElementById('productPrice').value = product.price;
 
-            modal.show();
-        }
+                modal.show();
+            }
 
-        document.getElementById('productModal').addEventListener('hidden.bs.modal', function() {
-            document.getElementById('modalTitle').innerText = 'Add Product';
-            document.getElementById('productForm').action = '{{ route('products.store') }}';
-            document.getElementById('formMethod').value = '';
-            document.getElementById('productForm').reset();
-        });
-    </script>
+            document.getElementById('productModal').addEventListener('hidden.bs.modal', function() {
+                document.getElementById('modalTitle').innerText = 'Add Product';
+                document.getElementById('productForm').action = '{{ route('products.store') }}';
+                document.getElementById('formMethod').value = '';
+                document.getElementById('productForm').reset();
+            });
+        </script>
+    @endmoduleEdit
 @endsection

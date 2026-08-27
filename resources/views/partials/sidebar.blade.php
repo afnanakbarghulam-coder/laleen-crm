@@ -254,79 +254,93 @@
              <span class="menu-header-text">Leads</span>
          </li> --}}
 
-         <li class="menu-item {{ request()->routeIs('leads.index') ? 'active' : '' }}">
-             <a href="{{ route('leads.index') }}" class="menu-link">
-                 <i class="bx bx-user-plus me-2"></i>
-                 <div>Leads</div>
-             </a>
-         </li>
+         @moduleView('leads')
+             <li class="menu-item {{ request()->routeIs('leads.index') ? 'active' : '' }}">
+                 <a href="{{ route('leads.index') }}" class="menu-link">
+                     <i class="bx bx-user-plus me-2"></i>
+                     <div>Leads</div>
+                 </a>
+             </li>
+         @endmoduleView
 
          <!-- Bookings -->
-         {{-- <li class="menu-header small text-uppercase mt-3">
-             <span class="menu-header-text">Bookings</span>
-         </li> --}}
+         @moduleView('bookings')
+             <li class="menu-item {{ request()->routeIs('appointments.index') ? 'active' : '' }}">
+                 <a href="{{ route('appointments.index') }}" class="menu-link">
+                     <i class="bx bx-calendar me-2"></i>
+                     <div>Bookings</div>
+                 </a>
+             </li>
+         @endmoduleView
 
-         <li class="menu-item {{ request()->routeIs('appointments.index') ? 'active' : '' }}">
-             <a href="{{ route('appointments.index') }}" class="menu-link">
-                 <i class="bx bx-calendar me-2"></i>
-                 <div>Bookings</div>
-             </a>
-         </li>
-
-         <li class="menu-item {{ request()->routeIs('appointments.revenue.*') ? 'active' : '' }}">
-             <a href="{{ route('appointments.revenue.index') }}" class="menu-link">
-                 <i class="bx bx-money me-2"></i>
-                 <div>Finance</div>
-             </a>
-         </li>
+         @moduleView('finance')
+             <li class="menu-item {{ request()->routeIs('appointments.revenue.*') ? 'active' : '' }}">
+                 <a href="{{ route('appointments.revenue.index') }}" class="menu-link">
+                     <i class="bx bx-money me-2"></i>
+                     <div>Finance</div>
+                 </a>
+             </li>
+         @endmoduleView
 
          <!-- Clients -->
-         <li class="menu-item {{ request()->routeIs('customers.*') ? 'active' : '' }}">
-             <a href="{{ route('customers.index') }}" class="menu-link">
-                 <i class="bx bx-id-card me-2"></i>
-                 <div>Clients</div>
-             </a>
-         </li>
+         @moduleView('clients')
+             <li class="menu-item {{ request()->routeIs('customers.*') ? 'active' : '' }}">
+                 <a href="{{ route('customers.index') }}" class="menu-link">
+                     <i class="bx bx-id-card me-2"></i>
+                     <div>Clients</div>
+                 </a>
+             </li>
+         @endmoduleView
 
          <!-- Staff -->
-         <li class="menu-item {{ request()->routeIs('staffs.index') || request()->routeIs('users.index') ? 'active' : '' }}">
-             <a href="{{ route('staffs.index') }}" class="menu-link">
-                 <i class="bx bx-user me-2"></i>
-                 <div>Staff Management</div>
-             </a>
-         </li>
+         @moduleView('staff_management')
+             <li class="menu-item {{ request()->routeIs('staffs.index') || request()->routeIs('users.index') ? 'active' : '' }}">
+                 <a href="{{ route('staffs.index') }}" class="menu-link">
+                     <i class="bx bx-user me-2"></i>
+                     <div>Staff Management</div>
+                 </a>
+             </li>
+         @endmoduleView
 
          <!-- Calendar -->
-         <li class="menu-item {{ request()->routeIs('appointments.calendar') ? 'active' : '' }}">
-             <a href="{{ route('appointments.calendar') }}" class="menu-link">
-                 <i class="bx bx-calendar-check me-2"></i>
-                 <div>Enhanced Calendar</div>
-             </a>
-         </li>
+         @moduleView('bookings')
+             <li class="menu-item {{ request()->routeIs('appointments.calendar') ? 'active' : '' }}">
+                 <a href="{{ route('appointments.calendar') }}" class="menu-link">
+                     <i class="bx bx-calendar-check me-2"></i>
+                     <div>Enhanced Calendar</div>
+                 </a>
+             </li>
+         @endmoduleView
 
          <!-- Services -->
-         <li class="menu-item {{ request()->routeIs('services.index') ? 'active' : '' }}">
-             <a href="{{ route('services.index') }}" class="menu-link">
-                 <i class="bx bx-briefcase me-2"></i>
-                 <div>Services</div>
-             </a>
-         </li>
+         @moduleView('services')
+             <li class="menu-item {{ request()->routeIs('services.index') ? 'active' : '' }}">
+                 <a href="{{ route('services.index') }}" class="menu-link">
+                     <i class="bx bx-briefcase me-2"></i>
+                     <div>Services</div>
+                 </a>
+             </li>
+         @endmoduleView
 
          <!-- Products -->
-         <li class="menu-item {{ request()->routeIs('products.index') ? 'active' : '' }}">
-             <a href="{{ route('products.index') }}" class="menu-link">
-                 <i class="bx bx-package me-2"></i>
-                 <div>Products</div>
-             </a>
-         </li>
+         @moduleView('products')
+             <li class="menu-item {{ request()->routeIs('products.index') ? 'active' : '' }}">
+                 <a href="{{ route('products.index') }}" class="menu-link">
+                     <i class="bx bx-package me-2"></i>
+                     <div>Products</div>
+                 </a>
+             </li>
+         @endmoduleView
 
          <!-- KPIs -->
-         <li class="menu-item {{ request()->routeIs('kpi.*') ? 'active' : '' }}">
-             <a href="{{ route('kpi.hub') }}" class="menu-link">
-                 <i class="bx bx-line-chart me-2"></i>
-                 <div>KPIs</div>
-             </a>
-         </li>
+         @moduleView('kpis')
+             <li class="menu-item {{ request()->routeIs('kpi.*') ? 'active' : '' }}">
+                 <a href="{{ route('kpi.hub') }}" class="menu-link">
+                     <i class="bx bx-line-chart me-2"></i>
+                     <div>KPIs</div>
+                 </a>
+             </li>
+         @endmoduleView
 
      </ul>
  </aside>

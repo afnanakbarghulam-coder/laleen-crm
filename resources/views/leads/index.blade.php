@@ -110,9 +110,11 @@
             <a href="{{ route('leads.analytics') }}" class="btn btn-outline-secondary">
                 <i class="bx bx-bar-chart-alt-2 me-1"></i> Analytics
             </a>
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addLeadModal">
-                <i class="bx bx-plus me-1"></i> Add Lead
-            </button>
+            @moduleEdit('leads')
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addLeadModal">
+                    <i class="bx bx-plus me-1"></i> Add Lead
+                </button>
+            @endmoduleEdit
         </div>
     </div>
 
@@ -148,7 +150,9 @@
                                 <span class="lead-badge cat-{{ $lead->category }} ms-1">{{ \App\Models\Lead::CATEGORIES[$lead->category] }}</span>
                                 <span class="text-muted">{{ $lead->service_interest }}</span>
                             </span>
-                            <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#editLeadModal{{ $lead->id }}">Set date</button>
+                            @moduleEdit('leads')
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#editLeadModal{{ $lead->id }}">Set date</button>
+                            @endmoduleEdit
                         </div>
                     @endforeach
                 </div>
@@ -232,7 +236,9 @@
                 </thead>
                 <tbody class="table-border-bottom-0">
                     @forelse($leads as $lead)
-                        @include('leads.edit', ['lead' => $lead])
+                        @moduleEdit('leads')
+                            @include('leads.edit', ['lead' => $lead])
+                        @endmoduleEdit
 
                         <tr>
                             <td>{{ $lead->created_at->format('d M Y') }}</td>
@@ -255,36 +261,46 @@
                             <td>{{ $lead->service_interest ?? '—' }}</td>
                             <td>{{ $lead->agent->name ?? '—' }}</td>
                             <td>
-                                <select class="needful-done-select {{ $lead->needful_done ? 'needful-' . $lead->needful_done : '' }}"
-                                    data-lead-id="{{ $lead->id }}"
-                                    data-previous="{{ $lead->needful_done }}"
-                                    data-url="{{ route('leads.needful-done', $lead->id) }}">
-                                    <option value="" {{ !$lead->needful_done ? 'selected' : '' }}>—</option>
-                                    @foreach (\App\Models\Lead::NEEDFUL_STATUSES as $key => $label)
-                                        <option value="{{ $key }}" {{ $lead->needful_done === $key ? 'selected' : '' }}>{{ $label }}</option>
-                                    @endforeach
-                                </select>
+                                @moduleEdit('leads')
+                                    <select class="needful-done-select {{ $lead->needful_done ? 'needful-' . $lead->needful_done : '' }}"
+                                        data-lead-id="{{ $lead->id }}"
+                                        data-previous="{{ $lead->needful_done }}"
+                                        data-url="{{ route('leads.needful-done', $lead->id) }}">
+                                        <option value="" {{ !$lead->needful_done ? 'selected' : '' }}>—</option>
+                                        @foreach (\App\Models\Lead::NEEDFUL_STATUSES as $key => $label)
+                                            <option value="{{ $key }}" {{ $lead->needful_done === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                @else
+                                    <span class="needful-done-select {{ $lead->needful_done ? 'needful-' . $lead->needful_done : '' }}">
+                                        {{ $lead->needful_done ? (\App\Models\Lead::NEEDFUL_STATUSES[$lead->needful_done] ?? $lead->needful_done) : '—' }}
+                                    </span>
+                                @endmoduleEdit
                             </td>
                             <td>{{ $lead->next_followup_date ? $lead->next_followup_date->format('d M Y') : '—' }}</td>
                             <td>
-                                <div class="d-flex gap-2 justify-content-center">
-                                    <!-- Edit Button -->
-                                    <button type="button" class="btn btn-sm btn-outline-primary" title="Edit Lead"
-                                        data-bs-toggle="modal" data-bs-target="#editLeadModal{{ $lead->id }}">
-                                        <i class="bx bx-edit-alt"></i>
-                                    </button>
-
-                                    <!-- Delete Button -->
-                                    <form action="{{ route('leads.destroy', $lead->id) }}" method="POST"
-                                        onsubmit="return confirm('Are you sure you want to delete this lead?');">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Lead">
-                                            <i class="bx bx-trash"></i>
+                                @moduleEdit('leads')
+                                    <div class="d-flex gap-2 justify-content-center">
+                                        <!-- Edit Button -->
+                                        <button type="button" class="btn btn-sm btn-outline-primary" title="Edit Lead"
+                                            data-bs-toggle="modal" data-bs-target="#editLeadModal{{ $lead->id }}">
+                                            <i class="bx bx-edit-alt"></i>
                                         </button>
-                                    </form>
 
-                                </div>
+                                        <!-- Delete Button -->
+                                        <form action="{{ route('leads.destroy', $lead->id) }}" method="POST"
+                                            onsubmit="return confirm('Are you sure you want to delete this lead?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Lead">
+                                                <i class="bx bx-trash"></i>
+                                            </button>
+                                        </form>
+
+                                    </div>
+                                @else
+                                    <span class="text-muted small">—</span>
+                                @endmoduleEdit
                             </td>
                         </tr>
                     @empty
@@ -312,11 +328,13 @@
     {{-- The unscheduled-leads banner above can link to leads outside the table's own
          filter/pagination, so their edit modals need rendering here too (skipping any
          already in $leads to avoid duplicate modal IDs). --}}
-    @foreach ($unscheduledLeads->whereNotIn('id', $leads->pluck('id')) as $lead)
-        @include('leads.edit', ['lead' => $lead])
-    @endforeach
+    @moduleEdit('leads')
+        @foreach ($unscheduledLeads->whereNotIn('id', $leads->pluck('id')) as $lead)
+            @include('leads.edit', ['lead' => $lead])
+        @endforeach
 
-    @include('leads.create')
+        @include('leads.create')
+    @endmoduleEdit
 
     <script>
         // Smart client linking: as the country code / phone number change in the

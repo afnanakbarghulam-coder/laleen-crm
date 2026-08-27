@@ -7,7 +7,9 @@
             <h4>Chat Evaluation Reports</h4>
             <p>History of saved evaluations. Click any row to view the full scorecard.</p>
         </div>
-        <a href="{{ route('kpi.chat-eval.create') }}" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New Evaluation</a>
+        @moduleEdit('kpis')
+            <a href="{{ route('kpi.chat-eval.create') }}" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New Evaluation</a>
+        @endmoduleEdit
     </div>
 
     <div class="kpi-panel p-0" style="overflow:hidden;">
@@ -36,10 +38,12 @@
                             <td class="text-end">{{ $report->totalScore() }} ({{ $report->percentage() }}%)</td>
                             <td><span class="kpi-badge {{ $badge }}">{{ $grade }}</span></td>
                             <td class="text-end">
-                                <form action="{{ route('kpi.chat-eval.destroy', $report) }}" method="POST" onsubmit="return confirm('Delete this evaluation?')">
-                                    @csrf @method('DELETE')
-                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bx bx-trash"></i></button>
-                                </form>
+                                @moduleEdit('kpis')
+                                    <form action="{{ route('kpi.chat-eval.destroy', $report) }}" method="POST" onsubmit="return confirm('Delete this evaluation?')">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bx bx-trash"></i></button>
+                                    </form>
+                                @endmoduleEdit
                             </td>
                         </tr>
                     @empty

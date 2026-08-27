@@ -129,8 +129,6 @@
                                 </div>
                             </td>
                         </tr>
-
-                        @include('users.edit', ['user' => $user])
                     @empty
                         <tr>
                             <td colspan="7" class="text-center text-muted">No staff members found</td>
@@ -140,6 +138,13 @@
             </table>
         </div>
     </div>
+
+    {{-- Modals render outside the table: a <div> is not valid inside <tbody>/<table>,
+         and browsers "foster parent" (relocate) misplaced content in ways that break
+         the table layout once the modal content is bigger than trivial. --}}
+    @foreach ($users as $user)
+        @include('users.edit', ['user' => $user])
+    @endforeach
 
     @include('users.create')
 @endsection

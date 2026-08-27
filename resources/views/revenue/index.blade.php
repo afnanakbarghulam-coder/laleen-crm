@@ -321,9 +321,11 @@
                 </div>
             @endif
         </div>
-        <button type="button" class="btn btn-primary fin-apply-btn" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
-            <i class="bx bx-plus me-1"></i> Add Expense
-        </button>
+        @moduleEdit('finance')
+            <button type="button" class="btn btn-primary fin-apply-btn" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
+                <i class="bx bx-plus me-1"></i> Add Expense
+            </button>
+        @endmoduleEdit
     </div>
 
     <!-- FILTER BAR -->
@@ -550,9 +552,11 @@
     <div class="fin-section-card">
         <div class="fin-section-head">
             <h6><i class="bx bx-wallet me-1"></i> Expense Tracker</h6>
-            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
-                <i class="bx bx-plus"></i> Add Expense
-            </button>
+            @moduleEdit('finance')
+                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
+                    <i class="bx bx-plus"></i> Add Expense
+                </button>
+            @endmoduleEdit
         </div>
         <div class="px-3 py-3 border-bottom d-flex flex-wrap align-items-center gap-2" style="background:rgba(217, 143, 131,0.05);">
             <form method="GET" action="{{ route('appointments.revenue.index') }}" class="d-flex flex-wrap align-items-center gap-2">
@@ -597,12 +601,16 @@
                             <td>{{ $expense->creator->name ?? '—' }}</td>
                             <td class="text-end fw-semibold">{{ number_format($expense->amount, 2) }}</td>
                             <td class="text-end">
-                                <form action="{{ route('expenses.destroy', $expense->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this expense?')">
-                                    @csrf @method('DELETE')
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
-                                        <i class="bx bx-trash"></i>
-                                    </button>
-                                </form>
+                                @moduleEdit('finance')
+                                    <form action="{{ route('expenses.destroy', $expense->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this expense?')">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                            <i class="bx bx-trash"></i>
+                                        </button>
+                                    </form>
+                                @else
+                                    <span class="text-muted small">—</span>
+                                @endmoduleEdit
                             </td>
                         </tr>
                     @empty
@@ -625,6 +633,7 @@
     </div>
 
     <!-- ADD EXPENSE MODAL -->
+    @moduleEdit('finance')
     <div class="modal fade" id="addExpenseModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -675,6 +684,7 @@
             </div>
         </div>
     </div>
+    @endmoduleEdit
 
 @endsection
 

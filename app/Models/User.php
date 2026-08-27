@@ -24,6 +24,7 @@ class User extends Authenticatable
         'password',
         'role',
         'is_active',
+        'permissions',
         'profile_photo',
     ];
 
@@ -48,6 +49,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'permissions' => 'array',
         ];
     }
 
@@ -63,5 +65,29 @@ class User extends Authenticatable
     public function isSuperAdmin(): bool
     {
         return $this->role === 'admin' && $this->email === 'afnanakbarghulam@gmail.com';
+    }
+
+    /**
+     * Admins always have full access to every module; everyone else is
+     * governed by their per-module permission ('none', 'view', or 'edit'),
+     * defaulting to 'none' when unset.
+     */
+    public function permissionLevel(string $module): string
+    {
+        if ($this->role === 'admin') {
+            return 'edit';
+        }
+
+        return $this->permissions[$module] ?? 'none';
+    }
+
+    public function canView(string $module): bool
+    {
+        return in_array($this->permissionLevel($module), ['view', 'edit'], true);
+    }
+
+    public function canEdit(string $module): bool
+    {
+        return $this->permissionLevel($module) === 'edit';
     }
 }

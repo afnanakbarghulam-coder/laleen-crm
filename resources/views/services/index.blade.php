@@ -127,9 +127,11 @@
             <h4 class="fw-bold mb-0">Service Catalog</h4>
             <p class="text-muted small mb-0">Manage the services your business offers, organized by category.</p>
         </div>
-        <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#serviceModal">
-            <i class="bx bx-plus me-1"></i> Add Service
-        </button>
+        @moduleEdit('services')
+            <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#serviceModal">
+                <i class="bx bx-plus me-1"></i> Add Service
+            </button>
+        @endmoduleEdit
     </div>
 
     <div class="row g-3">
@@ -147,9 +149,11 @@
                     </a>
                 @endforeach
             </div>
-            <button type="button" class="btn btn-link btn-sm p-0" data-bs-toggle="modal" data-bs-target="#categoryModal">
-                <i class="bx bx-plus"></i> Add category
-            </button>
+            @moduleEdit('services')
+                <button type="button" class="btn btn-link btn-sm p-0" data-bs-toggle="modal" data-bs-target="#categoryModal">
+                    <i class="bx bx-plus"></i> Add category
+                </button>
+            @endmoduleEdit
         </div>
 
         <div class="col-md-9">
@@ -195,21 +199,23 @@
 
                         <div class="text-end">
                             <div class="svc-price">{{ number_format($service->price, 2) }} QAR</div>
-                            <div class="mt-2">
-                                <button type="button" class="btn btn-sm btn-outline-warning edit-btn"
-                                    data-service='@json($service)'
-                                    data-staff-ids='@json($service->staff->pluck("id"))'
-                                    title="Edit">
-                                    <i class="bi bi-pencil-square"></i>
-                                </button>
-                                <form action="{{ route('services.destroy', $service->id) }}" method="POST" class="d-inline">
-                                    @csrf @method('DELETE')
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"
-                                        onclick="return confirm('Delete this service?')">
-                                        <i class="bi bi-trash"></i>
+                            @moduleEdit('services')
+                                <div class="mt-2">
+                                    <button type="button" class="btn btn-sm btn-outline-warning edit-btn"
+                                        data-service='@json($service)'
+                                        data-staff-ids='@json($service->staff->pluck("id"))'
+                                        title="Edit">
+                                        <i class="bi bi-pencil-square"></i>
                                     </button>
-                                </form>
-                            </div>
+                                    <form action="{{ route('services.destroy', $service->id) }}" method="POST" class="d-inline">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"
+                                            onclick="return confirm('Delete this service?')">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            @endmoduleEdit
                         </div>
                     </div>
                 @endforeach
@@ -219,6 +225,7 @@
         </div>
     </div>
 
+    @moduleEdit('services')
     @include('services.main-form')
 
     <!-- Add Category Modal -->
@@ -249,6 +256,7 @@
             </div>
         </div>
     </div>
+    @endmoduleEdit
 
     <script>
         document.querySelectorAll('.edit-btn').forEach(btn => {

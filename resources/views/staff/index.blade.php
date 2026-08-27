@@ -66,11 +66,11 @@
             <h4 class="fw-bold mb-0">Team members <span class="badge bg-secondary">{{ $staff->count() }}</span></h4>
             <p class="text-muted small mb-0">Manage your staff, their services, and CRM access.</p>
         </div>
-        @if (auth()->user()->role === 'admin')
+        @moduleEdit('staff_management')
             <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#addStaffModal" onclick="resetStaffForm()">
                 <i class="bx bx-plus me-1"></i> Add
             </button>
-        @endif
+        @endmoduleEdit
     </div>
 
     <div class="d-flex gap-2 mb-3">
@@ -180,7 +180,7 @@
                                 @endif
                             </td>
                             <td class="text-end">
-                                @if (auth()->user()->role === 'admin')
+                                @moduleEdit('staff_management')
                                     <div class="dropdown">
                                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
                                             Actions
@@ -205,7 +205,7 @@
                                     </div>
                                 @else
                                     <span class="text-muted small">—</span>
-                                @endif
+                                @endmoduleEdit
                             </td>
                         </tr>
                     @empty
@@ -218,7 +218,7 @@
         </div>
     </div>
 
-    @if (auth()->user()->role === 'admin')
+    @moduleEdit('staff_management')
         @include('staff.main-form')
 
         <script>
@@ -234,5 +234,5 @@
                 });
             });
         </script>
-    @endif
+    @endmoduleEdit
 @endsection

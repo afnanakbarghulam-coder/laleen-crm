@@ -47,6 +47,11 @@
                             <input type="file" name="profile_photo" class="form-control" accept="image/*">
                         </div>
 
+                        <div class="col-12">
+                            <hr>
+                            @include('users._permissions-panel', ['uid' => 'new', 'permissions' => []])
+                        </div>
+
                     </div>
                 </div>
                 <div class="modal-footer">

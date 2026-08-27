@@ -92,9 +92,9 @@
             <h4 class="fw-bold mb-0">Scheduled shifts</h4>
             <p class="text-muted small mb-0">Manage your team's recurring working hours and time off.</p>
         </div>
-        @if (auth()->user()->role === 'admin')
+        @moduleEdit('staff_management')
             <button class="btn btn-dark" id="addShiftBtn"><i class="bx bx-plus me-1"></i> Add</button>
-        @endif
+        @endmoduleEdit
     </div>
 
     <div class="team-tabs d-flex gap-2 mb-3">
@@ -148,11 +148,11 @@
                                     <div class="roster-member-name">{{ $row['staff']->name }}</div>
                                     <div class="roster-member-hours">{{ $row['weekly_hours'] }}h</div>
                                 </div>
-                                @if (auth()->user()->role === 'admin')
+                                @moduleEdit('staff_management')
                                     <button type="button" class="roster-edit-btn shift-edit-btn" data-staff-id="{{ $row['staff']->id }}" title="Edit schedule">
                                         <i class="bx bx-edit-alt"></i>
                                     </button>
-                                @endif
+                                @endmoduleEdit
                             </div>
                         </td>
                         @foreach ($days as $date)
@@ -184,7 +184,7 @@
         The team roster shows availability for bookings and is not linked to your business opening hours.
     </div>
 
-    @if (auth()->user()->role === 'admin')
+    @moduleEdit('staff_management')
         @include('shifts.config-modal')
 
         <script>
@@ -196,5 +196,5 @@
 
             document.getElementById('addShiftBtn').addEventListener('click', () => openShiftModal(null));
         </script>
-    @endif
+    @endmoduleEdit
 @endsection

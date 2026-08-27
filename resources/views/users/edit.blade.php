@@ -72,6 +72,9 @@
                         <input type="password" id="password_confirmation{{ $user->id }}"
                             name="password_confirmation" class="form-control" autocomplete="new-password">
                     </div>
+
+                    <hr>
+                    @include('users._permissions-panel', ['uid' => $user->id, 'permissions' => $user->permissions ?? []])
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>

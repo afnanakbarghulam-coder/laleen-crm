@@ -1287,9 +1287,16 @@
         </div>
     </div>
 
-    @include('appointments.calendar_book')
+    @moduleEdit('bookings')
+        @include('appointments.calendar_book')
+    @endmoduleEdit
 
     <script>
+        // Drives every UI gate below: view-only users can browse the calendar
+        // and open the drawer, but every mutating control stays hidden/inert.
+        const CAN_EDIT_BOOKINGS = @json(auth()->user()->canEdit('bookings'));
+        const CAN_EDIT_FINANCE = @json(auth()->user()->canEdit('finance'));
+
         const STORAGE_KEY = 'laleen_calendar_filters';
         const ZOOM_LEVELS = [40, 56, 72, 90];
 
@@ -1322,6 +1329,20 @@
         let latestData = null;
         let nowLineTimer = null;
         const DRAWER_SERVICES_CATALOG = @json($servicesCatalog);
+
+        // Hide every mutating "Add" entry point up front for view-only users.
+        (function applyCalendarPermissionGates() {
+            document.getElementById('addNewAppointment').closest('li').style.display = CAN_EDIT_BOOKINGS ? '' : 'none';
+            document.getElementById('addBlockTime').closest('li').style.display = CAN_EDIT_BOOKINGS ? '' : 'none';
+            const newSaleItem = document.getElementById('addNewAppointment').closest('.dropdown-menu').querySelector('a[href*="/sales/new"]');
+            if (newSaleItem) newSaleItem.closest('li').style.display = CAN_EDIT_FINANCE ? '' : 'none';
+            if (!CAN_EDIT_BOOKINGS && !CAN_EDIT_FINANCE) {
+                document.querySelector('.cal-add-btn')?.closest('.dropdown').style.setProperty('display', 'none');
+            }
+
+            document.getElementById('slotPopoverAddAppt').style.display = CAN_EDIT_BOOKINGS ? '' : 'none';
+            document.getElementById('slotPopoverAddBlock').style.display = CAN_EDIT_BOOKINGS ? '' : 'none';
+        })();
 
         function to12Hour(time) {
             const [h, m] = time.split(':').map(Number);
@@ -1433,7 +1454,7 @@
                         const height = Math.max(a.duration * PPM, 46);
 
                         html += `<div class="cal-appt status-${a.status}" data-id="${a.id}"
-                                draggable="${a.status === 'completed' || a.status === 'cancelled' ? 'false' : 'true'}"
+                                draggable="${(!CAN_EDIT_BOOKINGS || a.status === 'completed' || a.status === 'cancelled') ? 'false' : 'true'}"
                                 ondragstart="onApptDragStart(event, ${a.id}, ${a.start_minutes})" ondragend="onApptDragEnd(event)"
                                 ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
                                 ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${a.start}')"
@@ -1476,6 +1497,7 @@
         }
 
         function onSlotClick(e, staffId, date, time) {
+            if (!CAN_EDIT_BOOKINGS) return;
             const popover = document.getElementById('slotPopover');
             const rect = e.target.getBoundingClientRect();
 
@@ -1524,6 +1546,7 @@
         }
 
         function removeBlock(blockId) {
+            if (!CAN_EDIT_BOOKINGS) return;
             if (!confirm('Remove this blocked time?')) return;
             fetch(`/staff-blocks/${blockId}`, {
                     method: 'DELETE',
@@ -1578,7 +1601,7 @@
                         dayAppts.forEach(a => {
                             const color = data.status_colors[a.status] || '#c9a39a';
                             html += `<div class="cal-chip status-${a.status}" data-id="${a.id}"
-                                draggable="${a.status === 'completed' || a.status === 'cancelled' ? 'false' : 'true'}"
+                                draggable="${(!CAN_EDIT_BOOKINGS || a.status === 'completed' || a.status === 'cancelled') ? 'false' : 'true'}"
                                 ondragstart="event.stopPropagation(); onApptDragStart(event, ${a.id}, ${a.start_minutes})"
                                 ondragend="onApptDragEnd(event)"
                                 onclick="event.stopPropagation(); openDrawer(${a.id})"
@@ -1746,6 +1769,7 @@
         });
         document.getElementById('addNewAppointment').addEventListener('click', function(e) {
             e.preventDefault();
+            if (!CAN_EDIT_BOOKINGS) return;
             const now = new Date();
             const pad = n => n.toString().padStart(2, '0');
             openCalendarBookModal({
@@ -1847,7 +1871,7 @@
 
             renderDrawerServiceList(a, isFinal);
             showDrawerServicesView('list');
-            document.getElementById('drawerAddServiceBtn').classList.toggle('d-none', isFinal);
+            document.getElementById('drawerAddServiceBtn').classList.toggle('d-none', isFinal || !CAN_EDIT_BOOKINGS);
 
             if (a.profile_url) {
                 const link = document.getElementById('drawerProfileLink');
@@ -1862,7 +1886,7 @@
                 pending: { label: '🟣 Mark Arrived', status: 'arrived' },
                 arrived: { label: '🟠 Start Service', status: 'in_progress' },
             }[a.status];
-            if (nextStep) {
+            if (nextStep && CAN_EDIT_BOOKINGS) {
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'btn btn-outline-primary flex-grow-1';
@@ -1872,14 +1896,14 @@
             }
 
             // Quick actions dropdown (Reschedule / No show / Cancel)
-            document.getElementById('drawerQuickActionsWrap').classList.toggle('d-none', isFinal);
+            document.getElementById('drawerQuickActionsWrap').classList.toggle('d-none', isFinal || !CAN_EDIT_BOOKINGS);
             document.getElementById('drawerNoShowBtn').classList.toggle('disabled', isFinal);
             document.getElementById('drawerCancelBtn').classList.toggle('disabled', isFinal);
 
             // Checkout
             const checkoutBtn = document.getElementById('drawerCheckoutBtn');
             checkoutBtn.href = a.payment_url;
-            checkoutBtn.classList.toggle('d-none', isFinal);
+            checkoutBtn.classList.toggle('d-none', isFinal || !CAN_EDIT_FINANCE);
 
             // Reschedule form prefill
             document.getElementById('drawerRescheduleDate').value = a.date;
@@ -1909,7 +1933,7 @@
                             ${s.discount_type ? `<span class="strike">${Number(s.price).toFixed(2)}</span>` : ''}
                             ${Number(s.final_price).toFixed(2)} QAR
                         </span>
-                        ${isFinal ? '' : `
+                        ${(isFinal || !CAN_EDIT_BOOKINGS) ? '' : `
                             <button type="button" class="icon-btn" data-edit="${s.id}"><i class="bx bx-pencil"></i></button>
                             <button type="button" class="icon-btn danger" data-delete="${s.id}"><i class="bx bx-trash"></i></button>
                         `}
@@ -2073,6 +2097,7 @@
         }
 
         function updateDrawerStatus(status) {
+            if (!CAN_EDIT_BOOKINGS) return;
             fetch(`/appointments/${selectedAppointmentId}/status`, {
                     method: 'PATCH',
                     headers: {
@@ -2128,6 +2153,7 @@
         });
 
         function rescheduleAppointment(appointmentId, datetime, staffId, callback) {
+            if (!CAN_EDIT_BOOKINGS) return;
             fetch(`/appointments/${appointmentId}/reschedule`, {
                     method: 'PATCH',
                     headers: {

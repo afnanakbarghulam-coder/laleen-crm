@@ -194,21 +194,23 @@
                     <span class="badge bg-warning text-dark"><i class="bx bx-diamond"></i> {{ $customer->loyalty_points }} pts</span>
                 </div>
                 <div class="card-body">
-                    <form action="{{ route('customers.loyalty.redeem', $customer->id) }}" method="POST" class="mb-3">
-                        @csrf
-                        <div class="row g-2">
-                            <div class="col-4">
-                                <input type="number" name="points" class="form-control form-control-sm" placeholder="Points" min="1" max="{{ $customer->loyalty_points }}" required>
+                    @moduleEdit('clients')
+                        <form action="{{ route('customers.loyalty.redeem', $customer->id) }}" method="POST" class="mb-3">
+                            @csrf
+                            <div class="row g-2">
+                                <div class="col-4">
+                                    <input type="number" name="points" class="form-control form-control-sm" placeholder="Points" min="1" max="{{ $customer->loyalty_points }}" required>
+                                </div>
+                                <div class="col-8">
+                                    <input type="text" name="reward" class="form-control form-control-sm" placeholder="Reward (e.g. 50 QAR off)" required>
+                                </div>
                             </div>
-                            <div class="col-8">
-                                <input type="text" name="reward" class="form-control form-control-sm" placeholder="Reward (e.g. 50 QAR off)" required>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-sm btn-outline-warning mt-2 w-100"
-                            {{ $customer->loyalty_points < 1 ? 'disabled' : '' }}>
-                            <i class="bx bx-gift"></i> Redeem Points
-                        </button>
-                    </form>
+                            <button type="submit" class="btn btn-sm btn-outline-warning mt-2 w-100"
+                                {{ $customer->loyalty_points < 1 ? 'disabled' : '' }}>
+                                <i class="bx bx-gift"></i> Redeem Points
+                            </button>
+                        </form>
+                    @endmoduleEdit
 
                     <h6 class="small fw-bold text-muted text-uppercase mb-2">Recent Activity</h6>
                     @forelse ($loyaltyHistory as $tx)
@@ -229,72 +231,82 @@
                     <i class="bx bx-error-circle"></i> Allergies &amp; Staff Alerts
                 </div>
                 <div class="card-body">
-                    <form id="allergiesForm">
-                        @csrf
-                        <textarea name="allergies" id="allergiesField" class="form-control mb-2" rows="3"
-                            placeholder="e.g. Mild allergy to peroxide, avoid ammonia-based dyes...">{{ $customer->allergies }}</textarea>
-                        <button type="submit" class="btn btn-outline-danger btn-sm">Save Alert</button>
-                        <span class="text-success small ms-2 d-none" id="allergiesSaved">Saved</span>
-                    </form>
+                    @moduleEdit('clients')
+                        <form id="allergiesForm">
+                            @csrf
+                            <textarea name="allergies" id="allergiesField" class="form-control mb-2" rows="3"
+                                placeholder="e.g. Mild allergy to peroxide, avoid ammonia-based dyes...">{{ $customer->allergies }}</textarea>
+                            <button type="submit" class="btn btn-outline-danger btn-sm">Save Alert</button>
+                            <span class="text-success small ms-2 d-none" id="allergiesSaved">Saved</span>
+                        </form>
+                    @else
+                        <p class="mb-0">{{ $customer->allergies ?: 'No allergy notes on file.' }}</p>
+                    @endmoduleEdit
                 </div>
             </div>
 
             <div class="card">
                 <div class="card-header fw-semibold">Client Notes</div>
                 <div class="card-body">
-                    <form id="notesForm">
-                        @csrf
-                        <textarea name="notes" id="notesField" class="form-control mb-2" rows="6"
-                            placeholder="Preferences, styling notes...">{{ $customer->notes }}</textarea>
-                        <button type="submit" class="btn btn-primary btn-sm">Save Notes</button>
-                        <span class="text-success small ms-2 d-none" id="notesSaved">Saved</span>
-                    </form>
+                    @moduleEdit('clients')
+                        <form id="notesForm">
+                            @csrf
+                            <textarea name="notes" id="notesField" class="form-control mb-2" rows="6"
+                                placeholder="Preferences, styling notes...">{{ $customer->notes }}</textarea>
+                            <button type="submit" class="btn btn-primary btn-sm">Save Notes</button>
+                            <span class="text-success small ms-2 d-none" id="notesSaved">Saved</span>
+                        </form>
+                    @else
+                        <p class="mb-0">{{ $customer->notes ?: 'No notes on file.' }}</p>
+                    @endmoduleEdit
                 </div>
             </div>
         </div>
     </div>
 
-    <script>
-        document.getElementById('notesForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const notes = document.getElementById('notesField').value;
+    @moduleEdit('clients')
+        <script>
+            document.getElementById('notesForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const notes = document.getElementById('notesField').value;
 
-            fetch("{{ route('customers.notes.update', $customer->id) }}", {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({ notes })
-                })
-                .then(r => r.json())
-                .then(() => {
-                    const badge = document.getElementById('notesSaved');
-                    badge.classList.remove('d-none');
-                    setTimeout(() => badge.classList.add('d-none'), 2000);
-                });
-        });
+                fetch("{{ route('customers.notes.update', $customer->id) }}", {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ notes })
+                    })
+                    .then(r => r.json())
+                    .then(() => {
+                        const badge = document.getElementById('notesSaved');
+                        badge.classList.remove('d-none');
+                        setTimeout(() => badge.classList.add('d-none'), 2000);
+                    });
+            });
 
-        document.getElementById('allergiesForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const allergies = document.getElementById('allergiesField').value;
+            document.getElementById('allergiesForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const allergies = document.getElementById('allergiesField').value;
 
-            fetch("{{ route('customers.allergies.update', $customer->id) }}", {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({ allergies })
-                })
-                .then(r => r.json())
-                .then(() => {
-                    const badge = document.getElementById('allergiesSaved');
-                    badge.classList.remove('d-none');
-                    setTimeout(() => badge.classList.add('d-none'), 2000);
-                });
-        });
-    </script>
+                fetch("{{ route('customers.allergies.update', $customer->id) }}", {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ allergies })
+                    })
+                    .then(r => r.json())
+                    .then(() => {
+                        const badge = document.getElementById('allergiesSaved');
+                        badge.classList.remove('d-none');
+                        setTimeout(() => badge.classList.add('d-none'), 2000);
+                    });
+            });
+        </script>
+    @endmoduleEdit
 @endsection
