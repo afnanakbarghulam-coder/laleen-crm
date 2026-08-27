@@ -288,18 +288,8 @@
              </a>
          </li>
 
-         <!-- Users -->
-         @if (auth()->user()->role === 'admin')
-             <li class="menu-item {{ request()->routeIs('users.index') ? 'active' : '' }}">
-                 <a href="{{ route('users.index') }}" class="menu-link">
-                     <i class="bx bx-group me-2"></i>
-                     <div>Users</div>
-                 </a>
-             </li>
-         @endif
-
          <!-- Staff -->
-         <li class="menu-item {{ request()->routeIs('staffs.index') ? 'active' : '' }}">
+         <li class="menu-item {{ request()->routeIs('staffs.index') || request()->routeIs('users.index') ? 'active' : '' }}">
              <a href="{{ route('staffs.index') }}" class="menu-link">
                  <i class="bx bx-user me-2"></i>
                  <div>Staff Management</div>

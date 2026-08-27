@@ -54,6 +54,7 @@
     }
 
     .access-badge.admin { background: rgba(168, 82, 74, 0.16); color: #d4948c; }
+    .access-badge.manager { background: rgba(185, 142, 163, 0.16); color: #b98ea3; }
     .access-badge.agent { background: rgba(217, 143, 131, 0.14); color: var(--luxe-accent); }
     .access-badge.staff { background: rgba(142, 168, 138, 0.16); color: #b7cdb3; }
     .access-badge.user { background: var(--luxe-surface-2); color: var(--luxe-muted); }
@@ -75,6 +76,9 @@
     <div class="d-flex gap-2 mb-3">
         <a href="{{ route('staffs.index') }}" class="btn btn-sm btn-dark">Team members</a>
         <a href="{{ route('shifts.index') }}" class="btn btn-sm btn-outline-secondary">Scheduled shifts</a>
+        @if (auth()->user()->isSuperAdmin())
+            <a href="{{ route('users.index') }}" class="btn btn-sm btn-outline-secondary">Staff Access</a>
+        @endif
     </div>
 
     <div class="mb-3">

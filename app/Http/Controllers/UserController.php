@@ -67,7 +67,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|in:admin,agent,staff,user',
+            'role' => 'required|in:admin,manager,agent,staff,user',
             'profile_photo' => 'nullable|image|max:2048',
         ]);
 
@@ -91,13 +91,13 @@ class UserController extends Controller
             'profile_photo' => $profilePath,
         ]);
 
-        return redirect()->route('users.index')->with('success', 'User created successfully');
+        return redirect()->route('users.index')->with('success', 'Staff member added successfully');
     }
 
     public function destroy(User $user)
     {
         $user->delete();
-        return redirect()->route('users.index')->with('success', 'User deleted successfully');
+        return redirect()->route('users.index')->with('success', 'Staff member deleted successfully');
     }
 
     public function update(Request $request, User $user)
@@ -105,7 +105,7 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'role' => 'required|in:admin,agent,staff,user',
+            'role' => 'required|in:admin,manager,agent,staff,user',
             'profile_photo' => 'nullable|image|max:2048',
             'password' => 'nullable|string|min:8|confirmed',
         ]);
@@ -131,7 +131,20 @@ class UserController extends Controller
 
         $user->save();
 
-        return redirect()->route('users.index')->with('success', 'User updated successfully');
+        return redirect()->route('users.index')->with('success', 'Staff member updated successfully');
+    }
+
+    // Toggle a staff member's login access on/off without deleting their account or history.
+    public function toggleActive(Request $request, User $user)
+    {
+        if ($user->id === Auth::id()) {
+            return redirect()->route('users.index')->with('error', 'You cannot deactivate your own account.');
+        }
+
+        $user->is_active = !$user->is_active;
+        $user->save();
+
+        return redirect()->route('users.index')->with('success', $user->is_active ? 'Staff member reactivated.' : 'Staff member deactivated.');
     }
 
     public function profile_edit()

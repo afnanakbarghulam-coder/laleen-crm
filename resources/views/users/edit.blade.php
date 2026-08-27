@@ -36,6 +36,7 @@
                         <select id="role{{ $user->id }}" name="role"
                             class="form-select @error('role') is-invalid @enderror" required>
                             <option value="admin" {{ $user->role == 'admin' ? 'selected' : '' }}>Admin</option>
+                            <option value="manager" {{ $user->role == 'manager' ? 'selected' : '' }}>Manager</option>
                             <option value="agent" {{ $user->role == 'agent' ? 'selected' : '' }}>Agent</option>
                             <option value="staff" {{ $user->role == 'staff' ? 'selected' : '' }}>Staff</option>
                             <option value="user" {{ $user->role == 'user' ? 'selected' : '' }}>User</option>

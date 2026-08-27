@@ -159,7 +159,7 @@ class StaffController extends Controller
         $existingUserId = $staff->user_id;
 
         $request->validate([
-            'access_role' => ['required', Rule::in(['admin', 'agent', 'staff', 'user'])],
+            'access_role' => ['required', Rule::in(['admin', 'manager', 'agent', 'staff', 'user'])],
             'access_email' => [
                 $existingUserId ? 'nullable' : 'required',
                 'nullable',

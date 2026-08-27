@@ -3,7 +3,7 @@
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="addUserModalLabel">Add New User</h5>
+                <h5 class="modal-title" id="addUserModalLabel">Add Staff Member</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ route('users.store') }}" enctype="multipart/form-data">
@@ -22,21 +22,22 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label">Password</label>
-                            <input type="password" name="password" class="form-control" required>
+                            <label class="form-label">Temporary Password</label>
+                            <input type="password" name="password" class="form-control" required minlength="8">
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label">Confirm Password</label>
-                            <input type="password" name="password_confirmation" class="form-control" required>
+                            <input type="password" name="password_confirmation" class="form-control" required minlength="8">
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label">Role</label>
                             <select name="role" class="form-select" required>
                                 <option value="user">User</option>
-                                <option value="agent">Agent</option>
                                 <option value="staff">Staff</option>
+                                <option value="agent">Agent</option>
+                                <option value="manager">Manager</option>
                                 <option value="admin">Admin</option>
                             </select>
                         </div>

@@ -23,6 +23,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'is_active',
         'profile_photo',
     ];
 
@@ -46,11 +47,21 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
         ];
     }
 
     public function leads()
     {
         return $this->hasMany(Lead::class, 'assigned_agent_id');
+    }
+
+    /**
+     * Only this specific admin account may manage Staff Access (provisioning
+     * other staff logins/roles) — a narrower gate than the general 'admin' role.
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'admin' && $this->email === 'afnanakbarghulam@gmail.com';
     }
 }
