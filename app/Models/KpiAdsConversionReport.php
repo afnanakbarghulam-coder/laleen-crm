@@ -119,6 +119,104 @@ class KpiAdsConversionReport extends Model
         };
     }
 
+    /**
+     * Adaptive status badge for a computed category: strong performers show
+     * how many times the target they're converting at (e.g. "2.3x Target"),
+     * everyone else shows their plain status label.
+     */
+    public function categoryBadge(array $category): array
+    {
+        $status = $category['status'];
+        $multiple = self::TARGET_CONVERSION > 0 ? round($category['conversion'] / self::TARGET_CONVERSION, 1) : 0.0;
+
+        if ($status === 'Above' && $multiple >= 2.0) {
+            return ['label' => $multiple . 'x Target', 'class' => 'kpi-badge-green'];
+        }
+
+        return match ($status) {
+            'Above' => ['label' => 'Above Target', 'class' => 'kpi-badge-green'],
+            'Near' => ['label' => 'Near Target', 'class' => 'kpi-badge-amber'],
+            'Below' => ['label' => 'Below', 'class' => 'kpi-badge-amber'],
+            default => ['label' => 'Critical', 'class' => 'kpi-badge-red'],
+        };
+    }
+
+    /**
+     * Side-by-side branch comparison with booking/revenue share and the gap
+     * between the two branches, for this report's date range.
+     */
+    public function branchComparison(): array
+    {
+        $oldAirport = ['bookings' => (int) $this->old_airport_bookings, 'revenue' => (float) $this->old_airport_revenue];
+        $wakrah = ['bookings' => (int) $this->wakrah_bookings, 'revenue' => (float) $this->wakrah_revenue];
+
+        $totalBookings = $oldAirport['bookings'] + $wakrah['bookings'];
+        $totalRevenue = $oldAirport['revenue'] + $wakrah['revenue'];
+
+        $oldAirport['booking_share'] = $totalBookings > 0 ? round($oldAirport['bookings'] / $totalBookings * 100, 1) : 0.0;
+        $wakrah['booking_share'] = $totalBookings > 0 ? round($wakrah['bookings'] / $totalBookings * 100, 1) : 0.0;
+        $oldAirport['revenue_share'] = $totalRevenue > 0 ? round($oldAirport['revenue'] / $totalRevenue * 100, 1) : 0.0;
+        $wakrah['revenue_share'] = $totalRevenue > 0 ? round($wakrah['revenue'] / $totalRevenue * 100, 1) : 0.0;
+
+        $bookingGap = $oldAirport['bookings'] - $wakrah['bookings'];
+        $revenueGap = $oldAirport['revenue'] - $wakrah['revenue'];
+
+        return [
+            'old_airport' => $oldAirport,
+            'wakrah' => $wakrah,
+            'total_bookings' => $totalBookings,
+            'total_revenue' => round($totalRevenue, 2),
+            'booking_gap' => abs($bookingGap),
+            'revenue_gap' => round(abs($revenueGap), 2),
+            'leading_branch' => match (true) {
+                $bookingGap > 0 => 'Old Airport',
+                $bookingGap < 0 => 'Al Wakrah',
+                $revenueGap > 0 => 'Old Airport',
+                $revenueGap < 0 => 'Al Wakrah',
+                default => null,
+            },
+        ];
+    }
+
+    /**
+     * Rule-based Scale/Fix/Pause recommendation per ad category, based on
+     * conversion vs. the 20% target and booking volume. Purely mechanical —
+     * no manual input, recomputed fresh every time from computedCategories().
+     */
+    public function actionableInsights(): array
+    {
+        return array_map(function ($category) {
+            $leads = $category['leads'];
+            $bookings = $category['bookings'];
+            $conversion = $category['conversion'];
+            $multiple = self::TARGET_CONVERSION > 0 ? round($conversion / self::TARGET_CONVERSION, 1) : 0.0;
+            $leadWord = $leads === 1 ? 'lead' : 'leads';
+
+            $action = match ($category['status']) {
+                'Above' => 'scale',
+                'Near', 'Below' => 'fix',
+                default => 'pause',
+            };
+
+            $reason = match (true) {
+                $leads === 0 => 'No leads logged for this category in the selected period.',
+                $bookings === 0 => "Zero bookings from {$leads} {$leadWord} — pause spend and review targeting or offer fit before trying again.",
+                $action === 'scale' => "Converting at {$multiple}x the 20% target — increase budget and expand this campaign.",
+                $action === 'fix' => "Below the 20% target ({$conversion}%) — tighten messaging, speed up follow-up, or refine targeting before scaling spend.",
+                default => "Conversion is critical ({$conversion}%) — pause spend and review lead quality, response time, and offer fit.",
+            };
+
+            return [
+                'name' => $category['name'],
+                'action' => $action,
+                'conversion' => $conversion,
+                'multiple' => $multiple,
+                'reason' => $reason,
+                'low_sample' => $leads > 0 && $leads < 5,
+            ];
+        }, $this->computedCategories());
+    }
+
     public function statusRecommendation(string $status): string
     {
         return match ($status) {

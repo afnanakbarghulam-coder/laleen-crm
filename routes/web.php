@@ -149,7 +149,6 @@ Route::middleware(['auth'])->group(function () {
         })->name('hub');
 
         Route::middleware('module:kpis')->get('/ads', [AdsConversionController::class, 'index'])->name('ads.index');
-        Route::middleware('module:kpis,edit')->get('/ads/create', [AdsConversionController::class, 'create'])->name('ads.create');
         Route::middleware('module:kpis,edit')->post('/ads', [AdsConversionController::class, 'store'])->name('ads.store');
         Route::middleware('module:kpis')->get('/ads/{report}', [AdsConversionController::class, 'show'])->name('ads.show');
         Route::middleware('module:kpis,edit')->delete('/ads/{report}', [AdsConversionController::class, 'destroy'])->name('ads.destroy');

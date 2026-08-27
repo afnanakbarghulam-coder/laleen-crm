@@ -108,12 +108,28 @@
         <div class="kpi-header">
             <div>
                 <h4>Ads Conversion Reports</h4>
-                <p>History of saved reports. Click any row to view the full breakdown.</p>
+                <p>Pick a date range and generate a saved snapshot — leads, bookings, conversion %, revenue, and branch split are calculated automatically from the Ad Leads Log.</p>
             </div>
-            @moduleEdit('kpis')
-                <a href="{{ route('kpi.ads.create') }}" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New Report</a>
-            @endmoduleEdit
         </div>
+
+        @moduleEdit('kpis')
+            <div class="kpi-panel mb-3">
+                <form method="POST" action="{{ route('kpi.ads.store') }}" class="row g-3 align-items-end">
+                    @csrf
+                    <div class="col-md-3">
+                        <label class="form-label">From</label>
+                        <input type="date" name="date_from" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">To</label>
+                        <input type="date" name="date_to" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary"><i class="bx bx-plus me-1"></i> Generate Report</button>
+                    </div>
+                </form>
+            </div>
+        @endmoduleEdit
 
         <div class="kpi-panel p-0" style="overflow:hidden;">
             <div class="table-responsive">
@@ -166,6 +182,8 @@
         @php
             $analyticsCategories = $analyticsReport->computedCategories();
             $analyticsTotals = $analyticsReport->totals();
+            $branchComparison = $analyticsReport->branchComparison();
+            $insights = $analyticsReport->actionableInsights();
         @endphp
 
         <div class="kpi-header">
@@ -244,7 +262,7 @@
                         @forelse ($analyticsCategories as $c)
                             @php
                                 $barColor = match($c['status']) { 'Above' => 'green', 'Near' => 'amber', 'Below' => 'amber', default => 'red' };
-                                $badgeColor = match($c['status']) { 'Above' => 'kpi-badge-green', 'Near' => 'kpi-badge-amber', 'Below' => 'kpi-badge-amber', default => 'kpi-badge-red' };
+                                $badge = $analyticsReport->categoryBadge($c);
                             @endphp
                             <tr>
                                 <td class="fw-semibold">{{ $c['name'] }}</td>
@@ -261,7 +279,7 @@
                                 <td>{{ number_format($c['avg_ticket'], 2) }}</td>
                                 <td>{{ number_format($c['revenue'], 2) }}</td>
                                 <td>{{ $c['pct_of_target'] }}%</td>
-                                <td><span class="kpi-badge {{ $badgeColor }}">{{ $c['status'] }}</span></td>
+                                <td><span class="kpi-badge {{ $badge['class'] }}">{{ $badge['label'] }}</span></td>
                             </tr>
                         @empty
                             <tr><td colspan="8" class="text-center text-muted py-4">No ad leads logged for this period.</td></tr>
@@ -271,23 +289,70 @@
             </div>
         </div>
 
+        <div class="kpi-panel mb-3">
+            <h6>Branch Performance Comparison</h6>
+            <p class="text-muted small mb-3">Old Airport vs. Al Wakrah — bookings, revenue, and the gap between them.</p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="kpi-stat-card h-100 {{ $branchComparison['leading_branch'] === 'Old Airport' ? 'border border-success' : '' }}">
+                        <div class="kpi-stat-label">Old Airport {{ $branchComparison['leading_branch'] === 'Old Airport' ? '👑' : '' }}</div>
+                        <div class="kpi-stat-value">{{ $branchComparison['old_airport']['bookings'] }} <small class="fs-6">bookings</small></div>
+                        <div class="kpi-stat-sub">
+                            {{ number_format($branchComparison['old_airport']['revenue'], 2) }} QAR
+                            &middot; {{ $branchComparison['old_airport']['booking_share'] }}% of bookings
+                            &middot; {{ $branchComparison['old_airport']['revenue_share'] }}% of revenue
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="kpi-stat-card h-100 {{ $branchComparison['leading_branch'] === 'Al Wakrah' ? 'border border-success' : '' }}">
+                        <div class="kpi-stat-label">Al Wakrah {{ $branchComparison['leading_branch'] === 'Al Wakrah' ? '👑' : '' }}</div>
+                        <div class="kpi-stat-value">{{ $branchComparison['wakrah']['bookings'] }} <small class="fs-6">bookings</small></div>
+                        <div class="kpi-stat-sub">
+                            {{ number_format($branchComparison['wakrah']['revenue'], 2) }} QAR
+                            &middot; {{ $branchComparison['wakrah']['booking_share'] }}% of bookings
+                            &middot; {{ $branchComparison['wakrah']['revenue_share'] }}% of revenue
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3 small text-muted">
+                @if ($branchComparison['total_bookings'] === 0)
+                    No bookings logged for either branch in this period.
+                @elseif ($branchComparison['leading_branch'])
+                    <strong>{{ $branchComparison['leading_branch'] }}</strong> is ahead by
+                    {{ $branchComparison['booking_gap'] }} {{ Str::plural('booking', $branchComparison['booking_gap']) }}
+                    and {{ number_format($branchComparison['revenue_gap'], 2) }} QAR in revenue.
+                @else
+                    Both branches are performing evenly.
+                @endif
+            </div>
+        </div>
+
         <div class="kpi-panel">
-            <h6>Branch Performance</h6>
-            <table class="table kpi-table">
-                <thead><tr><th>Branch</th><th class="text-end">Bookings</th><th class="text-end">Revenue (QAR)</th></tr></thead>
-                <tbody>
-                    <tr>
-                        <td class="fw-semibold">Old Airport</td>
-                        <td class="text-end">{{ $analyticsReport->old_airport_bookings }}</td>
-                        <td class="text-end">{{ number_format($analyticsReport->old_airport_revenue, 2) }}</td>
-                    </tr>
-                    <tr>
-                        <td class="fw-semibold">Al Wakrah</td>
-                        <td class="text-end">{{ $analyticsReport->wakrah_bookings }}</td>
-                        <td class="text-end">{{ number_format($analyticsReport->wakrah_revenue, 2) }}</td>
-                    </tr>
-                </tbody>
-            </table>
+            <h6>Actionable Insights</h6>
+            <p class="text-muted small mb-3">Rule-based recommendations — which campaigns to scale, fix, or pause — based on conversion vs. the 20% target.</p>
+            @forelse ($insights as $insight)
+                @php
+                    $actionBadge = match ($insight['action']) {
+                        'scale' => ['label' => 'Scale', 'class' => 'kpi-badge-green'],
+                        'fix' => ['label' => 'Fix', 'class' => 'kpi-badge-amber'],
+                        default => ['label' => 'Pause', 'class' => 'kpi-badge-red'],
+                    };
+                @endphp
+                <div class="d-flex align-items-start gap-3 py-2 {{ !$loop->last ? 'border-bottom' : '' }}">
+                    <span class="kpi-badge {{ $actionBadge['class'] }}" style="min-width:64px; text-align:center; flex-shrink:0;">{{ $actionBadge['label'] }}</span>
+                    <div>
+                        <span class="fw-semibold">{{ $insight['name'] }}</span>
+                        @if ($insight['low_sample'])
+                            <span class="text-muted small">(small sample — keep monitoring)</span>
+                        @endif
+                        <div class="text-muted small">{{ $insight['reason'] }}</div>
+                    </div>
+                </div>
+            @empty
+                <p class="text-muted small mb-0">No ad leads logged for this period.</p>
+            @endforelse
         </div>
     </div>
 
