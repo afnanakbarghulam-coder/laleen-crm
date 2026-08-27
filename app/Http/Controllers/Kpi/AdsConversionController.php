@@ -3,16 +3,60 @@
 namespace App\Http\Controllers\Kpi;
 
 use App\Http\Controllers\Controller;
+use App\Models\AdLeadEntry;
 use App\Models\KpiAdsConversionReport;
 use Illuminate\Http\Request;
 
 class AdsConversionController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $reports = KpiAdsConversionReport::orderByDesc('date_to')->orderByDesc('id')->paginate(15);
+        $activeTab = in_array($request->query('tab'), ['leads', 'reports', 'analytics'], true)
+            ? $request->query('tab')
+            : 'leads';
 
-        return view('kpi.ads.index', compact('reports'));
+        $reports = KpiAdsConversionReport::orderByDesc('date_to')->orderByDesc('id')
+            ->paginate(15)
+            ->appends(['tab' => 'reports']);
+
+        $entriesFrom = $request->date('entries_from');
+        $entriesTo = $request->date('entries_to');
+
+        $adLeadEntries = AdLeadEntry::query()
+            ->when($entriesFrom, fn ($q) => $q->whereDate('date', '>=', $entriesFrom))
+            ->when($entriesTo, fn ($q) => $q->whereDate('date', '<=', $entriesTo))
+            ->orderByDesc('date')
+            ->orderByDesc('id')
+            ->paginate(20, ['*'], 'entries_page')
+            ->appends(array_filter([
+                'entries_from' => $entriesFrom?->format('Y-m-d'),
+                'entries_to' => $entriesTo?->format('Y-m-d'),
+                'tab' => 'leads',
+            ]));
+
+        $categories = AdLeadEntry::CATEGORIES;
+        $branches = AdLeadEntry::BRANCHES;
+
+        // Ads Analytics: a live, non-persisted breakdown for a date range —
+        // no "report" needs to be generated/saved to see it. Defaults to the
+        // full span of logged leads when no range is picked.
+        $earliestLogged = AdLeadEntry::min('date');
+        $latestLogged = AdLeadEntry::max('date');
+
+        $analyticsFrom = $request->date('analytics_from')
+            ?? ($earliestLogged ? \Carbon\Carbon::parse($earliestLogged) : now());
+        $analyticsTo = $request->date('analytics_to')
+            ?? ($latestLogged ? \Carbon\Carbon::parse($latestLogged) : now());
+
+        $analyticsReport = new KpiAdsConversionReport([
+            'date_from' => $analyticsFrom,
+            'date_to' => $analyticsTo,
+        ]);
+
+        return view('kpi.ads.index', compact(
+            'reports', 'adLeadEntries', 'categories', 'branches', 'entriesFrom', 'entriesTo',
+            'analyticsReport', 'analyticsFrom', 'analyticsTo', 'activeTab'
+        ));
     }
 
     public function create()
@@ -25,29 +69,15 @@ class AdsConversionController extends Controller
         $validated = $request->validate([
             'date_from' => 'required|date',
             'date_to' => 'required|date|after_or_equal:date_from',
-            'categories' => 'required|array|min:1',
-            'categories.*.name' => 'required|string|max:100',
-            'categories.*.leads' => 'required|integer|min:0',
-            'categories.*.bookings' => 'required|integer|min:0',
-            'categories.*.avg_ticket' => 'required|numeric|min:0',
-            'old_airport_bookings' => 'nullable|integer|min:0',
-            'old_airport_revenue' => 'nullable|numeric|min:0',
-            'wakrah_bookings' => 'nullable|integer|min:0',
-            'wakrah_revenue' => 'nullable|numeric|min:0',
         ]);
 
         $report = KpiAdsConversionReport::create([
             'date_from' => $validated['date_from'],
             'date_to' => $validated['date_to'],
-            'categories' => array_values($validated['categories']),
-            'old_airport_bookings' => $validated['old_airport_bookings'] ?? 0,
-            'old_airport_revenue' => $validated['old_airport_revenue'] ?? 0,
-            'wakrah_bookings' => $validated['wakrah_bookings'] ?? 0,
-            'wakrah_revenue' => $validated['wakrah_revenue'] ?? 0,
             'created_by' => auth()->id(),
         ]);
 
-        return redirect()->route('kpi.ads.show', $report)->with('success', 'Ads conversion report saved.');
+        return redirect()->route('kpi.ads.show', $report)->with('success', 'Ads conversion report generated from the lead log.');
     }
 
     public function show(KpiAdsConversionReport $report)
@@ -59,6 +89,6 @@ class AdsConversionController extends Controller
     {
         $report->delete();
 
-        return redirect()->route('kpi.ads.index')->with('success', 'Report deleted.');
+        return redirect()->route('kpi.ads.index', ['tab' => 'reports'])->with('success', 'Report deleted.');
     }
 }

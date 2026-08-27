@@ -19,6 +19,11 @@
         padding: 14px 18px;
         margin-bottom: 18px;
         box-shadow: 0 1px 2px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(217, 143, 131, .05);
+        /* backdrop-filter creates its own stacking context; without an explicit
+           z-index here, .cal-scroll's own backdrop-filter context (later in the
+           DOM) paints on top and clips the Filters dropdown behind the grid. */
+        position: relative;
+        z-index: 20;
     }
 
     .cal-toolbar {
@@ -149,6 +154,7 @@
         border: 1px solid var(--cal-border);
         border-radius: 14px;
         box-shadow: 0 12px 32px rgba(16, 24, 40, .12);
+        z-index: 500;
     }
 
     .cal-filter-title {
@@ -1038,7 +1044,6 @@
                                 <option value="">All Locations</option>
                                 <option value="old_airport">Old Airport</option>
                                 <option value="wakrah">Al Wakrah</option>
-                                <option value="home_service">Home Service</option>
                             </select>
                         </div>
 

@@ -9,7 +9,7 @@
 
 @section('content')
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <a href="{{ route('kpi.ads.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-arrow-back me-1"></i> Back to history</a>
+        <a href="{{ route('kpi.ads.index', ['tab' => 'reports']) }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-arrow-back me-1"></i> Back to history</a>
         <button type="button" class="btn btn-primary btn-sm" onclick="exportReportJpg('reportCapture', 'ads-conversion-report')"><i class="bx bx-download me-1"></i> Export as JPG</button>
     </div>
 
