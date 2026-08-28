@@ -155,6 +155,116 @@
         font-size: 11px;
         margin-left: 4px;
     }
+
+    .staff-tagselect {
+        position: relative;
+        min-width: 170px;
+    }
+
+    .staff-tagselect-control {
+        min-height: 31px;
+        border: 1px solid var(--luxe-border-strong);
+        border-radius: 6px;
+        background: var(--luxe-surface-2);
+        padding: 3px 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+        cursor: pointer;
+    }
+
+    .staff-tagselect-control i {
+        color: var(--luxe-muted);
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+
+    .staff-tagselect-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        flex: 1;
+    }
+
+    .staff-tagselect-placeholder {
+        color: var(--luxe-muted);
+        font-size: 12.5px;
+    }
+
+    .staff-tag-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(217, 143, 131, 0.16);
+        color: var(--luxe-accent);
+        border-radius: 999px;
+        padding: 1px 6px 1px 9px;
+        font-size: 11.5px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .staff-tag-remove {
+        background: none;
+        border: none;
+        color: inherit;
+        line-height: 1;
+        font-size: 14px;
+        cursor: pointer;
+        padding: 0;
+        opacity: .7;
+    }
+
+    .staff-tag-remove:hover {
+        opacity: 1;
+    }
+
+    .staff-tagselect-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 60;
+        background: #241e1c;
+        border: 1px solid rgba(217, 143, 131, 0.24);
+        border-radius: 6px;
+        margin-top: 2px;
+        padding: 6px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+        min-width: 200px;
+    }
+
+    .staff-tagselect-options {
+        max-height: 180px;
+        overflow-y: auto;
+        margin-top: 6px;
+    }
+
+    .staff-tagselect-option {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 6px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12.5px;
+        color: #e9dfda;
+    }
+
+    .staff-tagselect-option:hover {
+        background: rgba(217, 143, 131, 0.12);
+    }
+
+    .staff-tagselect-option input[type="checkbox"] {
+        margin: 0;
+    }
+
+    .staff-tagselect-empty {
+        padding: 8px;
+        color: var(--luxe-muted);
+        font-size: 12px;
+    }
 </style>
 
 @section('content')
@@ -535,12 +645,19 @@
                                     </select>
                                 </td>
                                 <td>
-                                    <select class="form-select form-select-sm" id="coQaStaff" multiple size="4">
-                                        @foreach ($allStaff as $s)
-                                            <option value="{{ $s->id }}">{{ $s->name }}</option>
-                                        @endforeach
-                                    </select>
-                                    <div class="text-muted small mt-1">Ctrl/Cmd-click to select multiple</div>
+                                    <div class="staff-tagselect" id="coQaStaffWrap">
+                                        <div class="staff-tagselect-control" onclick="toggleStaffDropdown('coQa')">
+                                            <div class="staff-tagselect-chips" id="coQaStaffChips">
+                                                <span class="staff-tagselect-placeholder">Select staff...</span>
+                                            </div>
+                                            <i class="bx bx-chevron-down"></i>
+                                        </div>
+                                        <div class="staff-tagselect-dropdown d-none" id="coQaStaffDropdown">
+                                            <input type="text" class="form-control form-control-sm" placeholder="Search staff..." id="coQaStaffSearch" oninput="filterStaffOptions('coQa')">
+                                            <div class="staff-tagselect-options" id="coQaStaffOptions"></div>
+                                        </div>
+                                        <input type="hidden" data-field="staff_ids" data-multi="1" id="coQaStaffValue" value="">
+                                    </div>
                                 </td>
                                 <td>
                                     <select class="form-select form-select-sm" id="coQaDeductionApplied" onchange="toggleDeductionAmount('coQa', this.value)">
@@ -907,10 +1024,105 @@
             return opts;
         }
 
-        function staffMultiOptionsHtml(selectedIds) {
-            const ids = (selectedIds || []).map(Number);
-            return ALL_STAFF.map(s => `<option value="${s.id}" ${ids.includes(s.id) ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('');
+        /* ---------- STAFF INVOLVED: tag-style multi-select (search + checkable list + removable chips) ---------- */
+        function staffTagSelectHtml(prefix, selectedIds) {
+            const ids = (selectedIds || []).join(',');
+            return `
+                <div class="staff-tagselect" id="${prefix}StaffWrap">
+                    <div class="staff-tagselect-control" onclick="toggleStaffDropdown('${prefix}')">
+                        <div class="staff-tagselect-chips" id="${prefix}StaffChips"></div>
+                        <i class="bx bx-chevron-down"></i>
+                    </div>
+                    <div class="staff-tagselect-dropdown d-none" id="${prefix}StaffDropdown">
+                        <input type="text" class="form-control form-control-sm" placeholder="Search staff..." id="${prefix}StaffSearch" oninput="filterStaffOptions('${prefix}')">
+                        <div class="staff-tagselect-options" id="${prefix}StaffOptions"></div>
+                    </div>
+                    <input type="hidden" data-field="staff_ids" data-multi="1" id="${prefix}StaffValue" value="${ids}">
+                </div>
+            `;
         }
+
+        function staffTagSelectedIds(prefix) {
+            const value = document.getElementById(prefix + 'StaffValue')?.value || '';
+            return value ? value.split(',').map(Number) : [];
+        }
+
+        function renderStaffTagChips(prefix) {
+            const ids = staffTagSelectedIds(prefix);
+            const box = document.getElementById(prefix + 'StaffChips');
+            if (!box) return;
+            if (!ids.length) {
+                box.innerHTML = '<span class="staff-tagselect-placeholder">Select staff...</span>';
+                return;
+            }
+            box.innerHTML = ids.map(id => {
+                const staff = ALL_STAFF.find(s => s.id === id);
+                if (!staff) return '';
+                return `<span class="staff-tag-chip">${escapeHtml(staff.name)}<button type="button" class="staff-tag-remove" onclick="event.stopPropagation(); removeStaffTag('${prefix}', ${id})">&times;</button></span>`;
+            }).join('');
+        }
+
+        function renderStaffTagOptions(prefix, filter = '') {
+            const ids = staffTagSelectedIds(prefix);
+            const box = document.getElementById(prefix + 'StaffOptions');
+            if (!box) return;
+            const q = filter.trim().toLowerCase();
+            const list = ALL_STAFF.filter(s => !q || s.name.toLowerCase().includes(q));
+            if (!list.length) {
+                box.innerHTML = '<div class="staff-tagselect-empty">No matches.</div>';
+                return;
+            }
+            box.innerHTML = list.map(s => `
+                <label class="staff-tagselect-option">
+                    <input type="checkbox" value="${s.id}" ${ids.includes(s.id) ? 'checked' : ''} onchange="toggleStaffTag('${prefix}', ${s.id}, this.checked)">
+                    ${escapeHtml(s.name)}
+                </label>
+            `).join('');
+        }
+
+        function renderStaffTagSelect(prefix) {
+            renderStaffTagChips(prefix);
+            renderStaffTagOptions(prefix);
+        }
+
+        window.toggleStaffDropdown = function (prefix) {
+            const dropdown = document.getElementById(prefix + 'StaffDropdown');
+            if (!dropdown) return;
+            const wasHidden = dropdown.classList.contains('d-none');
+            document.querySelectorAll('.staff-tagselect-dropdown').forEach(d => d.classList.add('d-none'));
+            if (wasHidden) {
+                dropdown.classList.remove('d-none');
+                renderStaffTagOptions(prefix);
+                document.getElementById(prefix + 'StaffSearch')?.focus();
+            }
+        };
+
+        window.filterStaffOptions = function (prefix) {
+            renderStaffTagOptions(prefix, document.getElementById(prefix + 'StaffSearch')?.value || '');
+        };
+
+        window.toggleStaffTag = function (prefix, staffId, checked) {
+            const valueInput = document.getElementById(prefix + 'StaffValue');
+            let ids = staffTagSelectedIds(prefix);
+            ids = checked ? [...new Set([...ids, staffId])] : ids.filter(id => id !== staffId);
+            valueInput.value = ids.join(',');
+            renderStaffTagChips(prefix);
+            document.getElementById(prefix + 'StaffSearch')?.focus();
+        };
+
+        window.removeStaffTag = function (prefix, staffId) {
+            const valueInput = document.getElementById(prefix + 'StaffValue');
+            valueInput.value = staffTagSelectedIds(prefix).filter(id => id !== staffId).join(',');
+            renderStaffTagSelect(prefix);
+        };
+
+        document.addEventListener('click', function (e) {
+            document.querySelectorAll('.staff-tagselect').forEach(wrap => {
+                if (!wrap.contains(e.target)) {
+                    wrap.querySelector('.staff-tagselect-dropdown')?.classList.add('d-none');
+                }
+            });
+        });
 
         function serviceOptionsHtml(selectedId) {
             let opts = '<option value="">Select service</option>';
@@ -1054,7 +1266,9 @@
         function readRowFields(row) {
             const fields = {};
             row.querySelectorAll('[data-field]').forEach(input => {
-                if (input.tagName === 'SELECT' && input.multiple) {
+                if (input.dataset.multi === '1') {
+                    fields[input.dataset.field] = input.value ? input.value.split(',') : [];
+                } else if (input.tagName === 'SELECT' && input.multiple) {
                     fields[input.dataset.field] = Array.from(input.selectedOptions).map(o => o.value);
                 } else {
                     fields[input.dataset.field] = input.value;
@@ -1261,10 +1475,7 @@
                 <td>${clientPickerCellHtml(prefix, e.customer_name, e.customer_phone)}</td>
                 <td><select class="form-select form-select-sm" data-field="service_id">${serviceOptionsHtml(e.service_id)}</select></td>
                 <td><select class="form-select form-select-sm" data-field="category">${plainOptionsHtml(COMPLAINT_CATEGORIES, e.category)}</select></td>
-                <td>
-                    <select class="form-select form-select-sm" data-field="staff_ids" multiple size="4">${staffMultiOptionsHtml(e.staff_ids)}</select>
-                    <div class="text-muted small mt-1">Ctrl/Cmd-click to select multiple</div>
-                </td>
+                <td>${staffTagSelectHtml(prefix, e.staff_ids)}</td>
                 <td>
                     <select class="form-select form-select-sm" data-field="deduction_applied" onchange="toggleDeductionAmount('${prefix}', this.value)">
                         <option value="N" ${e.deduction_applied === 'N' ? 'selected' : ''}>No</option>
@@ -1282,6 +1493,7 @@
             if (!row) return;
             row.innerHTML = coEditRowHtml(coEntries[id]);
             wireClientPicker(`coEdit${id}`);
+            renderStaffTagSelect(`coEdit${id}`);
         };
         window.cancelEditCo = function (id) {
             const row = document.querySelector(`#complaintsTable tr[data-entry-row="${id}"]`);
@@ -1400,12 +1612,13 @@
         const coQaSaveBtn = document.getElementById('coQaSaveBtn');
         if (coQaSaveBtn) {
             wireClientPicker('coQa');
+            renderStaffTagSelect('coQa');
             coQaSaveBtn.addEventListener('click', function () {
                 const fields = {
                     complaint_date: document.getElementById('coQaDate').value,
                     complaint_time: document.getElementById('coQaTime').value,
                     branch: document.getElementById('coQaBranch').value,
-                    staff_ids: Array.from(document.getElementById('coQaStaff').selectedOptions).map(o => o.value),
+                    staff_ids: staffTagSelectedIds('coQa'),
                     customer_name: document.getElementById('coQaClientName').value,
                     customer_phone: document.getElementById('coQaClientPhone').value,
                     service_id: document.getElementById('coQaService').value,
@@ -1434,7 +1647,8 @@
                         document.getElementById('coQaClientQuery').value = '';
                         document.getElementById('coQaClientName').value = '';
                         document.getElementById('coQaClientPhone').value = '';
-                        document.getElementById('coQaStaff').selectedIndex = -1;
+                        document.getElementById('coQaStaffValue').value = '';
+                        renderStaffTagSelect('coQa');
                         document.getElementById('coQaService').value = '';
                         document.getElementById('coQaDescription').value = '';
                         document.getElementById('coQaDeductionApplied').value = 'N';
