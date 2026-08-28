@@ -6,30 +6,30 @@ use Illuminate\Database\Eloquent\Model;
 
 class KpiContentEntry extends Model
 {
+    /** Suggestions only — activity_type stays free text (spreadsheet examples, not an enum). */
+    const ACTIVITY_TYPE_SUGGESTIONS = ['Feed Post', 'Stories Only', 'Feed + Event'];
+
     protected $fillable = [
-        'report_id',
+        'creator_name',
         'entry_date',
         'activity_type',
-        'feed_scheduled',
-        'stories_scheduled',
+        'feed_post_schedule',
+        'story_theme',
+        'story_flow',
         'feed_posted',
-        'stories_posted',
         'standards_feed',
         'standards_stories',
         'issues',
+        'created_by',
     ];
 
     protected $casts = [
         'entry_date' => 'date',
-        'feed_scheduled' => 'boolean',
-        'stories_scheduled' => 'boolean',
-        'feed_posted' => 'boolean',
-        'stories_posted' => 'boolean',
     ];
 
-    public function report()
+    public function creator()
     {
-        return $this->belongsTo(KpiContentReport::class, 'report_id');
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function dayName(): string
@@ -40,5 +40,18 @@ class KpiContentEntry extends Model
     public function weekNumber(): int
     {
         return (int) $this->entry_date->format('W');
+    }
+
+    /**
+     * Compact payload for the edit-modal JS. A single-argument call (no
+     * inline array literal) so Blade's @json directive — which naively
+     * explode(',')s its expression — doesn't truncate on commas.
+     */
+    public function toEditPayload(): array
+    {
+        return $this->only([
+            'id', 'creator_name', 'entry_date', 'activity_type', 'feed_post_schedule',
+            'story_theme', 'story_flow', 'feed_posted', 'standards_feed', 'standards_stories', 'issues',
+        ]);
     }
 }

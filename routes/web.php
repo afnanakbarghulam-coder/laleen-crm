@@ -5,8 +5,10 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\Kpi\AdLeadEntryController;
 use App\Http\Controllers\Kpi\AdsConversionController;
+use App\Http\Controllers\Kpi\AgentShiftLogController;
 use App\Http\Controllers\Kpi\AgentTargetController;
 use App\Http\Controllers\Kpi\ChatEvaluationController;
+use App\Http\Controllers\Kpi\ContentEntryController;
 use App\Http\Controllers\Kpi\ContentKpiController;
 use App\Http\Controllers\Kpi\StaffSalesController;
 use App\Http\Controllers\LeadController;
@@ -68,6 +70,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/appointments/{appointment}/services', [AppointmentController::class, 'addService'])->name('appointments.services.store');
         Route::patch('/appointments/{appointment}/services/{appointmentService}', [AppointmentController::class, 'updateService'])->name('appointments.services.update');
         Route::delete('/appointments/{appointment}/services/{appointmentService}', [AppointmentController::class, 'destroyService'])->name('appointments.services.destroy');
+        Route::post('/appointments/{appointment}/upsells', [AppointmentController::class, 'addUpsell'])->name('appointments.upsells.store');
+        Route::patch('/appointments/{appointment}/upsells/{appointmentUpsell}', [AppointmentController::class, 'updateUpsell'])->name('appointments.upsells.update');
+        Route::delete('/appointments/{appointment}/upsells/{appointmentUpsell}', [AppointmentController::class, 'destroyUpsell'])->name('appointments.upsells.destroy');
         Route::post('/staff-blocks', [StaffBlockController::class, 'store'])->name('staff-blocks.store');
         Route::delete('/staff-blocks/{staffBlock}', [StaffBlockController::class, 'destroy'])->name('staff-blocks.destroy');
     });
@@ -158,16 +163,15 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->delete('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'destroy'])->name('ad-leads.destroy');
 
         Route::middleware('module:kpis')->get('/agents', [AgentTargetController::class, 'index'])->name('agents.index');
-        Route::middleware('module:kpis,edit')->get('/agents/create', [AgentTargetController::class, 'create'])->name('agents.create');
         Route::middleware('module:kpis,edit')->post('/agents', [AgentTargetController::class, 'store'])->name('agents.store');
         Route::middleware('module:kpis')->get('/agents/{report}', [AgentTargetController::class, 'show'])->name('agents.show');
         Route::middleware('module:kpis,edit')->delete('/agents/{report}', [AgentTargetController::class, 'destroy'])->name('agents.destroy');
 
+        Route::middleware('module:kpis,edit')->post('/agent-shift-logs', [AgentShiftLogController::class, 'store'])->name('agent-shift-logs.store');
+        Route::middleware('module:kpis,edit')->put('/agent-shift-logs/{agentShiftLog}', [AgentShiftLogController::class, 'update'])->name('agent-shift-logs.update');
+        Route::middleware('module:kpis,edit')->delete('/agent-shift-logs/{agentShiftLog}', [AgentShiftLogController::class, 'destroy'])->name('agent-shift-logs.destroy');
+
         Route::middleware('module:kpis')->get('/staff-sales', [StaffSalesController::class, 'index'])->name('staff-sales.index');
-        Route::middleware('module:kpis,edit')->get('/staff-sales/create', [StaffSalesController::class, 'create'])->name('staff-sales.create');
-        Route::middleware('module:kpis,edit')->post('/staff-sales', [StaffSalesController::class, 'store'])->name('staff-sales.store');
-        Route::middleware('module:kpis')->get('/staff-sales/{report}', [StaffSalesController::class, 'show'])->name('staff-sales.show');
-        Route::middleware('module:kpis,edit')->delete('/staff-sales/{report}', [StaffSalesController::class, 'destroy'])->name('staff-sales.destroy');
 
         Route::middleware('module:kpis')->get('/chat-eval', [ChatEvaluationController::class, 'index'])->name('chat-eval.index');
         Route::middleware('module:kpis,edit')->get('/chat-eval/create', [ChatEvaluationController::class, 'create'])->name('chat-eval.create');
@@ -176,9 +180,12 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->delete('/chat-eval/{report}', [ChatEvaluationController::class, 'destroy'])->name('chat-eval.destroy');
 
         Route::middleware('module:kpis')->get('/content', [ContentKpiController::class, 'index'])->name('content.index');
-        Route::middleware('module:kpis,edit')->get('/content/create', [ContentKpiController::class, 'create'])->name('content.create');
         Route::middleware('module:kpis,edit')->post('/content', [ContentKpiController::class, 'store'])->name('content.store');
         Route::middleware('module:kpis')->get('/content/{report}', [ContentKpiController::class, 'show'])->name('content.show');
         Route::middleware('module:kpis,edit')->delete('/content/{report}', [ContentKpiController::class, 'destroy'])->name('content.destroy');
+
+        Route::middleware('module:kpis,edit')->post('/content-entries', [ContentEntryController::class, 'store'])->name('content-entries.store');
+        Route::middleware('module:kpis,edit')->put('/content-entries/{contentEntry}', [ContentEntryController::class, 'update'])->name('content-entries.update');
+        Route::middleware('module:kpis,edit')->delete('/content-entries/{contentEntry}', [ContentEntryController::class, 'destroy'])->name('content-entries.destroy');
     });
 });

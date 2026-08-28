@@ -3,21 +3,43 @@
 namespace App\Http\Controllers\Kpi;
 
 use App\Http\Controllers\Controller;
+use App\Models\AgentShiftLog;
 use App\Models\KpiAgentTargetReport;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 class AgentTargetController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $reports = KpiAgentTargetReport::orderByDesc('date_to')->orderByDesc('id')->paginate(15);
+        $activeTab = in_array($request->query('tab'), ['shifts', 'reports'], true)
+            ? $request->query('tab')
+            : 'shifts';
 
-        return view('kpi.agents.index', compact('reports'));
-    }
+        $reports = KpiAgentTargetReport::orderByDesc('date_to')->orderByDesc('id')
+            ->paginate(15)
+            ->appends(['tab' => 'reports']);
 
-    public function create()
-    {
-        return view('kpi.agents.create');
+        $logsFrom = $request->date('logs_from');
+        $logsTo = $request->date('logs_to');
+
+        $shiftLogs = AgentShiftLog::with('agent')
+            ->when($logsFrom, fn ($q) => $q->whereDate('date', '>=', $logsFrom))
+            ->when($logsTo, fn ($q) => $q->whereDate('date', '<=', $logsTo))
+            ->orderByDesc('date')
+            ->orderByDesc('id')
+            ->paginate(20, ['*'], 'logs_page')
+            ->appends(array_filter([
+                'logs_from' => $logsFrom?->format('Y-m-d'),
+                'logs_to' => $logsTo?->format('Y-m-d'),
+                'tab' => 'shifts',
+            ]));
+
+        $agents = User::where('role', 'agent')->orderBy('name')->get();
+
+        return view('kpi.agents.index', compact(
+            'reports', 'shiftLogs', 'logsFrom', 'logsTo', 'agents', 'activeTab'
+        ));
     }
 
     public function store(Request $request)
@@ -25,17 +47,15 @@ class AgentTargetController extends Controller
         $validated = $request->validate([
             'date_from' => 'required|date',
             'date_to' => 'required|date|after_or_equal:date_from',
-            'morning_bookings' => 'required|integer|min:0',
-            'morning_target' => 'required|integer|min:0',
-            'evening_bookings' => 'required|integer|min:0',
-            'evening_target' => 'required|integer|min:0',
-            'prev_morning_pct' => 'nullable|numeric|min:0',
-            'prev_evening_pct' => 'nullable|numeric|min:0',
         ]);
 
-        $report = KpiAgentTargetReport::create($validated + ['created_by' => auth()->id()]);
+        $report = KpiAgentTargetReport::create([
+            'date_from' => $validated['date_from'],
+            'date_to' => $validated['date_to'],
+            'created_by' => auth()->id(),
+        ]);
 
-        return redirect()->route('kpi.agents.show', $report)->with('success', 'Agents target report saved.');
+        return redirect()->route('kpi.agents.show', $report)->with('success', 'Agents target report generated from shift logs.');
     }
 
     public function show(KpiAgentTargetReport $report)
@@ -47,6 +67,6 @@ class AgentTargetController extends Controller
     {
         $report->delete();
 
-        return redirect()->route('kpi.agents.index')->with('success', 'Report deleted.');
+        return redirect()->route('kpi.agents.index', ['tab' => 'reports'])->with('success', 'Report deleted.');
     }
 }

@@ -22,6 +22,7 @@ class Appointment extends Model
         'price',
         'lifetime_revenue',
         'booking_agent_id',
+        'created_by',
         'staff_id',
         'status',
         'payment_method',
@@ -36,6 +37,17 @@ class Appointment extends Model
     public function agent()
     {
         return $this->belongsTo(User::class, 'booking_agent_id');
+    }
+
+    /**
+     * The account that physically created this booking record — distinct
+     * from agent()/booking_agent_id, which is who the booking is credited
+     * to. Used to verify a booking was self-created by an agent (not a
+     * manager/admin acting on their behalf) for shift-window attribution.
+     */
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function staff()
@@ -56,6 +68,11 @@ class Appointment extends Model
     public function appointmentServices()
     {
         return $this->hasMany(AppointmentService::class)->orderBy('start_time');
+    }
+
+    public function upsells()
+    {
+        return $this->hasMany(AppointmentUpsell::class)->orderBy('created_at');
     }
 
     /**

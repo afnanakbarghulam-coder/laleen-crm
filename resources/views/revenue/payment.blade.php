@@ -130,6 +130,16 @@
                         </div>
                     @endforeach
 
+                    @if (count($upsellItems))
+                        <h6 class="mt-4">Upsells</h6>
+                        @foreach ($upsellItems as $item)
+                            <div class="line-item">
+                                <span>{{ $item['name'] }} <span class="muted">({{ $item['staff_name'] }})</span></span>
+                                <span>{{ number_format($item['amount'], 2) }} QAR</span>
+                            </div>
+                        @endforeach
+                    @endif
+
                     <h6 class="mt-4">Retail Products</h6>
                     <div id="productRows"></div>
 
@@ -147,6 +157,9 @@
 
                     <h6 class="mt-4">Summary</h6>
                     <div class="summary-row"><span>Services</span><span id="sumServices">0.00</span></div>
+                    @if (count($upsellItems))
+                        <div class="summary-row"><span>Upsells</span><span id="sumUpsells">{{ number_format($upsellsTotal, 2) }}</span></div>
+                    @endif
                     <div class="summary-row"><span>Products</span><span id="sumProducts">0.00</span></div>
                     <div class="summary-row"><span>Discount</span><span id="sumDiscount">−0.00</span></div>
                     <div class="summary-row"><span>Tip</span><span id="sumTip">+0.00</span></div>
@@ -209,6 +222,7 @@
 
     <script>
         const servicesTotal = {{ $servicesTotal }};
+        const upsellsTotal = {{ $upsellsTotal }};
         const loyaltyRate = {{ \App\Models\Customer::POINTS_PER_QAR }};
         let productRows = [];
         let rowSeq = 0;
@@ -259,7 +273,7 @@
 
         function recalc() {
             const productsTotal = productRows.reduce((s, r) => s + r.price * r.qty, 0);
-            const subtotal = servicesTotal + productsTotal;
+            const subtotal = servicesTotal + upsellsTotal + productsTotal;
 
             const discountType = document.getElementById('discountType').value;
             const discountValue = parseFloat(document.getElementById('discountValue').value || 0);

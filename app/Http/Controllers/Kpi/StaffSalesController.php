@@ -3,70 +3,59 @@
 namespace App\Http\Controllers\Kpi;
 
 use App\Http\Controllers\Controller;
-use App\Models\KpiStaffSalesReport;
+use App\Support\StaffSalesAnalytics;
 use Illuminate\Http\Request;
 
 class StaffSalesController extends Controller
 {
-    const BRANCHES = [
-        'old_airport' => 'Old Airport',
-        'wakrah' => 'Al Wakrah',
-    ];
+    const BRANCHES = StaffSalesAnalytics::BRANCHES;
 
-    public function index()
+    /**
+     * Everything lives on one page now: "Sales & Upsells" (per-branch,
+     * per-staff live breakdown) and "Analytics" (cross-branch comparison +
+     * rankings). Nothing is generated or saved — both tabs recompute
+     * straight from appointment_upsells for whichever filters are set.
+     */
+    public function index(Request $request)
     {
-        $reports = KpiStaffSalesReport::withCount('entries')->with('entries')
-            ->orderByDesc('date_to')->orderByDesc('id')->paginate(15);
+        $activeTab = in_array($request->query('tab'), ['sales', 'analytics'], true)
+            ? $request->query('tab')
+            : 'sales';
 
-        return view('kpi.staff-sales.index', ['reports' => $reports, 'branches' => self::BRANCHES]);
-    }
+        $branch = $request->filled('sales_branch') && array_key_exists($request->sales_branch, self::BRANCHES)
+            ? $request->sales_branch
+            : array_key_first(self::BRANCHES);
 
-    public function create()
-    {
-        return view('kpi.staff-sales.create', ['branches' => self::BRANCHES]);
-    }
+        $salesTarget = $request->filled('sales_target') && is_numeric($request->sales_target)
+            ? (float) $request->sales_target
+            : StaffSalesAnalytics::DEFAULT_MONTHLY_TARGET;
 
-    public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'branch' => 'required|in:old_airport,wakrah',
-            'date_from' => 'required|date',
-            'date_to' => 'required|date|after_or_equal:date_from',
-            'monthly_target_per_staff' => 'required|numeric|min:0',
-            'staff' => 'required|array|min:1',
-            'staff.*.name' => 'required|string|max:100',
-            'staff.*.upsell' => 'required|numeric|min:0',
+        $salesFrom = $request->date('sales_from') ?? now()->startOfMonth();
+        $salesTo = $request->date('sales_to') ?? now()->endOfDay();
+
+        $salesAnalytics = new StaffSalesAnalytics($salesFrom, $salesTo, $salesTarget);
+
+        $analyticsTarget = $request->filled('analytics_target') && is_numeric($request->analytics_target)
+            ? (float) $request->analytics_target
+            : StaffSalesAnalytics::DEFAULT_MONTHLY_TARGET;
+
+        $analyticsFrom = $request->date('analytics_from') ?? now()->startOfMonth();
+        $analyticsTo = $request->date('analytics_to') ?? now()->endOfDay();
+
+        $analytics = new StaffSalesAnalytics($analyticsFrom, $analyticsTo, $analyticsTarget);
+
+        return view('kpi.staff-sales.index', [
+            'branches' => self::BRANCHES,
+            'activeTab' => $activeTab,
+            'branch' => $branch,
+            'salesTarget' => $salesTarget,
+            'salesFrom' => $salesFrom,
+            'salesTo' => $salesTo,
+            'salesAnalytics' => $salesAnalytics,
+            'analyticsTarget' => $analyticsTarget,
+            'analyticsFrom' => $analyticsFrom,
+            'analyticsTo' => $analyticsTo,
+            'analytics' => $analytics,
         ]);
-
-        $report = KpiStaffSalesReport::create([
-            'branch' => $validated['branch'],
-            'date_from' => $validated['date_from'],
-            'date_to' => $validated['date_to'],
-            'monthly_target_per_staff' => $validated['monthly_target_per_staff'],
-            'created_by' => auth()->id(),
-        ]);
-
-        foreach ($validated['staff'] as $staff) {
-            $report->entries()->create([
-                'staff_name' => $staff['name'],
-                'total_upsell' => $staff['upsell'],
-            ]);
-        }
-
-        return redirect()->route('kpi.staff-sales.show', $report)->with('success', 'Staff sales report saved.');
-    }
-
-    public function show(KpiStaffSalesReport $report)
-    {
-        $report->load('entries');
-
-        return view('kpi.staff-sales.show', ['report' => $report, 'branches' => self::BRANCHES]);
-    }
-
-    public function destroy(KpiStaffSalesReport $report)
-    {
-        $report->delete();
-
-        return redirect()->route('kpi.staff-sales.index')->with('success', 'Report deleted.');
     }
 }

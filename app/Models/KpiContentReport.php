@@ -23,9 +23,18 @@ class KpiContentReport extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function entries()
+    /**
+     * This creator's calendar entries for the report's date range — computed
+     * fresh every time, never stored. A report is just a saved (creator,
+     * date range) bookmark; deleting it never touches the underlying
+     * content calendar.
+     */
+    public function entriesInRange()
     {
-        return $this->hasMany(KpiContentEntry::class, 'report_id')->orderBy('entry_date');
+        return KpiContentEntry::where('creator_name', $this->creator_name)
+            ->whereBetween('entry_date', [$this->date_from->copy()->startOfDay(), $this->date_to->copy()->endOfDay()])
+            ->orderBy('entry_date')
+            ->get();
     }
 
     public static function gradeFor(float $pct): string
@@ -38,53 +47,43 @@ class KpiContentReport extends Model
         };
     }
 
-    private function postedPct($entries, string $scheduledField, string $postedField): float
-    {
-        $scheduled = $entries->where($scheduledField, true);
-        if ($scheduled->isEmpty()) {
-            return 0.0;
-        }
-
-        $posted = $scheduled->where($postedField, true)->count();
-
-        return round($posted / $scheduled->count() * 100, 1);
-    }
-
-    private function standardsPct($entries, string $field): float
+    /**
+     * % of entries where $field === 'Y', out of entries where $field isn't
+     * 'NA' (a day with no story activity, say, can't fail "standards met for
+     * stories" — it's excluded rather than counted against the creator).
+     */
+    private function metPct($entries, string $field): float
     {
         $applicable = $entries->where($field, '!=', 'NA');
         if ($applicable->isEmpty()) {
             return 0.0;
         }
 
-        $met = $applicable->where($field, 'Y')->count();
-
-        return round($met / $applicable->count() * 100, 1);
+        return round($applicable->where($field, 'Y')->count() / $applicable->count() * 100, 1);
     }
 
     public function metrics(): array
     {
-        $entries = $this->entries;
+        $entries = $this->entriesInRange();
 
-        $feedPosted = $this->postedPct($entries, 'feed_scheduled', 'feed_posted');
-        $storiesPosted = $this->postedPct($entries, 'stories_scheduled', 'stories_posted');
-        $standardsFeed = $this->standardsPct($entries, 'standards_feed');
-        $standardsStories = $this->standardsPct($entries, 'standards_stories');
+        $feedPosted = $entries->isEmpty() ? 0.0 : round($entries->where('feed_posted', 'Y')->count() / $entries->count() * 100, 1);
+        $standardsFeed = $this->metPct($entries, 'standards_feed');
+        $standardsStories = $this->metPct($entries, 'standards_stories');
 
-        $overall = round(($feedPosted + $storiesPosted + $standardsFeed + $standardsStories) / 4, 1);
+        $overall = round(($feedPosted + $standardsFeed + $standardsStories) / 3, 1);
 
         return [
             'feed_posted' => $feedPosted,
-            'stories_posted' => $storiesPosted,
             'standards_feed' => $standardsFeed,
             'standards_stories' => $standardsStories,
             'overall' => $overall,
             'grade' => self::gradeFor($overall),
+            'entry_count' => $entries->count(),
         ];
     }
 
     public function flaggedDays()
     {
-        return $this->entries->filter(fn ($e) => filled($e->issues));
+        return $this->entriesInRange()->filter(fn ($e) => filled($e->issues));
     }
 }

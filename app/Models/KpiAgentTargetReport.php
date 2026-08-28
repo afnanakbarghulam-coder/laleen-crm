@@ -3,31 +3,26 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Carbon;
 
 class KpiAgentTargetReport extends Model
 {
+    const DAILY_TARGET_PER_SHIFT = 13; // bookings/day/shift
     const MONTHLY_TARGET_PER_SHIFT = 403; // 13 bookings/day/shift x 31 days
     const RECOVERY_TARGET_PCT = 88.0;
 
     protected $fillable = [
         'date_from',
         'date_to',
-        'morning_bookings',
-        'morning_target',
-        'evening_bookings',
-        'evening_target',
-        'prev_morning_pct',
-        'prev_evening_pct',
         'created_by',
     ];
 
     protected $casts = [
         'date_from' => 'date',
         'date_to' => 'date',
-        'prev_morning_pct' => 'float',
-        'prev_evening_pct' => 'float',
     ];
+
+    /** In-memory cache so repeated calls within one request don't re-query. */
+    private ?array $shiftStatsCache = null;
 
     public function creator()
     {
@@ -39,29 +34,130 @@ class KpiAgentTargetReport extends Model
         return max($this->date_from->diffInDays($this->date_to) + 1, 1);
     }
 
-    public function shiftStats(): array
+    /**
+     * Morning/Evening bookings, computed entirely from agent shift sign-ins
+     * (AgentShiftLog) and appointments booked during each agent's active
+     * shift window on the day they signed in. No manual input: this report
+     * is just a saved bookmark for a date range, always recomputed fresh.
+     *
+     * Attribution is intentionally strict: a booking only counts toward an
+     * agent's target when that SAME agent account is the one that created
+     * the record (Appointment::created_by), not merely the account it's
+     * credited to (booking_agent_id) — so a manager/admin creating or
+     * reassigning a booking on an agent's behalf is excluded, and the
+     * booking's created_at must fall strictly inside that agent's exact
+     * check-in -> check-out window for the day.
+     *
+     * @return array{morning: int, evening: int}
+     */
+    private function rawShiftBookings(): array
+    {
+        $bounds = $this->dateRangeBounds();
+
+        $logs = AgentShiftLog::whereBetween('date', $bounds)
+            ->whereNotNull('check_in_time')
+            ->whereNotNull('check_out_time')
+            ->get();
+
+        if ($logs->isEmpty()) {
+            return ['morning' => 0, 'evening' => 0];
+        }
+
+        // "agentId|Y-m-d" => AgentShiftLog, so each booking can be matched to
+        // the specific shift its creating agent signed in for that day.
+        $logsByAgentAndDate = $logs->keyBy(fn ($log) => $log->user_id . '|' . $log->date->format('Y-m-d'));
+        $agentIds = $logs->pluck('user_id')->unique();
+
+        // Only bookings the agent account itself created (never a manager/
+        // admin acting on an agent's behalf) — enforced by joining against
+        // users and requiring role = 'agent' on the creating account.
+        $appointments = Appointment::query()
+            ->join('users', 'users.id', '=', 'appointments.created_by')
+            ->whereIn('appointments.created_by', $agentIds)
+            ->where('users.role', 'agent')
+            ->whereBetween('appointments.created_at', $bounds)
+            ->get(['appointments.id', 'appointments.created_by', 'appointments.created_at']);
+
+        $counts = ['morning' => 0, 'evening' => 0];
+
+        foreach ($appointments as $appointment) {
+            $key = $appointment->created_by . '|' . $appointment->created_at->format('Y-m-d');
+            $log = $logsByAgentAndDate->get($key);
+
+            if ($log && $appointment->created_at->between($log->windowStart(), $log->windowEnd())) {
+                $counts[$log->shift]++;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Morning/Evening completion % for the period immediately preceding this
+     * report's range (same length), for the "vs prior period" comparison.
+     *
+     * @return array{morning: float, evening: float}
+     */
+    private function previousPeriodPct(): array
     {
         $days = $this->daysInPeriod();
+        $prevTo = $this->date_from->copy()->subDay();
+        $prevFrom = $prevTo->copy()->subDays($days - 1);
 
-        $build = function (int $bookings, int $target, ?float $prevPct) use ($days) {
-            $pct = $target > 0 ? round($bookings / $target * 100, 1) : 0.0;
+        $previous = new self(['date_from' => $prevFrom, 'date_to' => $prevTo]);
+        $bookings = $previous->rawShiftBookings();
+        $target = self::DAILY_TARGET_PER_SHIFT * $days;
+
+        return [
+            'morning' => round($bookings['morning'] / $target * 100, 1),
+            'evening' => round($bookings['evening'] / $target * 100, 1),
+        ];
+    }
+
+    public function shiftStats(): array
+    {
+        if ($this->shiftStatsCache !== null) {
+            return $this->shiftStatsCache;
+        }
+
+        $days = $this->daysInPeriod();
+        $bookings = $this->rawShiftBookings();
+        $prevPct = $this->previousPeriodPct();
+
+        $build = function (string $shift) use ($days, $bookings, $prevPct) {
+            $b = $bookings[$shift];
+            $target = self::DAILY_TARGET_PER_SHIFT * $days;
+            $pct = $target > 0 ? round($b / $target * 100, 1) : 0.0;
+            $prev = $prevPct[$shift];
 
             return [
-                'bookings' => $bookings,
+                'bookings' => $b,
                 'target' => $target,
-                'gap' => max($target - $bookings, 0),
+                'gap' => max($target - $b, 0),
                 'pct' => $pct,
-                'daily_avg' => round($bookings / $days, 1),
-                'prev_pct' => $prevPct,
-                'change' => $prevPct !== null ? round($pct - $prevPct, 1) : null,
+                'daily_avg' => round($b / $days, 1),
+                'prev_pct' => $prev,
+                'change' => round($pct - $prev, 1),
                 'border' => $this->borderFor($pct),
             ];
         };
 
-        return [
-            'morning' => $build($this->morning_bookings, $this->morning_target, $this->prev_morning_pct),
-            'evening' => $build($this->evening_bookings, $this->evening_target, $this->prev_evening_pct),
+        return $this->shiftStatsCache = [
+            'morning' => $build('morning'),
+            'evening' => $build('evening'),
         ];
+    }
+
+    /**
+     * Start-of-day / end-of-day bounds for date-range queries. Both
+     * agent_shift_logs.date (plain DATE) and appointments.created_at
+     * (DATETIME) are stored as full "Y-m-d H:i:s" strings under SQLite
+     * regardless of column type, so a plain 'Y-m-d' bound would lexically
+     * exclude rows — spanning the whole day on both ends keeps it correct.
+     */
+    private function dateRangeBounds(): array
+    {
+        return [$this->date_from->copy()->startOfDay(), $this->date_to->copy()->endOfDay()];
     }
 
     public function borderFor(float $pct): string
@@ -75,8 +171,9 @@ class KpiAgentTargetReport extends Model
 
     public function combined(): array
     {
-        $totalBookings = $this->morning_bookings + $this->evening_bookings;
-        $totalTarget = $this->morning_target + $this->evening_target;
+        $shifts = $this->shiftStats();
+        $totalBookings = $shifts['morning']['bookings'] + $shifts['evening']['bookings'];
+        $totalTarget = $shifts['morning']['target'] + $shifts['evening']['target'];
         $pct = $totalTarget > 0 ? round($totalBookings / $totalTarget * 100, 1) : 0.0;
 
         return [
@@ -93,6 +190,7 @@ class KpiAgentTargetReport extends Model
      */
     public function recoveryMath(): array
     {
+        $bookings = $this->rawShiftBookings();
         $target88 = self::MONTHLY_TARGET_PER_SHIFT * self::RECOVERY_TARGET_PCT / 100;
         $daysInMonth = $this->date_to->daysInMonth;
         $daysRemaining = max($daysInMonth - $this->date_to->day, 0);
@@ -111,8 +209,8 @@ class KpiAgentTargetReport extends Model
 
         return [
             'days_remaining' => $daysRemaining,
-            'morning' => $build($this->morning_bookings),
-            'evening' => $build($this->evening_bookings),
+            'morning' => $build($bookings['morning']),
+            'evening' => $build($bookings['evening']),
         ];
     }
 }

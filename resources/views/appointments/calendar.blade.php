@@ -930,6 +930,91 @@
         color: #c9a39a;
     }
 
+    /* Upsells use a gold/amber accent so they read as visually distinct from
+       the coral-accented original booked services above. */
+    #apptDrawer .upsell-item {
+        border-left: 3px solid #c9a66b;
+        background: rgba(201, 166, 107, 0.12);
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+    }
+
+    #apptDrawer .upsell-item .name {
+        font-weight: 700;
+        font-size: 13px;
+        color: #d9b878;
+    }
+
+    #apptDrawer .upsell-item .name::before {
+        content: "\2b06\fe0f";
+        font-size: 10px;
+        margin-right: 4px;
+    }
+
+    #apptDrawer .upsell-item .meta {
+        font-size: 11px;
+        color: #c9b89a;
+    }
+
+    #apptDrawer .upsell-item .price {
+        font-weight: 700;
+        font-size: 13px;
+        white-space: nowrap;
+        color: #d9b878;
+    }
+
+    #apptDrawer .upsell-item .icon-btn {
+        border: none;
+        background: transparent;
+        color: #c9b89a;
+        padding: 2px 4px;
+        font-size: 15px;
+    }
+
+    #apptDrawer .upsell-item .icon-btn:hover {
+        color: #d9b878;
+    }
+
+    #apptDrawer .upsell-item .icon-btn.danger:hover {
+        color: #a8524a;
+    }
+
+    #apptDrawer .drawer-add-pill.upsell {
+        border-color: #c9a66b;
+        color: #d9b878;
+    }
+
+    #apptDrawer .drawer-empty-hint {
+        font-size: 11.5px;
+        color: #8a7d76;
+        padding: 4px 0 10px;
+    }
+
+    /* Calendar-card upsell badge: a small gold chip so a booking with an
+       upsell attached is distinguishable from the customer's original
+       booked service at a glance, without opening the drawer. */
+    .cal-appt .upsell-flag, .cal-chip .upsell-flag {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #1a1a1a;
+        background: #c9a66b;
+        border-radius: 4px;
+        padding: 0 4px;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
     /* ---------------- TOAST NOTIFICATIONS ---------------- */
     .cal-toast-container {
         position: fixed;
@@ -1199,6 +1284,51 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="drawer-section px-3" id="drawerUpsellsSection">
+                    <!-- LIST VIEW -->
+                    <div id="drawerUpsellsListView">
+                        <h6 class="text-uppercase small fw-bold text-muted mb-2">Upsells</h6>
+                        <div id="drawerUpsells"></div>
+                        <button type="button" class="drawer-add-pill upsell" id="drawerAddUpsellBtn">
+                            <i class="bx bx-plus"></i> Add upsell
+                        </button>
+                    </div>
+
+                    <!-- ADD UPSELL VIEW -->
+                    <div id="drawerUpsellsAddView" class="d-none">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <button type="button" class="drawer-back-btn" id="drawerAddUpsellBack"><i class="bx bx-arrow-back"></i></button>
+                            <h6 class="mb-0 text-uppercase small fw-bold text-muted">Add an upsell</h6>
+                        </div>
+
+                        <label class="form-label small mb-1">Type</label>
+                        <div class="btn-group w-100 mb-2" role="group">
+                            <input type="radio" class="btn-check" name="upsellType" id="upsellTypeService" value="service" checked>
+                            <label class="btn btn-outline-secondary btn-sm" for="upsellTypeService">Service</label>
+                            <input type="radio" class="btn-check" name="upsellType" id="upsellTypeProduct" value="product">
+                            <label class="btn btn-outline-secondary btn-sm" for="upsellTypeProduct">Retail Product</label>
+                        </div>
+
+                        <label class="form-label small mb-1" id="upsellItemLabel">Service</label>
+                        <select id="upsellItem" class="form-select form-select-sm mb-2">
+                            <option value="">Select…</option>
+                        </select>
+
+                        <label class="form-label small mb-1">Value (QAR)</label>
+                        <input type="number" id="upsellAmount" class="form-control form-control-sm mb-2" min="0" step="0.01">
+
+                        <label class="form-label small mb-1">Staff responsible</label>
+                        <select id="upsellStaff" class="form-select form-select-sm mb-2">
+                            <option value="">Select staff member</option>
+                            @foreach ($activeStaffs as $staff)
+                                <option value="{{ $staff->id }}">{{ $staff->name }}</option>
+                            @endforeach
+                        </select>
+
+                        <button type="button" class="btn btn-dark w-100 mt-2" id="upsellSaveBtn">Save upsell</button>
+                    </div>
+                </div>
             </div>
 
             <div class="px-3 py-3 border-top">
@@ -1334,6 +1464,7 @@
         let latestData = null;
         let nowLineTimer = null;
         const DRAWER_SERVICES_CATALOG = @json($servicesCatalog);
+        const DRAWER_PRODUCTS_CATALOG = @json($productsCatalog);
 
         // Hide every mutating "Add" entry point up front for view-only users.
         (function applyCalendarPermissionGates() {
@@ -1468,6 +1599,7 @@
                                 <span class="cust">${a.customer_name || 'Walk-in'}</span>
                                 <span class="svc">${a.service_name}</span>
                                 <span class="svc">${to12Hour(a.start)} - ${to12Hour(a.end)}</span>
+                                ${a.has_upsell ? `<span class="upsell-flag" title="Upsell by ${a.upsell_staff_names}">⬆ Upsell${a.upsell_staff_names ? ' · ' + a.upsell_staff_names : ''}</span>` : ''}
                             </div>`;
                     });
                 }
@@ -1613,6 +1745,7 @@
                                 style="background:${tint(color, .14)};border-left-color:${color};color:${color};">
                                 <strong>${a.time} · ${a.customer_name || 'Walk-in'}</strong>
                                 ${a.service_name}
+                                ${a.has_upsell ? `<span class="upsell-flag">⬆ Upsell</span>` : ''}
                             </div>`;
                         });
                     }
@@ -1821,12 +1954,14 @@
 
             document.getElementById('drawerCustomer').textContent = 'Loading…';
             document.getElementById('drawerServices').innerHTML = '';
+            document.getElementById('drawerUpsells').innerHTML = '';
             document.getElementById('drawerStatusRow').innerHTML = '';
             document.getElementById('drawerProfileLink').classList.add('d-none');
             document.getElementById('drawerAllergyWrap').classList.add('d-none');
             document.getElementById('drawerVisitsSection').classList.add('d-none');
             document.getElementById('drawerRescheduleForm').classList.add('d-none');
             showDrawerServicesView('list');
+            showDrawerUpsellsView('list');
 
             drawerInstance = bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('apptDrawer'));
             drawerInstance.show();
@@ -1877,6 +2012,10 @@
             renderDrawerServiceList(a, isFinal);
             showDrawerServicesView('list');
             document.getElementById('drawerAddServiceBtn').classList.toggle('d-none', isFinal || !CAN_EDIT_BOOKINGS);
+
+            renderDrawerUpsellList(a, isFinal);
+            showDrawerUpsellsView('list');
+            document.getElementById('drawerAddUpsellBtn').classList.toggle('d-none', isFinal || !CAN_EDIT_BOOKINGS);
 
             if (a.profile_url) {
                 const link = document.getElementById('drawerProfileLink');
@@ -2097,6 +2236,130 @@
                         fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
                     } else {
                         showCalToast(data.message || 'Could not remove service.', 'error');
+                    }
+                });
+        }
+
+        /* ---------------- DRAWER: UPSELL LIST / ADD ---------------- */
+        function showDrawerUpsellsView(view) {
+            document.getElementById('drawerUpsellsListView').classList.toggle('d-none', view !== 'list');
+            document.getElementById('drawerUpsellsAddView').classList.toggle('d-none', view !== 'add');
+        }
+
+        function renderDrawerUpsellList(a, isFinal) {
+            const el = document.getElementById('drawerUpsells');
+            const upsells = a.upsells || [];
+
+            if (!upsells.length) {
+                el.innerHTML = '<div class="drawer-empty-hint">No upsells logged for this booking yet.</div>';
+                return;
+            }
+
+            el.innerHTML = upsells.map(u => `
+                <div class="upsell-item" data-line-id="${u.id}">
+                    <div>
+                        <div class="name">${u.name}</div>
+                        <div class="meta">${u.staff_name}</div>
+                    </div>
+                    <div class="d-flex align-items-center gap-1">
+                        <span class="price">${Number(u.amount).toFixed(2)} QAR</span>
+                        ${(isFinal || !CAN_EDIT_BOOKINGS) ? '' : `
+                            <button type="button" class="icon-btn danger" data-delete-upsell="${u.id}"><i class="bx bx-trash"></i></button>
+                        `}
+                    </div>
+                </div>
+            `).join('');
+
+            el.querySelectorAll('[data-delete-upsell]').forEach(btn => {
+                btn.addEventListener('click', () => deleteUpsellLine(Number(btn.dataset.deleteUpsell)));
+            });
+        }
+
+        function currentUpsellType() {
+            return document.querySelector('input[name="upsellType"]:checked').value;
+        }
+
+        function populateUpsellItemOptions() {
+            const type = currentUpsellType();
+            const catalog = type === 'product' ? DRAWER_PRODUCTS_CATALOG : DRAWER_SERVICES_CATALOG;
+
+            document.getElementById('upsellItemLabel').textContent = type === 'product' ? 'Retail product' : 'Service';
+            document.getElementById('upsellItem').innerHTML = '<option value="">Select…</option>' +
+                catalog.map(item => `<option value="${item.id}" data-price="${item.price}">${item.name} (${item.price.toFixed(2)} QAR)</option>`).join('');
+            document.getElementById('upsellAmount').value = '';
+        }
+
+        document.querySelectorAll('input[name="upsellType"]').forEach(radio => {
+            radio.addEventListener('change', populateUpsellItemOptions);
+        });
+
+        document.getElementById('upsellItem').addEventListener('change', function() {
+            const opt = this.options[this.selectedIndex];
+            document.getElementById('upsellAmount').value = opt.value ? opt.dataset.price : '';
+        });
+
+        document.getElementById('drawerAddUpsellBtn').addEventListener('click', () => {
+            document.getElementById('upsellTypeService').checked = true;
+            document.getElementById('upsellStaff').value = '';
+            populateUpsellItemOptions();
+            showDrawerUpsellsView('add');
+        });
+        document.getElementById('drawerAddUpsellBack').addEventListener('click', () => showDrawerUpsellsView('list'));
+
+        document.getElementById('upsellSaveBtn').addEventListener('click', function() {
+            const type = currentUpsellType();
+            const itemId = document.getElementById('upsellItem').value;
+            const amount = document.getElementById('upsellAmount').value;
+            const staffId = document.getElementById('upsellStaff').value;
+
+            if (!itemId || amount === '' || !staffId) {
+                showCalToast('Select the item, value, and staff member.', 'error');
+                return;
+            }
+
+            const body = { type, amount, staff_id: staffId };
+            body[type === 'product' ? 'product_id' : 'service_id'] = itemId;
+
+            fetch(`/appointments/${selectedAppointmentId}/upsells`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                })
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    if (ok && data.success) {
+                        showCalToast(data.message || 'Upsell added');
+                        loadCalendar();
+                        showDrawerUpsellsView('list');
+                        fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
+                    } else {
+                        showCalToast(data.message || 'Could not add upsell.', 'error');
+                    }
+                });
+        });
+
+        function deleteUpsellLine(lineId) {
+            if (!confirm('Remove this upsell from the booking?')) return;
+
+            fetch(`/appointments/${selectedAppointmentId}/upsells/${lineId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    if (ok && data.success) {
+                        showCalToast(data.message || 'Upsell removed');
+                        loadCalendar();
+                        fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
+                    } else {
+                        showCalToast(data.message || 'Could not remove upsell.', 'error');
                     }
                 });
         }

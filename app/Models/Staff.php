@@ -58,6 +58,24 @@ class Staff extends Model
         return $this->hasMany(Appointment::class, 'staff_id');
     }
 
+    public function upsells()
+    {
+        return $this->hasMany(AppointmentUpsell::class);
+    }
+
+    /**
+     * Bookable staff who are currently employed (no end date, or an end date
+     * that hasn't passed yet) — the "active staff" list used for attributing
+     * upsells and other current-team pickers.
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('bookable', true)
+            ->where(function ($q) {
+                $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+            });
+    }
+
     public function blocks()
     {
         return $this->hasMany(StaffBlock::class);

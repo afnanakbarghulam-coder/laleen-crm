@@ -32,16 +32,13 @@
         </div>
 
         <div class="row g-3 mb-3">
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl-4">
                 <div class="kpi-stat-card"><div class="kpi-stat-label">Feed Posted</div><div class="kpi-stat-value">{{ $metrics['feed_posted'] }}%</div></div>
             </div>
-            <div class="col-md-6 col-xl-3">
-                <div class="kpi-stat-card"><div class="kpi-stat-label">Stories Posted</div><div class="kpi-stat-value">{{ $metrics['stories_posted'] }}%</div></div>
-            </div>
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl-4">
                 <div class="kpi-stat-card"><div class="kpi-stat-label">Standards — Feed</div><div class="kpi-stat-value">{{ $metrics['standards_feed'] }}%</div></div>
             </div>
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl-4">
                 <div class="kpi-stat-card"><div class="kpi-stat-label">Standards — Stories</div><div class="kpi-stat-value">{{ $metrics['standards_stories'] }}%</div></div>
             </div>
         </div>
@@ -50,7 +47,6 @@
             <h6>Metrics vs Targets</h6>
             @foreach ([
                 ['Feed Posted', $metrics['feed_posted'], 100],
-                ['Stories Posted', $metrics['stories_posted'], 100],
                 ['Standards Met — Feed', $metrics['standards_feed'], 90],
                 ['Standards Met — Stories', $metrics['standards_stories'], 90],
             ] as [$label, $value, $target])
@@ -74,22 +70,28 @@
                         <tr>
                             <th>Date</th>
                             <th>Day</th>
+                            <th>Week</th>
                             <th>Activity</th>
-                            <th>Feed Post</th>
-                            <th>Stories</th>
+                            <th>Feed Post / Shoot Schedule</th>
+                            <th>Story Theme</th>
+                            <th>Story Flow</th>
+                            <th>Posted</th>
                             <th>Std. Feed</th>
                             <th>Std. Stories</th>
                             <th>Issues</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($report->entries as $e)
+                        @foreach ($report->entriesInRange() as $e)
                             <tr>
                                 <td>{{ $e->entry_date->format('d M') }}</td>
                                 <td>{{ $e->dayName() }}</td>
+                                <td>W{{ $e->weekNumber() }}</td>
                                 <td>{{ $e->activity_type ?: '—' }}</td>
-                                <td>{!! $e->feed_scheduled ? ($e->feed_posted ? ynBadge('Y') : ynBadge('N')) : ynBadge('NA') !!}</td>
-                                <td>{!! $e->stories_scheduled ? ($e->stories_posted ? ynBadge('Y') : ynBadge('N')) : ynBadge('NA') !!}</td>
+                                <td class="small">{{ $e->feed_post_schedule ?: '—' }}</td>
+                                <td class="small">{{ $e->story_theme ?: '—' }}</td>
+                                <td class="small">{{ $e->story_flow ?: '—' }}</td>
+                                <td>{!! ynBadge($e->feed_posted) !!}</td>
                                 <td>{!! ynBadge($e->standards_feed) !!}</td>
                                 <td>{!! ynBadge($e->standards_stories) !!}</td>
                                 <td class="small">{{ $e->issues ?: '—' }}</td>

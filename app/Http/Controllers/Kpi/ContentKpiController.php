@@ -3,39 +3,58 @@
 namespace App\Http\Controllers\Kpi;
 
 use App\Http\Controllers\Controller;
+use App\Models\KpiContentEntry;
 use App\Models\KpiContentReport;
 use Illuminate\Http\Request;
 
 class ContentKpiController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $reports = KpiContentReport::with('entries')->orderByDesc('date_to')->orderByDesc('id')->paginate(15);
+        $activeTab = in_array($request->query('tab'), ['calendar', 'reports'], true)
+            ? $request->query('tab')
+            : 'calendar';
 
-        return view('kpi.content.index', compact('reports'));
+        $calendarFrom = $request->date('calendar_from');
+        $calendarTo = $request->date('calendar_to');
+        $calendarCreator = $request->filled('calendar_creator') ? $request->calendar_creator : null;
+
+        $entries = KpiContentEntry::query()
+            ->when($calendarFrom, fn ($q) => $q->whereDate('entry_date', '>=', $calendarFrom))
+            ->when($calendarTo, fn ($q) => $q->whereDate('entry_date', '<=', $calendarTo))
+            ->when($calendarCreator, fn ($q) => $q->where('creator_name', $calendarCreator))
+            ->orderByDesc('entry_date')
+            ->orderByDesc('id')
+            ->paginate(20, ['*'], 'entries_page')
+            ->appends(array_filter([
+                'calendar_from' => $calendarFrom?->format('Y-m-d'),
+                'calendar_to' => $calendarTo?->format('Y-m-d'),
+                'calendar_creator' => $calendarCreator,
+                'tab' => 'calendar',
+            ]));
+
+        $creators = KpiContentEntry::select('creator_name')->distinct()->orderBy('creator_name')->pluck('creator_name');
+
+        $reports = KpiContentReport::orderByDesc('date_to')->orderByDesc('id')
+            ->paginate(15, ['*'], 'reports_page')
+            ->appends(['tab' => 'reports']);
+
+        return view('kpi.content.index', compact(
+            'activeTab', 'entries', 'creators', 'calendarFrom', 'calendarTo', 'calendarCreator', 'reports'
+        ));
     }
 
-    public function create()
-    {
-        return view('kpi.content.create');
-    }
-
+    /**
+     * Generate a report: just a saved (creator, date range) bookmark. All
+     * scoring is computed live from the content calendar at render time —
+     * see KpiContentReport::metrics()/entriesInRange().
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
             'creator_name' => 'required|string|max:100',
             'date_from' => 'required|date',
             'date_to' => 'required|date|after_or_equal:date_from',
-            'entries' => 'required|array|min:1',
-            'entries.*.entry_date' => 'required|date',
-            'entries.*.activity_type' => 'nullable|string|max:100',
-            'entries.*.feed_scheduled' => 'nullable|boolean',
-            'entries.*.stories_scheduled' => 'nullable|boolean',
-            'entries.*.feed_posted' => 'nullable|boolean',
-            'entries.*.stories_posted' => 'nullable|boolean',
-            'entries.*.standards_feed' => 'required|in:Y,N,NA',
-            'entries.*.standards_stories' => 'required|in:Y,N,NA',
-            'entries.*.issues' => 'nullable|string|max:255',
         ]);
 
         $report = KpiContentReport::create([
@@ -45,27 +64,11 @@ class ContentKpiController extends Controller
             'created_by' => auth()->id(),
         ]);
 
-        foreach ($validated['entries'] as $entry) {
-            $report->entries()->create([
-                'entry_date' => $entry['entry_date'],
-                'activity_type' => $entry['activity_type'] ?? null,
-                'feed_scheduled' => (bool) ($entry['feed_scheduled'] ?? false),
-                'stories_scheduled' => (bool) ($entry['stories_scheduled'] ?? false),
-                'feed_posted' => (bool) ($entry['feed_posted'] ?? false),
-                'stories_posted' => (bool) ($entry['stories_posted'] ?? false),
-                'standards_feed' => $entry['standards_feed'],
-                'standards_stories' => $entry['standards_stories'],
-                'issues' => $entry['issues'] ?? null,
-            ]);
-        }
-
-        return redirect()->route('kpi.content.show', $report)->with('success', 'Content KPI report saved.');
+        return redirect()->route('kpi.content.show', $report)->with('success', 'Content KPI report generated from the calendar.');
     }
 
     public function show(KpiContentReport $report)
     {
-        $report->load('entries');
-
         return view('kpi.content.show', compact('report'));
     }
 
@@ -73,6 +76,6 @@ class ContentKpiController extends Controller
     {
         $report->delete();
 
-        return redirect()->route('kpi.content.index')->with('success', 'Report deleted.');
+        return redirect()->route('kpi.content.index', ['tab' => 'reports'])->with('success', 'Report deleted.');
     }
 }

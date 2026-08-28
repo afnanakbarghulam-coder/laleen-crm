@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Models\Customer;
 use App\Models\Service;
 use App\Models\AppointmentService;
+use App\Models\AppointmentUpsell;
 use App\Models\Appointment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -263,6 +264,7 @@ class AppointmentController extends Controller
                 'customer_name' => $request->customer_name ?: 'Walk-in',
                 'phone' => $phone,
                 'customer_id' => $customerId,
+                'created_by' => auth()->id(),
             ]
         ));
 
@@ -371,7 +373,9 @@ class AppointmentController extends Controller
     public function calendar(Request $request)
     {
         $staffs = Staff::orderBy('name')->get();
+        $activeStaffs = Staff::active()->orderBy('name')->get();
         $services = Service::orderBy('name')->get();
+        $products = Product::orderBy('name')->get();
         $agents = User::where('role', 'agent')->select('id', 'name')->get();
 
         $servicesCatalog = $services->map(function ($s) {
@@ -383,7 +387,15 @@ class AppointmentController extends Controller
             ];
         })->values();
 
-        return view('appointments.calendar', compact('staffs', 'services', 'agents', 'servicesCatalog'));
+        $productsCatalog = $products->map(function ($p) {
+            return [
+                'id' => $p->id,
+                'name' => $p->name,
+                'price' => (float) $p->price,
+            ];
+        })->values();
+
+        return view('appointments.calendar', compact('staffs', 'activeStaffs', 'services', 'products', 'agents', 'servicesCatalog', 'productsCatalog'));
     }
 
     /**
@@ -424,6 +436,23 @@ class AppointmentController extends Controller
         }
 
         return ['off' => false, 'reason' => null];
+    }
+
+    /**
+     * Bulk-load upsell totals/staff names for a set of appointment ids, keyed
+     * by appointment_id, so calendar cards can show the upsell distinction
+     * without an extra query per appointment.
+     */
+    private function upsellSummaries($appointmentIds)
+    {
+        return AppointmentUpsell::whereIn('appointment_id', $appointmentIds)
+            ->with('staff')
+            ->get()
+            ->groupBy('appointment_id')
+            ->map(fn($lines) => [
+                'total' => (float) $lines->sum('amount'),
+                'staff_names' => $lines->map(fn($u) => optional($u->staff)->name)->filter()->unique()->implode(', '),
+            ]);
     }
 
     private function filteredAppointmentQuery(Request $request)
@@ -526,20 +555,29 @@ class AppointmentController extends Controller
                 ];
             }
 
-            $appointments = $this->filteredAppointmentQuery($request)
+            $weekAppointments = $this->filteredAppointmentQuery($request)
                 ->whereBetween('appointment_datetime', [$weekStart, $weekEnd->copy()->endOfDay()])
                 ->orderBy('appointment_datetime')
-                ->get()
+                ->get();
+            $weekUpsellSummaries = $this->upsellSummaries($weekAppointments->pluck('id'));
+
+            $appointments = $weekAppointments
                 ->groupBy([fn($a) => $a->staff_id, fn($a) => Carbon::parse($a->appointment_datetime)->format('Y-m-d')])
-                ->map(fn($byDate) => $byDate->map(fn($list) => $list->map(fn($a) => [
-                    'id'            => $a->id,
-                    'time'          => Carbon::parse($a->appointment_datetime)->format('g:i A'),
-                    'start_minutes' => Carbon::parse($a->appointment_datetime)->hour * 60 + Carbon::parse($a->appointment_datetime)->minute,
-                    'customer_name' => $a->customer_name,
-                    'service_name'  => $a->service_name,
-                    'status'        => $a->status,
-                    'price'         => $a->price,
-                ])->values()));
+                ->map(fn($byDate) => $byDate->map(fn($list) => $list->map(function ($a) use ($weekUpsellSummaries) {
+                    $upsell = $weekUpsellSummaries->get($a->id);
+
+                    return [
+                        'id'            => $a->id,
+                        'time'          => Carbon::parse($a->appointment_datetime)->format('g:i A'),
+                        'start_minutes' => Carbon::parse($a->appointment_datetime)->hour * 60 + Carbon::parse($a->appointment_datetime)->minute,
+                        'customer_name' => $a->customer_name,
+                        'service_name'  => $a->service_name,
+                        'status'        => $a->status,
+                        'price'         => $a->price,
+                        'has_upsell'    => (bool) $upsell,
+                        'upsell_total'  => $upsell['total'] ?? 0,
+                    ];
+                })->values()));
 
             $off = [];
             foreach ($staffs as $staff) {
@@ -581,17 +619,21 @@ class AppointmentController extends Controller
         $uiEnd   = Carbon::createFromTime(22, 0);
         $dayEnd  = $anchor->copy()->setTimeFromTimeString($workingHours['end']);
 
-        $appointments = [];
-        $this->filteredAppointmentQuery($request)
+        $dayAppointments = $this->filteredAppointmentQuery($request)
             ->whereDate('appointment_datetime', $anchor->toDateString())
-            ->get()
-            ->each(function ($a) use (&$appointments, $dayEnd) {
+            ->get();
+        $upsellSummaries = $this->upsellSummaries($dayAppointments->pluck('id'));
+
+        $appointments = [];
+        $dayAppointments->each(function ($a) use (&$appointments, $dayEnd, $upsellSummaries) {
                 $start = Carbon::parse($a->appointment_datetime);
                 $duration = Service::where('name', $a->service_name)->value('duration') ?? 30;
                 $end = $start->copy()->addMinutes($duration);
                 if ($end->gt($dayEnd)) {
                     $end = $dayEnd;
                 }
+
+                $upsell = $upsellSummaries->get($a->id);
 
                 $appointments[$a->staff_id][] = [
                     'id'            => $a->id,
@@ -605,6 +647,9 @@ class AppointmentController extends Controller
                     'customer_name' => $a->customer_name,
                     'phone'         => $a->phone,
                     'price'         => $a->price,
+                    'has_upsell'    => (bool) $upsell,
+                    'upsell_total'  => $upsell['total'] ?? 0,
+                    'upsell_staff_names' => $upsell['staff_names'] ?? '',
                 ];
             });
 
@@ -1040,8 +1085,9 @@ class AppointmentController extends Controller
      */
     public function show(Appointment $appointment)
     {
-        $appointment->load('customer', 'staff', 'agent', 'appointmentServices.staff');
+        $appointment->load('customer', 'staff', 'agent', 'appointmentServices.staff', 'upsells.staff');
         $serviceLines = $appointment->appointmentServices->map(fn($s) => $this->formatServiceLine($s))->values()->all();
+        $upsellLines = $appointment->upsells->map(fn($u) => $this->formatUpsellLine($u))->values()->all();
 
         $customer = $appointment->customer;
         $recentVisits = [];
@@ -1079,6 +1125,8 @@ class AppointmentController extends Controller
             'price' => $appointment->price,
             'notes' => $appointment->notes,
             'services' => $serviceLines,
+            'upsells' => $upsellLines,
+            'upsell_total' => array_sum(array_column($upsellLines, 'amount')),
             'payment_url' => route('appointments.revenue.payment', $appointment->id),
             'profile_url' => $appointment->customer_id ? route('customers.show', $appointment->customer_id) : null,
         ]);
@@ -1319,14 +1367,126 @@ class AppointmentController extends Controller
         ];
     }
 
+    /**
+     * Validation rule for the staff attributed to an upsell: must be an
+     * active (bookable, currently employed) staff member — see
+     * Staff::scopeActive().
+     */
+    private function activeStaffRule()
+    {
+        return \Illuminate\Validation\Rule::exists('staff', 'id')->where(function ($query) {
+            $query->where('bookable', true)
+                ->where(function ($q) {
+                    $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+                });
+        });
+    }
+
+    /**
+     * Validated {type, service_id|product_id} pair for an upsell, plus the
+     * catalog item's own name — the upsell is always picked from the real
+     * Services/Products catalog, never free-typed, so it flows into checkout
+     * as a proper sale line item.
+     */
+    private function validatedUpsellCatalogItem(Request $request): array
+    {
+        $request->validate([
+            'type' => 'required|in:service,product',
+            'service_id' => 'required_if:type,service|nullable|exists:services,id',
+            'product_id' => 'required_if:type,product|nullable|exists:products,id',
+            'amount' => 'required|numeric|min:0',
+            'staff_id' => ['required', $this->activeStaffRule()],
+        ], [
+            'staff_id.exists' => 'Selected staff member is not active.',
+        ]);
+
+        if ($request->type === 'service') {
+            $service = Service::findOrFail($request->service_id);
+            return ['type' => 'service', 'service_id' => $service->id, 'product_id' => null, 'name' => $service->name];
+        }
+
+        $product = Product::findOrFail($request->product_id);
+        return ['type' => 'product', 'service_id' => null, 'product_id' => $product->id, 'name' => $product->name];
+    }
+
+    /**
+     * Log an upsell (extra service or product) against a booking, attributed
+     * to the active staff member who performed it (drawer "+ Add upsell").
+     */
+    public function addUpsell(Request $request, Appointment $appointment)
+    {
+        $item = $this->validatedUpsellCatalogItem($request);
+
+        $upsell = AppointmentUpsell::create($item + [
+            'appointment_id' => $appointment->id,
+            'staff_id' => $request->staff_id,
+            'amount' => $request->amount,
+            'created_by' => auth()->id(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Upsell added.',
+            'upsell' => $this->formatUpsellLine($upsell->fresh('staff')),
+        ]);
+    }
+
+    public function updateUpsell(Request $request, Appointment $appointment, AppointmentUpsell $appointmentUpsell)
+    {
+        if ($appointmentUpsell->appointment_id !== $appointment->id) {
+            abort(404);
+        }
+
+        $item = $this->validatedUpsellCatalogItem($request);
+
+        $appointmentUpsell->update($item + [
+            'staff_id' => $request->staff_id,
+            'amount' => $request->amount,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Upsell updated.',
+            'upsell' => $this->formatUpsellLine($appointmentUpsell->fresh('staff')),
+        ]);
+    }
+
+    public function destroyUpsell(Appointment $appointment, AppointmentUpsell $appointmentUpsell)
+    {
+        if ($appointmentUpsell->appointment_id !== $appointment->id) {
+            abort(404);
+        }
+
+        $appointmentUpsell->delete();
+
+        return response()->json(['success' => true, 'message' => 'Upsell removed.']);
+    }
+
+    private function formatUpsellLine(AppointmentUpsell $u): array
+    {
+        return [
+            'id' => $u->id,
+            'type' => $u->type,
+            'service_id' => $u->service_id,
+            'product_id' => $u->product_id,
+            'name' => $u->name,
+            'amount' => (float) $u->amount,
+            'staff_id' => $u->staff_id,
+            'staff_name' => optional($u->staff)->name ?? 'Unassigned',
+        ];
+    }
+
     public function payment(Appointment $appointment)
     {
-        $appointment->load('customer', 'staff');
+        $appointment->load('customer', 'staff', 'upsells.staff');
         $serviceItems = $this->appointmentServiceItems($appointment);
         $servicesTotal = array_sum(array_column($serviceItems, 'price'));
         $products = Product::orderBy('name')->get();
 
-        return view('revenue.payment', compact('appointment', 'serviceItems', 'servicesTotal', 'products'));
+        $upsellItems = $appointment->upsells->map(fn($u) => $this->formatUpsellLine($u))->values()->all();
+        $upsellsTotal = array_sum(array_column($upsellItems, 'amount'));
+
+        return view('revenue.payment', compact('appointment', 'serviceItems', 'servicesTotal', 'products', 'upsellItems', 'upsellsTotal'));
     }
 
     public function storePayment(Request $request, Appointment $appointment)
@@ -1362,6 +1522,13 @@ class AppointmentController extends Controller
                 'total' => $lineTotal,
             ];
         }
+
+        // Upsells logged from the calendar drawer are charged at checkout too,
+        // folded into services/products revenue by their own type.
+        $upsells = $appointment->upsells;
+        $upsellsTotal = (float) $upsells->sum('amount');
+        $servicesTotal += (float) $upsells->where('type', 'service')->sum('amount');
+        $productsTotal += (float) $upsells->where('type', 'product')->sum('amount');
 
         $subtotal = $servicesTotal + $productsTotal;
 
@@ -1433,6 +1600,18 @@ class AppointmentController extends Controller
                 'price' => $line['price'],
                 'quantity' => $line['quantity'],
                 'total' => $line['total'],
+            ]);
+        }
+
+        foreach ($upsells as $upsell) {
+            SaleItem::create([
+                'sale_id' => $sale->id,
+                'type' => $upsell->type,
+                'product_id' => $upsell->product_id,
+                'name' => $upsell->name . ' (Upsell)',
+                'price' => $upsell->amount,
+                'quantity' => 1,
+                'total' => $upsell->amount,
             ]);
         }
 
