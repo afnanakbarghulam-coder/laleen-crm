@@ -126,16 +126,168 @@
 @section('content')
 
 <style>
+/* ---------------- Holographic scanline overlay ---------------- */
+.cyber-scanlines {
+    position: relative;
+}
+
+.cyber-scanlines::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(245, 158, 11, 0.025) 0px,
+        rgba(245, 158, 11, 0.025) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+}
+
+.cyber-scanlines::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 160px;
+    top: -160px;
+    pointer-events: none;
+    z-index: 1;
+    background: linear-gradient(to bottom, transparent, rgba(245, 158, 11, 0.05), transparent);
+    animation: scan-sweep 9s linear infinite;
+}
+
+@keyframes scan-sweep {
+    0% { top: -160px; }
+    100% { top: 100%; }
+}
+
+/* ---------------- HUD metric cards ---------------- */
 .dashboard-card {
-    border-radius: 18px;
-    transition: all 0.25s ease-in-out;
-    background: var(--luxe-surface);
-    border: 1px solid var(--luxe-border);
+    position: relative;
+    border-radius: 10px;
+    transition: transform 0.3s cubic-bezier(.2, .8, .2, 1), box-shadow 0.3s cubic-bezier(.2, .8, .2, 1), border-color 0.3s ease;
+    background: rgba(12, 10, 9, 0.82);
+    border: 1px solid rgba(245, 158, 11, 0.22);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 0 25px rgba(245, 158, 11, 0.1), 0 10px 26px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+    z-index: 2;
+}
+
+.dashboard-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.8), rgba(245, 158, 11, 0) 70%);
+    opacity: .7;
+    transition: opacity 0.3s ease;
+    z-index: 1;
+}
+
+/* Sci-fi corner brackets */
+.dashboard-card::after {
+    content: '';
+    position: absolute;
+    inset: 7px;
+    pointer-events: none;
+    z-index: 1;
+    background-repeat: no-repeat;
+    background-size: 14px 14px;
+    background-image:
+        linear-gradient(to bottom, rgba(245, 158, 11, .65) 2px, transparent 2px),
+        linear-gradient(to right,  rgba(245, 158, 11, .65) 2px, transparent 2px),
+        linear-gradient(to bottom, rgba(245, 158, 11, .65) 2px, transparent 2px),
+        linear-gradient(to left,   rgba(245, 158, 11, .65) 2px, transparent 2px),
+        linear-gradient(to top,    rgba(245, 158, 11, .65) 2px, transparent 2px),
+        linear-gradient(to left,   rgba(245, 158, 11, .65) 2px, transparent 2px),
+        linear-gradient(to top,    rgba(245, 158, 11, .65) 2px, transparent 2px),
+        linear-gradient(to right,  rgba(245, 158, 11, .65) 2px, transparent 2px);
+    background-position:
+        top left, top left,
+        top right, top right,
+        bottom right, bottom right,
+        bottom left, bottom left;
+    opacity: .65;
+    transition: opacity 0.3s ease, filter 0.3s ease;
 }
 
 .dashboard-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+    transform: translateY(-4px);
+    border-color: rgba(245, 158, 11, 0.55);
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.28), 0 22px 50px rgba(0, 0, 0, 0.55);
+}
+
+.dashboard-card:hover::before {
+    opacity: 1;
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.95), rgba(217, 143, 131, 0.15) 80%);
+}
+
+.dashboard-card:hover::after {
+    opacity: 1;
+    filter: drop-shadow(0 0 5px rgba(245, 158, 11, .65));
+}
+
+/* Cyan HUD channel for the KPI Performance section */
+.hud-cyan .dashboard-card {
+    border-color: rgba(34, 211, 238, 0.22);
+    box-shadow: 0 0 25px rgba(34, 211, 238, 0.09), 0 10px 26px rgba(0, 0, 0, 0.4);
+}
+
+.hud-cyan .dashboard-card::before {
+    background: linear-gradient(90deg, rgba(34, 211, 238, 0.8), rgba(34, 211, 238, 0) 70%);
+}
+
+.hud-cyan .dashboard-card::after {
+    background-image:
+        linear-gradient(to bottom, rgba(34, 211, 238, .65) 2px, transparent 2px),
+        linear-gradient(to right,  rgba(34, 211, 238, .65) 2px, transparent 2px),
+        linear-gradient(to bottom, rgba(34, 211, 238, .65) 2px, transparent 2px),
+        linear-gradient(to left,   rgba(34, 211, 238, .65) 2px, transparent 2px),
+        linear-gradient(to top,    rgba(34, 211, 238, .65) 2px, transparent 2px),
+        linear-gradient(to left,   rgba(34, 211, 238, .65) 2px, transparent 2px),
+        linear-gradient(to top,    rgba(34, 211, 238, .65) 2px, transparent 2px),
+        linear-gradient(to right,  rgba(34, 211, 238, .65) 2px, transparent 2px);
+    background-position:
+        top left, top left,
+        top right, top right,
+        bottom right, bottom right,
+        bottom left, bottom left;
+}
+
+.hud-cyan .dashboard-card:hover {
+    border-color: rgba(34, 211, 238, 0.55);
+    box-shadow: 0 0 40px rgba(34, 211, 238, 0.25), 0 22px 50px rgba(0, 0, 0, 0.55);
+}
+
+.hud-cyan .dashboard-card:hover::before {
+    background: linear-gradient(90deg, rgba(34, 211, 238, 0.95), rgba(138, 166, 171, 0.15) 80%);
+}
+
+.hud-cyan .dashboard-card:hover::after {
+    filter: drop-shadow(0 0 5px rgba(34, 211, 238, .65));
+}
+
+.hud-cyan .live-dot {
+    background: #22d3ee;
+    box-shadow: 0 0 6px 2px rgba(34, 211, 238, 0.7);
+}
+
+.hud-cyan .live-dot { animation-name: live-pulse-cyan; }
+
+@keyframes live-pulse-cyan {
+    0%, 49% { opacity: 1; box-shadow: 0 0 6px 2px rgba(34, 211, 238, 0.7); }
+    50%, 100% { opacity: .3; box-shadow: 0 0 2px 1px rgba(34, 211, 238, 0.25); }
+}
+
+.hud-cyan .section-heading h5 {
+    color: #7fdbe8;
 }
 
 .icon-circle {
@@ -159,18 +311,157 @@
 .text-orange { color: #c97b4a; }
 
 .dashboard-title {
-    font-size: 14px;
-    color: var(--luxe-muted);
-    margin-bottom: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #a3a3a3;
+    margin-bottom: 8px;
 }
 
 .dashboard-value {
-    font-size: 22px;
+    font-family: 'SFMono-Regular', Consolas, 'Roboto Mono', 'Liberation Mono', Menlo, monospace;
+    font-size: 24px;
     font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #f5f2f0;
+    text-shadow: 0 0 14px rgba(245, 158, 11, 0.35);
+}
+
+.hud-cyan .dashboard-value {
+    text-shadow: 0 0 14px rgba(34, 211, 238, 0.3);
+}
+
+.dashboard-card .fw-semibold,
+.dash-pill {
+    font-family: 'SFMono-Regular', Consolas, 'Roboto Mono', 'Liberation Mono', Menlo, monospace;
+}
+
+.dashboard-card .d-flex.justify-content-between.small > span:last-child {
+    font-family: 'SFMono-Regular', Consolas, 'Roboto Mono', 'Liberation Mono', Menlo, monospace;
+}
+
+.text-loss {
+    color: #e39b91 !important;
+}
+
+.section-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    margin-bottom: 16px;
+}
+
+.section-heading h5 {
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
     color: var(--luxe-ink);
+    margin: 0;
+}
+
+.section-heading .section-link {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: #a3a3a3;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.section-heading .section-link:hover {
+    color: var(--luxe-accent);
+}
+
+.section-heading h5 {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #f59e0b;
+    box-shadow: 0 0 6px 2px rgba(245, 158, 11, 0.7);
+    animation: live-pulse 1.6s steps(2, jump-none) infinite;
+    flex-shrink: 0;
+}
+
+@keyframes live-pulse {
+    0%, 49% { opacity: 1; box-shadow: 0 0 6px 2px rgba(245, 158, 11, 0.7); }
+    50%, 100% { opacity: .3; box-shadow: 0 0 2px 1px rgba(245, 158, 11, 0.25); }
+}
+
+.mini-ring {
+    width: 96px;
+    height: 96px;
+    flex-shrink: 0;
+}
+
+.mini-sparkline {
+    width: 100%;
+    height: 46px;
+    margin-top: 10px;
+    opacity: 0;
+    animation: sparkline-in 0.6s ease forwards;
+    animation-delay: 0.4s;
+}
+
+@keyframes sparkline-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Refined status pills — soft-tinted translucent fill + glowing hairline border */
+.dash-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 13px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border: 1px solid transparent;
+    backdrop-filter: blur(6px);
+    transition: box-shadow 0.3s ease;
+}
+
+.dash-pill-green {
+    background: rgba(142, 168, 138, 0.1);
+    border-color: rgba(142, 168, 138, 0.5);
+    color: #aac9a5;
+    box-shadow: 0 0 14px rgba(142, 168, 138, 0.4);
+}
+
+.dash-pill-amber {
+    background: rgba(201, 166, 107, 0.1);
+    border-color: rgba(201, 166, 107, 0.5);
+    color: #ddc290;
+    box-shadow: 0 0 14px rgba(201, 166, 107, 0.4);
+}
+
+.dash-pill-red {
+    background: rgba(168, 82, 74, 0.1);
+    border-color: rgba(168, 82, 74, 0.5);
+    color: #e0998f;
+    box-shadow: 0 0 14px rgba(168, 82, 74, 0.4);
+}
+
+.dash-pill-gray {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.14);
+    color: #a3a3a3;
+    box-shadow: none;
 }
 </style>
 
+<div class="cyber-scanlines">
 <div class="row g-4">
 
     <!-- Welcome Card -->
@@ -181,106 +472,268 @@
         </div>
     </div>
 
-    <!-- Today's Appointments -->
-    <div class="col-md-4">
-        <a href="{{ route('appointments.index') }}" class="text-decoration-none">
-            <div class="card dashboard-card h-100 shadow-sm">
-                <div class="card-body d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="dashboard-title">Today's Appointments</div>
-                        <div class="dashboard-value text-dark">{{ $todayAppointments ?? 0 }}</div>
-                    </div>
-                    <div class="icon-circle bg-primary-light text-primary">
-                        <i class="bx bx-calendar fs-4"></i>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-
-    <!-- Total Leads -->
-    <div class="col-md-4">
-        <a href="{{ route('leads.index') }}" class="text-decoration-none">
-            <div class="card dashboard-card h-100 shadow-sm">
-                <div class="card-body d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="dashboard-title">Total Leads</div>
-                        <div class="dashboard-value text-dark">{{ $totalLeads ?? 0 }}</div>
-                    </div>
-                    <div class="icon-circle bg-success-light text-success">
-                        <i class="bx bx-user-plus fs-4"></i>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-
-    <!-- Pending Follow-ups -->
-    <div class="col-md-4">
-        <a href="{{ route('leads.index') }}" class="text-decoration-none">
-            <div class="card dashboard-card h-100 shadow-sm">
-                <div class="card-body d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="dashboard-title">Pending Follow-ups</div>
-                        <div class="dashboard-value text-dark">{{ $pendingFollowups ?? 0 }}</div>
-                    </div>
-                    <div class="icon-circle bg-warning-light text-warning">
-                        <i class="bx bx-time-five fs-4"></i>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-
-    <!-- Total Staff -->
-    <div class="col-md-4">
-        <a href="{{ route('staffs.index') }}" class="text-decoration-none">
-            <div class="card dashboard-card h-100 shadow-sm">
-                <div class="card-body d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="dashboard-title">Total Staff</div>
-                        <div class="dashboard-value text-dark">{{ $staffCount ?? 0 }}</div>
-                    </div>
-                    <div class="icon-circle bg-purple-light text-purple">
-                        <i class="bx bx-group fs-4"></i>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-
-    <!-- Staff on Leave -->
-    <div class="col-md-4">
-        <div class="card dashboard-card h-100 shadow-sm">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <div class="dashboard-title">Staff on Leave</div>
-                    <div class="dashboard-value text-dark">{{ $staffOnLeave ?? 0 }}</div>
-                </div>
-                <div class="icon-circle bg-danger-light text-danger">
-                    <i class="bx bx-moon fs-4"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Available Staff -->
-    <div class="col-md-4">
-        <a href="{{ route('staffs.index') }}" class="text-decoration-none">
-            <div class="card dashboard-card h-100 shadow-sm">
-                <div class="card-body d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="dashboard-title">Available Staff</div>
-                        <div class="dashboard-value text-dark">{{ $availableStaff ?? 0 }}</div>
-                    </div>
-                    <div class="icon-circle bg-info-light text-info">
-                        <i class="bx bx-user-check fs-4"></i>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-
 </div>
 
+@moduleView('finance')
+    <div class="section-heading">
+        <h5 class="fw-bold mb-0"><span class="live-dot"></span>Profit &amp; Loss — This Month</h5>
+        <a href="{{ route('appointments.revenue.index') }}" class="section-link">{{ $dashFrom->format('d M') }} – {{ $dashTo->format('d M Y') }} · View Finance →</a>
+    </div>
+    <div class="row g-4">
+        @foreach ($branchPnl as $row)
+            <div class="col-md-6">
+                <a href="{{ route('appointments.revenue.index', ['branch' => $row['key']]) }}" class="text-decoration-none">
+                    <div class="card dashboard-card h-100 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="dashboard-title">{{ $row['label'] }} — Net Profit</div>
+                                    <div class="dashboard-value {{ $row['profit'] < 0 ? 'text-loss' : '' }}">QAR {{ number_format($row['profit'], 2) }}</div>
+                                    <div class="small text-muted mt-2">
+                                        Sales <span class="fw-semibold text-dark">QAR {{ number_format($row['sales'], 2) }}</span>
+                                        &nbsp;·&nbsp;
+                                        Expenses <span class="fw-semibold text-dark">QAR {{ number_format($row['expenses'], 2) }}</span>
+                                    </div>
+                                    <span class="dash-pill dash-pill-{{ $row['color'] }} mt-2">{{ $row['margin_pct'] }}% margin</span>
+                                </div>
+                                <div class="mini-ring" id="pnlRing{{ $loop->index }}"></div>
+                            </div>
+                            <div class="mini-sparkline" id="pnlSparkline{{ $loop->index }}"></div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        @endforeach
+    </div>
+@endmoduleView
+
+@moduleView('kpis')
+<div class="hud-cyan">
+    <div class="section-heading">
+        <h5 class="fw-bold mb-0"><span class="live-dot"></span>KPI Performance Highlights</h5>
+        <a href="{{ route('kpi.hub') }}" class="section-link">View all KPIs →</a>
+    </div>
+    <div class="row g-4">
+        <!-- Ads Conversion -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{{ route('kpi.ads.index') }}" class="text-decoration-none">
+                <div class="card dashboard-card h-100 shadow-sm">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="dashboard-title">Ads Conversion</div>
+                            <div class="dashboard-value">{{ $adsTotals['overall_conversion'] }}%</div>
+                            <div class="small text-muted mt-1">Target 20%</div>
+                            <span class="dash-pill dash-pill-{{ $adsColor }} mt-2">{{ $adsTotals['overall_met_target'] ? 'On Target' : 'Below Target' }}</span>
+                        </div>
+                        <div class="mini-ring" id="adsRing"></div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Agents Target — Morning shift recovery -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{{ route('kpi.agents.index') }}" class="text-decoration-none">
+                <div class="card dashboard-card h-100 shadow-sm">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="dashboard-title">Morning Shift Recovery</div>
+                            <div class="dashboard-value">{{ $agentShifts['morning']['pct'] }}%</div>
+                            <div class="small text-muted mt-1">{{ $agentShifts['morning']['bookings'] }} / {{ $agentShifts['morning']['target'] }} bookings</div>
+                            <span class="dash-pill dash-pill-{{ $agentShifts['morning']['border'] }} mt-2">{{ $agentShifts['morning']['pct'] >= 85 ? 'On Track' : ($agentShifts['morning']['pct'] >= 70 ? 'Recovering' : 'At Risk') }}</span>
+                        </div>
+                        <div class="mini-ring" id="agentMorningRing"></div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Agents Target — Evening shift recovery -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{{ route('kpi.agents.index') }}" class="text-decoration-none">
+                <div class="card dashboard-card h-100 shadow-sm">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="dashboard-title">Evening Shift Recovery</div>
+                            <div class="dashboard-value">{{ $agentShifts['evening']['pct'] }}%</div>
+                            <div class="small text-muted mt-1">{{ $agentShifts['evening']['bookings'] }} / {{ $agentShifts['evening']['target'] }} bookings</div>
+                            <span class="dash-pill dash-pill-{{ $agentShifts['evening']['border'] }} mt-2">{{ $agentShifts['evening']['pct'] >= 85 ? 'On Track' : ($agentShifts['evening']['pct'] >= 70 ? 'Recovering' : 'At Risk') }}</span>
+                        </div>
+                        <div class="mini-ring" id="agentEveningRing"></div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Staff Sales — per-branch upsells vs target -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{{ route('kpi.staff-sales.index') }}" class="text-decoration-none">
+                <div class="card dashboard-card h-100 shadow-sm">
+                    <div class="card-body">
+                        <div class="dashboard-title mb-2">Staff Sales — Upsells vs Target</div>
+                        @foreach ($staffSalesComparison['branches'] as $b)
+                            <div class="d-flex justify-content-between small text-muted mb-1">
+                                <span>{{ $b['label'] }}</span><span class="fw-semibold text-dark">{{ $b['team_pct'] }}%</span>
+                            </div>
+                            <div class="kpi-progress-track {{ !$loop->last ? 'mb-3' : '' }}">
+                                <div class="kpi-progress-fill {{ $b['border'] }}" style="width: {{ min(100, $b['team_pct']) }}%"></div>
+                            </div>
+                        @endforeach
+                        @if ($staffSalesComparison['leading_branch'])
+                            <div class="small text-muted mt-2">Leading: <span class="fw-semibold text-dark">{{ $staffSalesComparison['leading_branch'] }}</span></div>
+                        @endif
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Chat Quality -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{{ route('kpi.chat-eval.index') }}" class="text-decoration-none">
+                <div class="card dashboard-card h-100 shadow-sm">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="dashboard-title">Chat Quality</div>
+                            @if ($chatQuality['avg'] !== null)
+                                <div class="dashboard-value">{{ $chatQuality['avg'] }}%</div>
+                                <span class="dash-pill dash-pill-{{ $chatQuality['color'] }} mt-2">{{ $chatQuality['grade'] }}</span>
+                            @else
+                                <div class="small text-muted mt-2">No evaluations logged this month.</div>
+                            @endif
+                        </div>
+                        @if ($chatQuality['avg'] !== null)
+                            <div class="mini-ring" id="chatRing"></div>
+                        @endif
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Content KPI compliance -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{{ route('kpi.content.index') }}" class="text-decoration-none">
+                <div class="card dashboard-card h-100 shadow-sm">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="dashboard-title">Content KPI Compliance</div>
+                            @if ($contentMetrics['entry_count'] > 0)
+                                <div class="dashboard-value">{{ $contentMetrics['overall'] }}%</div>
+                                <span class="dash-pill dash-pill-{{ $contentColor }} mt-2">{{ $contentMetrics['grade'] }}</span>
+                            @else
+                                <div class="small text-muted mt-2">No content logged this month.</div>
+                            @endif
+                        </div>
+                        @if ($contentMetrics['entry_count'] > 0)
+                            <div class="mini-ring" id="contentRing"></div>
+                        @endif
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+@endmoduleView
+</div>
+
+@endsection
+
+@section('scripts')
+<script>
+    (function () {
+        const RING_COLORS = { green: '#8ea88a', amber: '#c9a66b', red: '#a8524a', gray: '#8f8a86' };
+        let stagger = 0;
+        const STAGGER_STEP = 120;
+
+        function renderRing(selector, value, colorKey) {
+            const el = document.querySelector(selector);
+            if (!el || typeof ApexCharts === 'undefined') return;
+            const delay = stagger;
+            stagger += STAGGER_STEP;
+
+            new ApexCharts(el, {
+                chart: {
+                    type: 'radialBar',
+                    height: 96,
+                    sparkline: { enabled: true },
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 700,
+                        animateGradually: { enabled: true, delay },
+                        dynamicAnimation: { enabled: true, speed: 500 },
+                    },
+                },
+                series: [Math.max(0, Math.min(100, value))],
+                colors: [RING_COLORS[colorKey] || RING_COLORS.gray],
+                plotOptions: {
+                    radialBar: {
+                        hollow: { size: '58%' },
+                        track: { background: 'rgba(217, 143, 131, 0.1)' },
+                        dataLabels: {
+                            name: { show: false },
+                            value: {
+                                show: true,
+                                fontSize: '15px',
+                                fontWeight: 700,
+                                fontFamily: "SFMono-Regular, Consolas, 'Roboto Mono', monospace",
+                                color: '#e9dfda',
+                                formatter: (v) => Number(v).toFixed(1) + '%',
+                            },
+                        },
+                    },
+                },
+            }).render();
+        }
+
+        function renderSparkline(selector, data, colorHex) {
+            const el = document.querySelector(selector);
+            if (!el || typeof ApexCharts === 'undefined' || !data.length) return;
+            const delay = stagger;
+            stagger += STAGGER_STEP;
+
+            new ApexCharts(el, {
+                chart: {
+                    type: 'area',
+                    height: 46,
+                    sparkline: { enabled: true },
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 800,
+                        animateGradually: { enabled: true, delay },
+                    },
+                },
+                series: [{ data }],
+                colors: [colorHex],
+                fill: { type: 'gradient', gradient: { opacityFrom: .35, opacityTo: 0 } },
+                stroke: { curve: 'smooth', width: 2 },
+                tooltip: { enabled: false },
+            }).render();
+        }
+
+        @if ($branchPnl)
+            @foreach ($branchPnl as $row)
+                renderRing('#pnlRing{{ $loop->index }}', {{ $row['margin_pct'] }}, '{{ $row['color'] }}');
+                renderSparkline('#pnlSparkline{{ $loop->index }}', @json($row['trend']), '#f59e0b');
+            @endforeach
+        @endif
+
+        @if ($adsTotals)
+            renderRing('#adsRing', {{ $adsTotals['overall_conversion'] }}, '{{ $adsColor }}');
+        @endif
+
+        @if ($agentShifts)
+            renderRing('#agentMorningRing', {{ $agentShifts['morning']['pct'] }}, '{{ $agentShifts['morning']['border'] }}');
+            renderRing('#agentEveningRing', {{ $agentShifts['evening']['pct'] }}, '{{ $agentShifts['evening']['border'] }}');
+        @endif
+
+        @if ($chatQuality && $chatQuality['avg'] !== null)
+            renderRing('#chatRing', {{ $chatQuality['avg'] }}, '{{ $chatQuality['color'] }}');
+        @endif
+
+        @if ($contentMetrics && $contentMetrics['entry_count'] > 0)
+            renderRing('#contentRing', {{ $contentMetrics['overall'] }}, '{{ $contentColor }}');
+        @endif
+    })();
+</script>
 @endsection

@@ -74,7 +74,7 @@ class FinanceController extends Controller
             ->groupBy('method')
             ->pluck('total', 'method');
 
-        $branchBreakdown = $this->branchBreakdown($from, $to);
+        $branchBreakdown = self::branchBreakdown($from, $to);
         $trend = $this->trendBuckets($from, $to, $sales, $expenses);
 
         return view('revenue.index', [
@@ -127,9 +127,10 @@ class FinanceController extends Controller
 
     /**
      * Gross sales, expenses and net profit per branch for the given date range,
-     * independent of any branch filter — powers the branch comparison chart.
+     * independent of any branch filter — powers the branch comparison chart
+     * and the Dashboard's P&L cards (UserController::dashboard()).
      */
-    private function branchBreakdown(Carbon $from, Carbon $to): array
+    public static function branchBreakdown(Carbon $from, Carbon $to): array
     {
         $salesByBranch = Sale::whereBetween('created_at', [$from, $to])
             ->selectRaw('branch, SUM(services_total) as services_total, SUM(products_total) as products_total')

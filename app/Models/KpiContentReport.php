@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 class KpiContentReport extends Model
 {
@@ -96,5 +97,33 @@ class KpiContentReport extends Model
     public function flaggedDays()
     {
         return $this->entriesInRange()->filter(fn ($e) => filled($e->issues));
+    }
+
+    /**
+     * Same pooled-percentage calculation as metrics(), but across every
+     * creator's entries in the range — for the Dashboard's team-wide
+     * Content KPI compliance card, which has no single creator to scope to.
+     */
+    public static function overallMetrics(Carbon $from, Carbon $to): array
+    {
+        $entries = KpiContentEntry::whereBetween('entry_date', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])->get();
+        $fields = ['stories_posted', 'feed_posted', 'standards_stories', 'standards_feed', 'event'];
+
+        $totalApplicable = 0;
+        $totalMet = 0;
+
+        foreach ($fields as $field) {
+            $applicable = $entries->filter(fn ($e) => in_array($field, $e->visibleFields(), true));
+            $totalApplicable += $applicable->count();
+            $totalMet += $applicable->where($field, 'Y')->count();
+        }
+
+        $overall = $totalApplicable > 0 ? round($totalMet / $totalApplicable * 100, 1) : 0.0;
+
+        return [
+            'overall' => $overall,
+            'grade' => self::gradeFor($overall),
+            'entry_count' => $entries->count(),
+        ];
     }
 }

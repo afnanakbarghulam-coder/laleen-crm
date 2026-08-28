@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Lead;
 use App\Models\User;
-use App\Models\Staff;
-use App\Models\Appointment;
+use App\Models\Sale;
+use App\Models\KpiAdsConversionReport;
+use App\Models\KpiAgentTargetReport;
+use App\Models\KpiChatEvaluation;
+use App\Models\KpiContentReport;
+use App\Support\StaffSalesAnalytics;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -17,26 +19,89 @@ class UserController extends Controller
 
     public function dashboard()
     {
-        $today = Carbon::today();
+        // ---- This month's branch P&L + KPI highlights ----
+        $dashFrom = now()->startOfMonth();
+        $dashTo = now()->endOfDay();
+        $user = Auth::user();
 
-        // Fetch all dashboard stats
-        $todayAppointments = Appointment::whereDate('appointment_datetime', $today)->count();
-        $totalLeads = Lead::count();
-        $pendingFollowups = Lead::where(function ($q) {
-            $q->whereNull('category')->orWhere('category', '!=', 'cancel');
-        })->count();
+        $branchPnl = null;
+        if ($user->canView('finance')) {
+            $branchPnl = FinanceController::branchBreakdown($dashFrom, $dashTo);
+            foreach ($branchPnl as &$row) {
+                $row['margin_pct'] = $row['sales'] > 0 ? round($row['profit'] / $row['sales'] * 100, 1) : 0.0;
+                $row['color'] = match (true) {
+                    $row['margin_pct'] >= 20 => 'green',
+                    $row['margin_pct'] >= 0 => 'amber',
+                    default => 'red',
+                };
 
-        $staffCount = Staff::count();
-        $staffOnLeave = Staff::where('availability_status', 'on-leave')->count();
-        $availableStaff = Staff::where('availability_status', 'present')->count();
+                // Daily gross-sales trend this month, for the card's sparkline.
+                $row['trend'] = Sale::where('branch', $row['key'])
+                    ->whereBetween('created_at', [$dashFrom, $dashTo])
+                    ->selectRaw('DATE(created_at) as d, SUM(services_total) + SUM(products_total) as total')
+                    ->groupBy('d')
+                    ->orderBy('d')
+                    ->pluck('total')
+                    ->map(fn ($v) => (float) $v)
+                    ->values();
+            }
+            unset($row);
+        }
+
+        $adsTotals = null;
+        $adsColor = null;
+        $agentShifts = null;
+        $staffSalesComparison = null;
+        $chatQuality = null;
+        $contentMetrics = null;
+        $contentColor = null;
+
+        if ($user->canView('kpis')) {
+            $adsReport = new KpiAdsConversionReport(['date_from' => $dashFrom, 'date_to' => $dashTo]);
+            $adsTotals = $adsReport->totals();
+            $adsColor = match ($adsReport->statusFor($adsTotals['overall_conversion'])) {
+                'Above' => 'green',
+                'Near', 'Below' => 'amber',
+                default => 'red',
+            };
+
+            $agentShifts = (new KpiAgentTargetReport(['date_from' => $dashFrom, 'date_to' => $dashTo]))->shiftStats();
+
+            $staffSalesComparison = (new StaffSalesAnalytics($dashFrom, $dashTo))->branchComparison();
+
+            $chatEvals = KpiChatEvaluation::whereBetween('eval_date', [$dashFrom, $dashTo])->get();
+            $chatAvg = $chatEvals->count() ? round($chatEvals->avg(fn ($r) => $r->percentage()), 1) : null;
+            $chatQuality = [
+                'avg' => $chatAvg,
+                'grade' => $chatAvg !== null ? KpiChatEvaluation::gradeFor($chatAvg) : null,
+                'count' => $chatEvals->count(),
+                'color' => match ($chatAvg !== null ? KpiChatEvaluation::gradeFor($chatAvg) : null) {
+                    'Excellent', 'Pass' => 'green',
+                    'Warning' => 'amber',
+                    'Fail' => 'red',
+                    default => 'gray',
+                },
+            ];
+
+            $contentMetrics = KpiContentReport::overallMetrics($dashFrom, $dashTo);
+            $contentColor = match ($contentMetrics['grade']) {
+                'Excellent', 'Pass' => 'green',
+                'Warning' => 'amber',
+                default => 'red',
+            };
+        }
 
         return view('dashboard', compact(
-            'todayAppointments',
-            'totalLeads',
-            'pendingFollowups',
-            'staffCount',
-            'staffOnLeave',
-            'availableStaff'
+            'dashFrom',
+            'dashTo',
+            'branchPnl',
+            'adsTotals',
+            'adsColor',
+            'agentShifts',
+            'staffSalesComparison',
+            'chatQuality',
+            'contentMetrics',
+            'contentColor'
         ));
     }
 
