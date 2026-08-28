@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\StaffComplaint;
 use App\Models\StaffDeduction;
 use App\Models\StaffNotice;
+use App\Support\GeminiNoticeDrafter;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -105,6 +106,24 @@ class StaffComplaintController extends Controller
         }
 
         return redirect()->route('staffs.index', ['tab' => 'notices'])->with('success', 'Staff notice(s) drafted.');
+    }
+
+    /**
+     * AI-drafted "Summary of what happened" + "Corrective actions to be
+     * taken" text for the Generate Staff Notice modal. Always succeeds —
+     * falls back to a plain template if Gemini isn't configured or errors.
+     */
+    public function draftNoticeAi(StaffComplaint $staffComplaint, GeminiNoticeDrafter $drafter)
+    {
+        $draft = $drafter->draft($staffComplaint->load(['staffMembers', 'service']));
+
+        return response()->json([
+            'success' => true,
+            'summary' => $draft['summary'],
+            'corrective_actions' => $draft['corrective_actions'],
+            'source' => $draft['source'],
+            'note' => $draft['note'] ?? null,
+        ]);
     }
 
     /**

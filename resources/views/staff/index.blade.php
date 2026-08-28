@@ -784,6 +784,8 @@
 
     {{-- ================= NOTICES ================= --}}
     <div id="staff-pane-notices" class="staff-tab-pane {{ $activeTab === 'notices' ? '' : 'd-none' }}">
+        <p class="text-muted small mb-3">Notices are drafted from the Complaints &amp; Feedback tab (via "Generate staff notice" on a complaint row) — they can be reviewed, edited, or removed here, but not created directly.</p>
+
         <form method="GET" action="{{ route('staffs.index') }}" class="row g-3 align-items-end mb-4">
             <input type="hidden" name="tab" value="notices">
             <div class="col-md-4">
@@ -819,38 +821,6 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @moduleEdit('staff_management')
-                            <tr class="staff-quick-add-row" id="noQuickAddRow">
-                                <td><input type="date" class="form-control form-control-sm" id="noQaDate" value="{{ now()->format('Y-m-d') }}"></td>
-                                <td>
-                                    <select class="form-select form-select-sm" id="noQaStaff">
-                                        <option value="">Select staff</option>
-                                        @foreach ($allStaff as $s)
-                                            <option value="{{ $s->id }}">{{ $s->name }}</option>
-                                        @endforeach
-                                    </select>
-                                </td>
-                                <td>
-                                    <select class="form-select form-select-sm" id="noQaType">
-                                        @foreach (\App\Models\StaffNotice::TYPES as $t)
-                                            <option value="{{ $t }}">{{ $t }}</option>
-                                        @endforeach
-                                    </select>
-                                </td>
-                                <td><input type="text" class="form-control form-control-sm" id="noQaSubject" placeholder="Subject"></td>
-                                <td><input type="text" class="form-control form-control-sm" id="noQaDescription" placeholder="Description"></td>
-                                <td><input type="text" class="form-control form-control-sm" id="noQaCorrectiveActions" placeholder="Corrective actions (optional)"></td>
-                                <td>
-                                    <select class="form-select form-select-sm" id="noQaAcknowledged">
-                                        <option value="N">No</option>
-                                        <option value="Y">Yes</option>
-                                    </select>
-                                </td>
-                                <td class="text-end">
-                                    <button type="button" class="btn btn-sm btn-primary" id="noQaSaveBtn" title="Add notice"><i class="bx bx-plus"></i></button>
-                                </td>
-                            </tr>
-                        @endmoduleEdit
 
                         @forelse ($notices as $notice)
                             <tr data-entry-row="{{ $notice->id }}" data-entry='@json($notice->toEditPayload())'>
@@ -935,6 +905,8 @@
                                 <input type="text" class="form-control" id="gnSubject">
                             </div>
                         </div>
+
+                        <p class="small mb-2 d-none" id="gnAiStatus"></p>
 
                         <div class="mb-3">
                             <label class="form-label">Summary of what happened</label>
@@ -1556,14 +1528,71 @@
             document.getElementById('gnType').value = 'Written Warning';
             document.getElementById('gnSubject').value = `Complaint ${e.reference_number}: ${e.category}`;
 
-            let summary = `Complaint ${e.reference_number} logged on ${e.complaint_date_label} at ${branchLabel(e.branch)}.`;
-            if (e.service_name) summary += ` Service: ${e.service_name}.`;
-            summary += `\n\n${e.description}`;
-            document.getElementById('gnSummary').value = summary;
-            document.getElementById('gnCorrectiveActions').value = '';
+            // Instant local draft so the modal isn't blank while the AI call is in flight.
+            let fallbackSummary = `Complaint ${e.reference_number} logged on ${e.complaint_date_label} at ${branchLabel(e.branch)}.`;
+            if (e.service_name) fallbackSummary += ` Service: ${e.service_name}.`;
+            fallbackSummary += `\n\n${e.description}`;
+
+            const summaryField = document.getElementById('gnSummary');
+            const correctiveField = document.getElementById('gnCorrectiveActions');
+            summaryField.value = fallbackSummary;
+            correctiveField.value = '';
 
             new bootstrap.Modal(document.getElementById('generateNoticeModal')).show();
+            requestAiNoticeDraft(id, fallbackSummary);
         };
+
+        function requestAiNoticeDraft(complaintId, fallbackSummary) {
+            const summaryField = document.getElementById('gnSummary');
+            const correctiveField = document.getElementById('gnCorrectiveActions');
+            const status = document.getElementById('gnAiStatus');
+            const confirmBtn = document.getElementById('gnConfirmBtn');
+
+            status.textContent = 'Drafting with AI…';
+            status.classList.remove('d-none', 'text-danger');
+            status.classList.add('text-muted');
+            summaryField.disabled = true;
+            correctiveField.disabled = true;
+            confirmBtn.disabled = true;
+
+            fetch(`/staff-complaints/${complaintId}/draft-notice-ai`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_TOKEN, 'Accept': 'application/json' },
+                    body: '{}',
+                })
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    // Only apply the draft if this response still matches the open modal
+                    // (guards against a stray response landing after the user moved on).
+                    if (activeNoticeComplaintId !== complaintId) return;
+
+                    if (ok && data.success) {
+                        summaryField.value = data.summary || fallbackSummary;
+                        correctiveField.value = data.corrective_actions || '';
+                        if (data.source === 'ai') {
+                            status.textContent = 'Drafted with AI — review before sending.';
+                            status.classList.remove('text-danger');
+                        } else {
+                            status.textContent = (data.note || 'Used a standard template — review before sending.');
+                            status.classList.add('text-danger');
+                        }
+                    } else {
+                        status.textContent = 'Could not reach AI — using the standard template. Review before sending.';
+                        status.classList.add('text-danger');
+                    }
+                })
+                .catch(() => {
+                    if (activeNoticeComplaintId !== complaintId) return;
+                    status.textContent = 'Could not reach AI — using the standard template. Review before sending.';
+                    status.classList.add('text-danger');
+                })
+                .finally(() => {
+                    if (activeNoticeComplaintId !== complaintId) return;
+                    summaryField.disabled = false;
+                    correctiveField.disabled = false;
+                    confirmBtn.disabled = false;
+                });
+        }
 
         const gnConfirmBtn = document.getElementById('gnConfirmBtn');
         if (gnConfirmBtn) {
@@ -1596,7 +1625,7 @@
                             const tr = document.createElement('tr');
                             tr.setAttribute('data-entry-row', notice.id);
                             tr.innerHTML = noViewRowHtml(notice);
-                            document.getElementById('noQuickAddRow')?.insertAdjacentElement('afterend', tr);
+                            document.querySelector('#noticesTable tbody').prepend(tr);
                         });
 
                         bootstrap.Modal.getInstance(document.getElementById('generateNoticeModal'))?.hide();
@@ -1833,42 +1862,5 @@
             });
         };
 
-        const noQaSaveBtn = document.getElementById('noQaSaveBtn');
-        if (noQaSaveBtn) {
-            noQaSaveBtn.addEventListener('click', function () {
-                const fields = {
-                    notice_date: document.getElementById('noQaDate').value,
-                    staff_id: document.getElementById('noQaStaff').value,
-                    type: document.getElementById('noQaType').value,
-                    subject: document.getElementById('noQaSubject').value,
-                    description: document.getElementById('noQaDescription').value,
-                    corrective_actions: document.getElementById('noQaCorrectiveActions').value,
-                    acknowledged: document.getElementById('noQaAcknowledged').value,
-                };
-                if (!fields.notice_date || !fields.staff_id || !fields.subject.trim()) {
-                    showStaffToast('Date, staff, and subject are required.', 'error');
-                    return;
-                }
-                jsonFetch(`{{ route('staff-notices.store') }}`, 'POST', fields).then(({ ok, data }) => {
-                    if (ok && data.success) {
-                        noEntries[data.entry.id] = data.entry;
-                        document.getElementById('noEmptyRow')?.remove();
-                        const tr = document.createElement('tr');
-                        tr.setAttribute('data-entry-row', data.entry.id);
-                        tr.innerHTML = noViewRowHtml(data.entry);
-                        document.getElementById('noQuickAddRow').insertAdjacentElement('afterend', tr);
-                        document.getElementById('noQaStaff').value = '';
-                        document.getElementById('noQaSubject').value = '';
-                        document.getElementById('noQaDescription').value = '';
-                        document.getElementById('noQaCorrectiveActions').value = '';
-                        document.getElementById('noQaAcknowledged').value = 'N';
-                        showStaffToast(data.message || 'Notice logged.');
-                    } else {
-                        const firstError = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'Could not add notice.');
-                        showStaffToast(firstError, 'error');
-                    }
-                });
-            });
-        }
     </script>
 @endsection

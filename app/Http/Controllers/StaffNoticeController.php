@@ -6,25 +6,13 @@ use App\Models\StaffNotice;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
+/**
+ * Notices are drafted exclusively via StaffComplaintController::generateNotice()
+ * from the Complaints & Feedback module — this controller only handles
+ * reviewing (editing/acknowledging) and removing them afterwards.
+ */
 class StaffNoticeController extends Controller
 {
-    public function store(Request $request)
-    {
-        $validated = $this->validated($request);
-
-        $notice = StaffNotice::create($validated + ['created_by' => auth()->id()]);
-
-        if ($request->wantsJson()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Notice logged.',
-                'entry' => $notice->fresh('staff')->toEditPayload(),
-            ]);
-        }
-
-        return redirect()->route('staffs.index', ['tab' => 'notices'])->with('success', 'Notice logged.');
-    }
-
     public function update(Request $request, StaffNotice $staffNotice)
     {
         $staffNotice->update($this->validated($request));

@@ -115,12 +115,12 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/staff-complaints/{staffComplaint}', [StaffComplaintController::class, 'update'])->name('staff-complaints.update');
         Route::delete('/staff-complaints/{staffComplaint}', [StaffComplaintController::class, 'destroy'])->name('staff-complaints.destroy');
         Route::post('/staff-complaints/{staffComplaint}/generate-notice', [StaffComplaintController::class, 'generateNotice'])->name('staff-complaints.generate-notice');
+        Route::post('/staff-complaints/{staffComplaint}/draft-notice-ai', [StaffComplaintController::class, 'draftNoticeAi'])->name('staff-complaints.draft-notice-ai');
 
         Route::post('/staff-deductions', [StaffDeductionController::class, 'store'])->name('staff-deductions.store');
         Route::put('/staff-deductions/{staffDeduction}', [StaffDeductionController::class, 'update'])->name('staff-deductions.update');
         Route::delete('/staff-deductions/{staffDeduction}', [StaffDeductionController::class, 'destroy'])->name('staff-deductions.destroy');
 
-        Route::post('/staff-notices', [StaffNoticeController::class, 'store'])->name('staff-notices.store');
         Route::put('/staff-notices/{staffNotice}', [StaffNoticeController::class, 'update'])->name('staff-notices.update');
         Route::delete('/staff-notices/{staffNotice}', [StaffNoticeController::class, 'destroy'])->name('staff-notices.destroy');
     });
