@@ -18,7 +18,11 @@ use App\Http\Controllers\ServiceCategoryController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\StaffBlockController;
+use App\Http\Controllers\StaffComplaintController;
 use App\Http\Controllers\StaffController;
+use App\Http\Controllers\StaffDeductionController;
+use App\Http\Controllers\StaffNoticeController;
+use App\Http\Controllers\StaffOvertimeController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -102,6 +106,23 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/scheduled-shifts/{staff}/pattern', [ShiftController::class, 'savePattern'])->name('shifts.pattern.store');
         Route::post('/scheduled-shifts/{staff}/time-off', [ShiftController::class, 'storeTimeOff'])->name('shifts.timeoff.store');
         Route::delete('/scheduled-shifts/time-off/{timeOff}', [ShiftController::class, 'destroyTimeOff'])->name('shifts.timeoff.destroy');
+
+        Route::post('/staff-overtime', [StaffOvertimeController::class, 'store'])->name('staff-overtime.store');
+        Route::put('/staff-overtime/{staffOvertimeEntry}', [StaffOvertimeController::class, 'update'])->name('staff-overtime.update');
+        Route::delete('/staff-overtime/{staffOvertimeEntry}', [StaffOvertimeController::class, 'destroy'])->name('staff-overtime.destroy');
+
+        Route::post('/staff-complaints', [StaffComplaintController::class, 'store'])->name('staff-complaints.store');
+        Route::put('/staff-complaints/{staffComplaint}', [StaffComplaintController::class, 'update'])->name('staff-complaints.update');
+        Route::delete('/staff-complaints/{staffComplaint}', [StaffComplaintController::class, 'destroy'])->name('staff-complaints.destroy');
+        Route::post('/staff-complaints/{staffComplaint}/generate-notice', [StaffComplaintController::class, 'generateNotice'])->name('staff-complaints.generate-notice');
+
+        Route::post('/staff-deductions', [StaffDeductionController::class, 'store'])->name('staff-deductions.store');
+        Route::put('/staff-deductions/{staffDeduction}', [StaffDeductionController::class, 'update'])->name('staff-deductions.update');
+        Route::delete('/staff-deductions/{staffDeduction}', [StaffDeductionController::class, 'destroy'])->name('staff-deductions.destroy');
+
+        Route::post('/staff-notices', [StaffNoticeController::class, 'store'])->name('staff-notices.store');
+        Route::put('/staff-notices/{staffNotice}', [StaffNoticeController::class, 'update'])->name('staff-notices.update');
+        Route::delete('/staff-notices/{staffNotice}', [StaffNoticeController::class, 'destroy'])->name('staff-notices.destroy');
     });
 
     // ---- Services ----

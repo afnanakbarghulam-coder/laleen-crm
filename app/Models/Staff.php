@@ -40,6 +40,7 @@ class Staff extends Model
         'internal_notes',
         'hourly_wage',
         'commission_rate',
+        'base_salary',
         'user_id',
     ];
 
@@ -107,5 +108,25 @@ class Staff extends Model
             ->filter(fn ($pattern) => $pattern->coversDate($date))
             ->sortByDesc('start_date')
             ->first();
+    }
+
+    public function overtimeEntries()
+    {
+        return $this->hasMany(StaffOvertimeEntry::class);
+    }
+
+    public function complaints()
+    {
+        return $this->belongsToMany(StaffComplaint::class, 'complaint_staff', 'staff_id', 'staff_complaint_id');
+    }
+
+    public function deductions()
+    {
+        return $this->hasMany(StaffDeduction::class);
+    }
+
+    public function notices()
+    {
+        return $this->hasMany(StaffNotice::class);
     }
 }

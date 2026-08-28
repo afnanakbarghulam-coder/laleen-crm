@@ -359,14 +359,18 @@
                         <!-- WAGES & COMMISSIONS -->
                         <div class="stf-pane" id="stf-pay">
                             <h6 class="fw-bold">Wages &amp; commissions</h6>
-                            <p class="text-muted small">Used for internal wage and commission tracking</p>
+                            <p class="text-muted small">Used for internal wage tracking. Base salary and hourly wage feed the Payroll &amp; Overtime tab (Net Salary = Base Salary + Overtime Pay - Deductions); commission is not part of that calculation.</p>
 
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <div class="col-md-4">
+                                    <label class="form-label">Base salary (QAR / period)</label>
+                                    <input type="number" name="base_salary" id="stfBaseSalary" class="form-control" min="0" step="0.01">
+                                </div>
+                                <div class="col-md-4">
                                     <label class="form-label">Hourly wage (QAR)</label>
                                     <input type="number" name="hourly_wage" id="stfWage" class="form-control" min="0" step="0.01">
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <label class="form-label">Commission rate (%)</label>
                                     <input type="number" name="commission_rate" id="stfCommission" class="form-control" min="0" max="100" step="0.1">
                                 </div>
@@ -516,6 +520,7 @@
             document.getElementById('stfMemberId').value = member.staff_member_id || '';
             document.getElementById('stfNotes').value = member.internal_notes || '';
 
+            document.getElementById('stfBaseSalary').value = member.base_salary || '';
             document.getElementById('stfWage').value = member.hourly_wage || '';
             document.getElementById('stfCommission').value = member.commission_rate || '';
 

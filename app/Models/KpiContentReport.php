@@ -48,13 +48,15 @@ class KpiContentReport extends Model
     }
 
     /**
-     * % of entries where $field === 'Y', out of entries where $field isn't
-     * 'NA' (a day with no story activity, say, can't fail "standards met for
-     * stories" — it's excluded rather than counted against the creator).
+     * % of entries where $field === 'Y', out of entries where $field is
+     * actually applicable to that row's activity type (see
+     * KpiContentEntry::FIELD_VISIBILITY) — a Stories Only day, say, can't
+     * fail "feed posted", so it's excluded rather than counted against the
+     * creator.
      */
     private function metPct($entries, string $field): float
     {
-        $applicable = $entries->where($field, '!=', 'NA');
+        $applicable = $entries->filter(fn ($e) => in_array($field, $e->visibleFields(), true));
         if ($applicable->isEmpty()) {
             return 0.0;
         }
@@ -65,21 +67,30 @@ class KpiContentReport extends Model
     public function metrics(): array
     {
         $entries = $this->entriesInRange();
+        $fields = ['stories_posted', 'feed_posted', 'standards_stories', 'standards_feed', 'event'];
 
-        $feedPosted = $entries->isEmpty() ? 0.0 : round($entries->where('feed_posted', 'Y')->count() / $entries->count() * 100, 1);
-        $standardsFeed = $this->metPct($entries, 'standards_feed');
-        $standardsStories = $this->metPct($entries, 'standards_stories');
+        $breakdown = [];
+        $totalApplicable = 0;
+        $totalMet = 0;
 
-        $overall = round(($feedPosted + $standardsFeed + $standardsStories) / 3, 1);
+        foreach ($fields as $field) {
+            $applicable = $entries->filter(fn ($e) => in_array($field, $e->visibleFields(), true));
+            $breakdown[$field] = $applicable->isEmpty() ? 0.0 : round($applicable->where($field, 'Y')->count() / $applicable->count() * 100, 1);
+            $totalApplicable += $applicable->count();
+            $totalMet += $applicable->where($field, 'Y')->count();
+        }
 
-        return [
-            'feed_posted' => $feedPosted,
-            'standards_feed' => $standardsFeed,
-            'standards_stories' => $standardsStories,
+        // Overall is pooled across every applicable (field, entry) pair rather
+        // than an unweighted average of the five percentages, so a metric with
+        // only one applicable row doesn't swing the total as much as one with
+        // twenty.
+        $overall = $totalApplicable > 0 ? round($totalMet / $totalApplicable * 100, 1) : 0.0;
+
+        return array_merge($breakdown, [
             'overall' => $overall,
             'grade' => self::gradeFor($overall),
             'entry_count' => $entries->count(),
-        ];
+        ]);
     }
 
     public function flaggedDays()

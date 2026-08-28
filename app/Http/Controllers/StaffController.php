@@ -6,6 +6,11 @@ use App\Models\User;
 use App\Models\Staff;
 use App\Models\Service;
 use App\Models\ServiceCategory;
+use App\Models\StaffComplaint;
+use App\Models\StaffDeduction;
+use App\Models\StaffNotice;
+use App\Models\StaffOvertimeEntry;
+use App\Support\StaffPayrollCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -14,6 +19,11 @@ class StaffController extends Controller
 {
     public function index(Request $request)
     {
+        $activeTab = in_array($request->query('tab'), ['directory', 'payroll', 'complaints', 'notices'], true)
+            ? $request->query('tab')
+            : 'directory';
+
+        // ---- Staff Directory ----
         $today = now()->toDateString();
         $query = Staff::with(['user', 'timeOffs' => fn ($q) => $q->where('start_date', '<=', $today)->where('end_date', '>=', $today)]);
 
@@ -38,7 +48,89 @@ class StaffController extends Controller
         $services = Service::orderBy('name')->get();
         $categories = ServiceCategory::with('services')->orderBy('sort_order')->get();
 
-        return view('staff.index', compact('staff', 'services', 'categories'));
+        // Full roster, used by the pickers in the Payroll/Complaints/Notices tabs.
+        $allStaff = Staff::orderBy('name')->get();
+
+        // Plain-array projections for the tabs' JS (never pass a chained/argument
+        // expression to Blade's @json() directly — see StaffPayrollCalculator's
+        // sibling views for why; compute the array here instead).
+        $allStaffOptions = $allStaff->map(fn ($s) => [
+            'id' => $s->id,
+            'name' => $s->name,
+            'branch' => $s->branch,
+        ])->values();
+
+        // For the Complaints & Feedback "Service Received" dropdown.
+        $serviceOptions = $services->map(fn ($s) => [
+            'id' => $s->id,
+            'name' => $s->name,
+        ])->values();
+
+        // ---- Payroll & Overtime ----
+        $payrollBranch = $request->filled('payroll_branch') && in_array($request->payroll_branch, ['old_airport', 'wakrah'], true)
+            ? $request->payroll_branch
+            : null;
+        $payrollFrom = $request->date('payroll_from') ?? now()->startOfMonth();
+        $payrollTo = $request->date('payroll_to') ?? now()->endOfMonth();
+
+        $payrollCalculator = new StaffPayrollCalculator($payrollFrom, $payrollTo);
+        $payrollStaffQuery = Staff::active()->orderBy('name');
+        if ($payrollBranch) {
+            $payrollStaffQuery->where(fn ($q) => $q->where('branch', $payrollBranch)->orWhere('branch', 'both'));
+        }
+        $payrollRows = $payrollCalculator->payrollFor($payrollStaffQuery->get());
+
+        $overtimeEntries = StaffOvertimeEntry::with('staff')
+            ->whereBetween('entry_date', [$payrollFrom->copy()->startOfDay(), $payrollTo->copy()->endOfDay()])
+            ->orderByDesc('entry_date')->orderByDesc('id')
+            ->paginate(15, ['*'], 'overtime_page')
+            ->appends(array_filter([
+                'payroll_branch' => $payrollBranch,
+                'payroll_from' => $payrollFrom->format('Y-m-d'),
+                'payroll_to' => $payrollTo->format('Y-m-d'),
+                'tab' => 'payroll',
+            ]));
+
+        // ---- Complaints & Deductions ----
+        $complaintsStaffFilter = $request->filled('complaints_staff') ? (int) $request->complaints_staff : null;
+
+        $complaints = StaffComplaint::with(['staffMembers', 'customer', 'service'])
+            ->when($complaintsStaffFilter, fn ($q) => $q->whereHas('staffMembers', fn ($s) => $s->where('staff.id', $complaintsStaffFilter)))
+            ->orderByDesc('complaint_date')->orderByDesc('id')
+            ->paginate(15, ['*'], 'complaints_page')
+            ->appends(array_filter(['complaints_staff' => $complaintsStaffFilter, 'tab' => 'complaints']));
+
+        $deductions = StaffDeduction::with(['staff', 'complaint'])
+            ->when($complaintsStaffFilter, fn ($q) => $q->where('staff_id', $complaintsStaffFilter))
+            ->orderByDesc('deduction_date')->orderByDesc('id')
+            ->paginate(15, ['*'], 'deductions_page')
+            ->appends(array_filter(['complaints_staff' => $complaintsStaffFilter, 'tab' => 'complaints']));
+
+        // For the deduction quick-add's "link to penalty" dropdown.
+        $openComplaints = StaffComplaint::with('staffMembers')->orderByDesc('complaint_date')->get();
+        $openComplaintOptions = $openComplaints->map(fn ($c) => [
+            'id' => $c->id,
+            'reference_number' => $c->reference_number,
+            'staff_name' => $c->staffMembers->pluck('name')->implode(', ') ?: '—',
+            'category' => $c->category,
+            'complaint_date_label' => $c->complaint_date->format('d M Y'),
+        ])->values();
+
+        // ---- Notices ----
+        $noticesStaffFilter = $request->filled('notices_staff') ? (int) $request->notices_staff : null;
+
+        $notices = StaffNotice::with('staff')
+            ->when($noticesStaffFilter, fn ($q) => $q->where('staff_id', $noticesStaffFilter))
+            ->orderByDesc('notice_date')->orderByDesc('id')
+            ->paginate(15, ['*'], 'notices_page')
+            ->appends(array_filter(['notices_staff' => $noticesStaffFilter, 'tab' => 'notices']));
+
+        return view('staff.index', compact(
+            'staff', 'services', 'categories', 'activeTab', 'allStaff', 'allStaffOptions', 'serviceOptions',
+            'payrollBranch', 'payrollFrom', 'payrollTo', 'payrollRows', 'overtimeEntries',
+            'complaints', 'deductions', 'complaintsStaffFilter', 'openComplaints', 'openComplaintOptions',
+            'notices', 'noticesStaffFilter'
+        ));
     }
 
     public function store(Request $request)
@@ -113,6 +205,7 @@ class StaffController extends Controller
             'internal_notes' => 'nullable|string|max:1000',
             'hourly_wage' => 'nullable|numeric|min:0',
             'commission_rate' => 'nullable|numeric|min:0|max:100',
+            'base_salary' => 'nullable|numeric|min:0',
 
             'profile_picture' => 'nullable|image|max:2048',
         ]);

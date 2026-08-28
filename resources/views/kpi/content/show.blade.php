@@ -31,24 +31,32 @@
             <span class="kpi-badge {{ $gradeBadge }}">{{ $metrics['grade'] }} — {{ $metrics['overall'] }}%</span>
         </div>
 
-        <div class="row g-3 mb-3">
-            <div class="col-md-6 col-xl-4">
+        <div class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-3 mb-3">
+            <div class="col">
+                <div class="kpi-stat-card"><div class="kpi-stat-label">Stories Posted</div><div class="kpi-stat-value">{{ $metrics['stories_posted'] }}%</div></div>
+            </div>
+            <div class="col">
                 <div class="kpi-stat-card"><div class="kpi-stat-label">Feed Posted</div><div class="kpi-stat-value">{{ $metrics['feed_posted'] }}%</div></div>
             </div>
-            <div class="col-md-6 col-xl-4">
+            <div class="col">
+                <div class="kpi-stat-card"><div class="kpi-stat-label">Standards — Stories</div><div class="kpi-stat-value">{{ $metrics['standards_stories'] }}%</div></div>
+            </div>
+            <div class="col">
                 <div class="kpi-stat-card"><div class="kpi-stat-label">Standards — Feed</div><div class="kpi-stat-value">{{ $metrics['standards_feed'] }}%</div></div>
             </div>
-            <div class="col-md-6 col-xl-4">
-                <div class="kpi-stat-card"><div class="kpi-stat-label">Standards — Stories</div><div class="kpi-stat-value">{{ $metrics['standards_stories'] }}%</div></div>
+            <div class="col">
+                <div class="kpi-stat-card"><div class="kpi-stat-label">Event</div><div class="kpi-stat-value">{{ $metrics['event'] }}%</div></div>
             </div>
         </div>
 
         <div class="kpi-panel">
             <h6>Metrics vs Targets</h6>
             @foreach ([
+                ['Stories Posted', $metrics['stories_posted'], 100],
                 ['Feed Posted', $metrics['feed_posted'], 100],
-                ['Standards Met — Feed', $metrics['standards_feed'], 90],
                 ['Standards Met — Stories', $metrics['standards_stories'], 90],
+                ['Standards Met — Feed', $metrics['standards_feed'], 90],
+                ['Event', $metrics['event'], 100],
             ] as [$label, $value, $target])
                 <div class="mb-2">
                     <div class="d-flex justify-content-between small text-muted mb-1">
@@ -72,28 +80,29 @@
                             <th>Day</th>
                             <th>Week</th>
                             <th>Activity</th>
-                            <th>Feed Post / Shoot Schedule</th>
-                            <th>Story Theme</th>
-                            <th>Story Flow</th>
-                            <th>Posted</th>
-                            <th>Std. Feed</th>
+                            <th>Shoot Schedule</th>
+                            <th>Stories Posted</th>
+                            <th>Feed Posted</th>
                             <th>Std. Stories</th>
+                            <th>Std. Feed</th>
+                            <th>Event</th>
                             <th>Issues</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($report->entriesInRange() as $e)
+                            @php $visible = $e->visibleFields(); @endphp
                             <tr>
                                 <td>{{ $e->entry_date->format('d M') }}</td>
                                 <td>{{ $e->dayName() }}</td>
                                 <td>W{{ $e->weekNumber() }}</td>
                                 <td>{{ $e->activity_type ?: '—' }}</td>
                                 <td class="small">{{ $e->feed_post_schedule ?: '—' }}</td>
-                                <td class="small">{{ $e->story_theme ?: '—' }}</td>
-                                <td class="small">{{ $e->story_flow ?: '—' }}</td>
-                                <td>{!! ynBadge($e->feed_posted) !!}</td>
-                                <td>{!! ynBadge($e->standards_feed) !!}</td>
-                                <td>{!! ynBadge($e->standards_stories) !!}</td>
+                                <td>{!! in_array('stories_posted', $visible) ? ynBadge($e->stories_posted) : ynBadge('NA') !!}</td>
+                                <td>{!! in_array('feed_posted', $visible) ? ynBadge($e->feed_posted) : ynBadge('NA') !!}</td>
+                                <td>{!! in_array('standards_stories', $visible) ? ynBadge($e->standards_stories) : ynBadge('NA') !!}</td>
+                                <td>{!! in_array('standards_feed', $visible) ? ynBadge($e->standards_feed) : ynBadge('NA') !!}</td>
+                                <td>{!! in_array('event', $visible) ? ynBadge($e->event) : ynBadge('NA') !!}</td>
                                 <td class="small">{{ $e->issues ?: '—' }}</td>
                             </tr>
                         @endforeach
