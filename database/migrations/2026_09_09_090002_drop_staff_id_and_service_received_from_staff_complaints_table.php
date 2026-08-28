@@ -14,8 +14,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('staff_complaints', function (Blueprint $table) {
+            // MySQL/InnoDB won't drop an index that's still backing a foreign
+            // key constraint, so the FK must go first, then the index it was
+            // relying on, then the column itself.
+            $table->dropForeign(['staff_id']);
             $table->dropIndex(['staff_id', 'complaint_date']);
-            $table->dropConstrainedForeignId('staff_id');
+            $table->dropColumn('staff_id');
             $table->dropColumn('service_received');
         });
     }
