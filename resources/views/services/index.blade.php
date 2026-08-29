@@ -195,8 +195,8 @@
                             @if ($service->treatment_type)
                                 <span class="treatment-badge">{{ $service->treatment_type }}</span>
                             @endif
-                            @if ($service->maintenance_interval_days)
-                                <span class="treatment-badge"><i class="bx bx-refresh"></i> Re-book every {{ $service->maintenance_interval_days }}d</span>
+                            @if ($service->rebooking_interval_days)
+                                <span class="treatment-badge"><i class="bx bx-refresh"></i> Re-book every {{ $service->rebooking_interval_days }}d</span>
                             @endif
                         </div>
 
@@ -284,7 +284,7 @@
             document.getElementById('serviceDescription').value = service.description || '';
             document.getElementById('servicePrice').value = service.price;
             document.getElementById('serviceDuration').value = service.duration;
-            document.getElementById('serviceMaintenanceInterval').value = service.maintenance_interval_days || '';
+            document.getElementById('serviceRebookingInterval').value = service.rebooking_interval_days || '';
 
             if (service.photo) {
                 const preview = document.getElementById('photoPreview');

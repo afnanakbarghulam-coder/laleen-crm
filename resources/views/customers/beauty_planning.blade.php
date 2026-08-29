@@ -1,27 +1,28 @@
 @extends('layouts.app')
-@section('title', 'Follow-Up Task Queue')
+@section('title', 'Beauty Planning')
 
 <style>
-    .fu-summary {
+    .bp-summary {
         border: 1px solid rgba(217, 143, 131,0.16);
         border-radius: 10px;
         padding: 14px 18px;
         text-align: center;
+        background: rgba(36, 30, 28, 0.5);
     }
 
-    .fu-summary .value {
+    .bp-summary .value {
         font-size: 22px;
         font-weight: 700;
     }
 
-    .fu-summary .label {
+    .bp-summary .label {
         font-size: 12px;
         color: #c9a39a;
         text-transform: uppercase;
         letter-spacing: .02em;
     }
 
-    .fu-row {
+    .bp-row {
         border: 1px solid rgba(217, 143, 131,0.16);
         border-radius: 8px;
         padding: 12px 16px;
@@ -31,9 +32,20 @@
         align-items: center;
         gap: 14px;
         flex-wrap: wrap;
+        transition: box-shadow 0.2s ease, border-color 0.2s ease;
     }
 
-    .fu-status {
+    .bp-row.is-overdue {
+        border-color: rgba(168, 82, 74, 0.4);
+        box-shadow: 0 0 16px rgba(168, 82, 74, 0.12);
+    }
+
+    .bp-row.is-due-soon {
+        border-color: rgba(201, 166, 107, 0.4);
+        box-shadow: 0 0 16px rgba(201, 166, 107, 0.1);
+    }
+
+    .bp-status {
         font-size: 11px;
         font-weight: 700;
         padding: 3px 10px;
@@ -46,7 +58,7 @@
 @section('content')
     <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
         <div>
-            <h4 class="fw-bold mb-1">Follow-Up Task Queue</h4>
+            <h4 class="fw-bold mb-1">Beauty Planning</h4>
             <p class="text-muted small mb-0">Clients due for outreach — most overdue first. Send a script in one click.</p>
         </div>
         <a href="{{ route('customers.index') }}" class="btn btn-outline-secondary btn-sm">
@@ -61,19 +73,19 @@
 
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-3">
-            <div class="fu-summary">
+            <div class="bp-summary">
                 <div class="value" style="color:#a8524a">{{ $overdueCount }}</div>
                 <div class="label">Overdue</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="fu-summary">
+            <div class="bp-summary">
                 <div class="value" style="color:#c9a66b">{{ $dueSoonCount }}</div>
                 <div class="label">Due within {{ \App\Support\ClientMaintenancePlanner::DUE_SOON_WINDOW_DAYS }} days</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="fu-summary">
+            <div class="bp-summary">
                 <div class="value">{{ $queue->count() }}</div>
                 <div class="label">Total in queue</div>
             </div>
@@ -86,8 +98,9 @@
                 @php
                     $statusColors = ['overdue' => '#a8524a', 'due_soon' => '#c9a66b', 'upcoming' => '#8aa6ab'];
                     $statusLabels = ['overdue' => 'Overdue', 'due_soon' => 'Due Soon', 'upcoming' => 'Upcoming'];
+                    $rowClass = $row->urgency === 'overdue' ? 'is-overdue' : ($row->urgency === 'due_soon' ? 'is-due-soon' : '');
                 @endphp
-                <div class="fu-row">
+                <div class="bp-row {{ $rowClass }}">
                     <div>
                         <strong>{{ $row->customer->name ?? 'Unnamed Client' }}</strong>
                         <div class="text-muted small">
@@ -97,7 +110,7 @@
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2">
-                        <span class="fu-status" style="background:{{ $statusColors[$row->urgency] }}">
+                        <span class="bp-status" style="background:{{ $statusColors[$row->urgency] }}">
                             {{ $statusLabels[$row->urgency] }}
                             {{ $row->days_until < 0 ? '· ' . abs($row->days_until) . 'd ago' : ($row->days_until === 0 ? '· today' : '· in ' . $row->days_until . 'd') }}
                         </span>

@@ -191,15 +191,15 @@
                             </div>
 
                             <hr>
-                            <h6 class="fw-bold mb-1">Maintenance window</h6>
-                            <p class="text-muted small mb-3">How often clients should return for this treatment. Powers the Clients module's re-booking reminders — leave blank if this service isn't recurring.</p>
+                            <h6 class="fw-bold mb-1">Beauty Planning interval</h6>
+                            <p class="text-muted small mb-3">How often clients should return for this treatment. Powers the Clients module's Beauty Planning re-booking reminders — leave blank if this service isn't recurring.</p>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label">Recommended re-booking interval (days)</label>
-                                    <input type="number" name="maintenance_interval_days" id="serviceMaintenanceInterval"
+                                    <input type="number" name="rebooking_interval_days" id="serviceRebookingInterval"
                                         class="form-control" step="1" min="1" max="730" placeholder="e.g. 30"
-                                        list="maintenanceIntervalSuggestions">
-                                    <datalist id="maintenanceIntervalSuggestions">
+                                        list="rebookingIntervalSuggestions">
+                                    <datalist id="rebookingIntervalSuggestions">
                                         <option value="14">
                                         <option value="21">
                                         <option value="30">
@@ -287,7 +287,7 @@
             document.getElementById('serviceForm').action = '{{ route('services.store') }}';
             document.getElementById('formMethod').value = '';
             document.getElementById('serviceForm').reset();
-            document.getElementById('serviceMaintenanceInterval').value = '';
+            document.getElementById('serviceRebookingInterval').value = '';
             document.getElementById('photoPreview').classList.add('d-none');
             modalEl.querySelectorAll('.svc-nav-item').forEach(i => i.classList.remove('active'));
             modalEl.querySelectorAll('.svc-pane').forEach(p => p.classList.remove('active'));

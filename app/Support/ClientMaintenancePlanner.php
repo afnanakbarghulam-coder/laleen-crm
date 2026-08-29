@@ -11,7 +11,7 @@ use Illuminate\Support\Collection;
  * Live, non-persisted Service-Specific Maintenance Window computation. A
  * client's "next due" date for a given service is simply their most recent
  * completed visit for that service plus the service's configured
- * maintenance_interval_days — nothing here is ever written to the database;
+ * rebooking_interval_days — nothing here is ever written to the database;
  * every schedule is derived fresh from appointment_services + services.
  */
 class ClientMaintenancePlanner
@@ -28,7 +28,7 @@ class ClientMaintenancePlanner
         $query = AppointmentService::query()
             ->join('appointments', 'appointments.id', '=', 'appointment_services.appointment_id')
             ->join('services', 'services.id', '=', 'appointment_services.service_id')
-            ->whereNotNull('services.maintenance_interval_days')
+            ->whereNotNull('services.rebooking_interval_days')
             ->whereNotNull('appointments.customer_id')
             ->whereNotIn('appointments.status', ['cancelled', 'no_show'])
             ->where('appointment_services.start_time', '<=', now());
@@ -38,8 +38,8 @@ class ClientMaintenancePlanner
         }
 
         $rows = $query
-            ->selectRaw('appointments.customer_id as customer_id, appointment_services.service_id as service_id, services.name as service_name, services.maintenance_interval_days as interval_days, MAX(appointment_services.start_time) as last_visit')
-            ->groupBy('appointments.customer_id', 'appointment_services.service_id', 'services.name', 'services.maintenance_interval_days')
+            ->selectRaw('appointments.customer_id as customer_id, appointment_services.service_id as service_id, services.name as service_name, services.rebooking_interval_days as interval_days, MAX(appointment_services.start_time) as last_visit')
+            ->groupBy('appointments.customer_id', 'appointment_services.service_id', 'services.name', 'services.rebooking_interval_days')
             ->get();
 
         $today = now()->startOfDay();

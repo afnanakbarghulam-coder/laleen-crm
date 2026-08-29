@@ -5,8 +5,8 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h4 class="fw-bold">Clients</h4>
         <div class="d-flex gap-2">
-            <a href="{{ route('customers.follow-ups') }}" class="btn btn-outline-warning position-relative">
-                <i class="bx bx-bell me-1"></i> Follow-Up Queue
+            <a href="{{ route('customers.beauty-planning') }}" class="btn btn-outline-warning position-relative">
+                <i class="bx bx-bell me-1"></i> Beauty Planning
                 @if ($dueCustomerIds->count())
                     <span class="badge rounded-pill bg-danger ms-1">{{ $dueCustomerIds->count() }}</span>
                 @endif

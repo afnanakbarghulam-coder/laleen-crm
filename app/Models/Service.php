@@ -15,7 +15,7 @@ class Service extends Model
         'price',
         'price_type',
         'duration',
-        'maintenance_interval_days',
+        'rebooking_interval_days',
     ];
 
     public function category()

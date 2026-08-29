@@ -46,14 +46,15 @@ class CustomerController extends Controller
     }
 
     /**
-     * Front-desk task queue: clients whose maintenance window is overdue or
-     * due soon for a specific treatment, ready to message right away.
+     * Beauty Planning: front-desk task queue of clients whose re-booking
+     * window is overdue or due soon for a specific treatment, ready to
+     * message right away.
      */
-    public function followUps()
+    public function beautyPlanning()
     {
         $queue = (new ClientMaintenancePlanner())->dueQueue();
 
-        return view('customers.follow_ups', compact('queue'));
+        return view('customers.beauty_planning', compact('queue'));
     }
 
     public function show(Customer $customer)
