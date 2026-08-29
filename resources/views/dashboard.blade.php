@@ -322,6 +322,66 @@
     width: 96px;
     height: 96px;
     flex-shrink: 0;
+    position: relative;
+}
+
+/* Cyber-pulse neon tracer — a hot glowing point orbiting the ring, dragging a fading light trail behind it */
+.mini-ring::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(
+        from 0deg,
+        rgba(217, 119, 6, 0) 0deg,
+        rgba(255, 214, 150, .95) 6deg,
+        rgba(217, 119, 6, .6) 15deg,
+        rgba(217, 119, 6, 0) 36deg
+    );
+    -webkit-mask: radial-gradient(circle, transparent 55%, #000 60%, #000 80%, transparent 85%);
+    mask: radial-gradient(circle, transparent 55%, #000 60%, #000 80%, transparent 85%);
+    mix-blend-mode: screen;
+    filter: drop-shadow(0 0 8px rgba(217, 119, 6, 0.8));
+    pointer-events: none;
+    animation: nr-tracer-orbit 3.2s linear infinite;
+    z-index: 3;
+}
+
+@keyframes nr-tracer-orbit {
+    to { transform: rotate(360deg); }
+}
+
+/* Breathing laser edge — the live progress arc surges with neon intensity */
+.mini-ring .apexcharts-radialbar-slice-0 {
+    animation: nr-laser-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes nr-laser-breathe {
+    0%, 100% {
+        filter: drop-shadow(0 0 3px rgba(217, 119, 6, .5)) drop-shadow(0 0 6px rgba(217, 119, 6, .3));
+    }
+    50% {
+        filter: drop-shadow(0 0 10px rgba(217, 119, 6, .95)) drop-shadow(0 0 20px rgba(217, 119, 6, .55));
+    }
+}
+
+/* Core energy node — a welding-tip orb glowing right at the live tip of the fill line */
+.nr-energy-node {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff2d9 0%, #f5a742 45%, rgba(217, 119, 6, 0) 75%);
+    transform: translate(-50%, -50%);
+    filter: drop-shadow(0 0 8px rgba(217, 119, 6, .85)) drop-shadow(0 0 16px rgba(217, 119, 6, .5));
+    animation: nr-node-pulse 1.6s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 4;
+}
+
+@keyframes nr-node-pulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    50% { transform: translate(-50%, -50%) scale(1.35); opacity: .75; }
 }
 
 .mini-sparkline {
@@ -338,7 +398,19 @@
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Soft glass status pills — fully rounded, gentle glow */
+/* Flowing neon data-stream sweep along the sparkline trace */
+.mini-sparkline svg path {
+    stroke-width: 2.5px;
+    filter: drop-shadow(0 0 6px rgba(217, 143, 131, .6));
+    stroke-dasharray: 8 6;
+    animation: nr-sparkline-flow 2.2s linear infinite;
+}
+
+@keyframes nr-sparkline-flow {
+    to { stroke-dashoffset: -140; }
+}
+
+/* Soft glass status pills — fully rounded, gentle glow, breathing pulse */
 .dash-pill {
     display: inline-flex;
     align-items: center;
@@ -351,6 +423,12 @@
     border: 1px solid transparent;
     backdrop-filter: blur(8px);
     transition: box-shadow 0.3s ease;
+    animation: nr-badge-breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes nr-badge-breathe {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .72; }
 }
 
 .dash-pill-green {
@@ -603,7 +681,25 @@
                         },
                     },
                 },
-            }).render();
+            }).render().then(() => {
+                // The value arc's path is drawn gradually after render() resolves,
+                // so wait for that draw-in animation to finish before sampling it.
+                setTimeout(() => placeEnergyNode(el), delay + 900);
+            });
+        }
+
+        // Core energy node: sample the rendered arc's actual end point and drop
+        // a glowing orb exactly there, so it looks like a live welding tip.
+        function placeEnergyNode(ringEl) {
+            const arc = ringEl.querySelector('.apexcharts-radialbar-slice-0');
+            if (!arc || !arc.getTotalLength()) return;
+            const len = arc.getTotalLength();
+            const tip = arc.getPointAtLength(len);
+            const node = document.createElement('div');
+            node.className = 'nr-energy-node';
+            node.style.left = tip.x + 'px';
+            node.style.top = tip.y + 'px';
+            ringEl.appendChild(node);
         }
 
         function renderSparkline(selector, data, colorHex) {
@@ -655,6 +751,34 @@
         @if ($contentMetrics && $contentMetrics['entry_count'] > 0)
             renderRing('#contentRing', {{ $contentMetrics['overall'] }}, '{{ $contentColor }}');
         @endif
+
+        // Smooth count-up ticker: animate each metric from 0 to its final value on load.
+        function animateCountUp(el) {
+            const raw = el.textContent.trim();
+            const match = raw.match(/^([^\d-]*)(-?[\d,]+(?:\.\d+)?)(.*)$/);
+            if (!match) return;
+            const [, prefix, numStr, suffix] = match;
+            const target = parseFloat(numStr.replace(/,/g, ''));
+            if (isNaN(target)) return;
+            const decimals = (numStr.split('.')[1] || '').length;
+            const duration = 1100;
+            const start = performance.now();
+
+            function frame(now) {
+                const progress = Math.min(1, (now - start) / duration);
+                const eased = 1 - Math.pow(1 - progress, 3);
+                const value = target * eased;
+                el.textContent = prefix + value.toLocaleString('en-US', {
+                    minimumFractionDigits: decimals,
+                    maximumFractionDigits: decimals,
+                }) + suffix;
+                if (progress < 1) requestAnimationFrame(frame);
+                else el.textContent = raw;
+            }
+            requestAnimationFrame(frame);
+        }
+
+        document.querySelectorAll('.dashboard-value').forEach(animateCountUp);
     })();
 </script>
 @endsection
