@@ -4,9 +4,17 @@
 @section('content')
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h4 class="fw-bold">Clients</h4>
-        <a href="{{ route('appointments.calendar') }}" class="btn btn-primary">
-            <i class="bx bx-plus me-1"></i> Book Appointment
-        </a>
+        <div class="d-flex gap-2">
+            <a href="{{ route('customers.follow-ups') }}" class="btn btn-outline-warning position-relative">
+                <i class="bx bx-bell me-1"></i> Follow-Up Queue
+                @if ($dueCustomerIds->count())
+                    <span class="badge rounded-pill bg-danger ms-1">{{ $dueCustomerIds->count() }}</span>
+                @endif
+            </a>
+            <a href="{{ route('appointments.calendar') }}" class="btn btn-primary">
+                <i class="bx bx-plus me-1"></i> Book Appointment
+            </a>
+        </div>
     </div>
 
     <div class="mb-4">
@@ -38,7 +46,12 @@
             <tbody>
                 @forelse ($customers as $customer)
                     <tr>
-                        <td class="fw-semibold">{{ $customer->name ?? 'Unnamed' }}</td>
+                        <td class="fw-semibold">
+                            {{ $customer->name ?? 'Unnamed' }}
+                            @if ($dueCustomerIds->contains($customer->id))
+                                <span class="badge bg-warning text-dark ms-1" title="Due for a follow-up"><i class="bx bx-bell"></i></span>
+                            @endif
+                        </td>
                         <td>{{ $customer->phone }}</td>
                         <td>{{ $customer->appointments_count }}</td>
                         <td>

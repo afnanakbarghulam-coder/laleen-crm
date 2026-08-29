@@ -152,6 +152,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/customers-lookup', [CustomerController::class, 'lookup'])->name('customers.lookup');
         Route::get('/customers-search', [CustomerController::class, 'search'])->name('customers.search');
         Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
+        Route::get('/customers/follow-ups', [CustomerController::class, 'followUps'])->name('customers.follow-ups');
         Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
     });
     Route::middleware('module:clients,edit')->group(function () {

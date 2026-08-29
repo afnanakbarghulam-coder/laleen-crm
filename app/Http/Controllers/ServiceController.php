@@ -69,6 +69,7 @@ class ServiceController extends Controller
             'description' => 'nullable|string|max:1000',
             'price' => 'required|numeric|min:0',
             'duration' => 'required|integer|min:1',
+            'maintenance_interval_days' => 'nullable|integer|min:1|max:730',
         ]);
 
         $data['price_type'] = 'fixed';

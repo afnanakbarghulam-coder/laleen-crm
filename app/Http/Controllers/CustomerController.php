@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\Sale;
+use App\Support\ClientMaintenancePlanner;
 use Illuminate\Http\Request;
 
 class CustomerController extends Controller
@@ -39,7 +40,20 @@ class CustomerController extends Controller
             ->groupBy('customer_id')
             ->pluck('last_visit', 'customer_id');
 
-        return view('customers.index', compact('customers', 'ltv', 'lastVisit'));
+        $dueCustomerIds = (new ClientMaintenancePlanner())->dueQueue()->pluck('customer_id')->unique();
+
+        return view('customers.index', compact('customers', 'ltv', 'lastVisit', 'dueCustomerIds'));
+    }
+
+    /**
+     * Front-desk task queue: clients whose maintenance window is overdue or
+     * due soon for a specific treatment, ready to message right away.
+     */
+    public function followUps()
+    {
+        $queue = (new ClientMaintenancePlanner())->dueQueue();
+
+        return view('customers.follow_ups', compact('queue'));
     }
 
     public function show(Customer $customer)
@@ -65,7 +79,9 @@ class CustomerController extends Controller
 
         $loyaltyHistory = $customer->loyaltyTransactions()->take(10)->get();
 
-        return view('customers.show', compact('customer', 'appointments', 'upcoming', 'past', 'lifetimeValue', 'favoriteServices', 'loyaltyHistory'));
+        $maintenanceSchedule = (new ClientMaintenancePlanner())->scheduleForCustomer($customer);
+
+        return view('customers.show', compact('customer', 'appointments', 'upcoming', 'past', 'lifetimeValue', 'favoriteServices', 'loyaltyHistory', 'maintenanceSchedule'));
     }
 
     public function updateNotes(Request $request, Customer $customer)

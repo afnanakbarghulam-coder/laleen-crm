@@ -189,6 +189,26 @@
                                     <input type="number" name="duration" id="serviceDuration" class="form-control" step="1" min="1" required>
                                 </div>
                             </div>
+
+                            <hr>
+                            <h6 class="fw-bold mb-1">Maintenance window</h6>
+                            <p class="text-muted small mb-3">How often clients should return for this treatment. Powers the Clients module's re-booking reminders — leave blank if this service isn't recurring.</p>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Recommended re-booking interval (days)</label>
+                                    <input type="number" name="maintenance_interval_days" id="serviceMaintenanceInterval"
+                                        class="form-control" step="1" min="1" max="730" placeholder="e.g. 30"
+                                        list="maintenanceIntervalSuggestions">
+                                    <datalist id="maintenanceIntervalSuggestions">
+                                        <option value="14">
+                                        <option value="21">
+                                        <option value="30">
+                                        <option value="45">
+                                        <option value="60">
+                                        <option value="90">
+                                    </datalist>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- TEAM MEMBERS -->
@@ -267,6 +287,7 @@
             document.getElementById('serviceForm').action = '{{ route('services.store') }}';
             document.getElementById('formMethod').value = '';
             document.getElementById('serviceForm').reset();
+            document.getElementById('serviceMaintenanceInterval').value = '';
             document.getElementById('photoPreview').classList.add('d-none');
             modalEl.querySelectorAll('.svc-nav-item').forEach(i => i.classList.remove('active'));
             modalEl.querySelectorAll('.svc-pane').forEach(p => p.classList.remove('active'));

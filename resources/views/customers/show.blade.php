@@ -70,6 +70,27 @@
 
     .loyalty-row .pts-earn { color: #8ea88a; font-weight: 700; }
     .loyalty-row .pts-redeem { color: #a8524a; font-weight: 700; }
+
+    .planner-row {
+        border: 1px solid rgba(217, 143, 131,0.16);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .planner-status {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 999px;
+        color: #fff;
+        white-space: nowrap;
+    }
 </style>
 
 @section('content')
@@ -126,6 +147,48 @@
                 <div class="value"><i class="bx bx-diamond"></i> {{ $customer->loyalty_points }}</div>
                 <div class="label">Loyalty Points</div>
             </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header fw-semibold">
+            Beauty Planner — Maintenance &amp; Re-booking Timeline
+            <span class="text-muted small fw-normal">Auto-tracked from treatment history</span>
+        </div>
+        <div class="card-body">
+            @php
+                $plannerColors = ['overdue' => '#a8524a', 'due_soon' => '#c9a66b', 'upcoming' => '#8aa6ab'];
+                $plannerLabels = ['overdue' => 'Overdue', 'due_soon' => 'Due Soon', 'upcoming' => 'On Track'];
+            @endphp
+            @forelse ($maintenanceSchedule as $row)
+                <div class="planner-row">
+                    <div>
+                        <strong>{{ $row->service_name }}</strong>
+                        <div class="text-muted small">
+                            Last visit {{ $row->last_visit->format('d M Y') }} · re-books every {{ $row->interval_days }} days
+                            · next due {{ $row->next_due->format('d M Y') }}
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="planner-status" style="background:{{ $plannerColors[$row->urgency] }}">
+                            {{ $plannerLabels[$row->urgency] }}
+                            {{ $row->days_until < 0 ? '· ' . abs($row->days_until) . 'd ago' : ($row->days_until === 0 ? '· today' : '· in ' . $row->days_until . 'd') }}
+                        </span>
+                        <button type="button" class="btn btn-sm btn-outline-success wa-trigger"
+                            data-name="{{ $customer->name ?? 'there' }}"
+                            data-phone="{{ $customer->phone }}"
+                            data-service="{{ $row->service_name }}"
+                            data-last-visit="{{ $row->last_visit->format('d M Y') }}"
+                            data-days-since="{{ $row->days_since_visit }}"
+                            data-loyalty="{{ $customer->loyalty_points }}"
+                            data-interval="{{ $row->interval_days }}">
+                            <i class="bx bxl-whatsapp"></i> Message
+                        </button>
+                    </div>
+                </div>
+            @empty
+                <p class="text-muted mb-0">No recurring treatments tracked yet. Set a re-booking interval on a service to start tracking it here.</p>
+            @endforelse
         </div>
     </div>
 
@@ -309,4 +372,6 @@
             });
         </script>
     @endmoduleEdit
+
+    @include('customers._whatsapp_drawer')
 @endsection
