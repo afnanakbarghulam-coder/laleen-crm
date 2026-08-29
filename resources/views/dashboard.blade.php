@@ -126,177 +126,109 @@
 @section('content')
 
 <style>
-/* ---------------- Holographic scanline overlay ---------------- */
-.cyber-scanlines {
+/* ---------------- Ambient glass backdrop ---------------- */
+.dash-glass {
     position: relative;
 }
 
-.cyber-scanlines::before {
+.dash-glass::before {
     content: '';
     position: absolute;
-    inset: 0;
+    inset: -40px 0 auto 0;
+    height: 320px;
     pointer-events: none;
+    z-index: 0;
+    background:
+        radial-gradient(60% 100% at 20% 0%, rgba(217, 143, 131, 0.10), transparent 70%),
+        radial-gradient(50% 100% at 90% 10%, rgba(138, 166, 171, 0.08), transparent 70%);
+}
+
+.dash-glass > * {
+    position: relative;
     z-index: 1;
-    background: repeating-linear-gradient(
-        to bottom,
-        rgba(245, 158, 11, 0.025) 0px,
-        rgba(245, 158, 11, 0.025) 1px,
-        transparent 1px,
-        transparent 3px
-    );
 }
 
-.cyber-scanlines::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: 160px;
-    top: -160px;
-    pointer-events: none;
-    z-index: 1;
-    background: linear-gradient(to bottom, transparent, rgba(245, 158, 11, 0.05), transparent);
-    animation: scan-sweep 9s linear infinite;
-}
-
-@keyframes scan-sweep {
-    0% { top: -160px; }
-    100% { top: 100%; }
-}
-
-/* ---------------- HUD metric cards ---------------- */
+/* ---------------- Glassmorphic HUD cards ---------------- */
 .dashboard-card {
     position: relative;
-    border-radius: 10px;
-    transition: transform 0.3s cubic-bezier(.2, .8, .2, 1), box-shadow 0.3s cubic-bezier(.2, .8, .2, 1), border-color 0.3s ease;
-    background: rgba(12, 10, 9, 0.82);
-    border: 1px solid rgba(245, 158, 11, 0.22);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    box-shadow: 0 0 25px rgba(245, 158, 11, 0.1), 0 10px 26px rgba(0, 0, 0, 0.4);
+    border-radius: 24px;
+    transition: transform 0.35s cubic-bezier(.2, .8, .2, 1), box-shadow 0.35s cubic-bezier(.2, .8, .2, 1), border-color 0.35s ease;
+    background: linear-gradient(155deg, rgba(48, 40, 37, 0.55), rgba(26, 20, 18, 0.72));
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow:
+        0 24px 60px rgba(0, 0, 0, 0.40),
+        0 8px 22px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
     overflow: hidden;
     z-index: 2;
 }
 
+/* soft glowing highlight instead of a hard accent line */
 .dashboard-card::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, rgba(245, 158, 11, 0.8), rgba(245, 158, 11, 0) 70%);
-    opacity: .7;
-    transition: opacity 0.3s ease;
-    z-index: 1;
+    top: -30%;
+    left: 8%;
+    width: 55%;
+    height: 60%;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(217, 143, 131, 0.22), transparent);
+    filter: blur(20px);
+    opacity: .55;
+    pointer-events: none;
+    z-index: 0;
+    transition: opacity 0.35s ease;
 }
 
-/* Sci-fi corner brackets */
-.dashboard-card::after {
-    content: '';
-    position: absolute;
-    inset: 7px;
-    pointer-events: none;
+.dashboard-card > * {
+    position: relative;
     z-index: 1;
-    background-repeat: no-repeat;
-    background-size: 14px 14px;
-    background-image:
-        linear-gradient(to bottom, rgba(245, 158, 11, .65) 2px, transparent 2px),
-        linear-gradient(to right,  rgba(245, 158, 11, .65) 2px, transparent 2px),
-        linear-gradient(to bottom, rgba(245, 158, 11, .65) 2px, transparent 2px),
-        linear-gradient(to left,   rgba(245, 158, 11, .65) 2px, transparent 2px),
-        linear-gradient(to top,    rgba(245, 158, 11, .65) 2px, transparent 2px),
-        linear-gradient(to left,   rgba(245, 158, 11, .65) 2px, transparent 2px),
-        linear-gradient(to top,    rgba(245, 158, 11, .65) 2px, transparent 2px),
-        linear-gradient(to right,  rgba(245, 158, 11, .65) 2px, transparent 2px);
-    background-position:
-        top left, top left,
-        top right, top right,
-        bottom right, bottom right,
-        bottom left, bottom left;
-    opacity: .65;
-    transition: opacity 0.3s ease, filter 0.3s ease;
 }
 
 .dashboard-card:hover {
-    transform: translateY(-4px);
-    border-color: rgba(245, 158, 11, 0.55);
-    box-shadow: 0 0 40px rgba(245, 158, 11, 0.28), 0 22px 50px rgba(0, 0, 0, 0.55);
+    transform: translateY(-5px);
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow:
+        0 30px 70px rgba(0, 0, 0, 0.48),
+        0 10px 26px rgba(0, 0, 0, 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.09);
 }
 
 .dashboard-card:hover::before {
-    opacity: 1;
-    background: linear-gradient(90deg, rgba(245, 158, 11, 0.95), rgba(217, 143, 131, 0.15) 80%);
+    opacity: .9;
 }
 
-.dashboard-card:hover::after {
-    opacity: 1;
-    filter: drop-shadow(0 0 5px rgba(245, 158, 11, .65));
-}
-
-/* Cyan HUD channel for the KPI Performance section */
-.hud-cyan .dashboard-card {
-    border-color: rgba(34, 211, 238, 0.22);
-    box-shadow: 0 0 25px rgba(34, 211, 238, 0.09), 0 10px 26px rgba(0, 0, 0, 0.4);
-}
-
+/* Cool cyan-tinted glass channel for the KPI Performance section */
 .hud-cyan .dashboard-card::before {
-    background: linear-gradient(90deg, rgba(34, 211, 238, 0.8), rgba(34, 211, 238, 0) 70%);
-}
-
-.hud-cyan .dashboard-card::after {
-    background-image:
-        linear-gradient(to bottom, rgba(34, 211, 238, .65) 2px, transparent 2px),
-        linear-gradient(to right,  rgba(34, 211, 238, .65) 2px, transparent 2px),
-        linear-gradient(to bottom, rgba(34, 211, 238, .65) 2px, transparent 2px),
-        linear-gradient(to left,   rgba(34, 211, 238, .65) 2px, transparent 2px),
-        linear-gradient(to top,    rgba(34, 211, 238, .65) 2px, transparent 2px),
-        linear-gradient(to left,   rgba(34, 211, 238, .65) 2px, transparent 2px),
-        linear-gradient(to top,    rgba(34, 211, 238, .65) 2px, transparent 2px),
-        linear-gradient(to right,  rgba(34, 211, 238, .65) 2px, transparent 2px);
-    background-position:
-        top left, top left,
-        top right, top right,
-        bottom right, bottom right,
-        bottom left, bottom left;
-}
-
-.hud-cyan .dashboard-card:hover {
-    border-color: rgba(34, 211, 238, 0.55);
-    box-shadow: 0 0 40px rgba(34, 211, 238, 0.25), 0 22px 50px rgba(0, 0, 0, 0.55);
-}
-
-.hud-cyan .dashboard-card:hover::before {
-    background: linear-gradient(90deg, rgba(34, 211, 238, 0.95), rgba(138, 166, 171, 0.15) 80%);
-}
-
-.hud-cyan .dashboard-card:hover::after {
-    filter: drop-shadow(0 0 5px rgba(34, 211, 238, .65));
+    background: radial-gradient(closest-side, rgba(138, 166, 171, 0.26), transparent);
 }
 
 .hud-cyan .live-dot {
-    background: #22d3ee;
-    box-shadow: 0 0 6px 2px rgba(34, 211, 238, 0.7);
+    background: #8aa6ab;
+    box-shadow: 0 0 8px 2px rgba(138, 166, 171, 0.55);
 }
 
 .hud-cyan .live-dot { animation-name: live-pulse-cyan; }
 
 @keyframes live-pulse-cyan {
-    0%, 49% { opacity: 1; box-shadow: 0 0 6px 2px rgba(34, 211, 238, 0.7); }
-    50%, 100% { opacity: .3; box-shadow: 0 0 2px 1px rgba(34, 211, 238, 0.25); }
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px rgba(138, 166, 171, 0.55); }
+    50% { opacity: .55; box-shadow: 0 0 4px 1px rgba(138, 166, 171, 0.22); }
 }
 
 .hud-cyan .section-heading h5 {
-    color: #7fdbe8;
+    color: #a9c4c9;
 }
 
 .icon-circle {
-    width: 60px;
-    height: 60px;
-    border-radius: 14px;
+    width: 58px;
+    height: 58px;
+    border-radius: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .bg-primary-light { background: rgba(217, 143, 131, 0.14); }
@@ -314,31 +246,21 @@
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #a3a3a3;
+    letter-spacing: 0.06em;
+    color: #b7a9a4;
     margin-bottom: 8px;
 }
 
 .dashboard-value {
-    font-family: 'SFMono-Regular', Consolas, 'Roboto Mono', 'Liberation Mono', Menlo, monospace;
-    font-size: 24px;
+    font-size: 25px;
     font-weight: 700;
     letter-spacing: -0.01em;
-    color: #f5f2f0;
-    text-shadow: 0 0 14px rgba(245, 158, 11, 0.35);
+    color: #f7f1ee;
+    text-shadow: 0 2px 18px rgba(217, 143, 131, 0.28);
 }
 
 .hud-cyan .dashboard-value {
-    text-shadow: 0 0 14px rgba(34, 211, 238, 0.3);
-}
-
-.dashboard-card .fw-semibold,
-.dash-pill {
-    font-family: 'SFMono-Regular', Consolas, 'Roboto Mono', 'Liberation Mono', Menlo, monospace;
-}
-
-.dashboard-card .d-flex.justify-content-between.small > span:last-child {
-    font-family: 'SFMono-Regular', Consolas, 'Roboto Mono', 'Liberation Mono', Menlo, monospace;
+    text-shadow: 0 2px 18px rgba(138, 166, 171, 0.28);
 }
 
 .text-loss {
@@ -357,7 +279,7 @@
     font-size: 15px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     color: var(--luxe-ink);
     margin: 0;
 }
@@ -382,18 +304,18 @@
 }
 
 .live-dot {
-    width: 7px;
-    height: 7px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: #f59e0b;
-    box-shadow: 0 0 6px 2px rgba(245, 158, 11, 0.7);
-    animation: live-pulse 1.6s steps(2, jump-none) infinite;
+    background: #d98f83;
+    box-shadow: 0 0 8px 2px rgba(217, 143, 131, 0.55);
+    animation: live-pulse 2s ease-in-out infinite;
     flex-shrink: 0;
 }
 
 @keyframes live-pulse {
-    0%, 49% { opacity: 1; box-shadow: 0 0 6px 2px rgba(245, 158, 11, 0.7); }
-    50%, 100% { opacity: .3; box-shadow: 0 0 2px 1px rgba(245, 158, 11, 0.25); }
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px rgba(217, 143, 131, 0.55); }
+    50% { opacity: .55; box-shadow: 0 0 4px 1px rgba(217, 143, 131, 0.22); }
 }
 
 .mini-ring {
@@ -416,52 +338,51 @@
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Refined status pills — soft-tinted translucent fill + glowing hairline border */
+/* Soft glass status pills — fully rounded, gentle glow */
 .dash-pill {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 13px;
-    border-radius: 6px;
+    padding: 5px 14px;
+    border-radius: 999px;
     font-size: 11.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    font-weight: 600;
+    letter-spacing: 0.02em;
     border: 1px solid transparent;
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(8px);
     transition: box-shadow 0.3s ease;
 }
 
 .dash-pill-green {
-    background: rgba(142, 168, 138, 0.1);
-    border-color: rgba(142, 168, 138, 0.5);
+    background: rgba(142, 168, 138, 0.12);
+    border-color: rgba(142, 168, 138, 0.4);
     color: #aac9a5;
-    box-shadow: 0 0 14px rgba(142, 168, 138, 0.4);
+    box-shadow: 0 0 16px rgba(142, 168, 138, 0.3);
 }
 
 .dash-pill-amber {
-    background: rgba(201, 166, 107, 0.1);
-    border-color: rgba(201, 166, 107, 0.5);
+    background: rgba(201, 166, 107, 0.12);
+    border-color: rgba(201, 166, 107, 0.4);
     color: #ddc290;
-    box-shadow: 0 0 14px rgba(201, 166, 107, 0.4);
+    box-shadow: 0 0 16px rgba(201, 166, 107, 0.3);
 }
 
 .dash-pill-red {
-    background: rgba(168, 82, 74, 0.1);
-    border-color: rgba(168, 82, 74, 0.5);
+    background: rgba(168, 82, 74, 0.12);
+    border-color: rgba(168, 82, 74, 0.4);
     color: #e0998f;
-    box-shadow: 0 0 14px rgba(168, 82, 74, 0.4);
+    box-shadow: 0 0 16px rgba(168, 82, 74, 0.3);
 }
 
 .dash-pill-gray {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.12);
     color: #a3a3a3;
     box-shadow: none;
 }
 </style>
 
-<div class="cyber-scanlines">
+<div class="dash-glass">
 <div class="row g-4">
 
     <!-- Welcome Card -->
@@ -675,7 +596,7 @@
                                 show: true,
                                 fontSize: '15px',
                                 fontWeight: 700,
-                                fontFamily: "SFMono-Regular, Consolas, 'Roboto Mono', monospace",
+                                fontFamily: "'Poppins', -apple-system, BlinkMacSystemFont, sans-serif",
                                 color: '#e9dfda',
                                 formatter: (v) => Number(v).toFixed(1) + '%',
                             },
