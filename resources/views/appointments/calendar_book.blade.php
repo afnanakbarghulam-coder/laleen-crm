@@ -132,6 +132,12 @@
         padding: 8px 12px;
         margin-bottom: 8px;
         display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .fb-svc-row-main {
+        display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 8px;
@@ -152,6 +158,91 @@
         font-weight: 700;
         font-size: 13.5px;
         white-space: nowrap;
+    }
+
+    .fb-price-edit {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .fb-price-edit .currency {
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #c9a39a;
+    }
+
+    .fb-price-edit .price-input {
+        width: 62px;
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid rgba(217, 143, 131, 0.4);
+        color: #e79a91;
+        font-weight: 700;
+        font-size: 13.5px;
+        text-align: right;
+        padding: 1px 2px;
+    }
+
+    .fb-price-edit .price-input:focus {
+        outline: none;
+        border-bottom-color: #d98f83;
+    }
+
+    .fb-price-edit .price-input::-webkit-outer-spin-button,
+    .fb-price-edit .price-input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    .fb-price-edit .price-input[type=number] {
+        -moz-appearance: textfield;
+    }
+
+    .fb-discount-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-top: 6px;
+        border-top: 1px dashed rgba(217, 143, 131, 0.25);
+    }
+
+    .fb-discount-badge {
+        flex-shrink: 0;
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #8ea88a;
+        background: rgba(142, 168, 138, 0.14);
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+    .fb-discount-reason {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid rgba(217, 143, 131, 0.3);
+        color: #e6d9d5;
+        font-size: 12px;
+        padding: 1px 4px;
+    }
+
+    .fb-discount-reason:focus {
+        outline: none;
+        border-bottom-color: #d98f83;
+    }
+
+    .fb-discount-reason::placeholder {
+        color: #8a7d76;
+    }
+
+    .fb-footer .total-discount {
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #8ea88a;
     }
 
     .fb-svc-row .remove-btn {
@@ -441,6 +532,7 @@
             <div class="d-flex align-items-center gap-3">
                 <div class="text-end">
                     <div class="total-meta" id="fbFooterDuration">0min</div>
+                    <div class="total-discount d-none" id="fbFooterDiscount">Discount: −0.00 QAR</div>
                     <div class="total-price" id="fbFooterPrice">0 QAR</div>
                 </div>
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="offcanvas">Cancel</button>
@@ -623,20 +715,37 @@
         });
 
         /* ---------------- SERVICES ---------------- */
+        function fbServiceDiscount(s) {
+            return Math.max(0, (Number(s.original_price) || 0) - (Number(s.price) || 0));
+        }
+
         function fbRenderServices() {
             const list = document.getElementById('fbSvcList');
-            list.innerHTML = selectedServices.map((s, i) => `
+            list.innerHTML = selectedServices.map((s, i) => {
+                const discount = fbServiceDiscount(s);
+                return `
                 <div class="fb-svc-row">
-                    <div>
-                        <div class="name">${s.name}</div>
-                        <div class="meta">${s.duration} min</div>
+                    <div class="fb-svc-row-main">
+                        <div>
+                            <div class="name">${s.name}</div>
+                            <div class="meta">${s.duration} min</div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="fb-price-edit">
+                                <span class="currency">QAR</span>
+                                <input type="number" step="0.01" min="0" inputmode="decimal" class="price-input" data-idx="${i}" value="${s.price.toFixed(2)}">
+                            </div>
+                            <button type="button" class="remove-btn" data-idx="${i}"><i class="bx bx-x"></i></button>
+                        </div>
                     </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="price">${s.price.toFixed(2)} QAR</span>
-                        <button type="button" class="remove-btn" data-idx="${i}"><i class="bx bx-x"></i></button>
-                    </div>
+                    ${discount > 0 ? `
+                    <div class="fb-discount-row">
+                        <span class="fb-discount-badge">−${discount.toFixed(2)} QAR off ${s.original_price.toFixed(2)}</span>
+                        <input type="text" class="fb-discount-reason" data-idx="${i}" placeholder="Reason (optional)" value="${(s.discount_reason || '').replace(/"/g,'&quot;')}">
+                    </div>` : ''}
                 </div>
-            `).join('');
+            `;
+            }).join('');
 
             list.querySelectorAll('.remove-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -645,22 +754,66 @@
                 });
             });
 
-            const hidden = document.getElementById('svcHiddenInputs');
-            hidden.innerHTML = selectedServices.map(s =>
-                `<input type="hidden" name="service_name[]" value="${s.name.replace(/"/g,'&quot;')}">`
-            ).join('');
+            // Manual price override: staff can type a custom price for this
+            // specific booking without touching the service's master price.
+            // The discount badge/reason row and footer total/hidden inputs
+            // resync on each keystroke; the price list itself only fully
+            // re-renders when a discount note needs to appear/disappear, so
+            // typing doesn't steal focus.
+            list.querySelectorAll('.price-input').forEach(input => {
+                input.addEventListener('input', () => {
+                    const idx = Number(input.dataset.idx);
+                    const val = parseFloat(input.value);
+                    const hadDiscount = fbServiceDiscount(selectedServices[idx]) > 0;
+                    selectedServices[idx].price = (isNaN(val) || val < 0) ? 0 : val;
+                    const hasDiscount = fbServiceDiscount(selectedServices[idx]) > 0;
 
-            const totalPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
+                    if (hadDiscount !== hasDiscount) {
+                        fbRenderServices();
+                        list.querySelector(`.price-input[data-idx="${idx}"]`)?.focus();
+                    } else if (hasDiscount) {
+                        const badge = list.querySelector(`.fb-svc-row:nth-child(${idx + 1}) .fb-discount-badge`);
+                        if (badge) badge.textContent = `−${fbServiceDiscount(selectedServices[idx]).toFixed(2)} QAR off ${selectedServices[idx].original_price.toFixed(2)}`;
+                    }
+                    fbSyncHiddenAndTotals();
+                });
+                input.addEventListener('focus', () => input.select());
+            });
+
+            list.querySelectorAll('.fb-discount-reason').forEach(input => {
+                input.addEventListener('input', () => {
+                    selectedServices[Number(input.dataset.idx)].discount_reason = input.value;
+                    fbSyncHiddenAndTotals();
+                });
+            });
+
+            fbSyncHiddenAndTotals();
+            loadAvailableStaff();
+        }
+
+        function fbSyncHiddenAndTotals() {
+            const hidden = document.getElementById('svcHiddenInputs');
+            hidden.innerHTML = selectedServices.map(s => `
+                <input type="hidden" name="service_name[]" value="${s.name.replace(/"/g,'&quot;')}">
+                <input type="hidden" name="service_price[]" value="${s.price}">
+                <input type="hidden" name="service_discount_reason[]" value="${(s.discount_reason || '').replace(/"/g,'&quot;')}">
+            `).join('');
+
+            const totalPrice = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
+            const totalDiscount = selectedServices.reduce((sum, s) => sum + fbServiceDiscount(s), 0);
             const totalMin = selectedServices.reduce((sum, s) => sum + s.duration, 0);
 
             document.getElementById('bookPriceHidden').value = totalPrice.toFixed(2);
             document.getElementById('fbFooterPrice').textContent = totalPrice.toFixed(2) + ' QAR';
+
+            const discountEl = document.getElementById('fbFooterDiscount');
+            discountEl.classList.toggle('d-none', totalDiscount <= 0);
+            discountEl.textContent = `Discount: −${totalDiscount.toFixed(2)} QAR`;
+
             const hrs = Math.floor(totalMin / 60);
             const mins = totalMin % 60;
             document.getElementById('fbFooterDuration').textContent =
                 totalMin ? (hrs ? `${hrs}h ${mins}min` : `${mins}min`) : '0min';
-
-            loadAvailableStaff();
         }
 
         function fbRenderServiceResults(query) {
@@ -687,7 +840,7 @@
                         fbShowPanel('main');
                         return;
                     }
-                    selectedServices.push(Object.assign({}, svc));
+                    selectedServices.push(Object.assign({}, svc, { original_price: svc.price, discount_reason: '' }));
                     fbRenderServices();
                     fbShowPanel('main');
                 });

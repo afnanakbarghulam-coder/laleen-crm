@@ -76,6 +76,15 @@ class Appointment extends Model
     }
 
     /**
+     * Permanent audit trail of every manual price override/discount applied
+     * to this booking's services.
+     */
+    public function priceOverrides()
+    {
+        return $this->hasMany(AppointmentPriceOverride::class)->orderByDesc('created_at');
+    }
+
+    /**
      * Recompute the appointment's summary fields (service_name, price,
      * appointment_datetime, staff_id) from its line items. Call this any
      * time appointment_services rows are added, edited, or removed so the

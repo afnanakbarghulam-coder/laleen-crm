@@ -98,6 +98,42 @@
         font-size: 12.5px;
         margin-top: 10px;
     }
+
+    .line-item .item-name {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .line-item .discount-note {
+        font-size: 11px;
+        font-weight: 700;
+        color: #8ea88a;
+    }
+
+    .line-item .price-col {
+        text-align: right;
+    }
+
+    .line-item .original-price {
+        display: block;
+        font-size: 11.5px;
+        color: #8a7d76;
+        text-decoration: line-through;
+    }
+
+    .service-discount-banner {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(142,168,138,0.14);
+        border: 1px solid rgba(142,168,138,0.3);
+        color: #8ea88a;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 12.5px;
+        font-weight: 700;
+        margin-top: 10px;
+    }
 </style>
 
 @section('content')
@@ -125,10 +161,32 @@
                     <h6>Services</h6>
                     @foreach ($serviceItems as $item)
                         <div class="line-item">
-                            <span>{{ $item['name'] }} <span class="muted">({{ $item['duration'] }} min)</span></span>
-                            <span>{{ number_format($item['price'], 2) }} QAR</span>
+                            <span class="item-name">
+                                {{ $item['name'] }} <span class="muted">({{ $item['duration'] }} min)</span>
+                                @if (($item['discount_amount'] ?? 0) > 0)
+                                    <span class="discount-note">
+                                        <i class="bx bx-purchase-tag"></i> −{{ number_format($item['discount_amount'], 2) }} QAR off
+                                        @if (!empty($item['discount_reason']))
+                                            · {{ $item['discount_reason'] }}
+                                        @endif
+                                    </span>
+                                @endif
+                            </span>
+                            <span class="price-col">
+                                @if (($item['discount_amount'] ?? 0) > 0)
+                                    <span class="original-price">{{ number_format($item['original_price'], 2) }} QAR</span>
+                                @endif
+                                {{ number_format($item['price'], 2) }} QAR
+                            </span>
                         </div>
                     @endforeach
+
+                    @if ($serviceDiscountTotal > 0)
+                        <div class="service-discount-banner">
+                            <span><i class="bx bx-purchase-tag"></i> Service discounts applied</span>
+                            <span>−{{ number_format($serviceDiscountTotal, 2) }} QAR</span>
+                        </div>
+                    @endif
 
                     @if (count($upsellItems))
                         <h6 class="mt-4">Upsells</h6>
@@ -157,11 +215,14 @@
 
                     <h6 class="mt-4">Summary</h6>
                     <div class="summary-row"><span>Services</span><span id="sumServices">0.00</span></div>
+                    @if ($serviceDiscountTotal > 0)
+                        <div class="summary-row" style="color:#8ea88a;"><span>Service discounts (already applied)</span><span>−{{ number_format($serviceDiscountTotal, 2) }}</span></div>
+                    @endif
                     @if (count($upsellItems))
                         <div class="summary-row"><span>Upsells</span><span id="sumUpsells">{{ number_format($upsellsTotal, 2) }}</span></div>
                     @endif
                     <div class="summary-row"><span>Products</span><span id="sumProducts">0.00</span></div>
-                    <div class="summary-row"><span>Discount</span><span id="sumDiscount">−0.00</span></div>
+                    <div class="summary-row"><span>Checkout Discount</span><span id="sumDiscount">−0.00</span></div>
                     <div class="summary-row"><span>Tip</span><span id="sumTip">+0.00</span></div>
                     <div class="summary-row total"><span>Total Due</span><span id="sumTotal">0.00 QAR</span></div>
 

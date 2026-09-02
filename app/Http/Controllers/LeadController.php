@@ -79,7 +79,7 @@ class LeadController extends Controller
             'country_code' => 'required|string|max:5',
             'phone_number' => 'required|string|max:20',
             'customer_name' => 'required|string|max:255',
-            'assigned_agent_id' => 'required|exists:users,id',
+            'assigned_agent_id' => 'nullable|exists:users,id',
             'category' => 'required|in:' . implode(',', array_keys(Lead::MANUAL_CATEGORIES)),
             'service_interest' => 'required|string|max:255',
             'next_followup_date' => 'required|date',

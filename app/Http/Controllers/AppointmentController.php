@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Models\Customer;
 use App\Models\Service;
 use App\Models\AppointmentService;
+use App\Models\AppointmentPriceOverride;
 use App\Models\AppointmentUpsell;
 use App\Models\Appointment;
 use Illuminate\Http\Request;
@@ -155,6 +156,10 @@ class AppointmentController extends Controller
             'appointment_datetime' => 'required|date',
             'service_name' => 'required|array|min:1',
             'service_name.*' => 'string|max:255',
+            'service_price' => 'nullable|array',
+            'service_price.*' => 'nullable|numeric|min:0',
+            'service_discount_reason' => 'nullable|array',
+            'service_discount_reason.*' => 'nullable|string|max:255',
             'branch' => 'required|in:old_airport,wakrah,home_service',
             'price' => 'nullable|numeric',
             'booking_agent_id' => 'nullable|exists:users,id',
@@ -268,7 +273,14 @@ class AppointmentController extends Controller
             ]
         ));
 
-        $this->createServiceLineItems($appointment, $request->service_name, (int) $staffId, $startTime);
+        $this->createServiceLineItems(
+            $appointment,
+            $request->service_name,
+            (int) $staffId,
+            $startTime,
+            $request->service_price ?? [],
+            $request->service_discount_reason ?? []
+        );
 
         if ($request->input('then') === 'checkout') {
             return redirect()->route('appointments.revenue.payment', $appointment->id);
@@ -457,7 +469,11 @@ class AppointmentController extends Controller
 
     private function filteredAppointmentQuery(Request $request)
     {
-        $query = Appointment::query();
+        // Cancelled/no-show bookings no longer occupy a slot, so the
+        // calendar (month/week/day) shouldn't render them at all - once a
+        // booking is marked either, it drops off the timeline and the slot
+        // is immediately free for a new booking.
+        $query = Appointment::query()->whereNotIn('status', ['cancelled', 'no_show']);
 
         if ($request->filled('branch'))       $query->where('branch', $request->branch);
         if ($request->filled('staff_id'))     $query->where('staff_id', $request->staff_id);
@@ -714,7 +730,11 @@ class AppointmentController extends Controller
     private function staffHasTimeConflict(int $staffId, Carbon $newStart, int $newDuration, ?int $ignoreAppointmentId = null)
     {
         $newEnd = $newStart->copy()->addMinutes((int) $newDuration);
-        $query = Appointment::where('staff_id', $staffId);
+        // Cancelled/no-show appointments free up their slot immediately -
+        // they must never count as a conflict for a new or rescheduled
+        // booking.
+        $query = Appointment::where('staff_id', $staffId)
+            ->whereNotIn('status', ['cancelled', 'no_show']);
 
         if ($ignoreAppointmentId) {
             $query->where('id', '!=', $ignoreAppointmentId);
@@ -1209,6 +1229,9 @@ class AppointmentController extends Controller
             return collect($names)->map(fn($name) => [
                 'name' => $name,
                 'price' => $catalog->get($name)->price ?? 0,
+                'original_price' => $catalog->get($name)->price ?? 0,
+                'discount_amount' => 0,
+                'discount_reason' => null,
                 'duration' => $catalog->get($name)->duration ?? 0,
             ])->values()->all();
         }
@@ -1216,35 +1239,76 @@ class AppointmentController extends Controller
         return $lines->map(fn($s) => [
             'name' => $s->name,
             'price' => $s->final_price,
+            'original_price' => (float) ($s->original_price ?? $s->price),
+            'discount_amount' => (float) $s->discount_amount,
+            'discount_reason' => $s->discount_reason,
             'duration' => $s->duration,
         ])->values()->all();
     }
 
     /**
      * Create line items for a freshly booked appointment, stacking each
-     * service sequentially from the appointment's start time.
+     * service sequentially from the appointment's start time. $customPrices
+     * and $discountReasons are index-aligned with $serviceNames (from the
+     * booking drawer's per-service price override); a missing/blank price
+     * entry falls back to the service's catalog price. original_price always
+     * records the catalog price, independent of any override, so the
+     * discount given can be recovered later.
      */
-    private function createServiceLineItems(Appointment $appointment, array $serviceNames, int $staffId, Carbon $startTime): void
+    private function createServiceLineItems(Appointment $appointment, array $serviceNames, int $staffId, Carbon $startTime, array $customPrices = [], array $discountReasons = []): void
     {
         $catalog = Service::whereIn('name', $serviceNames)->get()->keyBy('name');
         $cursor = $startTime->copy();
 
-        foreach ($serviceNames as $name) {
+        foreach ($serviceNames as $index => $name) {
             $service = $catalog->get($name);
             $duration = $service->duration ?? 30;
+            $catalogPrice = (float) ($service->price ?? 0);
 
-            AppointmentService::create([
+            $customPrice = $customPrices[$index] ?? null;
+            $price = ($customPrice !== null && $customPrice !== '') ? (float) $customPrice : $catalogPrice;
+
+            $line = AppointmentService::create([
                 'appointment_id' => $appointment->id,
                 'service_id' => $service->id ?? null,
                 'staff_id' => $staffId,
                 'name' => $name,
-                'price' => $service->price ?? 0,
+                'price' => $price,
+                'original_price' => $catalogPrice,
                 'duration' => $duration,
                 'start_time' => $cursor->copy(),
+                'discount_reason' => $discountReasons[$index] ?? null,
             ]);
+
+            $this->logPriceOverrideIfDiscounted($line);
 
             $cursor->addMinutes($duration);
         }
+    }
+
+    /**
+     * Appends an immutable audit row to appointment_price_overrides whenever
+     * a service line actually carries a discount (original_price >
+     * final_price) - called after every create/update of an
+     * AppointmentService so booking-time and post-booking overrides alike
+     * end up in the same permanent, reportable log.
+     */
+    private function logPriceOverrideIfDiscounted(AppointmentService $line, ?string $reason = null): void
+    {
+        if ($line->discount_amount <= 0) {
+            return;
+        }
+
+        AppointmentPriceOverride::create([
+            'appointment_id' => $line->appointment_id,
+            'appointment_service_id' => $line->id,
+            'service_name' => $line->name,
+            'original_price' => $line->original_price,
+            'new_price' => $line->price,
+            'discount_amount' => $line->discount_amount,
+            'discount_reason' => $reason ?: $line->discount_reason,
+            'changed_by' => auth()->id(),
+        ]);
     }
 
     /**
@@ -1267,6 +1331,7 @@ class AppointmentController extends Controller
             'staff_id' => $request->staff_id ?: $appointment->staff_id,
             'name' => $service->name,
             'price' => $service->price,
+            'original_price' => $service->price,
             'duration' => $service->duration,
             'start_time' => $startTime,
         ]);
@@ -1299,6 +1364,7 @@ class AppointmentController extends Controller
             'staff_id' => 'nullable|exists:staff,id',
             'discount_type' => 'nullable|in:flat,percent',
             'discount_value' => 'nullable|numeric|min:0',
+            'discount_reason' => 'nullable|string|max:255',
         ]);
 
         $data = [
@@ -1308,16 +1374,26 @@ class AppointmentController extends Controller
             'staff_id' => $request->staff_id ?: null,
             'discount_type' => $request->discount_type ?: null,
             'discount_value' => $request->discount_value ?: 0,
+            'discount_reason' => $request->discount_reason ?: null,
         ];
 
         if ($request->filled('service_id')) {
             $service = Service::find($request->service_id);
             $data['service_id'] = $service->id;
             $data['name'] = $service->name;
+
+            // Swapping to a different catalog service resets the baseline
+            // it's discounted against; otherwise the line keeps whatever
+            // original_price it was first booked/added at.
+            if ((int) $request->service_id !== (int) $appointmentService->service_id) {
+                $data['original_price'] = $service->price;
+            }
         }
 
         $appointmentService->update($data);
         $appointment->syncFromServices();
+
+        $this->logPriceOverrideIfDiscounted($appointmentService->fresh(), $request->discount_reason);
 
         return response()->json([
             'success' => true,
@@ -1356,10 +1432,13 @@ class AppointmentController extends Controller
             'service_id' => $s->service_id,
             'name' => $s->name,
             'price' => (float) $s->price,
+            'original_price' => (float) ($s->original_price ?? $s->price),
             'final_price' => $s->final_price,
             'duration' => $s->duration,
             'discount_type' => $s->discount_type,
             'discount_value' => (float) $s->discount_value,
+            'discount_amount' => (float) $s->discount_amount,
+            'discount_reason' => $s->discount_reason,
             'start_time' => $s->start_time->format('H:i'),
             'start_time_label' => $s->start_time->format('g:i A'),
             'staff_id' => $s->staff_id,
@@ -1481,12 +1560,13 @@ class AppointmentController extends Controller
         $appointment->load('customer', 'staff', 'upsells.staff');
         $serviceItems = $this->appointmentServiceItems($appointment);
         $servicesTotal = array_sum(array_column($serviceItems, 'price'));
+        $serviceDiscountTotal = array_sum(array_column($serviceItems, 'discount_amount'));
         $products = Product::orderBy('name')->get();
 
         $upsellItems = $appointment->upsells->map(fn($u) => $this->formatUpsellLine($u))->values()->all();
         $upsellsTotal = array_sum(array_column($upsellItems, 'amount'));
 
-        return view('revenue.payment', compact('appointment', 'serviceItems', 'servicesTotal', 'products', 'upsellItems', 'upsellsTotal'));
+        return view('revenue.payment', compact('appointment', 'serviceItems', 'servicesTotal', 'serviceDiscountTotal', 'products', 'upsellItems', 'upsellsTotal'));
     }
 
     public function storePayment(Request $request, Appointment $appointment)
@@ -1586,6 +1666,8 @@ class AppointmentController extends Controller
                 'type' => 'service',
                 'name' => $item['name'],
                 'price' => $item['price'],
+                'original_price' => $item['original_price'],
+                'discount_amount' => $item['discount_amount'],
                 'quantity' => 1,
                 'total' => $item['price'],
             ]);

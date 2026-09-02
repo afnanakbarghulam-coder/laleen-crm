@@ -81,7 +81,7 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Next Follow-up Date <span class="text-danger">*</span></label>
-                            <input type="date" name="next_followup_date" class="form-control" required
+                            <input type="date" name="next_followup_date" class="form-control next-followup-date-input" required
                                 value="{{ optional($lead->next_followup_date)->format('Y-m-d') }}">
                         </div>
 

@@ -392,6 +392,21 @@
             });
         })();
 
+        // Open the native calendar picker on any click inside the Next
+        // Follow-up Date field (icon or text area alike) instead of making
+        // staff hit the small calendar glyph precisely. Delegated on
+        // document since the Edit modal is repeated once per lead row.
+        document.addEventListener('click', function(e) {
+            const dateInput = e.target.closest('.next-followup-date-input');
+            if (dateInput && typeof dateInput.showPicker === 'function') {
+                try {
+                    dateInput.showPicker();
+                } catch (err) {
+                    // Ignored - e.g. browser blocks showPicker() outside a user gesture.
+                }
+            }
+        });
+
         // Inline "Needful Done" toggle straight from the leads table.
         document.addEventListener('change', function(e) {
             if (!e.target.matches('.needful-done-select')) return;

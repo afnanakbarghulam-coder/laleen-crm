@@ -37,9 +37,9 @@
                          </div>
 
                          <div class="col-md-6">
-                             <label class="form-label">Agent Assign <span class="text-danger">*</span></label>
-                             <select name="assigned_agent_id" class="form-select" required>
-                                 <option value="">-- Select Agent --</option>
+                             <label class="form-label">Agent Assign</label>
+                             <select name="assigned_agent_id" class="form-select">
+                                 <option value="">-- Unassigned --</option>
                                  @foreach ($agents as $agent)
                                      <option value="{{ $agent->id }}">{{ $agent->name }}</option>
                                  @endforeach
@@ -66,7 +66,7 @@
                          </div>
                          <div class="col-md-6">
                              <label class="form-label">Next Follow-up Date <span class="text-danger">*</span></label>
-                             <input type="date" name="next_followup_date" class="form-control" required>
+                             <input type="date" name="next_followup_date" class="form-control next-followup-date-input" required>
                          </div>
 
                          <div class="col-12">

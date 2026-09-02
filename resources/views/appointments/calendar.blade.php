@@ -1218,6 +1218,10 @@
                         <button type="button" class="drawer-add-pill" id="drawerAddServiceBtn">
                             <i class="bx bx-plus"></i> Add service
                         </button>
+                        <div class="svc-row small d-none" id="drawerDiscountRow" style="color:#8ea88a;">
+                            <span>Total discount</span>
+                            <span id="drawerDiscountTotal"></span>
+                        </div>
                         <div class="svc-row fw-bold mt-2 pt-2 border-top">
                             <span>Total</span>
                             <span id="drawerTotal"></span>
@@ -1243,6 +1247,10 @@
 
                         <select id="editSvcServiceSelect" class="form-select form-select-sm mb-2"></select>
 
+                        <div class="text-muted small mb-2 d-none" id="editSvcOriginalPriceWrap">
+                            Catalog price: <span id="editSvcOriginalPrice"></span> QAR
+                        </div>
+
                         <div class="row g-2">
                             <div class="col-6">
                                 <label class="form-label small mb-1">Price (QAR)</label>
@@ -1258,6 +1266,11 @@
                             </div>
                         </div>
                         <input type="number" id="editSvcDiscountValue" class="form-control form-control-sm mt-2 d-none" min="0" step="0.01" placeholder="Discount value">
+
+                        <div class="d-flex align-items-center gap-2 mt-2 p-2 rounded d-none" id="editSvcDiscountSummary" style="background: rgba(142,168,138,0.14);">
+                            <span class="fw-bold small" style="color:#8ea88a;">Discount: <span id="editSvcDiscountAmount">0.00</span> QAR</span>
+                        </div>
+                        <input type="text" id="editSvcDiscountReason" class="form-control form-control-sm mt-2" placeholder="Discount reason (optional)">
 
                         <div class="row g-2 mt-1">
                             <div class="col-6">
@@ -2066,15 +2079,27 @@
 
         function renderDrawerServiceList(a, isFinal) {
             const el = document.getElementById('drawerServices');
-            el.innerHTML = a.services.map(s => `
+            el.innerHTML = a.services.map(s => {
+                // discount_amount is the authoritative original-vs-final gap
+                // (raw price override + any flat/percent discount combined);
+                // discount_type only tells us whether a flat/percent
+                // discount was ALSO layered on top of an unchanged price.
+                const hasDiscount = Number(s.discount_amount) > 0;
+                return `
                 <div class="svc-item" data-line-id="${s.id}">
                     <div>
                         <div class="name">${s.name}</div>
                         <div class="meta">${s.start_time_label} · ${s.duration}min${s.staff_name ? ' · ' + s.staff_name : ''}</div>
+                        ${hasDiscount ? `
+                            <div class="meta" style="color:#8ea88a;" title="${s.discount_reason ? s.discount_reason.replace(/"/g,'&quot;') : ''}">
+                                <i class="bx bx-purchase-tag"></i> −${Number(s.discount_amount).toFixed(2)} QAR off ${Number(s.original_price).toFixed(2)}
+                                ${s.discount_reason ? ` · ${s.discount_reason}` : ''}
+                            </div>
+                        ` : ''}
                     </div>
                     <div class="d-flex align-items-center gap-1">
                         <span class="price">
-                            ${s.discount_type ? `<span class="strike">${Number(s.price).toFixed(2)}</span>` : ''}
+                            ${hasDiscount ? `<span class="strike">${Number(s.original_price).toFixed(2)}</span>` : ''}
                             ${Number(s.final_price).toFixed(2)} QAR
                         </span>
                         ${(isFinal || !CAN_EDIT_BOOKINGS) ? '' : `
@@ -2083,8 +2108,13 @@
                         `}
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
             document.getElementById('drawerTotal').textContent = Number(a.price).toFixed(2) + ' QAR';
+
+            const totalDiscount = (a.services || []).reduce((sum, s) => sum + (Number(s.discount_amount) || 0), 0);
+            document.getElementById('drawerDiscountRow').classList.toggle('d-none', totalDiscount <= 0);
+            document.getElementById('drawerDiscountTotal').textContent = '−' + totalDiscount.toFixed(2) + ' QAR';
 
             el.querySelectorAll('[data-edit]').forEach(btn => {
                 btn.addEventListener('click', () => openEditServiceView(Number(btn.dataset.edit)));
@@ -2158,14 +2188,43 @@
             ).join('');
 
             document.getElementById('editSvcPrice').value = line.price;
+            document.getElementById('editSvcOriginalPriceWrap').classList.remove('d-none');
+            document.getElementById('editSvcOriginalPrice').textContent = Number(line.original_price).toFixed(2);
             document.getElementById('editSvcDiscountType').value = line.discount_type || '';
             document.getElementById('editSvcDiscountValue').value = line.discount_value || 0;
             document.getElementById('editSvcDiscountValue').classList.toggle('d-none', !line.discount_type);
+            document.getElementById('editSvcDiscountReason').value = line.discount_reason || '';
             document.getElementById('editSvcStartTime').value = line.start_time;
             document.getElementById('editSvcDuration').value = line.duration;
             document.getElementById('editSvcStaff').value = line.staff_id || '';
 
+            editSvcOriginalPrice = Number(line.original_price);
+            updateEditSvcDiscountSummary();
+
             showDrawerServicesView('edit');
+        }
+
+        // Baseline the "Edit service" panel's discount preview is computed
+        // against - the catalog price the line was originally added at, not
+        // whatever's currently sitting in the price field.
+        let editSvcOriginalPrice = 0;
+
+        function updateEditSvcDiscountSummary() {
+            const price = parseFloat(document.getElementById('editSvcPrice').value) || 0;
+            const discountType = document.getElementById('editSvcDiscountType').value;
+            const discountValue = parseFloat(document.getElementById('editSvcDiscountValue').value) || 0;
+
+            let finalPrice = price;
+            if (discountType === 'percent') {
+                finalPrice = Math.max(0, price * (1 - Math.min(discountValue, 100) / 100));
+            } else if (discountType === 'flat') {
+                finalPrice = Math.max(0, price - discountValue);
+            }
+
+            const discountAmount = Math.max(0, editSvcOriginalPrice - finalPrice);
+            const summary = document.getElementById('editSvcDiscountSummary');
+            summary.classList.toggle('d-none', discountAmount <= 0);
+            document.getElementById('editSvcDiscountAmount').textContent = discountAmount.toFixed(2);
         }
 
         document.getElementById('editSvcServiceSelect').addEventListener('change', function() {
@@ -2173,11 +2232,21 @@
             if (svc) {
                 document.getElementById('editSvcPrice').value = svc.price;
                 document.getElementById('editSvcDuration').value = svc.duration;
+                // Swapping the service type resets the baseline it's
+                // discounted against, matching the controller's behavior.
+                editSvcOriginalPrice = svc.price;
+                document.getElementById('editSvcOriginalPrice').textContent = Number(svc.price).toFixed(2);
+                updateEditSvcDiscountSummary();
             }
         });
 
         document.getElementById('editSvcDiscountType').addEventListener('change', function() {
             document.getElementById('editSvcDiscountValue').classList.toggle('d-none', !this.value);
+            updateEditSvcDiscountSummary();
+        });
+
+        ['editSvcPrice', 'editSvcDiscountValue'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateEditSvcDiscountSummary);
         });
 
         document.getElementById('editSvcApplyBtn').addEventListener('click', function() {
@@ -2196,6 +2265,7 @@
                         price: document.getElementById('editSvcPrice').value,
                         discount_type: document.getElementById('editSvcDiscountType').value || null,
                         discount_value: document.getElementById('editSvcDiscountValue').value || 0,
+                        discount_reason: document.getElementById('editSvcDiscountReason').value || null,
                         start_time: `${date}T${time}`,
                         duration: document.getElementById('editSvcDuration').value,
                         staff_id: document.getElementById('editSvcStaff').value || null,
