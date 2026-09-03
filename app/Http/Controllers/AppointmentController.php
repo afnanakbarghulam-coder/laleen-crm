@@ -151,8 +151,8 @@ class AppointmentController extends Controller
     public function store(Request $request)
     {
         $rules = [
-            'customer_name' => 'nullable|string|max:255',
-            'phone' => 'nullable|string|max:20',
+            'customer_name' => 'required|string|max:255',
+            'phone' => ['required', 'string', 'max:20', 'regex:/^\+?[1-9]\d{6,14}$/'],
             'appointment_datetime' => 'required|date',
             'service_name' => 'required|array|min:1',
             'service_name.*' => 'string|max:255',
@@ -167,6 +167,8 @@ class AppointmentController extends Controller
         ];
 
         $messages = [
+            'customer_name.required' => 'Please select an existing client or add a new client.',
+            'phone.required' => 'Please select an existing client or add a new client.',
             'appointment_datetime.required' => 'Appointment date and time is required.',
             'service_name.required' => 'At least one service must be selected.',
             'branch.required' => 'Please select a branch.',
@@ -175,7 +177,8 @@ class AppointmentController extends Controller
             'staff_id.exists' => 'Selected staff does not exist.',
             'booking_agent_id.exists' => 'Selected booking agent does not exist.',
             'service_name.*.string' => 'Each service must be a valid string.',
-            'service_name.*.max' => 'Each service name cannot exceed 255 characters.'
+            'service_name.*.max' => 'Each service name cannot exceed 255 characters.',
+            'phone.regex' => 'Enter a valid phone number with country code, e.g. +974XXXXXXXX.'
         ];
 
         $request->validate($rules, $messages);
@@ -234,7 +237,15 @@ class AppointmentController extends Controller
 
         $startTime = Carbon::parse($request->appointment_datetime);
         // total duration of selected services
-        $duration = Service::whereIn('name', $request->service_name)->sum('duration') ?? 30;
+        $duration = $this->totalServiceDuration($request->service_name);
+
+        $unskilled = $this->unskilledServices((int) $staffId, $request->service_name);
+        if (!empty($unskilled)) {
+            return redirect()->route('appointments.calendar', [
+                'date' => $startTime->toDateString(),
+                'staff_id' => $staffId
+            ])->with('error', 'Staff member is not skilled to do this service: ' . implode(', ', $unskilled) . '.');
+        }
 
         if ($this->staffHasTimeConflict($staffId, $startTime, $duration)) {
             // return redirect()->back()->with('error', 'Staff is already booked during this time.')->withInput();
@@ -246,29 +257,24 @@ class AppointmentController extends Controller
 
 
         $services = implode(', ', $request->service_name);
-        $phone = $request->phone ? preg_replace('/\D/', '', $request->phone) : '';
+        $phone = preg_replace('/\D/', '', $request->phone);
 
-        // Walk-ins (no phone given) aren't linked to a client profile or revenue history.
-        $customerId = null;
-        $lifetimeRevenue = (float) ($request->price ?? 0);
+        // Every booking now requires a real client (selected or newly added) —
+        // there's no walk-in fallback, so a customer record always exists.
+        $previousRevenue = Appointment::whereRaw("REPLACE(REPLACE(REPLACE(phone, ' ', ''), '(', ''), ')', '') = ?", [$phone])
+            ->sum('price');
+        $lifetimeRevenue = $previousRevenue + ($request->price ?? 0);
 
-        if ($phone !== '') {
-            $previousRevenue = Appointment::whereRaw("REPLACE(REPLACE(REPLACE(phone, ' ', ''), '(', ''), ')', '') = ?", [$phone])
-                ->sum('price');
-            $lifetimeRevenue = $previousRevenue + ($request->price ?? 0);
-
-            $customer = $this->findOrCreateCustomer($phone, $request->customer_name);
-            $customerId = $customer->id;
-        }
+        $customer = $this->findOrCreateCustomer($phone, $request->customer_name);
 
         $appointment = Appointment::create(array_merge(
             $request->all(),
             [
                 'lifetime_revenue' => $lifetimeRevenue,
                 'service_name' => $services,
-                'customer_name' => $request->customer_name ?: 'Walk-in',
+                'customer_name' => $request->customer_name,
                 'phone' => $phone,
-                'customer_id' => $customerId,
+                'customer_id' => $customer->id,
                 'created_by' => auth()->id(),
             ]
         ));
@@ -308,7 +314,7 @@ class AppointmentController extends Controller
     {
         $request->validate([
             'customer_name' => 'nullable|string|max:255',
-            'phone' => 'nullable|string|max:20',
+            'phone' => ['nullable', 'string', 'max:20', 'regex:/^\+?[1-9]\d{6,14}$/'],
             'appointment_datetime' => 'required|date',
             'service_name' => 'required|array',
             'service_name.*' => 'string|max:255',
@@ -316,6 +322,8 @@ class AppointmentController extends Controller
             'price' => 'nullable|numeric',
             'booking_agent_id' => 'nullable|exists:users,id',
             'staff_id' => 'nullable|exists:staff,id'
+        ], [
+            'phone.regex' => 'Enter a valid phone number with country code, e.g. +974XXXXXXXX.'
         ]);
 
         $services = implode(', ', $request->service_name);
@@ -323,7 +331,15 @@ class AppointmentController extends Controller
 
         $staffId = $request->staff_id ?? $appointment->staff_id;
         $startTime = Carbon::parse($request->appointment_datetime);
-        $duration = Service::whereIn('name', $request->service_name)->sum('duration') ?? 30;
+        $duration = $this->totalServiceDuration($request->service_name);
+
+        $unskilled = $this->unskilledServices((int) $staffId, $request->service_name);
+        if (!empty($unskilled)) {
+            return redirect()->route('appointments.calendar', [
+                'date' => $startTime->toDateString(),
+                'staff_id' => $staffId
+            ])->with('error', 'Staff member is not skilled to do this service: ' . implode(', ', $unskilled) . '.');
+        }
 
         if ($this->staffHasTimeConflict($staffId, $startTime, $duration, $appointment->id)) {
             // return redirect()->back()->with('error', 'Staff is already booked during this time.')->withInput();
@@ -490,6 +506,7 @@ class AppointmentController extends Controller
         $branch = $request->branch ?? 'old_airport';
 
         $staffQuery = Staff::select('id', 'name', 'weekly_off', 'availability_status', 'off_from', 'off_to', 'profile_picture')
+            ->with('services:id,name')
             ->orderBy('name');
 
         if ($request->filled('staff_id')) {
@@ -511,6 +528,10 @@ class AppointmentController extends Controller
             'profile_picture' => $s->profile_picture
                 ? asset(str_replace('\\', '/', $s->profile_picture))
                 : asset('design/sneat-admin-template/assets/img/avatars/1.png'),
+            // Service names this staff member is trained/assigned for
+            // (service_staff pivot). Lets the calendar reject a drag-and-drop
+            // onto an unqualified staff member instantly, client-side.
+            'skills' => $s->services->pluck('name'),
         ]);
 
         if ($view === 'month') {
@@ -643,7 +664,10 @@ class AppointmentController extends Controller
         $appointments = [];
         $dayAppointments->each(function ($a) use (&$appointments, $dayEnd, $upsellSummaries) {
                 $start = Carbon::parse($a->appointment_datetime);
-                $duration = Service::where('name', $a->service_name)->value('duration') ?? 30;
+                // service_name is a flat "A, B, C" list when multiple services
+                // are booked together - it never matches a single catalog row,
+                // so duration must be summed across the exploded names.
+                $duration = $this->totalServiceDuration(explode(',', $a->service_name));
                 $end = $start->copy()->addMinutes($duration);
                 if ($end->gt($dayEnd)) {
                     $end = $dayEnd;
@@ -727,6 +751,47 @@ class AppointmentController extends Controller
         };
     }
 
+    /**
+     * Total minutes for a set of service names, summed from the current
+     * service catalog. Appointments store their services as a flat
+     * "A, B, C" string on `service_name` (there's no duration/end_time
+     * column on appointments itself), so every place that needs a
+     * duration - conflict checks, reschedule, the calendar grid's block
+     * height - must derive it the same way. Falls back to 30 minutes only
+     * when nothing in the list matches the catalog (e.g. a renamed/deleted
+     * service), never on a 0-minute service.
+     */
+    private function totalServiceDuration(array $serviceNames): int
+    {
+        $names = array_filter(array_map('trim', $serviceNames));
+        if (empty($names)) {
+            return 30;
+        }
+
+        return (int) (Service::whereIn('name', $names)->sum('duration') ?: 30);
+    }
+
+    /**
+     * Names of the given services the staff member is NOT trained/assigned
+     * to perform, per Services > Team members (the service_staff pivot).
+     * Empty return means fully qualified. A service name that doesn't
+     * match the catalog at all is treated as unverified - never skilled.
+     */
+    private function unskilledServices(int $staffId, array $serviceNames): array
+    {
+        $names = array_values(array_unique(array_filter(array_map('trim', $serviceNames))));
+        if (empty($names)) {
+            return [];
+        }
+
+        $qualified = Service::whereIn('name', $names)
+            ->whereHas('staff', fn($q) => $q->where('staff.id', $staffId))
+            ->pluck('name')
+            ->all();
+
+        return array_values(array_diff($names, $qualified));
+    }
+
     private function staffHasTimeConflict(int $staffId, Carbon $newStart, int $newDuration, ?int $ignoreAppointmentId = null)
     {
         $newEnd = $newStart->copy()->addMinutes((int) $newDuration);
@@ -743,11 +808,7 @@ class AppointmentController extends Controller
         $appointments = $query->get();
         foreach ($appointments as $appointment) {
             $existingStart = Carbon::parse($appointment->appointment_datetime);
-            $serviceNames = array_map('trim', explode(',', $appointment->service_name));
-            $existingDuration = Service::whereIn('name', $serviceNames)->sum('duration');
-
-            // fallback safety
-            $existingDuration = (int) ($existingDuration ?: 30);
+            $existingDuration = $this->totalServiceDuration(explode(',', $appointment->service_name));
             $existingEnd = $existingStart->copy()->addMinutes($existingDuration);
 
             // ✅ OVERLAP CHECK
@@ -981,16 +1042,18 @@ class AppointmentController extends Controller
         $branch = $request->branch;
 
         // Total duration of selected services
-        $duration = Service::whereIn('name', $request->services)
-            ->sum('duration') ?? 30;
+        $duration = $this->totalServiceDuration($request->services);
 
-        // Staff eligible for at least one of the selected services, per the
-        // explicit service_staff team-member assignment (Services > Team members).
+        // Staff trained/skilled for EVERY selected service - not just one of
+        // them - per the explicit service_staff assignment (Services > Team
+        // members). A staff member missing even one of the selected services
+        // must not be offered here.
+        $serviceIds = Service::whereIn('name', $request->services)->pluck('id');
         $eligibleStaffIds = \Illuminate\Support\Facades\DB::table('service_staff')
-            ->join('services', 'services.id', '=', 'service_staff.service_id')
-            ->whereIn('services.name', $request->services)
-            ->pluck('service_staff.staff_id')
-            ->unique();
+            ->whereIn('service_id', $serviceIds)
+            ->groupBy('staff_id')
+            ->havingRaw('COUNT(DISTINCT service_id) = ?', [$serviceIds->count()])
+            ->pluck('staff_id');
 
         $staffs = Staff::where('availability_status', 'present')
             ->whereIn('id', $eligibleStaffIds)
@@ -1191,7 +1254,17 @@ class AppointmentController extends Controller
             }
         }
 
-        $duration = Service::whereIn('name', array_map('trim', explode(',', $appointment->service_name)))->sum('duration') ?: 30;
+        $duration = $this->totalServiceDuration(explode(',', $appointment->service_name));
+
+        if ($staffId) {
+            $unskilled = $this->unskilledServices((int) $staffId, explode(',', $appointment->service_name));
+            if (!empty($unskilled)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Staff member is not skilled to do this service: ' . implode(', ', $unskilled) . '.',
+                ], 422);
+            }
+        }
 
         if ($staffId && $this->staffHasTimeConflict((int) $staffId, $newStart, $duration, $appointment->id)) {
             return response()->json([

@@ -450,6 +450,11 @@
         box-shadow: 0 1px 2px rgba(16, 24, 40, .06);
         transition: box-shadow .12s ease, transform .12s ease;
         z-index: 1;
+        /* Without this, grabbing the card by its text starts a native text
+           selection instead of the HTML5 drag gesture, so dragstart never
+           fires and the drop silently does nothing. */
+        user-select: none;
+        -webkit-user-drag: element;
     }
 
     .cal-appt:hover {
@@ -636,6 +641,8 @@
         border-left: 3px solid transparent;
         cursor: pointer;
         overflow: hidden;
+        user-select: none;
+        -webkit-user-drag: element;
     }
 
     .cal-chip strong {
@@ -1588,7 +1595,10 @@
 
                     blocks.forEach(b => {
                         const diffMinutes = b.start_minutes - dayStartMinutes;
-                        const top = HEADER_H + diffMinutes * PPM;
+                        // .cal-block is positioned inside .cal-slots, which already
+                        // starts below the 84px sticky header in normal flow - adding
+                        // HEADER_H here would double-count it and draw the block too low.
+                        const top = diffMinutes * PPM;
                         const height = Math.max((b.end_minutes - b.start_minutes) * PPM, 30);
                         html += `<div class="cal-block" style="top:${top}px;height:${height}px" title="${b.reason}"
                                 onclick="event.stopPropagation(); removeBlock(${b.id})">
@@ -1599,7 +1609,9 @@
                     apts.forEach(a => {
                         const color = data.status_colors[a.status] || '#c9a39a';
                         const diffMinutes = a.start_minutes - dayStartMinutes;
-                        const top = HEADER_H + diffMinutes * PPM;
+                        // Same reasoning as .cal-block above: .cal-slots already sits
+                        // below the header, so this must not add HEADER_H again.
+                        const top = diffMinutes * PPM;
                         const height = Math.max(a.duration * PPM, 46);
 
                         html += `<div class="cal-appt status-${a.status}" data-id="${a.id}"
@@ -2543,6 +2555,43 @@
             e.currentTarget.classList.remove('drag-over');
         }
 
+        /**
+         * Looks up a dragged appointment's service names from the last
+         * fetched calendar payload, without a round trip. `latestData.appointments`
+         * is keyed by staff_id in day view ({staffId: [appt, ...]}) and by
+         * staff_id then date in week/3-day view ({staffId: {date: [appt, ...]}}),
+         * so this normalizes both shapes into a flat list of appointment arrays.
+         */
+        function findApptServiceNames(id) {
+            if (!latestData || !latestData.appointments) return null;
+            for (const key in latestData.appointments) {
+                const byKey = latestData.appointments[key];
+                const lists = Array.isArray(byKey) ? [byKey] : Object.values(byKey);
+                for (const list of lists) {
+                    const found = list.find(a => String(a.id) === String(id));
+                    if (found) {
+                        return found.service_name.split(',').map(s => s.trim()).filter(Boolean);
+                    }
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Service names the target staff member is NOT trained for, per the
+         * `skills` list calendarData() attaches to each staff (service_staff
+         * pivot). Returns [] (treated as "allowed") when we can't determine
+         * services or staff client-side - the server-side check in
+         * reschedule() is the real authority and still applies either way.
+         */
+        function staffMissingSkillsFor(staffId, serviceNames) {
+            if (!latestData || !latestData.staffs || !serviceNames) return [];
+            const staff = latestData.staffs.find(s => String(s.id) === String(staffId));
+            if (!staff) return [];
+            const skills = staff.skills || [];
+            return serviceNames.filter(name => !skills.includes(name));
+        }
+
         function onSlotDrop(e, staffId, date, time) {
             e.preventDefault();
             e.currentTarget.classList.remove('drag-over');
@@ -2550,6 +2599,13 @@
 
             const id = draggedAppointmentId;
             draggedAppointmentId = null;
+
+            const missing = staffMissingSkillsFor(staffId, findApptServiceNames(id));
+            if (missing.length) {
+                showCalToast('Staff member is not skilled to do this service: ' + missing.join(', ') + '.', 'error');
+                return;
+            }
+
             rescheduleAppointment(id, `${date}T${time}`, staffId);
         }
 
@@ -2561,6 +2617,13 @@
             const id = draggedAppointmentId;
             const minutes = draggedApptMinutes ?? 0;
             draggedAppointmentId = null;
+
+            const missing = staffMissingSkillsFor(staffId, findApptServiceNames(id));
+            if (missing.length) {
+                showCalToast('Staff member is not skilled to do this service: ' + missing.join(', ') + '.', 'error');
+                return;
+            }
+
             const hh = String(Math.floor(minutes / 60)).padStart(2, '0');
             const mm = String(minutes % 60).padStart(2, '0');
             rescheduleAppointment(id, `${date}T${hh}:${mm}`, staffId);

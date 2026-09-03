@@ -330,11 +330,6 @@
         color: #b98ea3;
     }
 
-    .fb-client-row.walkin .fb-client-avatar {
-        background: rgba(217, 143, 131,0.06);
-        color: #cbb8b0;
-    }
-
     .fb-client-name {
         font-weight: 700;
         font-size: 13.5px;
@@ -344,6 +339,18 @@
     .fb-client-phone {
         font-size: 12px;
         color: #c9a39a;
+    }
+
+    .fb-country-select {
+        flex: 0 0 108px;
+        max-width: 108px;
+        font-size: 12.5px;
+    }
+
+    .fb-phone-group:focus-within .form-select,
+    .fb-phone-group:focus-within .form-control {
+        border-color: var(--luxe-accent, #e79a91) !important;
+        box-shadow: 0 0 0 3px var(--luxe-accent-soft, rgba(217, 143, 131, 0.25)) !important;
     }
 
     .fb-service-row .svc-info .name {
@@ -422,7 +429,7 @@
             <div class="fb-rail" id="fbRail">
                 <div class="client-icon" id="fbRailIcon"><i class="bx bx-user-plus"></i></div>
                 <div class="client-label" id="fbRailLabel">Add client</div>
-                <div class="client-sub" id="fbRailSub">Or leave empty for walk-ins</div>
+                <div class="client-sub" id="fbRailSub">Search or add a new client</div>
             </div>
 
             <!-- CONTENT -->
@@ -485,7 +492,7 @@
 
                     <div class="fb-search-wrap">
                         <i class="bx bx-search"></i>
-                        <input type="text" id="fbClientSearch" class="form-control" placeholder="Search client or leave empty">
+                        <input type="text" id="fbClientSearch" class="form-control" placeholder="Search by name or phone">
                     </div>
 
                     <div class="fb-client-row add-new" onclick="fbShowAddClientForm()">
@@ -493,14 +500,26 @@
                         <div class="fb-client-name">Add new client</div>
                     </div>
 
-                    <div class="fb-client-row walkin" onclick="fbSelectWalkIn()">
-                        <div class="fb-client-avatar"><i class="bx bx-walk"></i></div>
-                        <div class="fb-client-name">Walk-In</div>
-                    </div>
-
                     <div id="fbAddClientForm" class="d-none border rounded p-3 my-2">
                         <input type="text" id="fbNewClientName" class="form-control form-control-sm mb-2" placeholder="Client name">
-                        <input type="text" id="fbNewClientPhone" class="form-control form-control-sm mb-2" placeholder="Phone number">
+                        <div class="input-group input-group-sm mb-1 fb-phone-group">
+                            <select id="fbNewClientCountryCode" class="form-select fb-country-select">
+                                <option value="+974" selected>🇶🇦 +974</option>
+                                <option value="+971">🇦🇪 +971</option>
+                                <option value="+966">🇸🇦 +966</option>
+                                <option value="+973">🇧🇭 +973</option>
+                                <option value="+965">🇰🇼 +965</option>
+                                <option value="+968">🇴🇲 +968</option>
+                                <option value="+20">🇪🇬 +20</option>
+                                <option value="+91">🇮🇳 +91</option>
+                                <option value="+92">🇵🇰 +92</option>
+                                <option value="+63">🇵🇭 +63</option>
+                                <option value="+44">🇬🇧 +44</option>
+                                <option value="+1">🇺🇸 +1</option>
+                            </select>
+                            <input type="tel" id="fbNewClientPhone" class="form-control" placeholder="Phone number" inputmode="tel" autocomplete="tel-national">
+                        </div>
+                        <small id="fbNewClientPhoneError" class="text-danger d-none mb-2 d-block">Enter a valid phone number.</small>
                         <button type="button" class="btn btn-sm btn-primary w-100" onclick="fbConfirmNewClient()">Add Client</button>
                     </div>
 
@@ -567,6 +586,10 @@
             document.getElementById('fbAddClientForm').classList.add('d-none');
             document.getElementById('fbClientSearch').value = '';
             document.getElementById('fbClientResults').innerHTML = '';
+            document.getElementById('fbNewClientName').value = '';
+            document.getElementById('fbNewClientPhone').value = '';
+            document.getElementById('fbNewClientCountryCode').value = '+974';
+            document.getElementById('fbNewClientPhoneError').classList.add('d-none');
 
             if (prefill.datetime) {
                 const [d, t] = prefill.datetime.split('T');
@@ -633,14 +656,7 @@
             if (!selectedClient) {
                 icon.innerHTML = '<i class="bx bx-user-plus"></i>';
                 label.textContent = 'Add client';
-                sub.textContent = 'Or leave empty for walk-ins';
-                return;
-            }
-
-            if (selectedClient.walkin) {
-                icon.innerHTML = '<i class="bx bx-walk"></i>';
-                label.textContent = 'Walk-In';
-                sub.textContent = 'No client profile';
+                sub.textContent = 'Search or add a new client';
                 return;
             }
 
@@ -657,24 +673,36 @@
 
         window.fbConfirmNewClient = function() {
             const name = document.getElementById('fbNewClientName').value.trim();
-            const phone = document.getElementById('fbNewClientPhone').value.trim();
-            if (!phone) {
-                alert('Please enter a phone number.');
+            const countryCode = document.getElementById('fbNewClientCountryCode').value;
+            const rawPhone = document.getElementById('fbNewClientPhone').value.trim();
+            const errorEl = document.getElementById('fbNewClientPhoneError');
+            const localDigits = rawPhone.replace(/\D/g, '');
+            const fullPhone = countryCode + localDigits;
+
+            errorEl.classList.add('d-none');
+
+            if (!name) {
+                errorEl.textContent = "Please enter the client's name.";
+                errorEl.classList.remove('d-none');
                 return;
             }
-            selectedClient = { name, phone, walkin: false };
-            fbUpdateRail();
-            fbShowPanel('main');
-        };
 
-        window.fbSelectWalkIn = function() {
-            selectedClient = { name: 'Walk-in', phone: '', walkin: true };
+            // E.164-style check: + then 7-15 digits total, first digit non-zero.
+            if (!/^\+[1-9]\d{6,14}$/.test(fullPhone)) {
+                errorEl.textContent = localDigits
+                    ? 'Enter a valid phone number for the selected country.'
+                    : 'Please enter a phone number.';
+                errorEl.classList.remove('d-none');
+                return;
+            }
+
+            selectedClient = { name, phone: fullPhone };
             fbUpdateRail();
             fbShowPanel('main');
         };
 
         function fbSelectExistingClient(client) {
-            selectedClient = { id: client.id, name: client.name, phone: client.phone, walkin: false };
+            selectedClient = { id: client.id, name: client.name, phone: client.phone };
             fbUpdateRail();
             fbShowPanel('main');
         }
@@ -902,6 +930,13 @@
             const dateVal = document.getElementById('bookDateInput').value;
             const timeVal = document.getElementById('bookTimeInput').value;
             document.getElementById('bookDatetimeHidden').value = (dateVal && timeVal) ? `${dateVal}T${timeVal}` : '';
+
+            if (!selectedClient) {
+                e.preventDefault();
+                alert('Please select an existing client or add a new client before booking.');
+                fbShowPanel('client');
+                return;
+            }
 
             if (!selectedServices.length) {
                 e.preventDefault();
