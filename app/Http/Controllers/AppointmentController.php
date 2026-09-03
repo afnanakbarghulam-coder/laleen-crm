@@ -92,6 +92,19 @@ class AppointmentController extends Controller
             $query->where('branch', $branch);
         }
 
+        $search = trim((string) $request->get('search', ''));
+        if ($search !== '') {
+            // Phone is stored digits-only, so a search like "+974 5551 2345"
+            // or "(555) 1234" still matches by comparing digits-only too.
+            $searchDigits = preg_replace('/\D/', '', $search);
+            $query->where(function ($q) use ($search, $searchDigits) {
+                $q->where('customer_name', 'like', '%' . $search . '%');
+                if ($searchDigits !== '') {
+                    $q->orWhere('phone', 'like', '%' . $searchDigits . '%');
+                }
+            });
+        }
+
         // Aggregates are computed over the full filtered set, not just the current page.
         $all = (clone $query)->get();
 
@@ -131,10 +144,14 @@ class AppointmentController extends Controller
 
         $appointments = $query->orderBy('appointment_datetime', 'desc')->paginate(25)->withQueryString();
 
+        $services = Service::orderBy('name')->get(['id', 'name', 'price', 'duration']);
+
         return view('appointments.index', compact(
             'appointments',
             'period',
             'branch',
+            'search',
+            'services',
             'from',
             'to',
             'totalBookings',
@@ -321,7 +338,8 @@ class AppointmentController extends Controller
             'branch' => 'required|in:old_airport,wakrah,home_service',
             'price' => 'nullable|numeric',
             'booking_agent_id' => 'nullable|exists:users,id',
-            'staff_id' => 'nullable|exists:staff,id'
+            'staff_id' => 'nullable|exists:staff,id',
+            'status' => 'nullable|in:pending,arrived,in_progress,completed,no_show,cancelled',
         ], [
             'phone.regex' => 'Enter a valid phone number with country code, e.g. +974XXXXXXXX.'
         ]);
@@ -335,18 +353,16 @@ class AppointmentController extends Controller
 
         $unskilled = $this->unskilledServices((int) $staffId, $request->service_name);
         if (!empty($unskilled)) {
-            return redirect()->route('appointments.calendar', [
-                'date' => $startTime->toDateString(),
-                'staff_id' => $staffId
-            ])->with('error', 'Staff member is not skilled to do this service: ' . implode(', ', $unskilled) . '.');
+            // back() rather than a hardcoded calendar redirect - update() is
+            // called from both the Bookings list and the Enhanced Calendar,
+            // so the error must return the staff member to wherever they were.
+            return redirect()->back()->withInput()
+                ->with('error', 'Staff member is not skilled to do this service: ' . implode(', ', $unskilled) . '.');
         }
 
         if ($this->staffHasTimeConflict($staffId, $startTime, $duration, $appointment->id)) {
-            // return redirect()->back()->with('error', 'Staff is already booked during this time.')->withInput();
-            return redirect()->route('appointments.calendar', [
-                'date' => $startTime->toDateString(),
-                'staff_id' => $staffId
-            ])->with('error', 'Staff is already booked during this time.');
+            return redirect()->back()->withInput()
+                ->with('error', 'Staff is already booked during this time.');
         }
 
 
@@ -1035,11 +1051,16 @@ class AppointmentController extends Controller
         $request->validate([
             'services' => 'required|array|min:1',
             'appointment_datetime' => 'required|date',
-            'branch' => 'required'
+            'branch' => 'required',
+            // Passed when checking availability for an appointment that's
+            // being edited/rescheduled, so it doesn't get excluded as a
+            // "conflict" with its own existing booking.
+            'exclude_appointment_id' => 'nullable|integer',
         ]);
 
         $appointmentTime = Carbon::parse($request->appointment_datetime);
         $branch = $request->branch;
+        $excludeAppointmentId = $request->exclude_appointment_id;
 
         // Total duration of selected services
         $duration = $this->totalServiceDuration($request->services);
@@ -1062,7 +1083,7 @@ class AppointmentController extends Controller
                     ->orWhere('branch', 'both');
             })
             ->get()
-            ->filter(function ($staff) use ($appointmentTime, $duration) {
+            ->filter(function ($staff) use ($appointmentTime, $duration, $excludeAppointmentId) {
 
                 // ❌ On Leave
                 if ($staff->off_from && $staff->off_to) {
@@ -1086,7 +1107,8 @@ class AppointmentController extends Controller
                 if ($this->staffHasTimeConflict(
                     $staff->id,
                     $appointmentTime,
-                    $duration
+                    $duration,
+                    $excludeAppointmentId
                 )) {
                     return false;
                 }
