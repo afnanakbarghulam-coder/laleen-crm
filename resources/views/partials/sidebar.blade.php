@@ -342,6 +342,16 @@
              </li>
          @endmoduleView
 
+         <!-- Nova: admin-only directly by role, independent of the module matrix -->
+         @if(auth()->check() && auth()->user()->role === 'admin')
+             <li class="menu-item {{ request()->routeIs('nova.command-center') ? 'active' : '' }}">
+                 <a href="{{ route('nova.command-center') }}" class="menu-link">
+                     <i class="bx bxs-bot me-2"></i>
+                     <div>Nova Command Center</div>
+                 </a>
+             </li>
+         @endif
+
      </ul>
  </aside>
 

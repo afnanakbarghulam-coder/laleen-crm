@@ -25,7 +25,7 @@ class GeminiNoticeDrafter
         }
 
         try {
-            $model = config('services.gemini.model', 'gemini-2.0-flash');
+            $model = config('services.gemini.model', 'gemini-3.5-flash-lite');
 
             $response = Http::timeout(20)->post(
                 "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}",

@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\EnsureRole::class,
             'super-admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
             'module' => \App\Http\Middleware\EnsureModulePermission::class,
+            'nova.admin' => \App\NovaAI\Http\Middleware\EnsureNovaAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

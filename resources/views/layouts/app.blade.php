@@ -133,6 +133,13 @@
 
     @include('users.profile')
 
+    {{-- Nova: executive AI assistant, admin-only regardless of the per-module
+         permissions matrix - the floating trigger/drawer never even reaches
+         the DOM for anyone whose role isn't literally 'admin'. --}}
+    @if(auth()->check() && auth()->user()->role === 'admin')
+        @include('nova-ai.widget')
+    @endif
+
     <script>
         setTimeout(() => {
             const msgs = document.querySelectorAll('.flash-msg');
