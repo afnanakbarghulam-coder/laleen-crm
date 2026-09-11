@@ -272,6 +272,32 @@
         background: rgba(217, 143, 131,0.06);
     }
 
+    .fb-decide-pill {
+        border: 1px solid #8a7d76;
+        border-radius: 999px;
+        padding: 7px 18px;
+        font-size: 13px;
+        font-weight: 600;
+        background: transparent;
+        color: #c9a39a;
+    }
+
+    .fb-decide-pill:hover {
+        background: rgba(201, 163, 154, 0.08);
+        color: #e79a91;
+    }
+
+    .fb-decide-tag {
+        flex-shrink: 0;
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #c9a39a;
+        background: rgba(201, 163, 154, 0.14);
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
     .fb-search-wrap {
         position: relative;
         margin-bottom: 16px;
@@ -410,6 +436,100 @@
         right: 16px;
         z-index: 5;
     }
+
+    .fb-combo-pill {
+        border: 1px solid #8a7d76;
+        border-radius: 999px;
+        padding: 7px 18px;
+        font-size: 13px;
+        font-weight: 600;
+        background: transparent;
+        color: #b98ea3;
+    }
+
+    .fb-combo-pill:hover {
+        background: rgba(185, 142, 163, 0.08);
+    }
+
+    .fb-combo-card {
+        gap: 8px;
+    }
+
+    .fb-combo-today-duration {
+        font-size: 11px;
+        color: #c9a39a;
+    }
+
+    .fb-combo-svc-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 4px 0;
+        font-size: 12.5px;
+        border-top: 1px dashed rgba(217, 143, 131, 0.15);
+    }
+
+    .fb-combo-immediate-toggle {
+        font-size: 12.5px;
+        color: #e6d9d5;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 0;
+        cursor: pointer;
+    }
+
+    .fb-combo-staff-select {
+        margin: 2px 0 6px;
+        font-size: 12px;
+        max-width: 220px;
+        margin-left: auto;
+    }
+
+    .fb-redeem-pill {
+        border: 1px solid #8a7d76;
+        border-radius: 999px;
+        padding: 7px 18px;
+        font-size: 13px;
+        font-weight: 600;
+        background: transparent;
+        color: #8ea88a;
+    }
+
+    .fb-redeem-pill:hover {
+        background: rgba(142, 168, 138, 0.08);
+    }
+
+    .fb-redeem-pill .badge {
+        background: #8ea88a;
+        color: #171310;
+        font-weight: 700;
+    }
+
+    .fb-redeem-row-meta {
+        font-size: 11px;
+        color: #c9a39a;
+    }
+
+    .fb-redeem-expiry {
+        font-weight: 700;
+    }
+
+    .fb-redeem-expiry.soon { color: #a8524a; }
+    .fb-redeem-expiry.ok { color: #8ea88a; }
+
+    .fb-redeem-pick-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 8px;
+        border-radius: 8px;
+    }
+
+    .fb-redeem-pick-row:hover {
+        background: rgba(217, 143, 131,0.06);
+    }
 </style>
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="calendarBookModal" aria-labelledby="calendarBookModalLabel">
@@ -459,17 +579,35 @@
 
                     <div class="fb-section-title">Services</div>
                     <div id="fbSvcList"></div>
-                    <button type="button" class="fb-add-pill" id="fbOpenServicePanel">
-                        <i class="bx bx-plus"></i> Add service
-                    </button>
+                    <div id="fbComboList"></div>
+                    <div id="fbRedeemList"></div>
+                    <input type="hidden" name="decide_in_salon" id="bookDecideInSalonHidden" value="0">
+                    <div id="fbComboHiddenInputs"></div>
+                    <div id="fbRedeemHiddenInputs"></div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <button type="button" class="fb-add-pill" id="fbOpenServicePanel">
+                            <i class="bx bx-plus"></i> Add service
+                        </button>
+                        <button type="button" class="fb-decide-pill" id="fbDecideInSalonBtn">
+                            Decide in Salon
+                        </button>
+                        <button type="button" class="fb-combo-pill" id="fbOpenComboPanel">
+                            <i class="bx bx-plus"></i> Add Combo
+                        </button>
+                        <button type="button" class="fb-redeem-pill d-none" id="fbOpenRedeemPanel">
+                            Redeem Package <span class="badge rounded-pill" id="fbRedeemBadge">0</span>
+                        </button>
+                    </div>
 
-                    <div class="fb-section-title">Team Member</div>
-                    <select id="bookStaffSelect" name="staff_id" class="form-select form-select-sm" required>
-                        <option value="">-- Select Staff --</option>
-                    </select>
-                    <small id="bookStaffHelp" class="text-danger d-none">
-                        No staff available for the selected service &amp; time
-                    </small>
+                    <div id="fbTeamMemberSection">
+                        <div class="fb-section-title">Team Member</div>
+                        <select id="bookStaffSelect" name="staff_id" class="form-select form-select-sm" required>
+                            <option value="">-- Select Staff --</option>
+                        </select>
+                        <small id="bookStaffHelp" class="text-danger d-none">
+                            No staff available for the selected service &amp; time
+                        </small>
+                    </div>
 
                     <div class="fb-section-title">Booking Agent</div>
                     <select id="bookAgent" name="booking_agent_id" class="form-select form-select-sm">
@@ -542,6 +680,26 @@
                     <div class="fb-cat-label">All Services <span id="fbSvcCount"></span></div>
                     <div id="fbServiceResults"></div>
                 </div>
+
+                <!-- PANEL: SELECT COMBO -->
+                <div id="fbPanelCombo" class="fb-content d-none">
+                    <div class="fb-panel-header">
+                        <button type="button" class="fb-back-btn" onclick="fbShowPanel('main')"><i class="bx bx-arrow-back"></i></button>
+                        <h5>Add a combo package</h5>
+                    </div>
+
+                    <div id="fbComboPickerList"></div>
+                </div>
+
+                <!-- PANEL: REDEEM PENDING PACKAGE SERVICE -->
+                <div id="fbPanelRedeem" class="fb-content d-none">
+                    <div class="fb-panel-header">
+                        <button type="button" class="fb-back-btn" onclick="fbShowPanel('main')"><i class="bx bx-arrow-back"></i></button>
+                        <h5>Redeem package service</h5>
+                    </div>
+
+                    <div id="fbRedeemPickerList"></div>
+                </div>
             </div>
         </div>
 
@@ -565,18 +723,29 @@
 <script>
     (function() {
         const ALL_SERVICES = @json($services->map(fn($s) => ['name' => $s->name, 'price' => (float) $s->price, 'duration' => (int) $s->duration]));
+        const ALL_COMBOS = @json($combosCatalog ?? []);
 
         let selectedServices = [];
+        let decideInSalon = false;
+        let selectedCombos = [];
+        let comboRowSeq = 0;
         let selectedClient = null; // { id, name, phone } or null
         let pendingStaffId = null;
         let staffRequestSeq = 0;
         let clientSearchTimer = null;
+        let clientPendingPackages = []; // this client's redeemable package services, fetched once picked
+        let selectedRedemptions = []; // subset of the above actually being applied to this booking
 
         window.openCalendarBookModal = function(prefill) {
             prefill = prefill || {};
 
             selectedServices = [];
+            decideInSalon = false;
+            document.getElementById('bookDecideInSalonHidden').value = '0';
+            selectedCombos = [];
             selectedClient = null;
+            clientPendingPackages = [];
+            selectedRedemptions = [];
             pendingStaffId = prefill.staffId || null;
 
             document.getElementById('bookStaffSelect').innerHTML = '<option value="">-- Select Staff --</option>';
@@ -602,6 +771,9 @@
 
             fbUpdateRail();
             fbRenderServices();
+            fbRenderCombos();
+            fbRenderRedemptions();
+            fbUpdateRedeemButton();
             fbUpdateDateLabel();
             fbShowPanel('main');
 
@@ -613,7 +785,7 @@
         };
 
         function fbShowPanel(name) {
-            ['Main', 'Client', 'Service'].forEach(p => {
+            ['Main', 'Client', 'Service', 'Combo', 'Redeem'].forEach(p => {
                 document.getElementById('fbPanel' + p).classList.toggle('d-none', p.toLowerCase() !== name);
             });
             if (name === 'client') {
@@ -621,6 +793,12 @@
             }
             if (name === 'service') {
                 fbRenderServiceResults('');
+            }
+            if (name === 'combo') {
+                fbRenderComboPicker();
+            }
+            if (name === 'redeem') {
+                fbRenderRedeemPicker();
             }
         }
         window.fbShowPanel = fbShowPanel;
@@ -640,9 +818,9 @@
                 document.getElementById('fbDateSub').textContent = `${hh}:${m.toString().padStart(2,'0')} ${p} · Doesn't repeat`;
             }
         }
-        document.getElementById('bookDateInput').addEventListener('change', () => { fbUpdateDateLabel(); loadAvailableStaff(); });
-        document.getElementById('bookTimeInput').addEventListener('change', () => { fbUpdateDateLabel(); loadAvailableStaff(); });
-        document.getElementById('bookBranch').addEventListener('change', loadAvailableStaff);
+        document.getElementById('bookDateInput').addEventListener('change', () => { fbUpdateDateLabel(); loadAvailableStaff(); fbRefreshComboStaffOptions(); });
+        document.getElementById('bookTimeInput').addEventListener('change', () => { fbUpdateDateLabel(); loadAvailableStaff(); fbRefreshComboStaffOptions(); });
+        document.getElementById('bookBranch').addEventListener('change', () => { loadAvailableStaff(); fbRefreshComboStaffOptions(); });
 
         /* ---------------- RAIL / CLIENT ---------------- */
         function fbUpdateRail() {
@@ -697,15 +875,107 @@
             }
 
             selectedClient = { name, phone: fullPhone };
+            selectedRedemptions = [];
+            fbLoadClientPendingPackages();
             fbUpdateRail();
             fbShowPanel('main');
         };
 
         function fbSelectExistingClient(client) {
             selectedClient = { id: client.id, name: client.name, phone: client.phone };
+            selectedRedemptions = [];
             fbUpdateRail();
             fbShowPanel('main');
+            fbLoadClientPendingPackages();
         }
+
+        /* ---------------- REDEEM PENDING PACKAGE SERVICE ---------------- */
+        function fbLoadClientPendingPackages() {
+            clientPendingPackages = [];
+            fbUpdateRedeemButton();
+
+            if (!selectedClient || !selectedClient.id) return;
+
+            fetch(`/customers/${selectedClient.id}/pending-packages`)
+                .then(res => res.json())
+                .then(data => {
+                    clientPendingPackages = Array.isArray(data) ? data : [];
+                    fbUpdateRedeemButton();
+                })
+                .catch(() => {});
+        }
+
+        function fbUpdateRedeemButton() {
+            const btn = document.getElementById('fbOpenRedeemPanel');
+            const available = clientPendingPackages.filter(p => !selectedRedemptions.some(r => r.id === p.id));
+            btn.classList.toggle('d-none', clientPendingPackages.length === 0);
+            document.getElementById('fbRedeemBadge').textContent = available.length;
+        }
+
+        function fbRenderRedeemPicker() {
+            const box = document.getElementById('fbRedeemPickerList');
+            const available = clientPendingPackages.filter(p => !selectedRedemptions.some(r => r.id === p.id));
+
+            if (!available.length) {
+                box.innerHTML = '<div class="text-muted small px-2">Nothing left to redeem for this client.</div>';
+                return;
+            }
+
+            box.innerHTML = available.map((p, i) => `
+                <div class="fb-redeem-pick-row" data-idx="${i}">
+                    <div class="flex-grow-1">
+                        <div class="name">${p.service_name} <span class="text-muted">(${p.duration} min)</span></div>
+                        <div class="fb-redeem-row-meta">
+                            from ${p.combo_name} ·
+                            <span class="fb-redeem-expiry ${p.days_left <= 2 ? 'soon' : 'ok'}">
+                                ${p.days_left <= 0 ? 'expires today' : 'expires ' + p.expires_at + ' (' + p.days_left + 'd left)'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            box.querySelectorAll('.fb-redeem-pick-row').forEach(row => {
+                row.addEventListener('click', () => {
+                    const item = available[Number(row.dataset.idx)];
+                    selectedRedemptions.push(item);
+                    fbRenderRedemptions();
+                    fbUpdateRedeemButton();
+                    loadAvailableStaff();
+                    fbShowPanel('main');
+                });
+            });
+        }
+
+        function fbRenderRedemptions() {
+            const list = document.getElementById('fbRedeemList');
+
+            list.innerHTML = selectedRedemptions.map((r, i) => `
+                <div class="fb-svc-row">
+                    <div class="fb-svc-row-main">
+                        <div>
+                            <div class="name">${r.service_name} <span class="fb-decide-tag">free · package</span></div>
+                            <div class="meta">${r.duration} min · from ${r.combo_name}</div>
+                        </div>
+                        <button type="button" class="remove-btn fb-redeem-remove-btn" data-idx="${i}"><i class="bx bx-x"></i></button>
+                    </div>
+                </div>
+            `).join('');
+
+            list.querySelectorAll('.fb-redeem-remove-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    selectedRedemptions.splice(Number(btn.dataset.idx), 1);
+                    fbRenderRedemptions();
+                    fbUpdateRedeemButton();
+                    fbSyncHiddenAndTotals();
+                    loadAvailableStaff();
+                });
+            });
+
+            fbSyncHiddenAndTotals();
+        }
+
+        document.getElementById('fbOpenRedeemPanel').addEventListener('click', () => fbShowPanel('redeem'));
 
         function fbRenderClientResults(query) {
             const box = document.getElementById('fbClientResults');
@@ -749,6 +1019,31 @@
 
         function fbRenderServices() {
             const list = document.getElementById('fbSvcList');
+
+            if (decideInSalon && !selectedServices.length) {
+                list.innerHTML = `
+                    <div class="fb-svc-row">
+                        <div class="fb-svc-row-main">
+                            <div>
+                                <div class="name">Decide in Salon</div>
+                                <div class="meta">0 min</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fb-decide-tag">0.00 QAR</span>
+                                <button type="button" class="remove-btn" id="fbDecideInSalonRemove"><i class="bx bx-x"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('fbDecideInSalonRemove').addEventListener('click', () => {
+                    decideInSalon = false;
+                    fbRenderServices();
+                });
+                fbSyncHiddenAndTotals();
+                loadAvailableStaff();
+                return;
+            }
+
             list.innerHTML = selectedServices.map((s, i) => {
                 const discount = fbServiceDiscount(s);
                 return `
@@ -820,6 +1115,9 @@
         }
 
         function fbSyncHiddenAndTotals() {
+            document.getElementById('bookDecideInSalonHidden').value =
+                (decideInSalon && !selectedServices.length) ? '1' : '0';
+
             const hidden = document.getElementById('svcHiddenInputs');
             hidden.innerHTML = selectedServices.map(s => `
                 <input type="hidden" name="service_name[]" value="${s.name.replace(/"/g,'&quot;')}">
@@ -827,9 +1125,27 @@
                 <input type="hidden" name="service_discount_reason[]" value="${(s.discount_reason || '').replace(/"/g,'&quot;')}">
             `).join('');
 
+            const comboHidden = document.getElementById('fbComboHiddenInputs');
+            comboHidden.innerHTML = selectedCombos.map(row => `
+                <input type="hidden" name="packages[${row.id}][combo_id]" value="${row.combo.id}">
+                ${row.immediateIds.map(id => `<input type="hidden" name="packages[${row.id}][immediate_service_ids][]" value="${id}">`).join('')}
+                ${Object.entries(row.serviceStaff || {}).filter(([, staffId]) => staffId).map(([sid, staffId]) => `<input type="hidden" name="packages[${row.id}][service_staff][${sid}]" value="${staffId}">`).join('')}
+            `).join('');
+
+            const redeemHidden = document.getElementById('fbRedeemHiddenInputs');
+            redeemHidden.innerHTML = selectedRedemptions.map(r => `
+                <input type="hidden" name="redeem_service_ids[]" value="${r.id}">
+            `).join('');
+
+            // Package services - new or redeemed - are already covered by
+            // what the client already paid, so only their duration - never
+            // a QAR amount - feeds into this visit's running total here.
+            const comboImmediateMinutes = selectedCombos.reduce((sum, r) => sum + fbComboImmediateDuration(r), 0);
+            const redeemMinutes = selectedRedemptions.reduce((sum, r) => sum + (r.duration || 0), 0);
+
             const totalPrice = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
             const totalDiscount = selectedServices.reduce((sum, s) => sum + fbServiceDiscount(s), 0);
-            const totalMin = selectedServices.reduce((sum, s) => sum + s.duration, 0);
+            const totalMin = selectedServices.reduce((sum, s) => sum + s.duration, 0) + comboImmediateMinutes + redeemMinutes;
 
             document.getElementById('bookPriceHidden').value = totalPrice.toFixed(2);
             document.getElementById('fbFooterPrice').textContent = totalPrice.toFixed(2) + ' QAR';
@@ -843,6 +1159,253 @@
             document.getElementById('fbFooterDuration').textContent =
                 totalMin ? (hrs ? `${hrs}h ${mins}min` : `${mins}min`) : '0min';
         }
+
+        /* ---------------- COMBO PACKAGES ---------------- */
+        function fbComboImmediateDuration(row) {
+            return row.combo.services
+                .filter(s => row.immediateIds.includes(s.id))
+                .reduce((sum, s) => sum + s.duration, 0);
+        }
+
+        function fbComboCardHtml(row) {
+            const combo = row.combo;
+            const todayCount = row.immediateIds.length;
+            const capReached = todayCount >= combo.quantity_included;
+            const remaining = combo.quantity_included - todayCount;
+
+            // No "select N of M to include" step anymore - staff just tick
+            // whichever pool services are being done today (up to the
+            // package's quantity_included). Whatever's left over is banked
+            // as a generic pending entitlement, not locked to a specific
+            // service - it's chosen later, at redemption time.
+            const rowsHtml = combo.services.map(s => {
+                const immediateChecked = row.immediateIds.includes(s.id);
+                const disableCheckbox = !immediateChecked && capReached;
+                const staffEntry = row.serviceStaffOptions[s.id];
+                const staffOpts = staffEntry ? staffEntry.options : null;
+                const currentStaff = row.serviceStaff[s.id] || '';
+                const staffSelectHtml = immediateChecked ? `
+                        <select class="form-select form-select-sm fb-combo-staff-select" data-row="${row.id}" data-svc="${s.id}">
+                            <option value="">-- Same as main staff --</option>
+                            ${(staffOpts || []).map(st => `<option value="${st.id}" ${currentStaff == st.id ? 'selected' : ''}>${st.name}</option>`).join('')}
+                        </select>` : '';
+                return `
+                    <div class="fb-combo-svc-row">
+                        <label class="fb-combo-immediate-toggle">
+                            <input type="checkbox" class="form-check-input fb-combo-immediate-cb" data-row="${row.id}" data-svc="${s.id}"
+                                ${immediateChecked ? 'checked' : ''} ${disableCheckbox ? 'disabled' : ''}>
+                            ${s.name} <span class="text-muted">(${s.duration} min)</span>
+                        </label>
+                        ${staffSelectHtml}
+                    </div>`;
+            }).join('');
+
+            const todayDuration = fbComboImmediateDuration(row);
+            const metaPendingNote = remaining > 0
+                ? ` · ${remaining} service${remaining === 1 ? '' : 's'} will be saved as pending`
+                : '';
+
+            return `
+                <div class="fb-svc-row fb-combo-card" data-row-id="${row.id}">
+                    <div class="fb-svc-row-main">
+                        <div>
+                            <div class="name">${combo.name}</div>
+                            <div class="meta">${combo.price.toFixed(2)} QAR · ${todayCount} / ${combo.quantity_included} chosen for today${metaPendingNote}</div>
+                        </div>
+                        <button type="button" class="remove-btn fb-combo-remove-btn" data-row="${row.id}"><i class="bx bx-x"></i></button>
+                    </div>
+                    <div class="fb-combo-today-duration">Today's duration: <strong>${todayDuration} min</strong>${todayCount ? '' : ` (nothing marked "Do today" yet - all ${combo.quantity_included} will be saved as pending)`}</div>
+                    ${rowsHtml}
+                </div>`;
+        }
+
+        function fbRenderCombos() {
+            const container = document.getElementById('fbComboList');
+            container.innerHTML = selectedCombos.map(fbComboCardHtml).join('');
+
+            fbUpdateTeamMemberVisibility();
+
+            container.querySelectorAll('.fb-combo-remove-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    selectedCombos = selectedCombos.filter(r => r.id != btn.dataset.row);
+                    fbRenderCombos();
+                    fbSyncHiddenAndTotals();
+                    loadAvailableStaff();
+                });
+            });
+
+            container.querySelectorAll('.fb-combo-immediate-cb').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const row = selectedCombos.find(r => r.id == cb.dataset.row);
+                    const svcId = Number(cb.dataset.svc);
+                    if (cb.checked) {
+                        if (!row.immediateIds.includes(svcId)) row.immediateIds.push(svcId);
+                    } else {
+                        row.immediateIds = row.immediateIds.filter(id => id !== svcId);
+                        delete row.serviceStaff[svcId];
+                        delete row.serviceStaffOptions[svcId];
+                    }
+                    fbRenderCombos();
+                    fbSyncHiddenAndTotals();
+                    loadAvailableStaff();
+                });
+            });
+
+            container.querySelectorAll('.fb-combo-staff-select').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    const row = selectedCombos.find(r => r.id == sel.dataset.row);
+                    const svcId = Number(sel.dataset.svc);
+                    if (sel.value) {
+                        row.serviceStaff[svcId] = sel.value;
+                    } else {
+                        delete row.serviceStaff[svcId];
+                    }
+                    fbSyncHiddenAndTotals();
+                    loadAvailableStaff();
+                });
+            });
+
+            fbSyncHiddenAndTotals();
+            fbRefreshComboStaffOptions();
+        }
+
+        /* A combo's services are each assigned their own staff inline, so
+           the appointment-wide "Team Member" field is redundant noise once
+           a combo is in the booking - hidden (not removed: it still carries
+           a valid staff_id for the appointment record itself, auto-filled
+           in loadAvailableStaff's callback) whenever any combo is present. */
+        function fbUpdateTeamMemberVisibility() {
+            const hide = selectedCombos.length > 0;
+            document.getElementById('fbTeamMemberSection').classList.toggle('d-none', hide);
+            // A hidden-but-required field blocks native form submission
+            // silently (a display:none control can't be focused for the
+            // validation prompt), so the requirement only applies while
+            // the field itself is visible and actionable.
+            document.getElementById('bookStaffSelect').required = !hide;
+        }
+
+        /* With the Team Member field hidden behind a combo, its value still
+           has to be a real staff id for the appointment record - filled in
+           automatically instead of asking the user to redundantly repick
+           someone already assigned inline to one of today's combo services. */
+        function fbAutoAssignMainStaffForCombo() {
+            if (!selectedCombos.length) return;
+
+            const staffSelect = document.getElementById('bookStaffSelect');
+            // Never override an explicit value already sitting there
+            // (a pending reschedule id, or one the flow set for another
+            // reason) - this only fills in a genuinely empty selection.
+            if (!staffSelect || staffSelect.disabled || !staffSelect.options.length || staffSelect.value) return;
+
+            let preferred = null;
+            for (const row of selectedCombos) {
+                for (const sid of row.immediateIds) {
+                    if (row.serviceStaff[sid]) { preferred = row.serviceStaff[sid]; break; }
+                }
+                if (preferred) break;
+            }
+
+            if (preferred && [...staffSelect.options].some(o => o.value == preferred)) {
+                staffSelect.value = preferred;
+            } else if (staffSelect.options.length > 1) {
+                staffSelect.value = staffSelect.options[1].value;
+            }
+        }
+
+        /* Per-service staff picker for combo services marked "Do today" -
+           each fetches independently from the main staff dropdown, since a
+           combo can split its services across different team members. */
+        function fbComboStaffSignature() {
+            const dateVal = document.getElementById('bookDateInput').value;
+            const timeVal = document.getElementById('bookTimeInput').value;
+            const branch = document.getElementById('bookBranch').value;
+            return `${dateVal}T${timeVal}|${branch}`;
+        }
+
+        let comboStaffRequestSeq = 0;
+
+        function fbFetchComboServiceStaff(row, svcId, svcName) {
+            const dateVal = document.getElementById('bookDateInput').value;
+            const timeVal = document.getElementById('bookTimeInput').value;
+            const branch = document.getElementById('bookBranch').value;
+            const datetime = (dateVal && timeVal) ? `${dateVal}T${timeVal}` : '';
+            if (!datetime || !branch) return;
+
+            const sig = fbComboStaffSignature();
+            const requestId = ++comboStaffRequestSeq;
+
+            const params = new URLSearchParams();
+            params.append('services[]', svcName);
+            params.append('appointment_datetime', datetime);
+            params.append('branch', branch);
+
+            fetch("{{ route('appointments.availableStaff') }}?" + params.toString())
+                .then(res => res.json())
+                .then(data => {
+                    if (requestId !== comboStaffRequestSeq) return;
+                    row.serviceStaffOptions[svcId] = { sig, options: data };
+
+                    const select = document.querySelector(`.fb-combo-staff-select[data-row="${row.id}"][data-svc="${svcId}"]`);
+                    if (!select) return;
+                    const current = row.serviceStaff[svcId] || '';
+                    select.innerHTML = '<option value="">-- Same as main staff --</option>' +
+                        data.map(st => `<option value="${st.id}">${st.name}</option>`).join('');
+                    if (current && data.some(st => st.id == current)) {
+                        select.value = current;
+                    } else if (current) {
+                        delete row.serviceStaff[svcId];
+                        fbSyncHiddenAndTotals();
+                    }
+                })
+                .catch(err => console.error('Fetch error:', err));
+        }
+
+        function fbRefreshComboStaffOptions() {
+            selectedCombos.forEach(row => {
+                row.immediateIds.forEach(svcId => {
+                    const entry = row.serviceStaffOptions[svcId];
+                    if (!entry || entry.sig !== fbComboStaffSignature()) {
+                        const svc = row.combo.services.find(s => s.id === svcId);
+                        if (svc) fbFetchComboServiceStaff(row, svcId, svc.name);
+                    }
+                });
+            });
+        }
+
+        function fbRenderComboPicker() {
+            const box = document.getElementById('fbComboPickerList');
+
+            if (!ALL_COMBOS.length) {
+                box.innerHTML = '<div class="text-muted small px-2">No active combo packages in the catalog.</div>';
+                return;
+            }
+
+            box.innerHTML = ALL_COMBOS.map((c, i) => `
+                <div class="fb-service-row" data-idx="${i}">
+                    <div class="svc-info">
+                        <div class="name">${c.name}</div>
+                        <div class="meta">Choose any ${c.quantity_included} of ${c.services.length} services</div>
+                    </div>
+                    <div class="svc-price">${c.price.toFixed(2)} QAR</div>
+                </div>
+            `).join('');
+
+            box.querySelectorAll('.fb-service-row').forEach(row => {
+                row.addEventListener('click', () => {
+                    const combo = ALL_COMBOS[Number(row.dataset.idx)];
+
+                    // No pre-selection - staff just tick whichever pool
+                    // services are being done today (up to quantity_included);
+                    // whatever's left over is automatically banked as a
+                    // pending entitlement, not locked to a specific service.
+                    selectedCombos.push({ id: ++comboRowSeq, combo, immediateIds: [], serviceStaff: {}, serviceStaffOptions: {} });
+                    fbRenderCombos();
+                    fbShowPanel('main');
+                });
+            });
+        }
+
+        document.getElementById('fbOpenComboPanel').addEventListener('click', () => fbShowPanel('combo'));
 
         function fbRenderServiceResults(query) {
             const box = document.getElementById('fbServiceResults');
@@ -868,6 +1431,7 @@
                         fbShowPanel('main');
                         return;
                     }
+                    decideInSalon = false;
                     selectedServices.push(Object.assign({}, svc, { original_price: svc.price, discount_reason: '' }));
                     fbRenderServices();
                     fbShowPanel('main');
@@ -876,6 +1440,11 @@
         }
 
         document.getElementById('fbOpenServicePanel').addEventListener('click', () => fbShowPanel('service'));
+        document.getElementById('fbDecideInSalonBtn').addEventListener('click', () => {
+            decideInSalon = true;
+            selectedServices = [];
+            fbRenderServices();
+        });
         document.getElementById('fbServiceSearch').addEventListener('input', function() {
             fbRenderServiceResults(this.value);
         });
@@ -894,11 +1463,35 @@
             staffHelp.classList.add('d-none');
             staffSelect.disabled = true;
 
-            if (!selectedServices.length || !datetime || !branch) return;
+            // Combo services marked "Do today" need a skilled staff member
+            // just like a manually-picked service does, unless staff already
+            // assigned that specific one to someone else on its own dropdown
+            // - and redeeming a pending service is exactly the same. Pending
+            // (not-yet-redeemed) combo services don't, since nothing happens
+            // with them at this visit.
+            const comboImmediateNames = [];
+            selectedCombos.forEach(row => {
+                row.combo.services.forEach(s => {
+                    if (row.immediateIds.includes(s.id) && !(row.serviceStaff && row.serviceStaff[s.id])) {
+                        comboImmediateNames.push(s.name);
+                    }
+                });
+            });
+            const redeemNames = selectedRedemptions.map(r => r.service_name);
+            const hasImmediate = selectedServices.length > 0 || comboImmediateNames.length > 0 || redeemNames.length > 0;
+            const decideMode = decideInSalon || (selectedCombos.length > 0 && !hasImmediate);
+
+            if ((!hasImmediate && !decideMode) || !datetime || !branch) return;
 
             const requestId = ++staffRequestSeq;
             const params = new URLSearchParams();
-            selectedServices.forEach(s => params.append('services[]', s.name));
+            if (hasImmediate) {
+                selectedServices.forEach(s => params.append('services[]', s.name));
+                redeemNames.forEach(name => params.append('services[]', name));
+                comboImmediateNames.forEach(name => params.append('services[]', name));
+            } else {
+                params.append('decide_in_salon', '1');
+            }
             params.append('appointment_datetime', datetime);
             params.append('branch', branch);
 
@@ -921,6 +1514,8 @@
                         staffSelect.value = pendingStaffId;
                     }
                     pendingStaffId = null;
+
+                    fbAutoAssignMainStaffForCombo();
                 })
                 .catch(err => console.error('Fetch error:', err));
         }
@@ -938,9 +1533,9 @@
                 return;
             }
 
-            if (!selectedServices.length) {
+            if (!selectedServices.length && !decideInSalon && !selectedCombos.length && !selectedRedemptions.length) {
                 e.preventDefault();
-                alert('Please add at least one service.');
+                alert('Please add at least one service, combo package, or redeemed service.');
                 fbShowPanel('service');
             }
         });

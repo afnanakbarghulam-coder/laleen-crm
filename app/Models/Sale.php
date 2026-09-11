@@ -14,6 +14,7 @@ class Sale extends Model
         'branch',
         'services_total',
         'products_total',
+        'packages_total',
         'discount_type',
         'discount_value',
         'discount_amount',
@@ -50,5 +51,10 @@ class Sale extends Model
     public function payments()
     {
         return $this->hasMany(SalePayment::class);
+    }
+
+    public function clientPackages()
+    {
+        return $this->hasMany(ClientPackage::class);
     }
 }

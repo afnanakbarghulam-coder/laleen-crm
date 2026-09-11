@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AppointmentController;
+use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\Kpi\AdLeadEntryController;
@@ -128,6 +129,7 @@ Route::middleware(['auth'])->group(function () {
     // ---- Services ----
     Route::middleware('module:services')->group(function () {
         Route::get('/services', [ServiceController::class, 'index'])->name('services.index');
+        Route::get('/combos', [ComboController::class, 'index'])->name('combos.index');
     });
     Route::middleware('module:services,edit')->group(function () {
         Route::post('/services', [ServiceController::class, 'store'])->name('services.store');
@@ -135,6 +137,10 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/services/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
         Route::post('/service-categories', [ServiceCategoryController::class, 'store'])->name('service-categories.store');
         Route::delete('/service-categories/{serviceCategory}', [ServiceCategoryController::class, 'destroy'])->name('service-categories.destroy');
+
+        Route::post('/combos', [ComboController::class, 'store'])->name('combos.store');
+        Route::put('/combos/{combo}', [ComboController::class, 'update'])->name('combos.update');
+        Route::delete('/combos/{combo}', [ComboController::class, 'destroy'])->name('combos.destroy');
     });
 
     // ---- Products ----
@@ -151,6 +157,7 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('module:clients')->group(function () {
         Route::get('/customers-lookup', [CustomerController::class, 'lookup'])->name('customers.lookup');
         Route::get('/customers-search', [CustomerController::class, 'search'])->name('customers.search');
+        Route::get('/customers/{customer}/pending-packages', [CustomerController::class, 'pendingPackages'])->name('customers.pendingPackages');
         Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
         Route::get('/customers/beauty-planning', [CustomerController::class, 'beautyPlanning'])->name('customers.beauty-planning');
         Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');

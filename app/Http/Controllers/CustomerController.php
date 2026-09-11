@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ClientPackage;
 use App\Models\Customer;
 use App\Models\Sale;
 use App\Support\ClientMaintenancePlanner;
@@ -82,7 +83,12 @@ class CustomerController extends Controller
 
         $maintenanceSchedule = (new ClientMaintenancePlanner())->scheduleForCustomer($customer);
 
-        return view('customers.show', compact('customer', 'appointments', 'upcoming', 'past', 'lifetimeValue', 'favoriteServices', 'loyaltyHistory', 'maintenanceSchedule'));
+        // Reconcile against real time before displaying, so an expired
+        // package never shows stale "pending" services here.
+        ClientPackage::expireDue($customer->id);
+        $clientPackages = $customer->clientPackages()->with('services', 'redeemedServices')->get();
+
+        return view('customers.show', compact('customer', 'appointments', 'upcoming', 'past', 'lifetimeValue', 'favoriteServices', 'loyaltyHistory', 'maintenanceSchedule', 'clientPackages'));
     }
 
     public function updateNotes(Request $request, Customer $customer)
@@ -153,6 +159,17 @@ class CustomerController extends Controller
             'phone' => $c->phone,
             'initials' => $c->name ? strtoupper(substr($c->name, 0, 1)) : '?',
         ]));
+    }
+
+    /**
+     * This client's still-redeemable combo package services, for the
+     * booking drawer's "Redeem Package Service" picker - fetched once a
+     * client is selected so staff can apply what's left from an earlier
+     * purchase directly onto a new appointment.
+     */
+    public function pendingPackages(Customer $customer)
+    {
+        return response()->json($customer->redeemablePackageServices());
     }
 
     /**

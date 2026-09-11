@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Combo;
 use App\Models\Service;
 use App\Models\ServiceCategory;
 use App\Models\Staff;
@@ -26,7 +27,12 @@ class ServiceController extends Controller
         $services = $query->get()->groupBy(fn($s) => $s->category->name ?? 'Uncategorized');
         $staffList = Staff::orderBy('name')->get();
 
-        return view('services.index', compact('categories', 'services', 'staffList'));
+        // Flat catalog (not grouped) for the Combos tab's service picker, and
+        // the combos themselves with their bundled services preloaded.
+        $allServices = Service::orderBy('name')->get();
+        $combos = Combo::with('services')->orderBy('name')->get();
+
+        return view('services.index', compact('categories', 'services', 'staffList', 'allServices', 'combos'));
     }
 
     public function store(Request $request)

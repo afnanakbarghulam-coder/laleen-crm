@@ -10,6 +10,7 @@ class SaleItem extends Model
         'sale_id',
         'type',
         'product_id',
+        'staff_id',
         'name',
         'price',
         'original_price',
@@ -26,5 +27,10 @@ class SaleItem extends Model
     public function product()
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function staff()
+    {
+        return $this->belongsTo(Staff::class);
     }
 }

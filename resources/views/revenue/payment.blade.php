@@ -134,6 +134,82 @@
         font-weight: 700;
         margin-top: 10px;
     }
+
+    .redeem-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 6px 0;
+        font-size: 13px;
+    }
+
+    .redeem-row .redeem-meta {
+        font-size: 11.5px;
+        color: #c9a39a;
+    }
+
+    .redeem-row .redeem-expiry {
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .redeem-expiry.soon { color: #a8524a; }
+    .redeem-expiry.ok { color: #8ea88a; }
+
+    .package-card {
+        border: 1px solid rgba(217, 143, 131,0.16);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 10px;
+        background: rgba(217, 143, 131,0.04);
+    }
+
+    .package-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+
+    .package-card-head .name {
+        font-weight: 700;
+        font-size: 13.5px;
+        color: #e79a91;
+    }
+
+    .package-pick-count {
+        font-size: 11.5px;
+        color: #c9a39a;
+        margin-bottom: 6px;
+    }
+
+    .package-pick-count.full {
+        color: #8ea88a;
+        font-weight: 700;
+    }
+
+    .package-svc-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 4px 0;
+        font-size: 12.5px;
+        border-bottom: 1px solid rgba(217, 143, 131,0.07);
+    }
+
+    .package-svc-row:last-child {
+        border-bottom: none;
+    }
+
+    .package-svc-row .immediate-toggle {
+        font-size: 12.5px;
+        color: #e6d9d5;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+    }
 </style>
 
 @section('content')
@@ -213,7 +289,48 @@
                         <button type="button" class="btn btn-sm btn-outline-primary" id="addProductBtn">Add</button>
                     </div>
 
+                    @if (count($pendingPackageServices))
+                        <h6 class="mt-4">Redeem Package Services <span class="text-muted">(no extra charge)</span></h6>
+                        @foreach ($pendingPackageServices as $svc)
+                            <div class="redeem-row">
+                                <input type="checkbox" class="form-check-input redeem-checkbox" name="redeem_service_ids[]" value="{{ $svc['id'] }}" id="redeem-{{ $svc['id'] }}" data-duration="{{ $svc['duration'] }}">
+                                <label for="redeem-{{ $svc['id'] }}" class="flex-grow-1 mb-0">
+                                    {{ $svc['service_name'] }} <span class="muted">({{ $svc['duration'] }} min)</span>
+                                    <div class="redeem-meta">
+                                        from {{ $svc['combo_name'] }} ·
+                                        <span class="redeem-expiry {{ $svc['days_left'] <= 2 ? 'soon' : 'ok' }}">
+                                            {{ $svc['days_left'] <= 0 ? 'expires today' : 'expires ' . $svc['expires_at'] . ' (' . $svc['days_left'] . 'd left)' }}
+                                        </span>
+                                    </div>
+                                </label>
+                            </div>
+                        @endforeach
+                    @endif
+
+                    <h6 class="mt-4">Combo Packages</h6>
+                    @foreach ($unpaidPackages as $pkg)
+                        <div class="line-item">
+                            <span class="item-name">{{ $pkg->combo_name }} <span class="muted">(sold at booking, awaiting payment)</span></span>
+                            <span class="price-col">{{ number_format($pkg->price_paid, 2) }} QAR</span>
+                        </div>
+                    @endforeach
+                    <div id="packageRows"></div>
+                    @if (count($combos))
+                        <div class="d-flex gap-2 mt-2">
+                            <select id="comboPicker" class="form-select form-select-sm">
+                                <option value="">+ Sell a combo package…</option>
+                                @foreach ($combos as $combo)
+                                    <option value="{{ $combo['id'] }}">{{ $combo['name'] }} ({{ number_format($combo['price'], 2) }} QAR)</option>
+                                @endforeach
+                            </select>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="addPackageBtn">Add</button>
+                        </div>
+                    @else
+                        <div class="text-muted small">No active combo packages in the catalog.</div>
+                    @endif
+
                     <h6 class="mt-4">Summary</h6>
+                    <div class="summary-row"><span>Estimated Duration</span><span id="sumDuration">0 min</span></div>
                     <div class="summary-row"><span>Services</span><span id="sumServices">0.00</span></div>
                     @if ($serviceDiscountTotal > 0)
                         <div class="summary-row" style="color:#8ea88a;"><span>Service discounts (already applied)</span><span>−{{ number_format($serviceDiscountTotal, 2) }}</span></div>
@@ -222,6 +339,7 @@
                         <div class="summary-row"><span>Upsells</span><span id="sumUpsells">{{ number_format($upsellsTotal, 2) }}</span></div>
                     @endif
                     <div class="summary-row"><span>Products</span><span id="sumProducts">0.00</span></div>
+                    <div class="summary-row"><span>Packages</span><span id="sumPackages">0.00</span></div>
                     <div class="summary-row"><span>Checkout Discount</span><span id="sumDiscount">−0.00</span></div>
                     <div class="summary-row"><span>Tip</span><span id="sumTip">+0.00</span></div>
                     <div class="summary-row total"><span>Total Due</span><span id="sumTotal">0.00 QAR</span></div>
@@ -283,10 +401,110 @@
 
     <script>
         const servicesTotal = {{ $servicesTotal }};
+        const servicesDuration = {{ $servicesDuration }};
         const upsellsTotal = {{ $upsellsTotal }};
+        // A combo already sold at booking time still needs to be paid for -
+        // it's not something this page's own "sell a package" picker knows
+        // about, so it's added to the packages total as a fixed base amount.
+        const existingPackagesTotal = {{ $unpaidPackagesTotal }};
         const loyaltyRate = {{ \App\Models\Customer::POINTS_PER_QAR }};
+        const ALL_COMBOS = @json($combos);
         let productRows = [];
         let rowSeq = 0;
+        let packageRows = [];
+        let pkgRowSeq = 0;
+
+        /* ---------------- COMBO PACKAGES ----------------
+           No "select N of M to include" step - staff just tick whichever
+           pool services are being done today (up to quantity_included).
+           Whatever's left over is banked as a generic pending entitlement,
+           chosen later at redemption time rather than locked in now. */
+        function packageCardHtml(row) {
+            const combo = row.combo;
+            const todayCount = row.immediateIds.length;
+            const capReached = todayCount >= combo.quantity_included;
+            const remaining = combo.quantity_included - todayCount;
+
+            const rowsHtml = combo.services.map(s => {
+                const immediateChecked = row.immediateIds.includes(s.id);
+                const disableCheckbox = !immediateChecked && capReached;
+                return `
+                    <div class="package-svc-row">
+                        <label class="immediate-toggle">
+                            <input type="checkbox" class="form-check-input pkg-immediate-cb" data-row="${row.id}" data-svc="${s.id}"
+                                ${immediateChecked ? 'checked' : ''} ${disableCheckbox ? 'disabled' : ''}>
+                            ${s.name} <span class="text-muted">(${s.duration} min)</span>
+                        </label>
+                    </div>`;
+            }).join('');
+
+            const hiddenInputs = `
+                <input type="hidden" name="packages[${row.id}][combo_id]" value="${combo.id}">
+                ${row.immediateIds.map(id => `<input type="hidden" name="packages[${row.id}][immediate_service_ids][]" value="${id}">`).join('')}
+            `;
+
+            const todayDuration = packageImmediateDuration(row);
+            const pendingNote = remaining > 0
+                ? ` · ${remaining} service${remaining === 1 ? '' : 's'} will be saved as pending`
+                : '';
+
+            return `
+                <div class="package-card" data-row-id="${row.id}">
+                    <div class="package-card-head">
+                        <span class="name">${combo.name} <span class="text-muted">(${combo.price.toFixed(2)} QAR)</span></span>
+                        <button type="button" class="btn btn-sm btn-outline-danger pkg-remove-btn" data-row="${row.id}"><i class="bx bx-x"></i></button>
+                    </div>
+                    <div class="package-pick-count ${remaining === 0 ? 'full' : ''}">${todayCount} / ${combo.quantity_included} chosen for today${pendingNote}</div>
+                    <div class="package-pick-count">Today's duration: <strong>${todayDuration} min</strong>${todayCount ? '' : ` (nothing marked "Do today" yet - all ${combo.quantity_included} will be saved as pending)`}</div>
+                    ${rowsHtml}
+                    ${hiddenInputs}
+                </div>`;
+        }
+
+        function packageImmediateDuration(row) {
+            return row.combo.services
+                .filter(s => row.immediateIds.includes(s.id))
+                .reduce((sum, s) => sum + s.duration, 0);
+        }
+
+        function renderPackageRows() {
+            const container = document.getElementById('packageRows');
+            container.innerHTML = packageRows.map(packageCardHtml).join('');
+
+            container.querySelectorAll('.pkg-remove-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    packageRows = packageRows.filter(r => r.id != btn.dataset.row);
+                    renderPackageRows();
+                    recalc();
+                });
+            });
+
+            container.querySelectorAll('.pkg-immediate-cb').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const row = packageRows.find(r => r.id == cb.dataset.row);
+                    const svcId = Number(cb.dataset.svc);
+                    if (cb.checked) {
+                        if (!row.immediateIds.includes(svcId)) row.immediateIds.push(svcId);
+                    } else {
+                        row.immediateIds = row.immediateIds.filter(id => id !== svcId);
+                    }
+                    renderPackageRows();
+                });
+            });
+
+            recalc();
+        }
+
+        document.getElementById('addPackageBtn')?.addEventListener('click', () => {
+            const picker = document.getElementById('comboPicker');
+            if (!picker.value) return;
+            const combo = ALL_COMBOS.find(c => c.id == picker.value);
+            if (!combo) return;
+
+            packageRows.push({ id: ++pkgRowSeq, combo, immediateIds: [] });
+            picker.value = '';
+            renderPackageRows();
+        });
 
         function renderProductRows() {
             const container = document.getElementById('productRows');
@@ -334,7 +552,18 @@
 
         function recalc() {
             const productsTotal = productRows.reduce((s, r) => s + r.price * r.qty, 0);
-            const subtotal = servicesTotal + upsellsTotal + productsTotal;
+            const packagesTotal = existingPackagesTotal + packageRows.reduce((s, r) => s + r.combo.price, 0);
+            const subtotal = servicesTotal + upsellsTotal + productsTotal + packagesTotal;
+
+            // Total time this visit actually takes: what's already booked,
+            // plus only the package services being performed today (pending
+            // ones don't occupy any of today's calendar slot) and any
+            // previously-purchased pending service just checked off to redeem.
+            const packageImmediateMinutes = packageRows.reduce((s, r) => s + packageImmediateDuration(r), 0);
+            const redeemMinutes = Array.from(document.querySelectorAll('.redeem-checkbox:checked'))
+                .reduce((s, cb) => s + (parseInt(cb.dataset.duration, 10) || 0), 0);
+            const totalDuration = servicesDuration + packageImmediateMinutes + redeemMinutes;
+            document.getElementById('sumDuration').textContent = totalDuration + ' min';
 
             const discountType = document.getElementById('discountType').value;
             const discountValue = parseFloat(document.getElementById('discountValue').value || 0);
@@ -350,6 +579,7 @@
 
             document.getElementById('sumServices').textContent = servicesTotal.toFixed(2);
             document.getElementById('sumProducts').textContent = productsTotal.toFixed(2);
+            document.getElementById('sumPackages').textContent = packagesTotal.toFixed(2);
             document.getElementById('sumDiscount').textContent = '−' + discountAmount.toFixed(2);
             document.getElementById('sumTip').textContent = '+' + tip.toFixed(2);
             document.getElementById('sumTotal').textContent = total.toFixed(2) + ' QAR';
@@ -395,6 +625,10 @@
 
         document.querySelectorAll('.pay-input').forEach(el => {
             el.addEventListener('input', updateRemaining);
+        });
+
+        document.querySelectorAll('.redeem-checkbox').forEach(cb => {
+            cb.addEventListener('change', recalc);
         });
 
         recalc();

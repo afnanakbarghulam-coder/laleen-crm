@@ -91,6 +91,70 @@
         color: #fff;
         white-space: nowrap;
     }
+
+    .profile-stat.packages {
+        background: linear-gradient(135deg, rgba(142,168,138,0.14), rgba(36,30,28,0.6));
+        border-color: rgba(142,168,138,0.3);
+    }
+
+    .profile-stat.packages .value {
+        color: #8ea88a;
+    }
+
+    .package-item {
+        border: 1px solid rgba(217, 143, 131,0.16);
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin-bottom: 8px;
+    }
+
+    .package-item-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .package-item-head .name {
+        font-weight: 700;
+        font-size: 13.5px;
+    }
+
+    .package-status-badge {
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        padding: 2px 9px;
+        border-radius: 999px;
+        color: #fff;
+        white-space: nowrap;
+    }
+
+    .package-item-meta {
+        font-size: 11.5px;
+        color: #c9a39a;
+        margin-top: 2px;
+    }
+
+    .package-svc-list {
+        margin-top: 8px;
+    }
+
+    .package-svc-chip {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        padding: 3px 0;
+    }
+
+    .package-svc-chip .svc-status {
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .package-svc-chip .svc-status.pending { color: #c9a66b; }
+    .package-svc-chip .svc-status.redeemed { color: #8ea88a; }
+    .package-svc-chip .svc-status.expired { color: #a8524a; }
 </style>
 
 @section('content')
@@ -146,6 +210,12 @@
             <div class="profile-stat loyalty">
                 <div class="value"><i class="bx bx-diamond"></i> {{ $customer->loyalty_points }}</div>
                 <div class="label">Loyalty Points</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="profile-stat packages">
+                <div class="value"><i class="bx bx-gift"></i> {{ $customer->pending_package_service_count }}</div>
+                <div class="label">Pending Package Services</div>
             </div>
         </div>
     </div>
@@ -247,6 +317,48 @@
                         <span class="fav-chip">{{ $service }} &times; {{ $count }}</span>
                     @empty
                         <p class="text-muted mb-0">No service history yet.</p>
+                    @endforelse
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+                    <span>Combo Packages</span>
+                    <span class="badge bg-success"><i class="bx bx-gift"></i> {{ $customer->pending_package_service_count }} pending</span>
+                </div>
+                <div class="card-body">
+                    @php
+                        $packageStatusColors = ['active' => '#8ea88a', 'completed' => '#c9a39a', 'expired' => '#a8524a'];
+                    @endphp
+                    @forelse ($clientPackages as $pkg)
+                        <div class="package-item">
+                            <div class="package-item-head">
+                                <span class="name">{{ $pkg->combo_name }}</span>
+                                <span class="package-status-badge" style="background:{{ $packageStatusColors[$pkg->status] ?? '#c9a39a' }}">
+                                    {{ $pkg->status }}
+                                </span>
+                            </div>
+                            <div class="package-item-meta">
+                                Bought {{ $pkg->purchased_at->format('d M Y') }} · {{ number_format($pkg->price_paid, 2) }} QAR ·
+                                {{ $pkg->is_expired ? 'expired ' . $pkg->expires_at->format('d M Y') : 'valid until ' . $pkg->expires_at->format('d M Y') }}
+                            </div>
+                            <div class="package-svc-list">
+                                @foreach ($pkg->services as $svc)
+                                    <div class="package-svc-chip">
+                                        <span>{{ $svc->service_name }}</span>
+                                        <span class="svc-status {{ $svc->status }}">{{ $svc->status }}</span>
+                                    </div>
+                                @endforeach
+                                @if ($pkg->remaining_count > 0)
+                                    <div class="package-svc-chip">
+                                        <span class="text-muted">{{ $pkg->remaining_count }} more service{{ $pkg->remaining_count === 1 ? '' : 's' }} available (any remaining option)</span>
+                                        <span class="svc-status pending">pending</span>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    @empty
+                        <p class="text-muted small mb-0">No combo packages purchased yet.</p>
                     @endforelse
                 </div>
             </div>
