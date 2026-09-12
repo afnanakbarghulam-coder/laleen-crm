@@ -505,6 +505,62 @@
             return english || cachedVoices[0] || null;
         }
 
+        /* ---------------- speech-only Markdown cleanup ----------------
+           Nova's stored/displayed reply keeps its Markdown untouched -
+           this only reshapes a COPY of the text right before it's handed
+           to SpeechSynthesisUtterance, so "**72%**" is spoken as "72%"
+           instead of "asterisk asterisk 72 percent asterisk asterisk".
+           Order matters: links and block markers (headings/bullets/rules)
+           are stripped line-by-line first, then inline emphasis
+           (bold before italic, since **x** would otherwise be half-eaten
+           by the italic pass), then inline code, then leftover newlines
+           become a spoken pause. Deliberately conservative - it only
+           touches recognized Markdown syntax, never numbers, currency,
+           percentages, names, or ordinary punctuation. */
+        function cleanTextForSpeech(text) {
+            if (!text) return text;
+
+            let out = text;
+
+            // Markdown links [label](url) -> speak the label only.
+            out = out.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+
+            // Heading markers at the start of a line: "### Recommendation" -> "Recommendation".
+            out = out.replace(/^\s{0,3}#{1,6}\s+/gm, '');
+
+            // Bullet markers at the start of a line: "- item" / "* item" -> "item".
+            out = out.replace(/^\s*[-*]\s+/gm, '');
+
+            // Numbered-list markers: "1. item" -> "item".
+            out = out.replace(/^\s*\d+\.\s+/gm, '');
+
+            // Horizontal rules on their own line ("---", "***", "___").
+            out = out.replace(/^\s*[-*_]{3,}\s*$/gm, '');
+
+            // Bold: **text** or __text__ -> text (before italic, so the
+            // outer pair of asterisks isn't half-consumed by that pass).
+            out = out.replace(/\*\*(.+?)\*\*/g, '$1');
+            out = out.replace(/__(.+?)__/g, '$1');
+
+            // Italic: *text* or _text_ -> text.
+            out = out.replace(/\*(.+?)\*/g, '$1');
+            out = out.replace(/_(.+?)_/g, '$1');
+
+            // Inline code: `text` -> text.
+            out = out.replace(/`([^`]+)`/g, '$1');
+
+            // Any newline left over (former line/heading/bullet break)
+            // becomes a spoken pause rather than being read as silence.
+            out = out.replace(/\r\n|\r|\n/g, '. ');
+
+            // Collapse anything the substitutions above left doubled up.
+            out = out.replace(/(\.\s*){2,}/g, '. ');
+            out = out.replace(/[ \t]{2,}/g, ' ');
+            out = out.replace(/\s+([.,;:!?])/g, '$1');
+
+            return out.trim();
+        }
+
         function speakAsNova(text) {
             setStatus('speaking', 'Speaking...');
 
@@ -520,7 +576,7 @@
 
             window.speechSynthesis.cancel();
 
-            const utterance = new SpeechSynthesisUtterance(text);
+            const utterance = new SpeechSynthesisUtterance(cleanTextForSpeech(text));
             const voice = pickVoice();
             if (voice) utterance.voice = voice;
             utterance.pitch = 0.95;
