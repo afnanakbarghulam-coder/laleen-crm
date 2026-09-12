@@ -168,9 +168,17 @@ class AppointmentFunnelSectionTest extends TestCase
 
         $text = $this->userTurnText();
 
-        $this->assertStringContainsString('APPOINTMENT FUNNEL', $text);
-        $this->assertStringContainsString('No appointments scheduled in this window.', $text);
-        $this->assertStringNotContainsString('0%', $text);
+        // Isolate just this section - later stages (e.g. Stage 3F's
+        // booking-agent performance) can legitimately show a real,
+        // non-fabricated "0.0%" of their own elsewhere in the same
+        // combined snapshot, which a whole-text search would collide with.
+        $section = substr($text, strpos($text, 'APPOINTMENT FUNNEL'));
+        $nextBreak = strpos($section, "\n\n");
+        $section = $nextBreak !== false ? substr($section, 0, $nextBreak) : $section;
+
+        $this->assertStringContainsString('APPOINTMENT FUNNEL', $section);
+        $this->assertStringContainsString('No appointments scheduled in this window.', $section);
+        $this->assertStringNotContainsString('0%', $section);
     }
 
     public function test_branch_breakdown_uses_the_existing_branch_label_convention(): void

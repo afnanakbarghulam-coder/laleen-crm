@@ -269,6 +269,29 @@
     let muted = false;
     let busy = false;
 
+    /* ---------------- conversation memory ---------------- */
+    // Shared with the command center so both Nova frontends continue the
+    // same conversation. Purely a client-side continuity token - wrapped
+    // in try/catch since localStorage can throw (private browsing, storage
+    // disabled); losing it just means Nova starts a fresh conversation.
+    const NOVA_CONVERSATION_KEY = 'nova_conversation_id';
+
+    function getConversationId() {
+        try {
+            return localStorage.getItem(NOVA_CONVERSATION_KEY);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function setConversationId(id) {
+        try {
+            if (id) localStorage.setItem(NOVA_CONVERSATION_KEY, id);
+        } catch (e) {
+            // ignore
+        }
+    }
+
     /* ---------------- panel open/close ---------------- */
     function openPanel() {
         panel.classList.add('nova-open');
@@ -323,13 +346,14 @@
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'
                 },
-                body: JSON.stringify({ message })
+                body: JSON.stringify({ message, conversation_id: getConversationId() })
             })
             .then(res => res.json().then(data => ({ ok: res.ok, data })))
             .then(({ ok, data }) => {
                 thinking.remove();
                 const reply = ok ? (data.reply || "Nova didn't return an answer.") :
                     (data.message || "Nova couldn't process that question.");
+                if (ok && data.conversation_id) setConversationId(data.conversation_id);
                 addMessage(reply, 'nova');
                 speak(reply);
             })

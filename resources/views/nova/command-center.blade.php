@@ -355,6 +355,29 @@
         let busy = false;
         let listening = false;
 
+        /* ---------------- conversation memory ---------------- */
+        // Shared with the drawer widget (same localStorage key) so both
+        // Nova frontends continue the same conversation. Wrapped in
+        // try/catch since localStorage can throw; losing it just means
+        // Nova starts a fresh conversation.
+        const NOVA_CONVERSATION_KEY = 'nova_conversation_id';
+
+        function getConversationId() {
+            try {
+                return localStorage.getItem(NOVA_CONVERSATION_KEY);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function setConversationId(id) {
+            try {
+                if (id) localStorage.setItem(NOVA_CONVERSATION_KEY, id);
+            } catch (e) {
+                // ignore
+            }
+        }
+
         function ask(message) {
             message = (message || '').trim();
             if (!message) {
@@ -372,12 +395,13 @@
                         'Accept': 'application/json',
                         'X-CSRF-TOKEN': '{{ csrf_token() }}'
                     },
-                    body: JSON.stringify({ message })
+                    body: JSON.stringify({ message, conversation_id: getConversationId() })
                 })
                 .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
                 .then(({ ok, data }) => {
                     const reply = ok ? (data.reply || "I didn't get a usable answer that time.") :
                         (data.message || "I couldn't process that question.");
+                    if (ok && data.conversation_id) setConversationId(data.conversation_id);
                     speakAsNova(reply);
                 })
                 .catch(() => {

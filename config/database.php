@@ -42,6 +42,18 @@ return [
             'synchronous' => null,
         ],
 
+        // Nova AI's own isolated conversation-memory database. Never used by
+        // any CRM controller/model/migration - see app/NovaAI/README.md's
+        // NOVA READ-ONLY INTEGRATION RULE. Kept as a completely separate
+        // SQLite file/connection from the CRM's own 'sqlite' connection
+        // above so a Nova memory write can never touch operational data.
+        'nova_memory' => [
+            'driver' => 'sqlite',
+            'database' => env('NOVA_MEMORY_DB_DATABASE', storage_path('app/nova/nova-memory.sqlite')),
+            'prefix' => '',
+            'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
+        ],
+
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),

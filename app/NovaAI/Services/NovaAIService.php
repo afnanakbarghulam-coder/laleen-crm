@@ -8,7 +8,10 @@ use App\Models\ClientPackage;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Staff;
+use App\NovaAI\Support\BookingAgentPerformanceAnalytics;
 use App\NovaAI\Support\CustomerRetentionAnalytics;
+use App\NovaAI\Support\MarketingLeadAnalytics;
+use App\NovaAI\Support\PayrollPerformanceAnalytics;
 use App\Support\BranchFinancialSummaryService;
 use App\Support\StaffSalesAnalytics;
 use Illuminate\Support\Facades\File;
@@ -20,7 +23,9 @@ use Illuminate\Support\Facades\Log;
  * the CRM's own tables (today's and the trailing week's revenue, the
  * trailing week's appointment-status funnel, month-to-date branch net
  * profit/margin, sale-item-attributed staff performance, month-to-date
- * staff upsell target performance, service volume, aggregate customer &
+ * staff upsell target performance, calendar-month staff payroll cost,
+ * month-to-date booking-agent shift performance, month-to-date
+ * marketing/lead intelligence, service volume, aggregate customer &
  * retention intelligence, and clients sitting on an unredeemed combo
  * package balance) and hands it to Gemini alongside the admin's question,
  * under a system instruction that keeps Nova speaking like an executive
@@ -56,12 +61,64 @@ class NovaAIService
     /** In-process memoization only - avoids re-reading the prompt file if ask() runs more than once per request. */
     private static ?string $cachedPersona = null;
 
-    public function ask(string $message): string
+    /**
+     * Stable public contract, unchanged since Stage 1 - returns Nova's
+     * reply text only. Stage 4's conversation-memory orchestration
+     * (App\NovaAI\Services\NovaConversationService, wired in from the
+     * controller) needs to know whether a reply was a genuine Gemini
+     * answer or an infrastructure fallback message, so it can decide
+     * whether that reply is worth remembering - askWithMeta() below
+     * exposes that distinction without changing this method's signature
+     * or behavior for any existing caller.
+     */
+    public function ask(string $message, array $recentTurns = [], array $businessFacts = [], array $decisions = [], array $experiments = []): string
+    {
+        return $this->askWithMeta($message, $recentTurns, $businessFacts, $decisions, $experiments)['reply'];
+    }
+
+    /**
+     * @param array<int, array{role: string, content: string}> $recentTurns
+     *     Prior turns in this conversation, oldest first, each
+     *     role = 'user' or 'assistant'. Passed straight through as native
+     *     Gemini chat turns (see buildContents()) ahead of the current,
+     *     always-fresh business snapshot + question - never persisted or
+     *     re-derived here. Empty by default, which reproduces the exact
+     *     single-turn request every existing caller/test already expects.
+     * @param array<int, array{category: string, value: string}> $businessFacts
+     *     Business facts relevant to $message (App\NovaAI\Services\
+     *     NovaBusinessFactService::relevantFacts() - deterministic
+     *     keyword-overlap scoring, never every active fact) - statements
+     *     the owner has explicitly made in the past, never a live CRM
+     *     figure and never something Nova inferred or recommended.
+     *     Rendered as its own clearly-labelled section in the CURRENT turn
+     *     (see buildBusinessFactsSection()), never blended into the CRM
+     *     snapshot text.
+     * @param array<int, array{title: string, description: ?string, category: string, review_date: ?string}> $decisions
+     *     Decisions relevant to $message (App\NovaAI\Services\
+     *     NovaDecisionService::relevantDecisions()) - durable choices the
+     *     owner has explicitly approved, never a Nova recommendation
+     *     alone. Rendered as its own section; never implies any CRM record
+     *     was actually changed.
+     * @param array<int, array{title: string, description: ?string, category: string, started_at: ?string, ends_at: ?string, target_metric: ?string, success_criteria: ?string, review_date: ?string}> $experiments
+     *     Experiments relevant to $message (App\NovaAI\Services\
+     *     NovaDecisionService::relevantExperiments()) - time-bounded
+     *     trials the owner explicitly approved. Unspecified parameters
+     *     arrive as null, never invented.
+     * @return array{reply: string, succeeded: bool}
+     *     succeeded is true only for a genuine Gemini answer - false for
+     *     every fallback branch (missing key, failed request, 429, empty
+     *     response, exception), so callers can skip persisting a
+     *     transient infrastructure message as if it were real memory.
+     */
+    public function askWithMeta(string $message, array $recentTurns = [], array $businessFacts = [], array $decisions = [], array $experiments = []): array
     {
         $apiKey = config('services.gemini.key');
 
         if (empty($apiKey)) {
-            return "Nova isn't connected yet - ask an administrator to set GEMINI_API_KEY in the environment configuration.";
+            return [
+                'reply' => "Nova isn't connected yet - ask an administrator to set GEMINI_API_KEY in the environment configuration.",
+                'succeeded' => false,
+            ];
         }
 
         try {
@@ -111,9 +168,7 @@ class NovaAIService
                         'systemInstruction' => [
                             'parts' => [['text' => $this->persona()]],
                         ],
-                        'contents' => [
-                            ['role' => 'user', 'parts' => [['text' => $this->buildPrompt($message)]]],
-                        ],
+                        'contents' => $this->buildContents($message, $recentTurns, $businessFacts, $decisions, $experiments),
                         'generationConfig' => [
                             'temperature' => 0.6,
                             'maxOutputTokens' => 800,
@@ -128,10 +183,16 @@ class NovaAIService
                 ]);
 
                 if ($response->status() === 429) {
-                    return "Nova's Gemini quota is exhausted for now (429 from the API). Wait a bit before asking again, or check the plan/billing on the Gemini API key.";
+                    return [
+                        'reply' => "Nova's Gemini quota is exhausted for now (429 from the API). Wait a bit before asking again, or check the plan/billing on the Gemini API key.",
+                        'succeeded' => false,
+                    ];
                 }
 
-                return "Nova couldn't reach the analysis engine just now (the request failed). Try again in a moment.";
+                return [
+                    'reply' => "Nova couldn't reach the analysis engine just now (the request failed). Try again in a moment.",
+                    'succeeded' => false,
+                ];
             }
 
             $text = data_get($response->json(), 'candidates.0.content.parts.0.text');
@@ -139,18 +200,52 @@ class NovaAIService
             if (empty(trim((string) $text))) {
                 Log::warning('Nova AI returned an empty response', ['raw' => $response->json()]);
 
-                return "Nova didn't get a usable answer that time - try rephrasing the question.";
+                return [
+                    'reply' => "Nova didn't get a usable answer that time - try rephrasing the question.",
+                    'succeeded' => false,
+                ];
             }
 
-            return trim($text);
+            return ['reply' => trim($text), 'succeeded' => true];
         } catch (\Throwable $e) {
             // Belt-and-braces: even with the key out of the URL, never let a
             // raw exception message (which can echo request details) reach
             // the log without a pass through the redactor first.
             Log::warning('Nova AI errored', ['message' => $this->redactKey($e->getMessage(), $apiKey)]);
 
-            return 'Nova hit an unexpected error reaching the analysis engine. Try again shortly.';
+            return [
+                'reply' => 'Nova hit an unexpected error reaching the analysis engine. Try again shortly.',
+                'succeeded' => false,
+            ];
         }
+    }
+
+    /**
+     * Native Gemini multi-turn chat turns: prior conversation history first
+     * (role 'user'/'model' - Gemini's own naming, translated from our
+     * stored 'user'/'assistant'), then always exactly one final 'user' turn
+     * carrying the CURRENT, freshly-built business snapshot + question.
+     * History carries only the plain visible text of past turns - never a
+     * snapshot - so recent conversation can never smuggle in stale CRM data
+     * as if it were current (see resources/prompts/nova-system.md's "live
+     * CRM data overrides recalled conversation" rule). When $recentTurns is
+     * empty (every caller/test before Stage 4), this produces the exact
+     * single-turn contents array Nova has always sent.
+     */
+    private function buildContents(string $message, array $recentTurns, array $businessFacts = [], array $decisions = [], array $experiments = []): array
+    {
+        $contents = [];
+
+        foreach ($recentTurns as $turn) {
+            $contents[] = [
+                'role' => ($turn['role'] ?? 'user') === 'assistant' ? 'model' : 'user',
+                'parts' => [['text' => (string) ($turn['content'] ?? '')]],
+            ];
+        }
+
+        $contents[] = ['role' => 'user', 'parts' => [['text' => $this->buildPrompt($message, $businessFacts, $decisions, $experiments)]]];
+
+        return $contents;
     }
 
     /** Strips a literal API key out of any string before it's ever logged. */
@@ -206,11 +301,123 @@ class NovaAIService
             . 'posted payroll ledger.';
     }
 
-    private function buildPrompt(string $message): string
+    private function buildPrompt(string $message, array $businessFacts = [], array $decisions = [], array $experiments = []): string
     {
         return 'BUSINESS SNAPSHOT (as of ' . now()->format('D, d M Y H:i') . "):\n"
             . $this->buildSnapshot()
+            . "\n\n" . $this->buildBusinessFactsSection($businessFacts)
+            . "\n\n" . $this->buildDecisionsSection($decisions)
+            . "\n\n" . $this->buildExperimentsSection($experiments)
             . "\n\nADMIN'S QUESTION:\n{$message}";
+    }
+
+    /**
+     * @param array<int, array{category: string, value: string}> $facts
+     *
+     * Deliberately never merged into buildSnapshot()'s text: these are
+     * facts the owner previously stated, not live CRM data, and the
+     * system prompt's memory-priority rule (CRM snapshot > business facts
+     * > conversation) depends on them staying visibly, structurally
+     * separate from it.
+     */
+    private function buildBusinessFactsSection(array $facts): string
+    {
+        $header = 'REMEMBERED BUSINESS FACTS (previously stated by the owner - not live CRM data;'
+            . ' if this conflicts with the business snapshot above, the snapshot wins)';
+
+        if (empty($facts)) {
+            return "{$header}\n- No business facts recorded yet.";
+        }
+
+        $lines = [$header];
+        foreach ($facts as $fact) {
+            $lines[] = sprintf('- [%s] %s', $fact['category'] ?? 'other', $fact['value'] ?? '');
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param array<int, array{title: string, description: ?string, category: string, review_date: ?string}> $decisions
+     *
+     * Never merged into the CRM snapshot or the business-facts section:
+     * a decision is the owner's stated intent, never proof the CRM
+     * changed to match it - see resources/prompts/nova-system.md's
+     * MEMORY PRIORITY ORDER and CRM-conflict-disclosure rules.
+     */
+    private function buildDecisionsSection(array $decisions): string
+    {
+        $header = 'ACTIVE DECISIONS (approved/committed to by the owner - never proof the CRM'
+            . ' was actually updated to match; Nova never executes these)';
+
+        if (empty($decisions)) {
+            return "{$header}\n- No active decisions recorded yet.";
+        }
+
+        $lines = [$header];
+        foreach ($decisions as $decision) {
+            $lines[] = sprintf(
+                '- [%s] %s%s%s',
+                $decision['category'] ?? 'other',
+                $decision['title'] ?? '',
+                !empty($decision['description']) ? ' - ' . $decision['description'] : '',
+                $this->reviewDateSuffix($decision['review_date'] ?? null)
+            );
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param array<int, array{title: string, description: ?string, category: string, started_at: ?string, ends_at: ?string, target_metric: ?string, success_criteria: ?string, review_date: ?string}> $experiments
+     */
+    private function buildExperimentsSection(array $experiments): string
+    {
+        $header = 'ACTIVE EXPERIMENTS (time-bounded trials approved by the owner - never proof of'
+            . ' a result until the owner reports one; Nova never executes or runs these)';
+
+        if (empty($experiments)) {
+            return "{$header}\n- No active experiments recorded yet.";
+        }
+
+        $lines = [$header];
+        foreach ($experiments as $experiment) {
+            $window = $experiment['started_at'] || $experiment['ends_at']
+                ? sprintf(' (%s - %s)', $experiment['started_at'] ?? '?', $experiment['ends_at'] ?? '?')
+                : '';
+            $metric = !empty($experiment['target_metric']) ? " | measuring: {$experiment['target_metric']}" : '';
+            $criteria = !empty($experiment['success_criteria']) ? " | success = {$experiment['success_criteria']}" : '';
+
+            $lines[] = sprintf(
+                '- [%s] %s%s%s%s%s%s',
+                $experiment['category'] ?? 'other',
+                $experiment['title'] ?? '',
+                $window,
+                !empty($experiment['description']) ? ' - ' . $experiment['description'] : '',
+                $metric,
+                $criteria,
+                $this->reviewDateSuffix($experiment['review_date'] ?? null)
+            );
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * "Review-date awareness only": no scheduler or notification exists
+     * anywhere for this - this is purely a derived label on data already
+     * being shown, computed fresh on every request, so Nova can recognize
+     * an overdue review if asked without any automation behind it.
+     */
+    private function reviewDateSuffix(?string $reviewDate): string
+    {
+        if (empty($reviewDate)) {
+            return '';
+        }
+
+        $isOverdue = \Illuminate\Support\Carbon::parse($reviewDate)->isPast();
+
+        return sprintf(' | review date: %s%s', $reviewDate, $isOverdue ? ' (OVERDUE)' : '');
     }
 
     /* ---------------- data gathering ---------------- */
@@ -232,6 +439,9 @@ class NovaAIService
             $this->branchFinancialSection(),
             $this->staffPerformanceSection(),
             $this->staffTargetSection(),
+            $this->staffPayrollSection(),
+            $this->bookingAgentPerformanceSection(),
+            $this->marketingLeadSection(),
             $this->serviceVolumeSection(),
             $this->customerRetentionSection(),
             $this->pendingPackagesSection(),
@@ -568,6 +778,260 @@ class NovaAIService
         );
     }
 
+    /**
+     * NOVA READ-ONLY INTEGRATION RULE: the payroll formula (base salary +
+     * overtime pay - deductions) comes straight from the CRM's existing,
+     * unmodified StaffPayrollCalculator::rowFor()/payrollFor() - exactly
+     * how StaffController::index()'s Payroll tab already uses it, same
+     * active-staff population. See
+     * App\NovaAI\Support\PayrollPerformanceAnalytics for the branch
+     * bucketing (never double-counting a 'both'-branch staff member).
+     *
+     * CRITICAL DISTINCTIONS this method must never blur:
+     * - PAYROLL is not COMMISSION. staffPerformanceSection() above shows
+     *   an ESTIMATED commission (attributed revenue x commission_rate) -
+     *   a completely different, unrelated number computed by a different
+     *   mechanism. Never add them together or imply one measures the other.
+     * - Full calendar month, not month-to-date: StaffController's own
+     *   Payroll tab uses startOfMonth()->endOfMonth() (the whole month,
+     *   including days that haven't happened yet), unlike every other
+     *   Nova section's "start of month to now" - mirrored exactly here
+     *   since that is the CRM's own established payroll period.
+     * - base_salary is never prorated - it is always the staff member's
+     *   full stored monthly rate regardless of period length.
+     * - Whether this calculated payroll is already represented in the
+     *   CRM's recorded Expense rows is NOT established anywhere in the
+     *   code - Expense::create() is only ever called from a plain manual
+     *   admin form with no link to payroll at all. This method must never
+     *   be combined with branchFinancialSection()'s net profit figure.
+     */
+    private function staffPayrollSection(): string
+    {
+        $from = now()->startOfMonth();
+        $to = now()->endOfMonth();
+
+        $data = (new PayrollPerformanceAnalytics())->summary($from, $to);
+
+        $header = 'STAFF PAYROLL COST (calendar month, not limited to elapsed days - the CRM\'s own payroll period, '
+            . $from->format('d M') . ' - ' . $to->format('d M') . ')';
+
+        $lines = [$header];
+
+        if ($data['rows']->isEmpty()) {
+            $lines[] = '- No active staff recorded for payroll calculation.';
+        } else {
+            foreach ($data['rows'] as $row) {
+                $lines[] = sprintf(
+                    '- %s (%s): base salary %.2f QAR | overtime %.2f QAR (%.1f hrs) | deductions %.2f QAR |'
+                        . ' calculated net salary %.2f QAR',
+                    $row['name'],
+                    self::branchLabel($row['branch']),
+                    $row['base_salary'],
+                    $row['overtime_pay'],
+                    $row['overtime_hours'],
+                    $row['deductions'],
+                    $row['net_salary']
+                );
+            }
+        }
+
+        $lines[] = $this->formatPayrollTotalsLine('Old Airport', $data['old_airport']);
+        $lines[] = $this->formatPayrollTotalsLine('Al Wakrah', $data['wakrah']);
+
+        if ($data['both']['staff_count'] > 0) {
+            $lines[] = $this->formatPayrollTotalsLine(
+                'Both-branch staff (not included in either branch total above, to avoid double-counting)',
+                $data['both']
+            );
+        }
+
+        $lines[] = $this->formatPayrollTotalsLine('All active staff combined', $data['overall']);
+
+        $lines[] = '- This is the CRM\'s existing payroll formula only: base salary + overtime pay - deductions.'
+            . ' It excludes commission entirely - the estimated commission figure in staff performance above is a'
+            . ' separate, unrelated calculation; never add the two together. Whether this calculated payroll is'
+            . ' already represented in the CRM\'s recorded expenses is not established anywhere in the code - do not'
+            . ' subtract it from branch net profit, which would risk double-counting.';
+
+        return implode("\n", $lines);
+    }
+
+    private function formatPayrollTotalsLine(string $label, array $totals): string
+    {
+        return sprintf(
+            '- %s (%d staff): base salary %.2f QAR | overtime %.2f QAR | deductions %.2f QAR | calculated net'
+                . ' salary %.2f QAR',
+            $label,
+            $totals['staff_count'],
+            $totals['base_salary'],
+            $totals['overtime_pay'],
+            $totals['deductions'],
+            $totals['net_salary']
+        );
+    }
+
+    /**
+     * NOVA READ-ONLY INTEGRATION RULE: shift-level bookings/target/
+     * achievement come straight from the CRM's existing, unmodified
+     * KpiAgentTargetReport::shiftStats()/combined() - the exact methods
+     * UserController::dashboard() already calls. Month-to-date to match
+     * that same existing usage. See
+     * App\NovaAI\Support\BookingAgentPerformanceAnalytics for exactly how
+     * the per-agent breakdown is derived and why no per-agent target
+     * exists to compare it against.
+     *
+     * Booking agents and salon staff/stylists (staffTargetSection() above)
+     * are kept strictly separate populations - never combined or compared.
+     * "Bookings" here means appointment RECORDS a booking-agent account
+     * created during its own logged shift - never a completed appointment,
+     * a sale, or a conversion; the appointment funnel section already
+     * covers completion/show-rate separately.
+     */
+    private function bookingAgentPerformanceSection(): string
+    {
+        $from = now()->startOfMonth();
+        $to = now()->endOfDay();
+
+        $data = (new BookingAgentPerformanceAnalytics())->summary($from, $to);
+
+        $header = 'BOOKING AGENT PERFORMANCE (month to date, bookings attributed under the CRM\'s'
+            . ' agent-shift logic, ' . $from->format('d M') . ' - ' . $to->format('d M') . ')';
+
+        $lines = [$header];
+
+        foreach (['morning' => 'Morning', 'evening' => 'Evening'] as $key => $label) {
+            $shift = $data['shift_stats'][$key];
+            $lines[] = sprintf(
+                '- %s: %d bookings | target %d | %.1f%% | gap %d | %s',
+                $label,
+                $shift['bookings'],
+                $shift['target'],
+                $shift['pct'],
+                $shift['gap'],
+                strtoupper($shift['border'])
+            );
+        }
+
+        $combined = $data['combined'];
+        $lines[] = sprintf(
+            '- Combined: %d bookings | target %d | %.1f%% | gap %d | %s',
+            $combined['bookings'],
+            $combined['target'],
+            $combined['pct'],
+            $combined['gap'],
+            strtoupper($data['combined_border'])
+        );
+
+        if ($data['per_agent']->isEmpty()) {
+            $lines[] = '- No agent shift logs (with both check-in and check-out recorded) in this period.';
+        } else {
+            $lines[] = 'Per-agent bookings this period (raw counts - no individual per-agent target exists'
+                . ' in the CRM, only the aggregate shift target above):';
+            foreach ($data['per_agent'] as $agent) {
+                $lines[] = sprintf(
+                    '- %s: %d morning / %d evening (%d total), %.1f logged shift hours',
+                    $agent['name'],
+                    $agent['morning'],
+                    $agent['evening'],
+                    $agent['total'],
+                    $agent['logged_hours']
+                );
+            }
+        }
+
+        $lines[] = '- Attribution is strict: a booking only counts here when the SAME agent account'
+            . ' created the appointment record (not merely credited to them) during their own logged'
+            . ' check-in-to-check-out window that day. A day with no shift log for an agent means no'
+            . ' attribution data exists, not a proven absence.';
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * NOVA READ-ONLY INTEGRATION RULE: ad-inquiry figures come from the
+     * CRM's existing, unmodified KpiAdsConversionReport (exactly how
+     * UserController::dashboard() already uses it - a fresh, unsaved
+     * instance, never persisted). Lead follow-up figures mirror
+     * LeadController's own conventions. See
+     * App\NovaAI\Support\MarketingLeadAnalytics for the full data-quality
+     * reasoning this section depends on.
+     *
+     * This is the weakest-evidence domain Nova has: every AdLeadEntry row
+     * is manually typed, "booked" is a manual branch selection rather than
+     * an Appointment/Sale link, ticket_amount is self-reported and never
+     * reconciled to Sale, and there is no advertising-spend field anywhere
+     * in this schema - CAC/CPL/ROAS cannot be calculated, full stop, and
+     * this method must never produce them.
+     */
+    private function marketingLeadSection(): string
+    {
+        $from = now()->startOfMonth();
+        $to = now()->endOfDay();
+
+        $analytics = new MarketingLeadAnalytics();
+        $ads = $analytics->adSummary($from, $to);
+        $leads = $analytics->leadSummary($from, $to);
+
+        $header = 'MARKETING & LEAD INTELLIGENCE (month to date, manually maintained ad-inquiry log,'
+            . ' ' . $from->format('d M') . ' - ' . $to->format('d M') . ')';
+
+        $lines = [$header];
+
+        $totals = $ads['totals'];
+        $lines[] = sprintf(
+            '- Total recorded ad inquiries: %d | marked booked (branch manually selected, not an appointment/sale link): %d'
+                . ' | recorded booking conversion: %.1f%% (target 20%%)',
+            $totals['total_leads'],
+            $totals['total_bookings'],
+            $totals['overall_conversion']
+        );
+        $lines[] = sprintf(
+            '- Reported booking value (self-reported ticket amounts on booked entries, NOT reconciled to Sale records): %.2f QAR',
+            $totals['total_revenue']
+        );
+
+        $branch = $ads['branch_comparison'];
+        $lines[] = sprintf(
+            '- Booked entries by branch (inquiry volume by branch is not tracked - branch is only recorded when'
+                . ' booked): Old Airport %d booked / %.2f QAR reported, Al Wakrah %d booked / %.2f QAR reported.'
+                . ' Home Service is not a supported branch in the ad-inquiry log.',
+            $branch['old_airport']['bookings'],
+            $branch['old_airport']['revenue'],
+            $branch['wakrah']['bookings'],
+            $branch['wakrah']['revenue']
+        );
+
+        if (!empty($ads['top_categories'])) {
+            $lines[] = 'Top categories by recorded inquiry volume:';
+            foreach ($ads['top_categories'] as $category) {
+                $lines[] = sprintf(
+                    '- %s: %d leads / %d booked / %.1f%% conversion (%s)',
+                    $category['name'],
+                    $category['leads'],
+                    $category['bookings'],
+                    $category['conversion'],
+                    strtoupper($category['status'])
+                );
+            }
+        }
+
+        $lines[] = sprintf(
+            'Lead follow-up log (separate from the ad-inquiry data above; Lead.customer_id links to a real'
+                . ' Customer record): %d lead records this period | %d marked follow-up-completed'
+                . ' (needful_done - task completed, NOT a sale/conversion) | %d pending | %d overdue for'
+                . ' follow-up (all-time count, not limited to this period)',
+            $leads['total_leads'],
+            $leads['follow_up_completed'],
+            $leads['follow_up_pending'],
+            $leads['overdue_all_time']
+        );
+
+        $lines[] = '- No advertising-spend data exists anywhere in this CRM - CAC, cost-per-lead, and ROAS'
+            . ' cannot be calculated from any current source.';
+
+        return implode("\n", $lines);
+    }
+
     private function serviceVolumeSection(): string
     {
         $from = now()->copy()->subDays(self::SERVICE_COUNT_DAYS - 1)->startOfDay();
@@ -702,6 +1166,7 @@ class NovaAIService
             'old_airport' => 'Old Airport',
             'wakrah' => 'Al Wakrah',
             'home_service' => 'Home Service',
+            'both' => 'Both Branches',
             default => $branch ?: 'Unknown branch',
         };
     }
