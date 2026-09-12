@@ -3,45 +3,14 @@
 namespace App\Http\Controllers\Kpi;
 
 use App\Http\Controllers\Controller;
-use App\Models\KpiContentEntry;
 use App\Models\KpiContentReport;
 use Illuminate\Http\Request;
 
 class ContentKpiController extends Controller
 {
-    public function index(Request $request)
+    public function index()
     {
-        $activeTab = in_array($request->query('tab'), ['calendar', 'reports'], true)
-            ? $request->query('tab')
-            : 'calendar';
-
-        $calendarFrom = $request->date('calendar_from');
-        $calendarTo = $request->date('calendar_to');
-        $calendarCreator = $request->filled('calendar_creator') ? $request->calendar_creator : null;
-
-        $entries = KpiContentEntry::query()
-            ->when($calendarFrom, fn ($q) => $q->whereDate('entry_date', '>=', $calendarFrom))
-            ->when($calendarTo, fn ($q) => $q->whereDate('entry_date', '<=', $calendarTo))
-            ->when($calendarCreator, fn ($q) => $q->where('creator_name', $calendarCreator))
-            ->orderByDesc('entry_date')
-            ->orderByDesc('id')
-            ->paginate(20, ['*'], 'entries_page')
-            ->appends(array_filter([
-                'calendar_from' => $calendarFrom?->format('Y-m-d'),
-                'calendar_to' => $calendarTo?->format('Y-m-d'),
-                'calendar_creator' => $calendarCreator,
-                'tab' => 'calendar',
-            ]));
-
-        $creators = KpiContentEntry::select('creator_name')->distinct()->orderBy('creator_name')->pluck('creator_name');
-
-        $reports = KpiContentReport::orderByDesc('date_to')->orderByDesc('id')
-            ->paginate(15, ['*'], 'reports_page')
-            ->appends(['tab' => 'reports']);
-
-        return view('kpi.content.index', compact(
-            'activeTab', 'entries', 'creators', 'calendarFrom', 'calendarTo', 'calendarCreator', 'reports'
-        ));
+        return view('kpi.content.index');
     }
 
     /**
