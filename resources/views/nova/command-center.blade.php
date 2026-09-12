@@ -384,6 +384,13 @@
                 startListening();
                 return;
             }
+            // Stage 8 hardening: recognition.continuous = false normally
+            // means only one 'result' can fire per listen cycle, but a
+            // request-in-flight guard costs nothing and closes any
+            // browser-specific double-fire/race between a result event and
+            // an overlapping request - the same guard the drawer widget
+            // (resources/views/nova-ai/widget.blade.php) already has.
+            if (busy) return;
 
             busy = true;
             setStatus('processing', 'Processing...');

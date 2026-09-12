@@ -206,7 +206,13 @@ class NovaAIServiceTest extends TestCase
         });
     }
 
-    public function test_request_shape_and_generation_config_are_unchanged(): void
+    /**
+     * maxOutputTokens was deliberately raised from 800 to 1600 in Stage 8
+     * after live-verifying a real MAX_TOKENS truncation at 796/800 for a
+     * genuinely broad "full executive review" question - see
+     * NovaAIService::askWithMeta()'s generationConfig comment.
+     */
+    public function test_request_shape_and_generation_config_match_the_stage_8_token_limit(): void
     {
         $this->fakeSuccess();
 
@@ -216,7 +222,7 @@ class NovaAIServiceTest extends TestCase
             return $request->url() === 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent'
                 && $request->hasHeader('x-goog-api-key', 'test-gemini-key')
                 && ($request['generationConfig']['temperature'] ?? null) === 0.6
-                && ($request['generationConfig']['maxOutputTokens'] ?? null) === 800
+                && ($request['generationConfig']['maxOutputTokens'] ?? null) === 1600
                 && count($request['contents']) === 1;
         });
     }
@@ -267,5 +273,42 @@ class NovaAIServiceTest extends TestCase
         $reply = (new NovaAIService())->ask('Anything I should know?');
 
         $this->assertStringContainsString("didn't get a usable answer", $reply);
+    }
+
+    /**
+     * Stage 8: a real MAX_TOKENS truncation must be observable in logs (so
+     * it's diagnosable, not silent) without ever logging the reply content
+     * or the question that produced it - only the finish-reason signal and
+     * token counts, matching the logging-hygiene rule for every other Nova
+     * log line.
+     */
+    public function test_max_tokens_finish_reason_is_logged_without_leaking_reply_or_question_content(): void
+    {
+        \Illuminate\Support\Facades\Log::spy();
+
+        Http::fake([
+            self::GEMINI_URL_PATTERN => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [['text' => 'A sensitive partial payroll figure that got cut off']]],
+                    'finishReason' => 'MAX_TOKENS',
+                ]],
+                'usageMetadata' => ['promptTokenCount' => 100, 'candidatesTokenCount' => 1600, 'totalTokenCount' => 1700],
+            ], 200),
+        ]);
+
+        $result = (new NovaAIService())->askWithMeta('A secret question about payroll');
+
+        $this->assertTrue($result['succeeded']);
+        $this->assertSame('A sensitive partial payroll figure that got cut off', $result['reply']);
+
+        \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')
+            ->withArgs(function (string $message, array $context) {
+                $serializedContext = json_encode($context);
+
+                return str_contains($message, 'truncated')
+                    && !str_contains($serializedContext, 'sensitive partial payroll figure')
+                    && !str_contains($serializedContext, 'secret question about payroll');
+            })
+            ->once();
     }
 }

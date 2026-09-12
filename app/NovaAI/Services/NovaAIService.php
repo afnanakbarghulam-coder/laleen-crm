@@ -71,9 +71,9 @@ class NovaAIService
      * exposes that distinction without changing this method's signature
      * or behavior for any existing caller.
      */
-    public function ask(string $message, array $recentTurns = [], array $businessFacts = [], array $decisions = [], array $experiments = []): string
+    public function ask(string $message, array $recentTurns = [], array $businessFacts = [], array $decisions = [], array $experiments = [], ?array $domains = null): string
     {
-        return $this->askWithMeta($message, $recentTurns, $businessFacts, $decisions, $experiments)['reply'];
+        return $this->askWithMeta($message, $recentTurns, $businessFacts, $decisions, $experiments, $domains)['reply'];
     }
 
     /**
@@ -104,13 +104,22 @@ class NovaAIService
      *     NovaDecisionService::relevantExperiments()) - time-bounded
      *     trials the owner explicitly approved. Unspecified parameters
      *     arrive as null, never invented.
+     * @param ?array<int, string> $domains
+     *     Stage 7 question-aware retrieval (App\NovaAI\Support\
+     *     NovaContextRouter::route()) - which CRM domains buildSnapshot()
+     *     should actually build for this question. A non-empty array
+     *     builds only those domains; [] builds none (the question needs no
+     *     CRM data at all); null (the default, and what every pre-Stage-7
+     *     caller/test still passes implicitly) builds the COMPLETE
+     *     snapshot exactly as before Stage 7 - the permanent safety
+     *     fallback. See buildSnapshot()'s own docblock.
      * @return array{reply: string, succeeded: bool}
      *     succeeded is true only for a genuine Gemini answer - false for
      *     every fallback branch (missing key, failed request, 429, empty
      *     response, exception), so callers can skip persisting a
      *     transient infrastructure message as if it were real memory.
      */
-    public function askWithMeta(string $message, array $recentTurns = [], array $businessFacts = [], array $decisions = [], array $experiments = []): array
+    public function askWithMeta(string $message, array $recentTurns = [], array $businessFacts = [], array $decisions = [], array $experiments = [], ?array $domains = null): array
     {
         $apiKey = config('services.gemini.key');
 
@@ -168,10 +177,19 @@ class NovaAIService
                         'systemInstruction' => [
                             'parts' => [['text' => $this->persona()]],
                         ],
-                        'contents' => $this->buildContents($message, $recentTurns, $businessFacts, $decisions, $experiments),
+                        'contents' => $this->buildContents($message, $recentTurns, $businessFacts, $decisions, $experiments, $domains),
                         'generationConfig' => [
                             'temperature' => 0.6,
-                            'maxOutputTokens' => 800,
+                            // Stage 8: raised from 800 after live-verifying that a
+                            // genuinely broad "full executive review across every
+                            // domain" question hit finishReason MAX_TOKENS at
+                            // 796/800 output tokens - a real, reproducible
+                            // truncation risk, not a theoretical one. 1600 is a
+                            // deliberate, bounded 2x headroom (confirmed by the
+                            // same live question finishing naturally with
+                            // finishReason STOP at ~1307 tokens), not an
+                            // open-ended increase.
+                            'maxOutputTokens' => 1600,
                         ],
                     ]
                 );
@@ -196,9 +214,27 @@ class NovaAIService
             }
 
             $text = data_get($response->json(), 'candidates.0.content.parts.0.text');
+            $finishReason = data_get($response->json(), 'candidates.0.finishReason');
+
+            // Observability only - Stage 8 finding: a genuinely broad
+            // question can legitimately hit the output cap even after
+            // raising it (see maxOutputTokens above). This never changes
+            // what's returned to the admin (a MAX_TOKENS answer is still
+            // usually a complete, useful partial answer) - it only makes a
+            // real truncation visible in logs instead of silent. Never logs
+            // reply content or business data, only the finish-reason code
+            // and token counts.
+            if ($finishReason === 'MAX_TOKENS') {
+                Log::warning('Nova AI reply was truncated at the output token limit', [
+                    'usage' => data_get($response->json(), 'usageMetadata'),
+                ]);
+            }
 
             if (empty(trim((string) $text))) {
-                Log::warning('Nova AI returned an empty response', ['raw' => $response->json()]);
+                Log::warning('Nova AI returned an empty response', [
+                    'finishReason' => $finishReason,
+                    'usage' => data_get($response->json(), 'usageMetadata'),
+                ]);
 
                 return [
                     'reply' => "Nova didn't get a usable answer that time - try rephrasing the question.",
@@ -232,7 +268,7 @@ class NovaAIService
      * empty (every caller/test before Stage 4), this produces the exact
      * single-turn contents array Nova has always sent.
      */
-    private function buildContents(string $message, array $recentTurns, array $businessFacts = [], array $decisions = [], array $experiments = []): array
+    private function buildContents(string $message, array $recentTurns, array $businessFacts = [], array $decisions = [], array $experiments = [], ?array $domains = null): array
     {
         $contents = [];
 
@@ -243,7 +279,7 @@ class NovaAIService
             ];
         }
 
-        $contents[] = ['role' => 'user', 'parts' => [['text' => $this->buildPrompt($message, $businessFacts, $decisions, $experiments)]]];
+        $contents[] = ['role' => 'user', 'parts' => [['text' => $this->buildPrompt($message, $businessFacts, $decisions, $experiments, $domains)]]];
 
         return $contents;
     }
@@ -301,10 +337,10 @@ class NovaAIService
             . 'posted payroll ledger.';
     }
 
-    private function buildPrompt(string $message, array $businessFacts = [], array $decisions = [], array $experiments = []): string
+    private function buildPrompt(string $message, array $businessFacts = [], array $decisions = [], array $experiments = [], ?array $domains = null): string
     {
         return 'BUSINESS SNAPSHOT (as of ' . now()->format('D, d M Y H:i') . "):\n"
-            . $this->buildSnapshot()
+            . $this->buildSnapshot($domains)
             . "\n\n" . $this->buildBusinessFactsSection($businessFacts)
             . "\n\n" . $this->buildDecisionsSection($decisions)
             . "\n\n" . $this->buildExperimentsSection($experiments)
@@ -430,27 +466,109 @@ class NovaAIService
      * If this method grows new sections in a later stage, that part of the
      * prompt must be revised to match, or Nova will keep disclaiming data
      * she actually has.
+     *
+     * Every section-builder method below, in the exact canonical order
+     * they have always run in - this order is preserved by buildSnapshot()
+     * regardless of which subset Stage 7's App\NovaAI\Support\
+     * NovaContextRouter selects, so a multi-domain answer's prompt
+     * structure never depends on router-match order (see Stage 7 note in
+     * app/NovaAI/README.md).
      */
-    private function buildSnapshot(): string
+    private const SECTION_DOMAIN_MAP = [
+        'revenueSection' => 'finance',
+        'appointmentFunnelSection' => 'appointments',
+        'branchFinancialSection' => 'finance',
+        'staffPerformanceSection' => 'staff_performance',
+        'staffTargetSection' => 'staff_performance',
+        'staffPayrollSection' => 'payroll',
+        'bookingAgentPerformanceSection' => 'booking_agents',
+        'marketingLeadSection' => 'marketing',
+        'serviceVolumeSection' => 'service_activity',
+        'customerRetentionSection' => 'customers',
+        'pendingPackagesSection' => 'packages',
+    ];
+
+    private const NO_DOMAIN_NOTICE = 'No CRM domain was required for this request.';
+
+    /**
+     * @param ?array<int, string> $domains Stage 7 question-aware retrieval
+     *     (see askWithMeta()'s own docblock for the full three-outcome
+     *     contract):
+     *     - null (default): every section above runs, in the same order,
+     *       with the same wording/calculations/queries as before Stage 7 -
+     *       this is the permanent, byte-identical full-snapshot fallback
+     *       every pre-Stage-7 test and caller already exercises.
+     *     - []: no section runs at all - not even a query is issued for
+     *       any of them - and a single clearly-worded marker is returned
+     *       instead, so Nova can tell "no CRM domain was selected" apart
+     *       from "a domain was checked and is empty".
+     *     - a non-empty subset of App\NovaAI\Support\
+     *       NovaContextRouter::DOMAINS: only the section-builder methods
+     *       mapped to those domains run - an unselected domain's method is
+     *       never called, so its query cost is never paid either.
+     */
+    private function buildSnapshot(?array $domains = null): string
     {
-        $sections = [
-            $this->revenueSection(),
-            $this->appointmentFunnelSection(),
-            $this->branchFinancialSection(),
-            $this->staffPerformanceSection(),
-            $this->staffTargetSection(),
-            $this->staffPayrollSection(),
-            $this->bookingAgentPerformanceSection(),
-            $this->marketingLeadSection(),
-            $this->serviceVolumeSection(),
-            $this->customerRetentionSection(),
-            $this->pendingPackagesSection(),
-        ];
+        if ($domains === []) {
+            return self::NO_DOMAIN_NOTICE;
+        }
+
+        $methods = $domains === null
+            ? array_keys(self::SECTION_DOMAIN_MAP)
+            : array_keys(array_intersect(self::SECTION_DOMAIN_MAP, $domains));
+
+        $sections = array_map(fn (string $method): string => $this->buildSectionSafely($method), $methods);
 
         return implode("\n\n", array_filter($sections));
     }
 
-    private function revenueSection(): string
+    /**
+     * Stage 8 hardening: one section throwing (a query exception, a bad
+     * cast, a collaborator error) must never take down the whole request -
+     * the admin still gets an answer built from every section that DID
+     * load, with the failed one clearly marked as unavailable rather than
+     * silently missing (which the admin/Nova could otherwise misread as
+     * "checked and zero" - the same "absence is not zero" distinction
+     * Stage 7's system-prompt update already establishes for unselected
+     * domains). This is the same catch-all discipline every other Nova
+     * collaborator (NovaBusinessFactService, NovaDecisionService,
+     * NovaConversationService) already uses for exactly this reason - it
+     * is not a new indiscriminate pattern. It does not hide the failure: a
+     * warning is always logged with the section name, domain, and
+     * exception class/code - deliberately never $e->getMessage() (a
+     * database/query exception's message can carry raw SQL, bindings, or
+     * the input values themselves - potentially real customer/business
+     * data), so this stays fully diagnosable without ever risking CRM
+     * content in the logs.
+     *
+     * The eleven section-builder methods below are `protected`, not
+     * `private` (a Stage 8 visibility-only change, no behavior change) -
+     * PHP does not allow a subclass to override a private method when the
+     * call site lives in the parent class, which would make this exact
+     * failure-isolation behavior untestable without it. Still not part of
+     * any public API - just testable-by-subclass.
+     */
+    private function buildSectionSafely(string $method): string
+    {
+        try {
+            return $this->{$method}();
+        } catch (\Throwable $e) {
+            Log::warning('Nova CRM section failed to build - continuing with the remaining sections', [
+                'section' => $method,
+                'domain' => self::SECTION_DOMAIN_MAP[$method] ?? 'unknown',
+                'exception' => get_class($e),
+                'code' => $e->getCode(),
+            ]);
+
+            $domain = self::SECTION_DOMAIN_MAP[$method] ?? 'this';
+
+            return "[{$domain} DATA UNAVAILABLE]\n- This business-data section could not be loaded right now due to an"
+                . ' internal error. This is NOT evidence the underlying figures are zero - say so plainly if asked'
+                . ' and suggest trying again.';
+        }
+    }
+
+    protected function revenueSection(): string
     {
         $todayStart = now()->startOfDay();
         $todayEnd = now()->endOfDay();
@@ -496,7 +614,7 @@ class NovaAIService
      * already passed stays counted as pending - it is not reclassified as
      * a no-show, cancellation, or completion just because time has moved on.
      */
-    private function appointmentFunnelSection(): string
+    protected function appointmentFunnelSection(): string
     {
         $from = now()->copy()->subDays(self::APPOINTMENT_FUNNEL_DAYS - 1)->startOfDay();
         $to = now();
@@ -584,7 +702,7 @@ class NovaAIService
      * was never part of that breakdown and is not fabricated in this
      * section either.
      */
-    private function branchFinancialSection(): string
+    protected function branchFinancialSection(): string
     {
         $from = now()->startOfMonth();
         $to = now()->endOfDay();
@@ -642,7 +760,7 @@ class NovaAIService
         );
     }
 
-    private function staffPerformanceSection(): string
+    protected function staffPerformanceSection(): string
     {
         $from = now()->copy()->subDays(self::STAFF_PERFORMANCE_DAYS - 1)->startOfDay();
         $to = now()->endOfDay();
@@ -705,7 +823,7 @@ class NovaAIService
      * the class's own alphabetical default - a read-only presentation
      * choice, not a recalculation.
      */
-    private function staffTargetSection(): string
+    protected function staffTargetSection(): string
     {
         $from = now()->startOfMonth();
         $to = now()->endOfDay();
@@ -805,7 +923,7 @@ class NovaAIService
      *   admin form with no link to payroll at all. This method must never
      *   be combined with branchFinancialSection()'s net profit figure.
      */
-    private function staffPayrollSection(): string
+    protected function staffPayrollSection(): string
     {
         $from = now()->startOfMonth();
         $to = now()->endOfMonth();
@@ -887,7 +1005,7 @@ class NovaAIService
      * a sale, or a conversion; the appointment funnel section already
      * covers completion/show-rate separately.
      */
-    private function bookingAgentPerformanceSection(): string
+    protected function bookingAgentPerformanceSection(): string
     {
         $from = now()->startOfMonth();
         $to = now()->endOfDay();
@@ -963,7 +1081,7 @@ class NovaAIService
      * in this schema - CAC/CPL/ROAS cannot be calculated, full stop, and
      * this method must never produce them.
      */
-    private function marketingLeadSection(): string
+    protected function marketingLeadSection(): string
     {
         $from = now()->startOfMonth();
         $to = now()->endOfDay();
@@ -1032,7 +1150,7 @@ class NovaAIService
         return implode("\n", $lines);
     }
 
-    private function serviceVolumeSection(): string
+    protected function serviceVolumeSection(): string
     {
         $from = now()->copy()->subDays(self::SERVICE_COUNT_DAYS - 1)->startOfDay();
 
@@ -1068,7 +1186,7 @@ class NovaAIService
      * appears in this section - individual-customer retrieval is explicitly
      * a later, question-aware stage.
      */
-    private function customerRetentionSection(): string
+    protected function customerRetentionSection(): string
     {
         $data = (new CustomerRetentionAnalytics())->summary();
 
@@ -1129,7 +1247,7 @@ class NovaAIService
         return implode("\n", $lines);
     }
 
-    private function pendingPackagesSection(): string
+    protected function pendingPackagesSection(): string
     {
         $packages = ClientPackage::query()
             ->where('status', 'active')

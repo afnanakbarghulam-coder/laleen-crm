@@ -9,6 +9,7 @@ use App\NovaAI\Services\NovaConversationService;
 use App\NovaAI\Services\NovaDecisionExtractor;
 use App\NovaAI\Services\NovaDecisionService;
 use App\NovaAI\Services\NovaFactExtractor;
+use App\NovaAI\Support\NovaContextRouter;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
@@ -47,7 +48,13 @@ class NovaAIController extends Controller
      *
      * Gemini call count per request (unchanged, reported not optimized):
      * 1) the main answer, 2) fact extraction, 3) decision/experiment
-     * extraction.
+     * extraction. Stage 7's App\NovaAI\Support\NovaContextRouter::route()
+     * is a pure, in-process PHP function - no network call, no DB query,
+     * no LLM - so it adds no fourth call and no CRM-affecting side effect
+     * of its own; it only decides which of NovaAIService's existing CRM
+     * sections get built for this specific question (see that class's
+     * askWithMeta()/buildSnapshot() docblocks for the null/[]/array
+     * contract).
      */
     public function ask(
         Request $request,
@@ -72,13 +79,15 @@ class NovaAIController extends Controller
         $relevantFacts = $facts->relevantFacts($validated['message'], $request->user()->id);
         $relevantDecisions = $decisions->relevantDecisions($validated['message']);
         $relevantExperiments = $decisions->relevantExperiments($validated['message']);
+        $domains = NovaContextRouter::route($validated['message']);
 
         $result = $nova->askWithMeta(
             $validated['message'],
             $recentTurns,
             $relevantFacts,
             $relevantDecisions,
-            $relevantExperiments
+            $relevantExperiments,
+            $domains
         );
 
         $conversations->recordExchange(

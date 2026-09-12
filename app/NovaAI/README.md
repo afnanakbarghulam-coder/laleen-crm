@@ -440,6 +440,156 @@ mocked test - a reminder that a schema/prompt correctly *validating*
 mocked JSON says nothing about what the real model actually produces
 under that schema.
 
+## Stage 7B — Question-aware CRM retrieval (deterministic domain router)
+
+Before this stage, `NovaAIService::buildSnapshot()` built and queried all
+11 CRM intelligence sections on every single question, regardless of what
+was actually asked - a pure-finance question paid the query cost of, and
+sent Gemini the text of, staff payroll, customer retention, marketing,
+booking-agent, and package data it never needed. Stage 7B (design
+approved in Stage 7A's audit/architecture report) makes CRM retrieval
+question-aware: `App\NovaAI\Support\NovaContextRouter::route($message)`
+maps the admin's raw question to the small subset of CRM domains actually
+relevant to it, and `buildSnapshot()` only builds (and only queries) that
+subset. Existing CRM production files modified: **none** - this stage is
+entirely inside `App\NovaAI`.
+
+**Deterministic only, no fourth Gemini call.** Routing is pure PHP string
+matching - phrase/keyword lookups against a fixed, hardcoded vocabulary,
+reusing the same normalization approach as `App\NovaAI\Support\
+NovaRelevance` (lowercase, punctuation collapsed to spaces) without reusing
+that class's stopword-dropping token-overlap model, since routing needs
+whole phrases ("no show", "who are you") intact rather than a bag of
+tokens. No LLM call, no embeddings, no vector store, no external API, and
+no database query of its own. The existing 3-Gemini-calls-per-request
+architecture (main answer, fact extraction, decision extraction) is
+completely unchanged - `NovaContextRouter::route()` runs entirely
+in-process before the main call is even built.
+
+**Three outcomes, never confused with each other** - this is the one
+correction Stage 7A's own design needed, made explicit here:
+- A non-empty array (e.g. `['finance']`): build only these domains.
+- `[]`: the question confidently needs no CRM data at all (a greeting or
+  meta message like "Hello Nova") - zero sections are built, zero queries
+  run, and `buildSnapshot()` returns a single clearly-worded marker
+  ("No CRM domain was required for this request.") instead of leaving the
+  BUSINESS SNAPSHOT block looking empty or, worse, implying every metric
+  is zero.
+- `null`: routing was uncertain, the question's domain spread exceeded the
+  4-domain cap, or (defensively) routing itself threw - build the
+  **complete** snapshot exactly as before Stage 7. This is the permanent
+  safety fallback and is exercised by every pre-Stage-7 caller/test that
+  doesn't pass a domains argument at all (`buildSnapshot()`'s new
+  `?array $domains = null` parameter defaults to it).
+  `NovaContextRouterTest::test_null_domains_is_byte_identical_to_manually_replicated_pre_stage_7_snapshot`
+  (in `NovaContextRetrievalTest`) independently reconstructs the original
+  11-section algorithm and asserts byte-for-byte equality against
+  `buildSnapshot(null)` - the regression guard that this fallback path
+  never silently drifts.
+
+**Nine domains, mapped directly onto the eleven existing section-builder
+methods** (`NovaAIService::SECTION_DOMAIN_MAP`) - no new provider/interface
+abstraction was introduced, since nine domains cleanly mapping onto eleven
+already-existing private methods on one class didn't justify one:
+`finance` (revenue + branch financial), `appointments`, `staff_performance`
+(staff performance + staff upsell target - deliberately never payroll),
+`payroll`, `booking_agents`, `marketing`, `customers`, `packages`,
+`service_activity`. `buildSnapshot()` filters `SECTION_DOMAIN_MAP` by the
+selected domains but always iterates it in its own original, fixed
+insertion order - so a multi-domain answer's section order never depends
+on which order the router happened to match things in (e.g. requesting
+`['payroll', 'finance']` still renders revenue/branch-financial before
+payroll, matching the pre-Stage-7 canonical order exactly).
+
+**Ambiguity is resolved by evidence, never guessed away.** Three words are
+genuinely cross-cutting in this business's own vocabulary and are handled
+as explicit ambiguous groups, never silently assigned to one side:
+`target` (`staff_performance` + `booking_agents`), `booking`/`bookings`
+(`appointments` + `booking_agents` + `marketing`), and
+`offer`/`push`/`promote`/`promotion` (`marketing` + `service_activity` +
+`customers`). Each group only contributes to its member domains, and only
+when *none* of them already has independent evidence from their own,
+more-specific phrase lists - this is what makes "who is behind **upsell**
+target?" resolve to `staff_performance` alone while a bare "who is behind
+target?" resolves to both populations, and what stops "which **booking
+agent** is behind target?" from also pulling in `appointments`/`marketing`
+just because the word "booking" is technically present. Selection is
+capped at 4 domains; a question whose evidence spreads across more than
+that returns `null` (full snapshot) rather than trusting a partial,
+possibly-misleading slice.
+
+**Known, accepted limitation - no name-based routing.** The router makes
+no database query of its own and deliberately does not hardcode a
+staff/agent name roster to resolve a bare-name question ("How is Anita
+doing?", "How are Areeba and Zoya performing?") to a domain - confirmed
+actively unsafe by this stage's own audit of the real dataset: `Nadia
+Youssef` is simultaneously a `Staff` row and the sole `agent`-role `User`
+row, so any hardcoded name -> domain table would be wrong some of the
+time, and would go stale the moment the real roster changes. These
+questions correctly fall back to `null` (full snapshot) rather than a
+guess - a deliberately safe outcome, not a bug. See
+`NovaContextRouterTest::test_bare_name_question_with_no_domain_vocabulary_falls_back_to_full_snapshot`.
+
+**Narrow greeting/meta detection, business content always wins.**
+`NovaContextRouter` only checks for a greeting/meta message ("hello",
+"thanks", "who are you", "help", ...) after confirming zero domains
+matched at all - so "Hi Nova, how much did Wakrah make?" routes to
+`finance` exactly as if the greeting weren't there. This is deliberately
+not a general intent-classification framework - just a small fixed phrase
+list plus a short-message length guard.
+
+**PII reduction is real, not just theoretical.** Of the nine domains, four
+carry identifiable names: `staff_performance` and `payroll` (staff names;
+`payroll` additionally carries salary/overtime/deduction figures - the
+single most sensitive section Nova has), `booking_agents` (agent names),
+and `packages` (customer names, the only section that ever names a
+customer). Before this stage, all four were sent to Gemini on every single
+question. After: a pure `finance` question now sends zero personally
+identifiable data at all.
+`NovaContextRetrievalTest::test_finance_only_never_discloses_staff_agent_or_customer_names`
+proves this with real fixture names; the payroll/packages tests in the
+same file prove the opposite - that a genuinely relevant domain still
+discloses exactly what it needs to, unchanged from before Stage 7.
+
+**Failure isolation matches every other Nova collaborator's convention.**
+`NovaContextRouter::route()` wraps its own logic in a catch-all and
+degrades to `null` (full snapshot) on any unexpected `\Throwable`, logged
+via `Log::warning()` - the same discipline `NovaBusinessFactService`/
+`NovaDecisionService` already use for a `nova_memory` outage. A routing
+bug can therefore never cost Nova the ability to answer; worst case, every
+request behaves exactly as it did before this stage existed.
+
+**System prompt update, deliberately minimal.** `resources/prompts/
+nova-system.md`'s CURRENT DATA BOUNDARIES section now opens by explaining
+that the snapshot she receives is built only from the domain(s) relevant
+to the current question, and states explicitly that an absent domain does
+NOT prove that metric is zero, empty, or unavailable - it may simply not
+have been selected for this specific question. This stops Nova from
+reasoning "I don't see payroll in this prompt, therefore payroll must be
+zero" now that an incomplete-by-design snapshot is the normal case rather
+than a data gap. Nothing else in the prompt was touched - every existing
+per-domain data-quality caveat (marketing's weak evidence, payroll's
+possible-double-count-with-expenses ambiguity, etc.) still applies exactly
+as before, whenever that domain happens to be shown.
+
+**No model-selected filters of any kind.** Stage 7B is domain selection
+only - no arbitrary date ranges, branches, staff/customer IDs, or status
+filters are ever routable. Every section-builder method keeps its own
+existing, established period/branch semantics untouched (e.g. payroll's
+full-calendar-month vs. every other section's month-to-date) - Stage 7B
+never touches *what* a selected section computes, only *whether* it runs
+at all.
+
+**Files changed:** `app/NovaAI/Support/NovaContextRouter.php` (new),
+`app/NovaAI/Services/NovaAIService.php` (`buildSnapshot()`/`buildPrompt()`/
+`buildContents()`/`askWithMeta()`/`ask()` all gained an optional, trailing
+`?array $domains = null` parameter - every pre-existing call site and test
+that omits it is completely unaffected), `app/NovaAI/Http/Controllers/
+NovaAIController.php` (routes the message once, alongside the existing
+memory-retrieval calls, and passes the result straight through to
+`askWithMeta()`), `resources/prompts/nova-system.md` (the minimal wording
+update above). No migration, no schema change, no CRM production file.
+
 ## Correction pass (post Stage 6) - relevant memory retrieval + contextual approval
 
 Two precision corrections to Stages 5/6's already-approved design, not a
