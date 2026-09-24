@@ -243,6 +243,21 @@ class NovaAIService
             }
 
             return ['reply' => trim($text), 'succeeded' => true];
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            // A cURL-level failure (timeout or dropped connection) that
+            // survived the retry() above - i.e. it happened on the final
+            // attempt too. Logged and messaged distinctly from a generic
+            // Throwable below so a flaky-network incident is identifiable
+            // in storage/logs/laravel.log at a glance instead of reading as
+            // an unexplained "unexpected error".
+            Log::warning('Nova AI connection timed out or dropped', [
+                'message' => $this->redactKey($e->getMessage(), $apiKey),
+            ]);
+
+            return [
+                'reply' => "Nova couldn't reach Gemini - the connection timed out or dropped. Try again in a moment.",
+                'succeeded' => false,
+            ];
         } catch (\Throwable $e) {
             // Belt-and-braces: even with the key out of the URL, never let a
             // raw exception message (which can echo request details) reach
