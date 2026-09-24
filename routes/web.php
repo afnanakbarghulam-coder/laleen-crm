@@ -25,7 +25,6 @@ use App\Http\Controllers\StaffDeductionController;
 use App\Http\Controllers\StaffNoticeController;
 use App\Http\Controllers\StaffOvertimeController;
 use App\Http\Controllers\UserController;
-use App\NovaAI\Http\Controllers\NovaAIController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -173,12 +172,6 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('super-admin')->group(function () {
         Route::resource('users', UserController::class)->only(['index', 'store', 'update', 'destroy']);
         Route::patch('/users/{user}/toggle-active', [UserController::class, 'toggleActive'])->name('users.toggle-active');
-    });
-
-    // ---- Nova AI: executive assistant, walled off to the 'admin' role directly - independent of the module matrix ----
-    Route::prefix('nova')->name('nova.')->middleware('nova.admin')->group(function () {
-        Route::post('/ask', [NovaAIController::class, 'ask'])->name('ask');
-        Route::get('/command-center', [NovaAIController::class, 'commandCenter'])->name('command-center');
     });
 
     // ---- KPIs ----
