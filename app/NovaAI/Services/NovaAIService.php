@@ -156,7 +156,7 @@ class NovaAIService
             // a rejected-but-answered request (e.g. a 429) flowing into the
             // ordinary "not successful" branch below instead of being turned
             // into a generic exception that loses the real status/body.
-            $response = Http::timeout(20)
+            $response = Http::timeout(30)
                 ->connectTimeout(8)
                 ->retry(2, 500, function ($exception) {
                     if ($exception instanceof \Illuminate\Http\Client\ConnectionException) {
