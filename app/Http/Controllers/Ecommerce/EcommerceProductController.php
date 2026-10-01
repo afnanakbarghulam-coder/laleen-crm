@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Ecommerce;
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceProduct;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class EcommerceProductController extends Controller
 {
@@ -26,7 +27,7 @@ class EcommerceProductController extends Controller
 
     public function update(Request $request, EcommerceProduct $ecommerceProduct)
     {
-        $validated = $this->validated($request);
+        $validated = $this->validated($request, $ecommerceProduct->id);
 
         $ecommerceProduct->update($validated);
 
@@ -40,10 +41,16 @@ class EcommerceProductController extends Controller
         return back()->with('success', 'Product deleted.');
     }
 
-    private function validated(Request $request): array
+    private function validated(Request $request, ?int $ignoreId = null): array
     {
         return $request->validate([
             'name' => 'required|string|max:255',
+            'sku' => [
+                'required',
+                'string',
+                'max:100',
+                Rule::unique('ecommerce_products', 'sku')->ignore($ignoreId),
+            ],
             'selling_price' => 'required|numeric|min:0',
             'liquid_cost_per_ml' => 'required|numeric|min:0',
             'volume_ml' => 'required|numeric|min:0',

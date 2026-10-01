@@ -22,6 +22,7 @@
                 <thead>
                     <tr>
                         <th>Product</th>
+                        <th>SKU</th>
                         <th>Selling Price</th>
                         <th>Total COGS</th>
                         <th>Gross Profit</th>
@@ -34,6 +35,7 @@
                     @forelse ($products as $product)
                         <tr>
                             <td>{{ $product->name }}</td>
+                            <td>{{ $product->sku }}</td>
                             <td>PKR {{ number_format($product->selling_price, 2) }}</td>
                             <td>PKR {{ number_format($product->total_cogs, 2) }}</td>
                             <td class="{{ $product->gross_profit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($product->gross_profit, 2) }}</td>
@@ -50,7 +52,7 @@
                             @endmoduleEdit
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="text-center text-muted">No product cost sheets yet</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted">No product cost sheets yet</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -73,6 +75,11 @@
                                 <label class="form-label">Product Name</label>
                                 <input type="text" name="name" id="f_name" class="form-control" required>
                             </div>
+                            <div class="col-md-6">
+                                <label class="form-label">SKU</label>
+                                <input type="text" name="sku" id="f_sku" class="form-control" placeholder="e.g. RS-100" required>
+                            </div>
+
                             <div class="col-md-6">
                                 <label class="form-label">Selling Price (PKR)</label>
                                 <input type="number" step="0.01" min="0" name="selling_price" id="f_selling_price" class="form-control calc-field" required>
@@ -185,6 +192,7 @@
                         document.getElementById('f_' + id).value = product[id];
                     });
                     document.getElementById('f_name').value = product.name;
+                    document.getElementById('f_sku').value = product.sku;
 
                     runCalculator();
                     modal.show();
