@@ -3,7 +3,6 @@
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CustomerController;
-use App\Http\Controllers\Ecommerce\EcommerceDashboardController;
 use App\Http\Controllers\Ecommerce\EcommerceExpenseController;
 use App\Http\Controllers\Ecommerce\EcommerceInventoryController;
 use App\Http\Controllers\Ecommerce\EcommercePartnerController;
@@ -227,7 +226,6 @@ Route::middleware(['auth'])->group(function () {
     // ---- Ecommerce ----
     Route::prefix('ecommerce')->name('ecommerce.')->group(function () {
         Route::middleware('module:ecommerce')->group(function () {
-            Route::get('/', [EcommerceDashboardController::class, 'index'])->name('dashboard');
             Route::get('/partners', [EcommercePartnerController::class, 'index'])->name('partners.index');
             Route::get('/products', [EcommerceProductController::class, 'index'])->name('products.index');
             Route::get('/expenses', [EcommerceExpenseController::class, 'index'])->name('expenses.index');

@@ -345,7 +345,7 @@
          <!-- Ecommerce -->
          @moduleView('ecommerce')
              <li class="menu-item {{ request()->routeIs('ecommerce.*') ? 'active' : '' }}">
-                 <a href="{{ route('ecommerce.dashboard') }}" class="menu-link">
+                 <a href="{{ route('ecommerce.partners.index') }}" class="menu-link">
                      <i class="bx bx-store-alt me-2"></i>
                      <div>Ecommerce</div>
                  </a>
