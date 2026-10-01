@@ -14,9 +14,17 @@ class EcommerceInventoryController extends Controller
         $rawMaterials = EcommerceRawMaterial::orderBy('name')->get();
         $products = EcommerceProduct::with('rawMaterials')->orderBy('name')->get();
 
+        $rawMaterialTypes = EcommerceRawMaterial::query()
+            ->whereNotNull('type')
+            ->where('type', '!=', '')
+            ->distinct()
+            ->orderBy('type')
+            ->pluck('type');
+
         return view('ecommerce.inventory', [
             'rawMaterials' => $rawMaterials,
             'products' => $products,
+            'rawMaterialTypes' => $rawMaterialTypes,
         ]);
     }
 
