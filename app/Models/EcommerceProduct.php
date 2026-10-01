@@ -8,6 +8,7 @@ class EcommerceProduct extends Model
 {
     protected $fillable = [
         'name',
+        'product_line_id',
         'sku',
         'unit_size',
         'current_stock',
@@ -49,6 +50,11 @@ class EcommerceProduct extends Model
     public function productionRuns()
     {
         return $this->hasMany(ProductionRun::class, 'ecommerce_product_id');
+    }
+
+    public function productLine()
+    {
+        return $this->belongsTo(EcommerceProductLine::class, 'product_line_id');
     }
 
     public function getLiquidCostAttribute(): float

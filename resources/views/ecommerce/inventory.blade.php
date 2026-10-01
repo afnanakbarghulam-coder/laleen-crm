@@ -25,7 +25,7 @@
             <table class="table ec-table align-middle">
                 <thead>
                     <tr>
-                        <th>Category</th>
+                        <th>Product Line &mdash; Component Type</th>
                         <th>Remaining / Original</th>
                         <th>Last Unit Cost</th>
                         @moduleEdit('ecommerce')<th></th>@endmoduleEdit
@@ -34,7 +34,7 @@
                 <tbody>
                     @forelse ($rawMaterials as $material)
                         <tr>
-                            <td>{{ $material->type ?: '—' }}</td>
+                            <td>{{ $material->productLine->name ?? 'Uncategorized' }} &mdash; {{ $material->componentType->name ?? 'Uncategorized' }}</td>
                             <td class="{{ $material->current_stock < 0 ? 'ec-negative' : '' }}">{{ number_format($material->current_stock, 2) }} / {{ number_format($material->initial_stock, 2) }} {{ $material->unit_of_measure }}</td>
                             <td>{{ $material->last_purchased_unit_cost !== null ? 'PKR ' . number_format($material->last_purchased_unit_cost, 2) : '—' }}</td>
                             @moduleEdit('ecommerce')
@@ -198,6 +198,15 @@
                             <div class="col-md-6">
                                 <label class="form-label">SKU</label>
                                 <input type="text" name="sku" id="f_sku" class="form-control" placeholder="e.g. RS-100" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Product Line</label>
+                                <select name="product_line_id" id="f_product_line_id" class="form-select" required>
+                                    <option value="" disabled selected>Select a product line</option>
+                                    @foreach ($productLines as $productLine)
+                                        <option value="{{ $productLine->id }}">{{ $productLine->name }}</option>
+                                    @endforeach
+                                </select>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Unit Size (e.g., 50ml, 100g)</label>

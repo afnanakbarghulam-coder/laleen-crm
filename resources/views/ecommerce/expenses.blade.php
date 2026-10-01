@@ -166,18 +166,27 @@
                                 <label class="form-check-label" for="expenseRestockCheckbox">This expense includes a raw material restock</label>
                             </div>
                             <div id="expenseRestockFields" style="display: none;">
-                                <div class="mb-3">
-                                    <label class="form-label">Raw Material Category</label>
-                                    <select name="raw_material_category" id="expenseRestockCategorySelect" class="form-select">
-                                        <option value="" disabled selected>Select a raw material category</option>
-                                        @foreach ($rawMaterialCategories as $rawMaterialCategory)
-                                            <option value="{{ $rawMaterialCategory }}">{{ $rawMaterialCategory }}</option>
-                                        @endforeach
-                                        <option value="__add_new__">+ Add New Raw Material</option>
-                                    </select>
-                                    <input type="text" id="expenseRestockCategoryCustomInput" class="form-control mt-2" placeholder="Type the new raw material name" style="display: none;">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Product Line</label>
+                                        <select name="product_line_id" id="expenseRestockProductLineSelect" class="form-select">
+                                            <option value="" disabled selected>Select a product line</option>
+                                            @foreach ($productLines as $productLine)
+                                                <option value="{{ $productLine->id }}">{{ $productLine->name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Component Type</label>
+                                        <select name="component_type_id" id="expenseRestockComponentTypeSelect" class="form-select">
+                                            <option value="" disabled selected>Select a component type</option>
+                                            @foreach ($componentTypes as $componentType)
+                                                <option value="{{ $componentType->id }}">{{ $componentType->name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
                                 </div>
-                                <div class="mb-3">
+                                <div class="mb-3 mt-3">
                                     <label class="form-label">Quantity Received</label>
                                     <input type="number" step="0.01" min="0.01" name="quantity_received" id="expenseRestockQuantityInput" class="form-control" placeholder="e.g. 10">
                                 </div>
@@ -213,42 +222,24 @@
 
             const expenseRestockCheckbox = document.getElementById('expenseRestockCheckbox');
             const expenseRestockFields = document.getElementById('expenseRestockFields');
-            const expenseRestockCategorySelect = document.getElementById('expenseRestockCategorySelect');
-            const expenseRestockCategoryCustomInput = document.getElementById('expenseRestockCategoryCustomInput');
+            const expenseRestockProductLineSelect = document.getElementById('expenseRestockProductLineSelect');
+            const expenseRestockComponentTypeSelect = document.getElementById('expenseRestockComponentTypeSelect');
             const expenseRestockQuantityInput = document.getElementById('expenseRestockQuantityInput');
-
-            function resetExpenseRestockCategoryCustomInput() {
-                expenseRestockCategoryCustomInput.style.display = 'none';
-                expenseRestockCategoryCustomInput.removeAttribute('name');
-                expenseRestockCategoryCustomInput.required = false;
-                expenseRestockCategoryCustomInput.value = '';
-                expenseRestockCategorySelect.name = 'raw_material_category';
-            }
-
-            expenseRestockCategorySelect.addEventListener('change', function () {
-                if (this.value === '__add_new__') {
-                    expenseRestockCategoryCustomInput.style.display = 'block';
-                    expenseRestockCategoryCustomInput.name = 'raw_material_category';
-                    expenseRestockCategoryCustomInput.required = true;
-                    expenseRestockCategorySelect.removeAttribute('name');
-                    expenseRestockCategoryCustomInput.focus();
-                } else {
-                    resetExpenseRestockCategoryCustomInput();
-                }
-            });
 
             expenseRestockCheckbox.addEventListener('change', function () {
                 if (this.checked) {
                     expenseRestockFields.style.display = 'block';
-                    expenseRestockCategorySelect.required = true;
+                    expenseRestockProductLineSelect.required = true;
+                    expenseRestockComponentTypeSelect.required = true;
                     expenseRestockQuantityInput.required = true;
                 } else {
                     expenseRestockFields.style.display = 'none';
-                    expenseRestockCategorySelect.required = false;
+                    expenseRestockProductLineSelect.required = false;
+                    expenseRestockComponentTypeSelect.required = false;
                     expenseRestockQuantityInput.required = false;
-                    expenseRestockCategorySelect.value = '';
+                    expenseRestockProductLineSelect.value = '';
+                    expenseRestockComponentTypeSelect.value = '';
                     expenseRestockQuantityInput.value = '';
-                    resetExpenseRestockCategoryCustomInput();
                 }
             });
 
@@ -261,9 +252,9 @@
                 expenseCategorySelect.name = 'category';
 
                 expenseRestockFields.style.display = 'none';
-                expenseRestockCategorySelect.required = false;
+                expenseRestockProductLineSelect.required = false;
+                expenseRestockComponentTypeSelect.required = false;
                 expenseRestockQuantityInput.required = false;
-                resetExpenseRestockCategoryCustomInput();
             });
         </script>
     @endmoduleEdit

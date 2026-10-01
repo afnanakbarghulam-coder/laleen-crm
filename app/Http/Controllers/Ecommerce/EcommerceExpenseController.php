@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
+use App\Models\EcommerceComponentType;
 use App\Models\EcommerceExpense;
+use App\Models\EcommerceProductLine;
 use App\Models\EcommerceRawMaterial;
 use App\Models\PartnerTransaction;
 use Illuminate\Http\Request;
@@ -27,17 +29,14 @@ class EcommerceExpenseController extends Controller
             ->orderBy('category')
             ->pluck('category');
 
-        $rawMaterialCategories = EcommerceRawMaterial::query()
-            ->whereNotNull('type')
-            ->where('type', '!=', '')
-            ->distinct()
-            ->orderBy('type')
-            ->pluck('type');
+        $productLines = EcommerceProductLine::orderBy('name')->get();
+        $componentTypes = EcommerceComponentType::orderBy('name')->get();
 
         return view('ecommerce.expenses', [
             'expenses' => $expenses,
             'categories' => $categories,
-            'rawMaterialCategories' => $rawMaterialCategories,
+            'productLines' => $productLines,
+            'componentTypes' => $componentTypes,
             'fundingSources' => EcommerceExpense::FUNDING_SOURCES,
             'totalExpenses' => $totalExpenses,
             'totalPool' => $totalPool,
@@ -60,13 +59,15 @@ class EcommerceExpenseController extends Controller
             'notes' => 'nullable|string|max:2000',
             'receipt' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'includes_raw_material_restock' => 'nullable|boolean',
-            'raw_material_category' => 'required_if:includes_raw_material_restock,1|nullable|string|max:100',
+            'product_line_id' => 'required_if:includes_raw_material_restock,1|nullable|exists:ecommerce_product_lines,id',
+            'component_type_id' => 'required_if:includes_raw_material_restock,1|nullable|exists:ecommerce_component_types,id',
             'quantity_received' => 'required_if:includes_raw_material_restock,1|nullable|numeric|min:0.01',
         ]);
 
         $receiptPath = $this->handleReceipt($request);
         $isRestock = $request->boolean('includes_raw_material_restock')
-            && !empty($validated['raw_material_category'])
+            && !empty($validated['product_line_id'])
+            && !empty($validated['component_type_id'])
             && !empty($validated['quantity_received']);
 
         DB::transaction(function () use ($validated, $receiptPath, $isRestock) {
@@ -86,7 +87,8 @@ class EcommerceExpenseController extends Controller
                 $quantityReceived = (float) $validated['quantity_received'];
                 $unitCost = (float) $validated['amount'] / $quantityReceived;
 
-                $rawMaterial = EcommerceRawMaterial::where('type', $validated['raw_material_category'])
+                $rawMaterial = EcommerceRawMaterial::where('product_line_id', $validated['product_line_id'])
+                    ->where('component_type_id', $validated['component_type_id'])
                     ->lockForUpdate()
                     ->first();
 
@@ -96,9 +98,13 @@ class EcommerceExpenseController extends Controller
                         'last_purchased_unit_cost' => $unitCost,
                     ]);
                 } else {
+                    $productLine = EcommerceProductLine::find($validated['product_line_id']);
+                    $componentType = EcommerceComponentType::find($validated['component_type_id']);
+
                     EcommerceRawMaterial::create([
-                        'name' => $validated['raw_material_category'],
-                        'type' => $validated['raw_material_category'],
+                        'name' => $productLine->name . ' - ' . $componentType->name,
+                        'product_line_id' => $productLine->id,
+                        'component_type_id' => $componentType->id,
                         'current_stock' => $quantityReceived,
                         'unit_of_measure' => 'units',
                         'last_purchased_unit_cost' => $unitCost,

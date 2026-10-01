@@ -8,7 +8,8 @@ class EcommerceRawMaterial extends Model
 {
     protected $fillable = [
         'name',
-        'type',
+        'product_line_id',
+        'component_type_id',
         'current_stock',
         'initial_stock',
         'unit_of_measure',
@@ -26,5 +27,15 @@ class EcommerceRawMaterial extends Model
         static::creating(function (EcommerceRawMaterial $material) {
             $material->initial_stock = $material->current_stock;
         });
+    }
+
+    public function productLine()
+    {
+        return $this->belongsTo(EcommerceProductLine::class, 'product_line_id');
+    }
+
+    public function componentType()
+    {
+        return $this->belongsTo(EcommerceComponentType::class, 'component_type_id');
     }
 }
