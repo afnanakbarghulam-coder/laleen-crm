@@ -111,7 +111,7 @@
                             <h6 class="mb-3">A. What was produced?</h6>
                             <div class="mb-3">
                                 <label class="form-label">Finished Product</label>
-                                <select name="ecommerce_product_id" class="form-select" required>
+                                <select name="ecommerce_product_id" id="productionProductSelect" class="form-select" required>
                                     <option value="" disabled selected>Select product</option>
                                     @foreach ($products as $product)
                                         <option value="{{ $product->id }}">{{ $product->name }}{{ $product->sku ? ' (' . $product->sku . ')' : '' }}</option>
@@ -145,9 +145,11 @@
 
         <script>
             const materialOptionsHtml = `@foreach ($rawMaterials as $material)<option value="{{ $material->id }}">{{ $material->name }} ({{ $material->unit_of_measure }})</option>@endforeach`;
+            const productsForRecipe = @json($productsForRecipe);
+            const rawMaterialsForRecipe = @json($rawMaterialsForRecipe);
             let materialUsedRowIndex = 0;
 
-            function addMaterialUsedRow() {
+            function addMaterialUsedRow(presetMaterialId, presetAmountPerUnit) {
                 const index = materialUsedRowIndex++;
                 const row = document.createElement('div');
                 row.className = 'row g-2 align-items-end mb-2 material-used-row';
@@ -167,12 +169,52 @@
 
                 document.getElementById('materialsUsedRows').appendChild(row);
 
+                if (presetMaterialId) {
+                    row.querySelector('select').value = presetMaterialId;
+                }
+                if (presetAmountPerUnit !== undefined && presetAmountPerUnit !== null) {
+                    row.querySelector('input[type="number"]').value = presetAmountPerUnit;
+                }
+
                 row.querySelector('.remove-material-used-row').addEventListener('click', function () {
                     row.remove();
                 });
+
+                return row;
             }
 
-            document.getElementById('addMaterialUsedRowBtn').addEventListener('click', addMaterialUsedRow);
+            document.getElementById('addMaterialUsedRowBtn').addEventListener('click', function () {
+                addMaterialUsedRow();
+            });
+
+            // Smart Recipe: selecting a finished product rebuilds Section B from
+            // every raw material that shares the product's product_line_id,
+            // pre-filling the per-unit amount (unit_size for the Liquid Base
+            // component, 1 for packaging) — still fully editable afterward.
+            document.getElementById('productionProductSelect').addEventListener('change', function () {
+                document.getElementById('materialsUsedRows').innerHTML = '';
+
+                const product = productsForRecipe[this.value];
+                if (!product || !product.product_line_id) {
+                    return;
+                }
+
+                const liquidAmountPerUnit = parseFloat(product.unit_size) || 0;
+
+                Object.keys(rawMaterialsForRecipe).forEach(function (materialId) {
+                    const material = rawMaterialsForRecipe[materialId];
+
+                    if (String(material.product_line_id) !== String(product.product_line_id)) {
+                        return;
+                    }
+
+                    const amountPerUnit = material.component_type_name === 'Liquid Base'
+                        ? liquidAmountPerUnit
+                        : 1;
+
+                    addMaterialUsedRow(materialId, amountPerUnit);
+                });
+            });
 
             document.getElementById('productionModal').addEventListener('hidden.bs.modal', function () {
                 this.querySelector('form').reset();

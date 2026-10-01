@@ -22,10 +22,26 @@ class EcommerceInventoryController extends Controller
         $products = EcommerceProduct::orderBy('name')->get();
         $productLines = EcommerceProductLine::orderBy('name')->get();
 
+        $productsForRecipe = $products->mapWithKeys(function ($product) {
+            return [$product->id => [
+                'product_line_id' => $product->product_line_id,
+                'unit_size' => $product->unit_size,
+            ]];
+        });
+
+        $rawMaterialsForRecipe = $rawMaterials->mapWithKeys(function ($material) {
+            return [$material->id => [
+                'product_line_id' => $material->product_line_id,
+                'component_type_name' => $material->componentType->name ?? null,
+            ]];
+        });
+
         return view('ecommerce.inventory', [
             'rawMaterials' => $rawMaterials,
             'products' => $products,
             'productLines' => $productLines,
+            'productsForRecipe' => $productsForRecipe,
+            'rawMaterialsForRecipe' => $rawMaterialsForRecipe,
         ]);
     }
 
