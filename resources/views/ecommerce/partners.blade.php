@@ -16,10 +16,21 @@
 
     @include('ecommerce._nav')
 
-    <div class="ec-card">
-        <h6>Total Capital Pool</h6>
-        <div class="ec-value">PKR {{ number_format($totalPool, 2) }}</div>
-        <div class="ec-sub">Total cash injected across all partners</div>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="ec-card">
+                <h6>Total Capital Pool</h6>
+                <div class="ec-value">PKR {{ number_format($totalPool, 2) }}</div>
+                <div class="ec-sub">Total cash injected across all partners</div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="ec-card">
+                <h6>Available Balance (Runway)</h6>
+                <div class="ec-value {{ $remainingBalance >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($remainingBalance, 2) }}</div>
+                <div class="ec-sub">Capital Pool &minus; Total Ecommerce Expenses</div>
+            </div>
+        </div>
     </div>
 
     <div class="row">

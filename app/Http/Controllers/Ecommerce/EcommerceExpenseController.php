@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceExpense;
+use App\Models\PartnerTransaction;
 use Illuminate\Http\Request;
 
 class EcommerceExpenseController extends Controller
@@ -12,10 +13,16 @@ class EcommerceExpenseController extends Controller
     {
         $expenses = EcommerceExpense::with('creator')->orderByDesc('expense_date')->get();
 
+        $totalExpenses = (float) $expenses->sum('amount');
+        $totalPool = (float) PartnerTransaction::where('type', 'injection')->sum('amount');
+        $remainingBalance = $totalPool - $totalExpenses;
+
         return view('ecommerce.expenses', [
             'expenses' => $expenses,
             'categories' => EcommerceExpense::CATEGORIES,
-            'totalExpenses' => (float) $expenses->sum('amount'),
+            'totalExpenses' => $totalExpenses,
+            'totalPool' => $totalPool,
+            'remainingBalance' => $remainingBalance,
         ]);
     }
 
@@ -25,8 +32,9 @@ class EcommerceExpenseController extends Controller
             'expense_date' => 'required|date',
             'title' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0.01',
-            'category' => 'required|in:' . implode(',', EcommerceExpense::CATEGORIES),
+            'category' => 'required|string|max:100',
             'vendor' => 'nullable|string|max:255',
+            'notes' => 'nullable|string|max:2000',
             'receipt' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ]);
 

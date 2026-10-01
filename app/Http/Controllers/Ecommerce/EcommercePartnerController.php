@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
+use App\Models\EcommerceExpense;
 use App\Models\Partner;
 use App\Models\PartnerTransaction;
 use Illuminate\Http\Request;
@@ -17,6 +18,7 @@ class EcommercePartnerController extends Controller
 
         $equalization = Partner::equalizationSummary();
         $totalPool = (float) $partners->sum('total_injected');
+        $remainingBalance = $totalPool - (float) EcommerceExpense::sum('amount');
 
         $transactions = PartnerTransaction::with('partner')
             ->orderByDesc('transaction_date')
@@ -27,6 +29,7 @@ class EcommercePartnerController extends Controller
             'partners' => $partners,
             'equalization' => $equalization,
             'totalPool' => $totalPool,
+            'remainingBalance' => $remainingBalance,
             'transactions' => $transactions,
             'transactionCategories' => PartnerTransaction::CATEGORIES,
         ]);

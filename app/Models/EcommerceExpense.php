@@ -20,6 +20,7 @@ class EcommerceExpense extends Model
         'amount',
         'category',
         'vendor',
+        'notes',
         'receipt_path',
         'created_by',
     ];
