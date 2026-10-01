@@ -27,9 +27,20 @@ class EcommerceProductionController extends Controller
             $product = EcommerceProduct::lockForUpdate()->findOrFail($validated['ecommerce_product_id']);
             $product->increment('current_stock', $quantityProduced);
 
+            $run = $product->productionRuns()->create([
+                'quantity_produced' => $quantityProduced,
+            ]);
+
             foreach ($materialsUsed as $item) {
+                $quantityUsed = (float) $item['quantity_used'];
+
                 $rawMaterial = EcommerceRawMaterial::lockForUpdate()->findOrFail($item['ecommerce_raw_material_id']);
-                $rawMaterial->decrement('current_stock', (float) $item['quantity_used']);
+                $rawMaterial->decrement('current_stock', $quantityUsed);
+
+                $run->materials()->create([
+                    'ecommerce_raw_material_id' => $rawMaterial->id,
+                    'quantity_used' => $quantityUsed,
+                ]);
             }
         });
 

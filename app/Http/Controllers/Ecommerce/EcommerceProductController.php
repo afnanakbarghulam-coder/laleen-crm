@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceProduct;
+use App\Models\EcommerceRawMaterial;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class EcommerceProductController extends Controller
@@ -34,11 +36,34 @@ class EcommerceProductController extends Controller
         return back()->with('success', 'Product cost sheet updated.');
     }
 
+    /**
+     * Deleting a finished product refunds every raw material it ever consumed:
+     * each of its production runs is walked, the quantity_used on each line
+     * item is added back to that raw material's current_stock, then the run
+     * history and the product itself are removed.
+     */
     public function destroy(EcommerceProduct $ecommerceProduct)
     {
-        $ecommerceProduct->delete();
+        DB::transaction(function () use ($ecommerceProduct) {
+            $productionRuns = $ecommerceProduct->productionRuns()->with('materials')->get();
 
-        return back()->with('success', 'Product deleted.');
+            foreach ($productionRuns as $run) {
+                foreach ($run->materials as $material) {
+                    $rawMaterial = EcommerceRawMaterial::lockForUpdate()->find($material->ecommerce_raw_material_id);
+
+                    if ($rawMaterial) {
+                        $rawMaterial->increment('current_stock', (float) $material->quantity_used);
+                    }
+                }
+
+                $run->materials()->delete();
+                $run->delete();
+            }
+
+            $ecommerceProduct->delete();
+        });
+
+        return back()->with('success', 'Product deleted and raw materials refunded.');
     }
 
     private function validated(Request $request, ?int $ignoreId = null): array

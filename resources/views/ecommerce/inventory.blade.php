@@ -68,6 +68,7 @@
                         <th>Name</th>
                         <th>SKU</th>
                         <th>Current Stock</th>
+                        @moduleEdit('ecommerce')<th></th>@endmoduleEdit
                     </tr>
                 </thead>
                 <tbody>
@@ -76,9 +77,17 @@
                             <td>{{ $product->name }}</td>
                             <td>{{ $product->sku ?? '—' }}</td>
                             <td class="{{ $product->current_stock < 0 ? 'ec-negative' : '' }}">{{ number_format($product->current_stock, 2) }}</td>
+                            @moduleEdit('ecommerce')
+                                <td>
+                                    <form action="{{ route('ecommerce.products.destroy', $product->id) }}" method="POST" onsubmit="return confirm('Delete this finished product? Any raw materials used to make it will be refunded back to stock.')">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            @endmoduleEdit
                         </tr>
                     @empty
-                        <tr><td colspan="3" class="text-center text-muted">No finished goods yet &mdash; use "+ Add Finished Product" above.</td></tr>
+                        <tr><td colspan="4" class="text-center text-muted">No finished goods yet &mdash; use "+ Add Finished Product" above.</td></tr>
                     @endforelse
                 </tbody>
             </table>

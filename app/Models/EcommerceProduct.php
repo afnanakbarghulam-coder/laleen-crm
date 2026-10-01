@@ -45,6 +45,11 @@ class EcommerceProduct extends Model
         'breakeven_cac',
     ];
 
+    public function productionRuns()
+    {
+        return $this->hasMany(ProductionRun::class, 'ecommerce_product_id');
+    }
+
     public function getLiquidCostAttribute(): float
     {
         return (float) $this->liquid_cost_per_ml * (float) $this->volume_ml;
