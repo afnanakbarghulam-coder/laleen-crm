@@ -25,11 +25,4 @@ class EcommerceRawMaterial extends Model
             $material->initial_stock = $material->current_stock;
         });
     }
-
-    public function products()
-    {
-        return $this->belongsToMany(EcommerceProduct::class, 'ecommerce_product_raw_material')
-            ->withPivot('quantity_required')
-            ->withTimestamps();
-    }
 }

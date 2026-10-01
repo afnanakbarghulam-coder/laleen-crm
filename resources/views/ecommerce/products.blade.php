@@ -136,18 +136,6 @@
                                     </div>
                                 </div>
                             </div>
-
-                            <div class="col-12">
-                                <hr style="border-color: var(--ec-border);">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <label class="form-label mb-0">Recipe (Bill of Materials)</label>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" id="addRecipeRowBtn">+ Add Ingredient</button>
-                                </div>
-                                <div id="recipeRows"></div>
-                                @if ($rawMaterials->isEmpty())
-                                    <p class="ec-sub mb-0">No raw materials yet — add some on the Inventory &amp; Production tab first.</p>
-                                @endif
-                            </div>
                         </div>
                         <div class="modal-footer">
                             <button type="submit" class="btn btn-primary">Save</button>
@@ -158,49 +146,6 @@
         </div>
 
         <script>
-            const rawMaterialOptionsHtml = `@foreach ($rawMaterials as $material)<option value="{{ $material->id }}">{{ $material->name }} ({{ $material->unit_of_measure }})</option>@endforeach`;
-            let recipeRowIndex = 0;
-
-            function addRecipeRow(selectedMaterialId, quantityRequired) {
-                const index = recipeRowIndex++;
-                const row = document.createElement('div');
-                row.className = 'row g-2 align-items-end mb-2 recipe-row';
-                row.innerHTML =
-                    '<div class="col-6">' +
-                        '<select name="recipe[' + index + '][ecommerce_raw_material_id]" class="form-select" required>' +
-                            '<option value="" disabled selected>Select raw material</option>' +
-                            rawMaterialOptionsHtml +
-                        '</select>' +
-                    '</div>' +
-                    '<div class="col-4">' +
-                        '<input type="number" step="0.0001" min="0.0001" name="recipe[' + index + '][quantity_required]" class="form-control" placeholder="Qty / unit" required>' +
-                    '</div>' +
-                    '<div class="col-2">' +
-                        '<button type="button" class="btn btn-outline-danger w-100 remove-recipe-row">&times;</button>' +
-                    '</div>';
-
-                document.getElementById('recipeRows').appendChild(row);
-
-                if (selectedMaterialId) {
-                    row.querySelector('select').value = selectedMaterialId;
-                }
-                if (quantityRequired !== undefined) {
-                    row.querySelector('input[type="number"]').value = quantityRequired;
-                }
-
-                row.querySelector('.remove-recipe-row').addEventListener('click', function () {
-                    row.remove();
-                });
-            }
-
-            document.getElementById('addRecipeRowBtn').addEventListener('click', function () {
-                addRecipeRow();
-            });
-
-            function resetRecipeRows() {
-                document.getElementById('recipeRows').innerHTML = '';
-            }
-
             const calcFieldIds = ['selling_price', 'liquid_cost_per_ml', 'volume_ml', 'bottle_cost', 'pump_cost', 'label_cost', 'box_cost', 'labor_cost', 'shipping_cost', 'payment_gateway_fee_percent'];
 
             function num(id) {
@@ -231,7 +176,6 @@
                 document.getElementById('formMethod').value = '';
                 document.getElementById('productForm').reset();
                 document.getElementById('f_payment_gateway_fee_percent').value = 2.5;
-                resetRecipeRows();
                 runCalculator();
             }
 
@@ -249,11 +193,6 @@
                     });
                     document.getElementById('f_name').value = product.name;
                     document.getElementById('f_sku').value = product.sku;
-
-                    resetRecipeRows();
-                    (product.raw_materials || []).forEach(function (ingredient) {
-                        addRecipeRow(ingredient.id, ingredient.pivot.quantity_required);
-                    });
 
                     runCalculator();
                     modal.show();

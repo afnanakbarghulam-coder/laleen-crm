@@ -45,17 +45,6 @@ class EcommerceProduct extends Model
         'breakeven_cac',
     ];
 
-    /**
-     * Bill-of-materials recipe: each raw material consumed per unit produced,
-     * via the quantity_required pivot column.
-     */
-    public function rawMaterials()
-    {
-        return $this->belongsToMany(EcommerceRawMaterial::class, 'ecommerce_product_raw_material')
-            ->withPivot('quantity_required')
-            ->withTimestamps();
-    }
-
     public function getLiquidCostAttribute(): float
     {
         return (float) $this->liquid_cost_per_ml * (float) $this->volume_ml;

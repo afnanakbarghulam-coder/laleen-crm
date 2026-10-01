@@ -68,8 +68,6 @@
                         <th>Name</th>
                         <th>SKU</th>
                         <th>Current Stock</th>
-                        <th>Recipe</th>
-                        @moduleEdit('ecommerce')<th></th>@endmoduleEdit
                     </tr>
                 </thead>
                 <tbody>
@@ -78,21 +76,9 @@
                             <td>{{ $product->name }}</td>
                             <td>{{ $product->sku ?? '—' }}</td>
                             <td class="{{ $product->current_stock < 0 ? 'ec-negative' : '' }}">{{ number_format($product->current_stock, 2) }}</td>
-                            <td>
-                                @forelse ($product->rawMaterials as $ingredient)
-                                    <span class="ec-sub">{{ $ingredient->name }} &times; {{ number_format($ingredient->pivot->quantity_required, 4) }} {{ $ingredient->unit_of_measure }}/unit</span><br>
-                                @empty
-                                    <span class="ec-sub">No recipe set</span>
-                                @endforelse
-                            </td>
-                            @moduleEdit('ecommerce')
-                                <td>
-                                    <button type="button" class="btn btn-sm btn-outline-warning recipe-btn" data-product='@json($product)' title="Manage Recipe"><i class="bi bi-list-check"></i></button>
-                                </td>
-                            @endmoduleEdit
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="text-center text-muted">No finished goods yet &mdash; use "+ Add Finished Product" above.</td></tr>
+                        <tr><td colspan="3" class="text-center text-muted">No finished goods yet &mdash; use "+ Add Finished Product" above.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -180,6 +166,7 @@
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
+                            <h6 class="mb-3">A. What was produced?</h6>
                             <div class="mb-3">
                                 <label class="form-label">Finished Product</label>
                                 <select name="ecommerce_product_id" class="form-select" required>
@@ -189,11 +176,22 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <div class="mb-3">
+                            <div class="mb-4">
                                 <label class="form-label">Quantity Produced</label>
                                 <input type="number" step="0.01" min="0.01" name="quantity_produced" class="form-control" placeholder="e.g. 100" required>
                             </div>
-                            <p class="ec-sub mb-0">Finished stock will increase by this amount, and each recipe ingredient's raw material stock will decrease by quantity &times; its required amount per unit.</p>
+
+                            <hr style="border-color: var(--ec-border);">
+
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">B. Raw materials used for this entire batch</h6>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="addMaterialUsedRowBtn">+ Add Raw Material</button>
+                            </div>
+                            <p class="ec-sub">Enter the <strong>total</strong> quantity of each raw material consumed for this whole production run &mdash; not per unit.</p>
+                            <div id="materialsUsedRows"></div>
+                            @if ($rawMaterials->isEmpty())
+                                <p class="ec-sub mb-0">No raw materials yet &mdash; add some in Tier 1 above first.</p>
+                            @endif
                         </div>
                         <div class="modal-footer">
                             <button type="submit" class="btn btn-primary">Log Run</button>
@@ -203,48 +201,42 @@
             </div>
         </div>
 
-        {{-- Manage Recipe Modal --}}
-        <div class="modal fade" id="recipeModal" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="recipeModalTitle">Manage Recipe</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <table class="table ec-table align-middle" id="recipeItemsTable">
-                            <thead>
-                                <tr>
-                                    <th>Raw Material</th>
-                                    <th>Qty Required / Unit</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="recipeItemsBody"></tbody>
-                        </table>
+        <script>
+            const materialOptionsHtml = `@foreach ($rawMaterials as $material)<option value="{{ $material->id }}">{{ $material->name }} ({{ $material->unit_of_measure }})</option>@endforeach`;
+            let materialUsedRowIndex = 0;
 
-                        <form id="recipeAddForm" method="POST" class="row g-2 align-items-end mt-2">
-                            @csrf
-                            <div class="col-6">
-                                <label class="form-label small text-muted mb-1">Raw Material</label>
-                                <select name="ecommerce_raw_material_id" class="form-select" required>
-                                    @foreach ($rawMaterials as $material)
-                                        <option value="{{ $material->id }}">{{ $material->name }} ({{ $material->unit_of_measure }})</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div class="col-4">
-                                <label class="form-label small text-muted mb-1">Qty Required / Unit</label>
-                                <input type="number" step="0.0001" min="0.0001" name="quantity_required" class="form-control" required>
-                            </div>
-                            <div class="col-2">
-                                <button type="submit" class="btn btn-primary w-100">Add</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
+            function addMaterialUsedRow() {
+                const index = materialUsedRowIndex++;
+                const row = document.createElement('div');
+                row.className = 'row g-2 align-items-end mb-2 material-used-row';
+                row.innerHTML =
+                    '<div class="col-6">' +
+                        '<select name="materials_used[' + index + '][ecommerce_raw_material_id]" class="form-select" required>' +
+                            '<option value="" disabled selected>Select raw material</option>' +
+                            materialOptionsHtml +
+                        '</select>' +
+                    '</div>' +
+                    '<div class="col-4">' +
+                        '<input type="number" step="0.01" min="0.01" name="materials_used[' + index + '][quantity_used]" class="form-control" placeholder="Total used" required>' +
+                    '</div>' +
+                    '<div class="col-2">' +
+                        '<button type="button" class="btn btn-outline-danger w-100 remove-material-used-row">&times;</button>' +
+                    '</div>';
+
+                document.getElementById('materialsUsedRows').appendChild(row);
+
+                row.querySelector('.remove-material-used-row').addEventListener('click', function () {
+                    row.remove();
+                });
+            }
+
+            document.getElementById('addMaterialUsedRowBtn').addEventListener('click', addMaterialUsedRow);
+
+            document.getElementById('productionModal').addEventListener('hidden.bs.modal', function () {
+                this.querySelector('form').reset();
+                document.getElementById('materialsUsedRows').innerHTML = '';
+            });
+        </script>
 
         {{-- Add Finished Product Modal --}}
         <div class="modal fade" id="addProductModal" tabindex="-1">
@@ -265,18 +257,6 @@
                                 <label class="form-label">SKU</label>
                                 <input type="text" name="sku" id="f_sku" class="form-control" placeholder="e.g. RS-100" required>
                             </div>
-
-                            <div class="col-12">
-                                <hr style="border-color: var(--ec-border);">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <label class="form-label mb-0">Recipe (Bill of Materials)</label>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" id="addRecipeRowBtn">+ Add Ingredient</button>
-                                </div>
-                                <div id="recipeRows"></div>
-                                @if ($rawMaterials->isEmpty())
-                                    <p class="ec-sub mb-0">No raw materials yet — add some in Tier 1 above first.</p>
-                                @endif
-                            </div>
                         </div>
                         <div class="modal-footer">
                             <button type="submit" class="btn btn-primary">Save</button>
@@ -287,99 +267,8 @@
         </div>
 
         <script>
-            const rawMaterialOptionsHtml = `@foreach ($rawMaterials as $material)<option value="{{ $material->id }}">{{ $material->name }} ({{ $material->unit_of_measure }})</option>@endforeach`;
-            let recipeRowIndex = 0;
-
-            function addRecipeRow(selectedMaterialId, quantityRequired) {
-                const index = recipeRowIndex++;
-                const row = document.createElement('div');
-                row.className = 'row g-2 align-items-end mb-2 recipe-row';
-                row.innerHTML =
-                    '<div class="col-6">' +
-                        '<select name="recipe[' + index + '][ecommerce_raw_material_id]" class="form-select" required>' +
-                            '<option value="" disabled selected>Select raw material</option>' +
-                            rawMaterialOptionsHtml +
-                        '</select>' +
-                    '</div>' +
-                    '<div class="col-4">' +
-                        '<input type="number" step="0.0001" min="0.0001" name="recipe[' + index + '][quantity_required]" class="form-control" placeholder="Qty / unit" required>' +
-                    '</div>' +
-                    '<div class="col-2">' +
-                        '<button type="button" class="btn btn-outline-danger w-100 remove-recipe-row">&times;</button>' +
-                    '</div>';
-
-                document.getElementById('recipeRows').appendChild(row);
-
-                if (selectedMaterialId) {
-                    row.querySelector('select').value = selectedMaterialId;
-                }
-                if (quantityRequired !== undefined) {
-                    row.querySelector('input[type="number"]').value = quantityRequired;
-                }
-
-                row.querySelector('.remove-recipe-row').addEventListener('click', function () {
-                    row.remove();
-                });
-            }
-
-            document.getElementById('addRecipeRowBtn').addEventListener('click', function () {
-                addRecipeRow();
-            });
-
-            function resetRecipeRows() {
-                document.getElementById('recipeRows').innerHTML = '';
-            }
-
             document.getElementById('addProductModal').addEventListener('hidden.bs.modal', function () {
                 document.getElementById('productForm').reset();
-                resetRecipeRows();
-            });
-        </script>
-
-        <script>
-            const recipeCsrfToken = '{{ csrf_token() }}';
-
-            document.querySelectorAll('.recipe-btn').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    const product = JSON.parse(this.dataset.product);
-                    const modal = new bootstrap.Modal(document.getElementById('recipeModal'));
-
-                    document.getElementById('recipeModalTitle').innerText = 'Manage Recipe — ' + product.name;
-                    document.getElementById('recipeAddForm').action = '{{ url('ecommerce/products') }}/' + product.id + '/recipe';
-
-                    const body = document.getElementById('recipeItemsBody');
-                    body.innerHTML = '';
-
-                    if (!product.raw_materials || product.raw_materials.length === 0) {
-                        body.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No ingredients yet</td></tr>';
-                    } else {
-                        product.raw_materials.forEach(function (ingredient) {
-                            const row = document.createElement('tr');
-                            const nameCell = document.createElement('td');
-                            nameCell.textContent = ingredient.name;
-                            const qtyCell = document.createElement('td');
-                            qtyCell.textContent = parseFloat(ingredient.pivot.quantity_required).toFixed(4) + ' ' + ingredient.unit_of_measure;
-                            const actionCell = document.createElement('td');
-
-                            const form = document.createElement('form');
-                            form.method = 'POST';
-                            form.action = '{{ url('ecommerce/products') }}/' + product.id + '/recipe/' + ingredient.id;
-                            form.onsubmit = function () { return confirm('Remove this ingredient?'); };
-                            form.innerHTML =
-                                '<input type="hidden" name="_token" value="' + recipeCsrfToken + '">' +
-                                '<input type="hidden" name="_method" value="DELETE">' +
-                                '<button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>';
-
-                            actionCell.appendChild(form);
-                            row.appendChild(nameCell);
-                            row.appendChild(qtyCell);
-                            row.appendChild(actionCell);
-                            body.appendChild(row);
-                        });
-                    }
-
-                    modal.show();
-                });
             });
         </script>
     @endmoduleEdit
