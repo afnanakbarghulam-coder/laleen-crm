@@ -17,9 +17,9 @@
         <div class="mb-0">
             <label class="form-label">Finished Product</label>
             <select id="pricingProductSelect" class="form-select">
-                <option value="" selected>Select a product to price</option>
+                <option value="" {{ (string) $selectedProductId === '' ? 'selected' : '' }}>Select a product to price</option>
                 @foreach ($products as $product)
-                    <option value="{{ $product->id }}">{{ $product->name }}{{ $product->sku ? ' (' . $product->sku . ')' : '' }}</option>
+                    <option value="{{ $product->id }}" {{ (string) $selectedProductId === (string) $product->id ? 'selected' : '' }}>{{ $product->name }}{{ $product->sku ? ' (' . $product->sku . ')' : '' }}</option>
                 @endforeach
             </select>
             @if ($products->isEmpty())
@@ -127,23 +127,28 @@
             input.addEventListener('input', recalculate);
         });
 
-        productSelect.addEventListener('change', function () {
-            const productId = this.value;
+        function applyPricingForSelectedProduct() {
+            const productId = productSelect.value;
             productIdInput.value = productId;
 
-            const saved = pricingData[productId];
-            liquidCostInput.value = saved ? saved.liquid_cost : 0;
-            packagingCostInput.value = saved ? saved.packaging_cost : 0;
-            fulfillmentCostInput.value = saved ? saved.fulfillment_cost : 0;
-            sellingPriceInput.value = saved ? saved.selling_price : 0;
+            const saved = Object.prototype.hasOwnProperty.call(pricingData, productId) ? pricingData[productId] : null;
+            liquidCostInput.value = saved ? Number(saved.liquid_cost) : 0;
+            packagingCostInput.value = saved ? Number(saved.packaging_cost) : 0;
+            fulfillmentCostInput.value = saved ? Number(saved.fulfillment_cost) : 0;
+            sellingPriceInput.value = saved ? Number(saved.selling_price) : 0;
 
             if (saveBtn) {
                 saveBtn.disabled = productId === '';
             }
 
             recalculate();
-        });
+        }
 
-        recalculate();
+        productSelect.addEventListener('change', applyPricingForSelectedProduct);
+
+        // Re-applies on initial load too, so a product pre-selected via
+        // ?product=<id> (e.g. redirected back here right after saving)
+        // shows its data immediately instead of resetting to blank.
+        applyPricingForSelectedProduct();
     </script>
 @endsection

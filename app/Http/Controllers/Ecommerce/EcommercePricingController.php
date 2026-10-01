@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 
 class EcommercePricingController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $products = EcommerceProduct::orderBy('name')->get();
 
@@ -25,6 +25,7 @@ class EcommercePricingController extends Controller
         return view('ecommerce.pricing', [
             'products' => $products,
             'pricingModels' => $pricingModels,
+            'selectedProductId' => $request->query('product'),
         ]);
     }
 
@@ -48,6 +49,8 @@ class EcommercePricingController extends Controller
             ]
         );
 
-        return back()->with('success', 'Pricing model saved.');
+        return redirect()
+            ->route('ecommerce.pricing.index', ['product' => $validated['ecommerce_product_id']])
+            ->with('success', 'Pricing model saved.');
     }
 }
