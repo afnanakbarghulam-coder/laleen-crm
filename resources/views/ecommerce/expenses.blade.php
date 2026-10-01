@@ -173,10 +173,9 @@
                                         @foreach ($rawMaterialCategories as $rawMaterialCategory)
                                             <option value="{{ $rawMaterialCategory }}">{{ $rawMaterialCategory }}</option>
                                         @endforeach
+                                        <option value="__add_new__">+ Add New Raw Material</option>
                                     </select>
-                                    @if ($rawMaterialCategories->isEmpty())
-                                        <p class="ec-sub mb-0 mt-2">No raw materials yet &mdash; add some in Inventory &amp; Production first.</p>
-                                    @endif
+                                    <input type="text" id="expenseRestockCategoryCustomInput" class="form-control mt-2" placeholder="Type the new raw material name" style="display: none;">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">Quantity Received</label>
@@ -215,7 +214,28 @@
             const expenseRestockCheckbox = document.getElementById('expenseRestockCheckbox');
             const expenseRestockFields = document.getElementById('expenseRestockFields');
             const expenseRestockCategorySelect = document.getElementById('expenseRestockCategorySelect');
+            const expenseRestockCategoryCustomInput = document.getElementById('expenseRestockCategoryCustomInput');
             const expenseRestockQuantityInput = document.getElementById('expenseRestockQuantityInput');
+
+            function resetExpenseRestockCategoryCustomInput() {
+                expenseRestockCategoryCustomInput.style.display = 'none';
+                expenseRestockCategoryCustomInput.removeAttribute('name');
+                expenseRestockCategoryCustomInput.required = false;
+                expenseRestockCategoryCustomInput.value = '';
+                expenseRestockCategorySelect.name = 'raw_material_category';
+            }
+
+            expenseRestockCategorySelect.addEventListener('change', function () {
+                if (this.value === '__add_new__') {
+                    expenseRestockCategoryCustomInput.style.display = 'block';
+                    expenseRestockCategoryCustomInput.name = 'raw_material_category';
+                    expenseRestockCategoryCustomInput.required = true;
+                    expenseRestockCategorySelect.removeAttribute('name');
+                    expenseRestockCategoryCustomInput.focus();
+                } else {
+                    resetExpenseRestockCategoryCustomInput();
+                }
+            });
 
             expenseRestockCheckbox.addEventListener('change', function () {
                 if (this.checked) {
@@ -228,6 +248,7 @@
                     expenseRestockQuantityInput.required = false;
                     expenseRestockCategorySelect.value = '';
                     expenseRestockQuantityInput.value = '';
+                    resetExpenseRestockCategoryCustomInput();
                 }
             });
 
@@ -242,6 +263,7 @@
                 expenseRestockFields.style.display = 'none';
                 expenseRestockCategorySelect.required = false;
                 expenseRestockQuantityInput.required = false;
+                resetExpenseRestockCategoryCustomInput();
             });
         </script>
     @endmoduleEdit

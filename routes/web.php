@@ -248,7 +248,6 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/expenses', [EcommerceExpenseController::class, 'store'])->name('expenses.store');
             Route::delete('/expenses/{ecommerceExpense}', [EcommerceExpenseController::class, 'destroy'])->name('expenses.destroy');
 
-            Route::post('/raw-materials', [EcommerceInventoryController::class, 'storeRawMaterial'])->name('raw-materials.store');
             Route::delete('/raw-materials/{ecommerceRawMaterial}', [EcommerceInventoryController::class, 'destroyRawMaterial'])->name('raw-materials.destroy');
 
             Route::post('/production-runs', [EcommerceProductionController::class, 'store'])->name('production.store');

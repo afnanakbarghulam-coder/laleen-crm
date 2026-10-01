@@ -19,10 +19,8 @@
     <div class="ec-card">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="mb-0">Tier 1 &mdash; Raw Materials</h6>
-            @moduleEdit('ecommerce')
-                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#rawMaterialModal">+ Add Raw Material</button>
-            @endmoduleEdit
         </div>
+        <p class="ec-sub mb-3">Stock is created and topped up exclusively by logging a restock expense on the Expenses tab.</p>
         <div class="table-responsive">
             <table class="table ec-table align-middle">
                 <thead>
@@ -97,75 +95,6 @@
     </div>
 
     @moduleEdit('ecommerce')
-        {{-- Add Raw Material Modal --}}
-        <div class="modal fade" id="rawMaterialModal" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <form action="{{ route('ecommerce.raw-materials.store') }}" method="POST">
-                        @csrf
-                        <div class="modal-header">
-                            <h5 class="modal-title">Add Raw Material</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label class="form-label">Type</label>
-                                <select name="type" id="rawMaterialTypeSelect" class="form-select">
-                                    <option value="" selected>Select a category</option>
-                                    @foreach ($rawMaterialTypes as $type)
-                                        <option value="{{ $type }}">{{ $type }}</option>
-                                    @endforeach
-                                    <option value="__add_new__">+ Add New Category</option>
-                                </select>
-                                <input type="text" id="rawMaterialTypeCustomInput" class="form-control mt-2" placeholder="Type the new category name" style="display: none;">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Current Stock</label>
-                                <input type="number" step="0.01" min="0" name="current_stock" class="form-control" value="0" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Unit of Measure</label>
-                                <input type="text" name="unit_of_measure" class="form-control" placeholder="e.g. ml, units, boxes" required>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="submit" class="btn btn-primary">Save</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <script>
-            const rawMaterialTypeSelect = document.getElementById('rawMaterialTypeSelect');
-            const rawMaterialTypeCustomInput = document.getElementById('rawMaterialTypeCustomInput');
-
-            rawMaterialTypeSelect.addEventListener('change', function () {
-                if (this.value === '__add_new__') {
-                    rawMaterialTypeCustomInput.style.display = 'block';
-                    rawMaterialTypeCustomInput.name = 'type';
-                    rawMaterialTypeCustomInput.required = true;
-                    rawMaterialTypeSelect.removeAttribute('name');
-                    rawMaterialTypeCustomInput.focus();
-                } else {
-                    rawMaterialTypeCustomInput.style.display = 'none';
-                    rawMaterialTypeCustomInput.removeAttribute('name');
-                    rawMaterialTypeCustomInput.required = false;
-                    rawMaterialTypeCustomInput.value = '';
-                    rawMaterialTypeSelect.name = 'type';
-                }
-            });
-
-            document.getElementById('rawMaterialModal').addEventListener('hidden.bs.modal', function () {
-                this.querySelector('form').reset();
-                rawMaterialTypeCustomInput.style.display = 'none';
-                rawMaterialTypeCustomInput.removeAttribute('name');
-                rawMaterialTypeCustomInput.required = false;
-                rawMaterialTypeCustomInput.value = '';
-                rawMaterialTypeSelect.name = 'type';
-            });
-        </script>
-
         {{-- Log Production Run Modal --}}
         <div class="modal fade" id="productionModal" tabindex="-1">
             <div class="modal-dialog">

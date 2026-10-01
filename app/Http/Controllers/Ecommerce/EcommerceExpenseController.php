@@ -83,16 +83,25 @@ class EcommerceExpenseController extends Controller
             ]);
 
             if ($isRestock) {
+                $quantityReceived = (float) $validated['quantity_received'];
+                $unitCost = (float) $validated['amount'] / $quantityReceived;
+
                 $rawMaterial = EcommerceRawMaterial::where('type', $validated['raw_material_category'])
                     ->lockForUpdate()
                     ->first();
 
                 if ($rawMaterial) {
-                    $quantityReceived = (float) $validated['quantity_received'];
-
                     $rawMaterial->update([
                         'current_stock' => (float) $rawMaterial->current_stock + $quantityReceived,
-                        'last_purchased_unit_cost' => (float) $validated['amount'] / $quantityReceived,
+                        'last_purchased_unit_cost' => $unitCost,
+                    ]);
+                } else {
+                    EcommerceRawMaterial::create([
+                        'name' => $validated['raw_material_category'],
+                        'type' => $validated['raw_material_category'],
+                        'current_stock' => $quantityReceived,
+                        'unit_of_measure' => 'units',
+                        'last_purchased_unit_cost' => $unitCost,
                     ]);
                 }
             }
