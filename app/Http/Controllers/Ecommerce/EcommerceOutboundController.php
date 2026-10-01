@@ -15,28 +15,48 @@ class EcommerceOutboundController extends Controller
         $outbounds = EcommerceOutbound::with('product')->orderByDesc('created_at')->get();
         $products = EcommerceProduct::orderBy('name')->get();
 
+        $reasons = EcommerceOutbound::query()
+            ->whereNotNull('reason')
+            ->where('reason', '!=', '')
+            ->distinct()
+            ->orderBy('reason')
+            ->pluck('reason');
+
         return view('ecommerce.outbound', [
             'outbounds' => $outbounds,
             'products' => $products,
-            'reasons' => EcommerceOutbound::REASONS,
+            'reasons' => $reasons,
         ]);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'ecommerce_product_id' => 'required|exists:ecommerce_products,id',
-            'quantity' => 'required|integer|min:1',
-            'reason' => 'required|in:' . implode(',', EcommerceOutbound::REASONS),
+            'customer_name' => 'nullable|string|max:255',
+            'contact_number' => 'nullable|string|max:50',
+            'reason' => 'required|string|max:100',
+            'items' => 'required|array|min:1',
+            'items.*.ecommerce_product_id' => 'required|exists:ecommerce_products,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.price' => 'nullable|numeric|min:0',
         ]);
 
         DB::transaction(function () use ($validated) {
-            $product = EcommerceProduct::lockForUpdate()->findOrFail($validated['ecommerce_product_id']);
-            $product->decrement('current_stock', $validated['quantity']);
+            foreach ($validated['items'] as $item) {
+                $product = EcommerceProduct::lockForUpdate()->findOrFail($item['ecommerce_product_id']);
+                $product->decrement('current_stock', $item['quantity']);
 
-            EcommerceOutbound::create($validated);
+                EcommerceOutbound::create([
+                    'ecommerce_product_id' => $item['ecommerce_product_id'],
+                    'customer_name' => $validated['customer_name'] ?? null,
+                    'contact_number' => $validated['contact_number'] ?? null,
+                    'quantity' => $item['quantity'],
+                    'price' => $item['price'] ?? null,
+                    'reason' => $validated['reason'],
+                ]);
+            }
         });
 
-        return back()->with('success', 'Outbound stock logged.');
+        return back()->with('success', 'Sales & usage logged.');
     }
 }

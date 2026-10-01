@@ -6,22 +6,18 @@ use Illuminate\Database\Eloquent\Model;
 
 class EcommerceOutbound extends Model
 {
-    const REASONS = [
-        'Retail Sale - Old Airport',
-        'Retail Sale - Wakrah',
-        'Backbar / Internal Use',
-        'Promotional / Giveaway',
-        'Damaged / Expired',
-    ];
-
     protected $fillable = [
         'ecommerce_product_id',
+        'customer_name',
+        'contact_number',
         'quantity',
+        'price',
         'reason',
     ];
 
     protected $casts = [
         'quantity' => 'integer',
+        'price' => 'decimal:2',
     ];
 
     public function product()
