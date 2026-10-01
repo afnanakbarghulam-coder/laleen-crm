@@ -28,7 +28,7 @@
                 <select name="product_id" class="form-select ec-form-select">
                     @forelse ($products as $product)
                         <option value="{{ $product->id }}" {{ $productId == $product->id ? 'selected' : '' }}>
-                            {{ $product->name }} (QAR {{ number_format($product->total_cogs, 2) }}/unit)
+                            {{ $product->name }} (PKR {{ number_format($product->total_cogs, 2) }}/unit)
                         </option>
                     @empty
                         <option value="">No products yet</option>
@@ -36,7 +36,7 @@
                 </select>
             </div>
             <div class="col-auto">
-                <label class="form-label small text-muted mb-1">Gross Revenue (QAR)</label>
+                <label class="form-label small text-muted mb-1">Gross Revenue (PKR)</label>
                 <input type="number" step="0.01" min="0" name="gross_revenue" class="form-control ec-form-control" value="{{ $grossRevenue }}">
             </div>
             <div class="col-auto">
@@ -53,42 +53,42 @@
         <div class="col-md-4">
             <div class="ec-card">
                 <h6>Gross Revenue</h6>
-                <div class="ec-value">QAR {{ number_format($grossRevenue, 2) }}</div>
-                <div class="ec-sub">{{ $unitsSold }} units @ QAR {{ number_format($unitCost, 2) }} unit cost</div>
+                <div class="ec-value">PKR {{ number_format($grossRevenue, 2) }}</div>
+                <div class="ec-sub">{{ $unitsSold }} units @ PKR {{ number_format($unitCost, 2) }} unit cost</div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="ec-card">
                 <h6>Total COGS</h6>
-                <div class="ec-value">QAR {{ number_format($totalCogs, 2) }}</div>
+                <div class="ec-value">PKR {{ number_format($totalCogs, 2) }}</div>
                 <div class="ec-sub">Units Sold &times; Calculated Unit Cost</div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="ec-card">
                 <h6>Gross Operating Profit</h6>
-                <div class="ec-value {{ $grossOperatingProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">QAR {{ number_format($grossOperatingProfit, 2) }}</div>
+                <div class="ec-value {{ $grossOperatingProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($grossOperatingProfit, 2) }}</div>
                 <div class="ec-sub">Gross Revenue &minus; Total COGS</div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="ec-card">
                 <h6>Total Ecommerce OpEx</h6>
-                <div class="ec-value">QAR {{ number_format($totalOpex, 2) }}</div>
+                <div class="ec-value">PKR {{ number_format($totalOpex, 2) }}</div>
                 <div class="ec-sub">{{ $from->format('d M Y') }} &ndash; {{ $to->format('d M Y') }}</div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="ec-card">
                 <h6>Net Ecommerce Profit</h6>
-                <div class="ec-value {{ $netProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">QAR {{ number_format($netProfit, 2) }}</div>
+                <div class="ec-value {{ $netProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($netProfit, 2) }}</div>
                 <div class="ec-sub">Gross Operating Profit &minus; Total OpEx</div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="ec-card">
                 <h6>Partner Profit Share</h6>
-                <div class="ec-value {{ $equalShare >= 0 ? 'ec-positive' : 'ec-negative' }}">QAR {{ number_format($equalShare, 2) }}</div>
+                <div class="ec-value {{ $equalShare >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($equalShare, 2) }}</div>
                 <div class="ec-sub">Net Profit &divide; {{ max($partners->count(), 1) }} partners</div>
             </div>
         </div>
@@ -110,7 +110,7 @@
                         <tr>
                             <td>{{ $partner->name }}</td>
                             <td>{{ number_format($partner->equity_percentage, 2) }}%</td>
-                            <td class="{{ $equalShare >= 0 ? 'ec-positive' : 'ec-negative' }}">QAR {{ number_format($equalShare, 2) }}</td>
+                            <td class="{{ $equalShare >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($equalShare, 2) }}</td>
                         </tr>
                     @empty
                         <tr>

@@ -18,7 +18,7 @@
 
     <div class="ec-card">
         <h6>Total Ecommerce Expenses</h6>
-        <div class="ec-value">QAR {{ number_format($totalExpenses, 2) }}</div>
+        <div class="ec-value">PKR {{ number_format($totalExpenses, 2) }}</div>
         <div class="ec-sub">{{ $expenses->count() }} entries, all time</div>
     </div>
 
@@ -44,7 +44,7 @@
                             <td>{{ $expense->title }}</td>
                             <td><span class="ec-badge" style="background: rgba(217,143,131,0.14); color: var(--ec-ink);">{{ $expense->category }}</span></td>
                             <td>{{ $expense->vendor ?? '—' }}</td>
-                            <td>QAR {{ number_format($expense->amount, 2) }}</td>
+                            <td>PKR {{ number_format($expense->amount, 2) }}</td>
                             <td>
                                 @if ($expense->receipt_path)
                                     <a href="{{ asset($expense->receipt_path) }}" target="_blank">View</a>
@@ -94,7 +94,7 @@
                                 </select>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">Amount (QAR)</label>
+                                <label class="form-label">Amount (PKR)</label>
                                 <input type="number" step="0.01" min="0.01" name="amount" class="form-control" required>
                             </div>
                             <div class="mb-3">

@@ -18,7 +18,7 @@
 
     <div class="ec-card">
         <h6>Total Capital Pool</h6>
-        <div class="ec-value">QAR {{ number_format($totalPool, 2) }}</div>
+        <div class="ec-value">PKR {{ number_format($totalPool, 2) }}</div>
         <div class="ec-sub">Total cash injected across all partners</div>
     </div>
 
@@ -27,13 +27,13 @@
             <div class="col-md-4">
                 <div class="ec-card">
                     <h6>{{ $row['partner']->name }}</h6>
-                    <div class="ec-value">QAR {{ number_format($row['contributed'], 2) }}</div>
+                    <div class="ec-value">PKR {{ number_format($row['contributed'], 2) }}</div>
                     <div class="ec-sub">{{ number_format($row['percent'], 1) }}% of total pool</div>
                     <hr style="border-color: var(--ec-border); margin: 10px 0;">
                     @if ($row['balance'] <= 0.01)
                         <div class="ec-sub ec-positive">Fully Matched</div>
                     @else
-                        <div class="ec-sub ec-negative">Owes QAR {{ number_format($row['balance'], 2) }} to match the top investor</div>
+                        <div class="ec-sub ec-negative">Owes PKR {{ number_format($row['balance'], 2) }} to match the top investor</div>
                     @endif
                 </div>
             </div>
@@ -44,7 +44,7 @@
         <h6 class="mb-3">Profit Distribution Splitter</h6>
         <form class="row g-3 align-items-end" onsubmit="return false;">
             <div class="col-auto">
-                <label class="form-label small text-muted mb-1">Net Profit to Distribute (QAR)</label>
+                <label class="form-label small text-muted mb-1">Net Profit to Distribute (PKR)</label>
                 <input type="number" step="0.01" id="splitterAmount" class="form-control ec-form-control" placeholder="0.00" oninput="recalcSplit()">
             </div>
         </form>
@@ -62,7 +62,7 @@
                         <tr data-equity="{{ $partner->equity_percentage }}">
                             <td>{{ $partner->name }}</td>
                             <td>{{ number_format($partner->equity_percentage, 2) }}%</td>
-                            <td class="splitter-payout">QAR 0.00</td>
+                            <td class="splitter-payout">PKR 0.00</td>
                         </tr>
                     @empty
                         <tr><td colspan="3" class="text-center text-muted">No partners yet</td></tr>
@@ -99,7 +99,7 @@
                             <td>{{ $transaction->partner->name }}</td>
                             <td><span class="ec-badge ec-badge-{{ $transaction->type }}">{{ ucfirst($transaction->type) }}</span></td>
                             <td>{{ $transaction->category ?? '—' }}</td>
-                            <td>QAR {{ number_format($transaction->amount, 2) }}</td>
+                            <td>PKR {{ number_format($transaction->amount, 2) }}</td>
                             <td>{{ $transaction->reference_note ?? '—' }}</td>
                             @moduleEdit('ecommerce')
                                 <td>
@@ -179,7 +179,7 @@
                                 </select>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">Amount (QAR)</label>
+                                <label class="form-label">Amount (PKR)</label>
                                 <input type="number" step="0.01" min="0.01" name="amount" class="form-control" required>
                             </div>
                             <div class="mb-3">
@@ -215,7 +215,7 @@
                 const equity = parseFloat(row.dataset.equity) || 0;
                 const payout = total * (equity / 100);
                 const cell = row.querySelector('.splitter-payout');
-                if (cell) cell.textContent = 'QAR ' + payout.toFixed(2);
+                if (cell) cell.textContent = 'PKR ' + payout.toFixed(2);
             });
         }
     </script>
