@@ -10,6 +10,16 @@ use Illuminate\Support\Facades\DB;
 
 class EcommerceProductionController extends Controller
 {
+    /**
+     * Component types every production run must include, keyed by the
+     * finished product's Product Line name. Product lines not listed here
+     * have no required Bill of Materials.
+     */
+    private const REQUIRED_COMPONENT_TYPES_BY_PRODUCT_LINE = [
+        'Hair Oil' => ['Liquid Base', 'Bottle/Jar', 'Label'],
+        'Shampoo' => ['Liquid Base', 'Bottle/Jar', 'Label', 'Pump/Cap'],
+    ];
+
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -22,6 +32,24 @@ class EcommerceProductionController extends Controller
 
         $quantityProduced = (float) $validated['quantity_produced'];
         $materialsUsed = $validated['materials_used'] ?? [];
+
+        $product = EcommerceProduct::with('productLine')->findOrFail($validated['ecommerce_product_id']);
+        $requiredComponentTypes = self::REQUIRED_COMPONENT_TYPES_BY_PRODUCT_LINE[$product->productLine->name ?? ''] ?? null;
+
+        if ($requiredComponentTypes) {
+            $submittedComponentTypes = EcommerceRawMaterial::whereIn('id', collect($materialsUsed)->pluck('ecommerce_raw_material_id'))
+                ->with('componentType')
+                ->get()
+                ->pluck('componentType.name')
+                ->filter()
+                ->unique();
+
+            $missingComponentTypes = collect($requiredComponentTypes)->diff($submittedComponentTypes);
+
+            if ($missingComponentTypes->isNotEmpty()) {
+                return back()->withErrors(['error' => 'Production blocked: You are missing required components for this product line (e.g., Label, Pump). Please restock Tier 1 inventory first.']);
+            }
+        }
 
         DB::transaction(function () use ($validated, $quantityProduced, $materialsUsed) {
             $product = EcommerceProduct::lockForUpdate()->findOrFail($validated['ecommerce_product_id']);

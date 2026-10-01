@@ -125,11 +125,8 @@
 
                             <hr style="border-color: var(--ec-border);">
 
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h6 class="mb-0">B. Raw materials used per unit</h6>
-                                <button type="button" class="btn btn-sm btn-outline-primary" id="addMaterialUsedRowBtn">+ Add Raw Material</button>
-                            </div>
-                            <p class="ec-sub">Enter the quantity of each raw material consumed for ONE unit. The system will automatically calculate the total based on the batch size.</p>
+                            <h6 class="mb-2">B. Raw materials used per unit</h6>
+                            <p class="ec-sub">Materials are determined automatically by the product's line. Amounts default to the calculated value but can be corrected if a batch needs an override &mdash; restock Tier 1 inventory if a required component is missing.</p>
                             <div id="materialsUsedRows"></div>
                             @if ($rawMaterials->isEmpty())
                                 <p class="ec-sub mb-0">No raw materials yet &mdash; add some in Tier 1 above first.</p>
@@ -154,17 +151,14 @@
                 const row = document.createElement('div');
                 row.className = 'row g-2 align-items-end mb-2 material-used-row';
                 row.innerHTML =
-                    '<div class="col-6">' +
+                    '<div class="col-7">' +
                         '<select name="materials_used[' + index + '][ecommerce_raw_material_id]" class="form-select" required>' +
                             '<option value="" disabled selected>Select raw material</option>' +
                             materialOptionsHtml +
                         '</select>' +
                     '</div>' +
-                    '<div class="col-4">' +
+                    '<div class="col-5">' +
                         '<input type="number" step="0.01" min="0.01" name="materials_used[' + index + '][amount_per_unit]" class="form-control" placeholder="Amount per unit" required>' +
-                    '</div>' +
-                    '<div class="col-2">' +
-                        '<button type="button" class="btn btn-outline-danger w-100 remove-material-used-row">&times;</button>' +
                     '</div>';
 
                 document.getElementById('materialsUsedRows').appendChild(row);
@@ -176,16 +170,8 @@
                     row.querySelector('input[type="number"]').value = presetAmountPerUnit;
                 }
 
-                row.querySelector('.remove-material-used-row').addEventListener('click', function () {
-                    row.remove();
-                });
-
                 return row;
             }
-
-            document.getElementById('addMaterialUsedRowBtn').addEventListener('click', function () {
-                addMaterialUsedRow();
-            });
 
             // Smart Recipe: selecting a finished product rebuilds Section B from
             // every raw material that shares the product's product_line_id,
