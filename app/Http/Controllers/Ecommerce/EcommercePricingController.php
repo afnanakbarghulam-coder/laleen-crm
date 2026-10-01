@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Ecommerce;
 use App\Http\Controllers\Controller;
 use App\Models\EcommercePricingModel;
 use App\Models\EcommerceProduct;
+use App\Models\EcommerceRawMaterial;
 use Illuminate\Http\Request;
 
 class EcommercePricingController extends Controller
@@ -12,6 +13,7 @@ class EcommercePricingController extends Controller
     public function index(Request $request)
     {
         $products = EcommerceProduct::orderBy('name')->get();
+        $rawMaterials = EcommerceRawMaterial::orderBy('name')->get();
 
         $pricingModels = EcommercePricingModel::all()->keyBy('ecommerce_product_id')->map(function ($model) {
             return [
@@ -22,9 +24,19 @@ class EcommercePricingController extends Controller
             ];
         });
 
+        $rawMaterialCosts = $rawMaterials->keyBy('id')->map(function ($material) {
+            return [
+                'name' => $material->name,
+                'unit_of_measure' => $material->unit_of_measure,
+                'last_purchased_unit_cost' => (float) $material->last_purchased_unit_cost,
+            ];
+        });
+
         return view('ecommerce.pricing', [
             'products' => $products,
             'pricingModels' => $pricingModels,
+            'rawMaterials' => $rawMaterials,
+            'rawMaterialCosts' => $rawMaterialCosts,
             'selectedProductId' => $request->query('product'),
         ]);
     }

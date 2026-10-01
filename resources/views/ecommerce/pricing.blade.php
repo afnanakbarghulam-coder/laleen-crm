@@ -28,6 +28,32 @@
         </div>
     </div>
 
+    <div class="ec-card">
+        <h6 class="mb-1" style="text-transform: none; font-size: 14px; letter-spacing: 0;">Auto-Calculate Liquid Cost</h6>
+        <p class="ec-sub mb-3">Pull a raw material's last purchased unit cost and multiply it by how much goes into one bottle.</p>
+        <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label">Ingredient (Raw Material)</label>
+                <select id="rawMaterialHelperSelect" class="form-select">
+                    <option value="" selected>Select a raw material</option>
+                    @foreach ($rawMaterials as $material)
+                        <option value="{{ $material->id }}">{{ $material->name }} ({{ $material->unit_of_measure }})</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Amount used per bottle (units)</label>
+                <input type="number" step="0.01" min="0" id="rawMaterialHelperAmount" class="form-control" placeholder="e.g. 50">
+            </div>
+            <div class="col-md-3">
+                <button type="button" class="btn btn-outline-primary w-100" id="rawMaterialHelperApplyBtn">Apply to Liquid Cost</button>
+            </div>
+        </div>
+        @if ($rawMaterials->isEmpty())
+            <p class="ec-sub mb-0 mt-2">No raw materials yet &mdash; add some via a restock expense first.</p>
+        @endif
+    </div>
+
     <form id="pricingForm" action="{{ route('ecommerce.pricing.store') }}" method="POST">
         @csrf
         <input type="hidden" name="ecommerce_product_id" id="pricingProductId">
@@ -91,6 +117,7 @@
 
     <script>
         const pricingData = @json($pricingModels);
+        const rawMaterialCosts = @json($rawMaterialCosts);
 
         const productSelect = document.getElementById('pricingProductSelect');
         const productIdInput = document.getElementById('pricingProductId');
@@ -150,5 +177,24 @@
         // ?product=<id> (e.g. redirected back here right after saving)
         // shows its data immediately instead of resetting to blank.
         applyPricingForSelectedProduct();
+
+        const rawMaterialHelperSelect = document.getElementById('rawMaterialHelperSelect');
+        const rawMaterialHelperAmount = document.getElementById('rawMaterialHelperAmount');
+        const rawMaterialHelperApplyBtn = document.getElementById('rawMaterialHelperApplyBtn');
+
+        rawMaterialHelperApplyBtn.addEventListener('click', function () {
+            const materialId = rawMaterialHelperSelect.value;
+            const amountPerBottle = parseFloat(rawMaterialHelperAmount.value) || 0;
+
+            if (!materialId || !Object.prototype.hasOwnProperty.call(rawMaterialCosts, materialId)) {
+                return;
+            }
+
+            const unitCost = Number(rawMaterialCosts[materialId].last_purchased_unit_cost) || 0;
+            const calculatedLiquidCost = unitCost * amountPerBottle;
+
+            liquidCostInput.value = calculatedLiquidCost.toFixed(2);
+            recalculate();
+        });
     </script>
 @endsection
