@@ -158,6 +158,31 @@
                                 <label class="form-label">Receipt (optional)</label>
                                 <input type="file" name="receipt" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
                             </div>
+
+                            <hr style="border-color: var(--ec-border);">
+
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="expenseRestockCheckbox" name="includes_raw_material_restock" value="1">
+                                <label class="form-check-label" for="expenseRestockCheckbox">This expense includes a raw material restock</label>
+                            </div>
+                            <div id="expenseRestockFields" style="display: none;">
+                                <div class="mb-3">
+                                    <label class="form-label">Raw Material Category</label>
+                                    <select name="raw_material_category" id="expenseRestockCategorySelect" class="form-select">
+                                        <option value="" disabled selected>Select a raw material category</option>
+                                        @foreach ($rawMaterialCategories as $rawMaterialCategory)
+                                            <option value="{{ $rawMaterialCategory }}">{{ $rawMaterialCategory }}</option>
+                                        @endforeach
+                                    </select>
+                                    @if ($rawMaterialCategories->isEmpty())
+                                        <p class="ec-sub mb-0 mt-2">No raw materials yet &mdash; add some in Inventory &amp; Production first.</p>
+                                    @endif
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Quantity Received</label>
+                                    <input type="number" step="0.01" min="0.01" name="quantity_received" id="expenseRestockQuantityInput" class="form-control" placeholder="e.g. 10">
+                                </div>
+                            </div>
                         </div>
                         <div class="modal-footer">
                             <button type="submit" class="btn btn-primary">Save</button>
@@ -187,6 +212,25 @@
                 }
             });
 
+            const expenseRestockCheckbox = document.getElementById('expenseRestockCheckbox');
+            const expenseRestockFields = document.getElementById('expenseRestockFields');
+            const expenseRestockCategorySelect = document.getElementById('expenseRestockCategorySelect');
+            const expenseRestockQuantityInput = document.getElementById('expenseRestockQuantityInput');
+
+            expenseRestockCheckbox.addEventListener('change', function () {
+                if (this.checked) {
+                    expenseRestockFields.style.display = 'block';
+                    expenseRestockCategorySelect.required = true;
+                    expenseRestockQuantityInput.required = true;
+                } else {
+                    expenseRestockFields.style.display = 'none';
+                    expenseRestockCategorySelect.required = false;
+                    expenseRestockQuantityInput.required = false;
+                    expenseRestockCategorySelect.value = '';
+                    expenseRestockQuantityInput.value = '';
+                }
+            });
+
             document.getElementById('expenseModal').addEventListener('hidden.bs.modal', function () {
                 this.querySelector('form').reset();
                 expenseCategoryCustomInput.style.display = 'none';
@@ -194,6 +238,10 @@
                 expenseCategoryCustomInput.required = false;
                 expenseCategoryCustomInput.value = '';
                 expenseCategorySelect.name = 'category';
+
+                expenseRestockFields.style.display = 'none';
+                expenseRestockCategorySelect.required = false;
+                expenseRestockQuantityInput.required = false;
             });
         </script>
     @endmoduleEdit

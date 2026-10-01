@@ -29,6 +29,7 @@
                     <tr>
                         <th>Category</th>
                         <th>Remaining / Original</th>
+                        <th>Last Unit Cost</th>
                         @moduleEdit('ecommerce')<th></th>@endmoduleEdit
                     </tr>
                 </thead>
@@ -37,6 +38,7 @@
                         <tr>
                             <td>{{ $material->type ?: '—' }}</td>
                             <td class="{{ $material->current_stock < 0 ? 'ec-negative' : '' }}">{{ number_format($material->current_stock, 2) }} / {{ number_format($material->initial_stock, 2) }} {{ $material->unit_of_measure }}</td>
+                            <td>{{ $material->last_purchased_unit_cost !== null ? 'PKR ' . number_format($material->last_purchased_unit_cost, 2) : '—' }}</td>
                             @moduleEdit('ecommerce')
                                 <td>
                                     <form action="{{ route('ecommerce.raw-materials.destroy', $material->id) }}" method="POST" onsubmit="return confirm('Delete this raw material?')">
@@ -47,7 +49,7 @@
                             @endmoduleEdit
                         </tr>
                     @empty
-                        <tr><td colspan="3" class="text-center text-muted">No raw materials logged yet</td></tr>
+                        <tr><td colspan="4" class="text-center text-muted">No raw materials logged yet</td></tr>
                     @endforelse
                 </tbody>
             </table>
