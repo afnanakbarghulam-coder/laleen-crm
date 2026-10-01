@@ -8,6 +8,8 @@ class EcommerceProduct extends Model
 {
     protected $fillable = [
         'name',
+        'sku',
+        'current_stock',
         'selling_price',
         'liquid_cost_per_ml',
         'volume_ml',
@@ -21,6 +23,7 @@ class EcommerceProduct extends Model
     ];
 
     protected $casts = [
+        'current_stock' => 'decimal:2',
         'selling_price' => 'decimal:2',
         'liquid_cost_per_ml' => 'decimal:4',
         'volume_ml' => 'decimal:2',
@@ -41,6 +44,17 @@ class EcommerceProduct extends Model
         'gross_margin_percent',
         'breakeven_cac',
     ];
+
+    /**
+     * Bill-of-materials recipe: each raw material consumed per unit produced,
+     * via the quantity_required pivot column.
+     */
+    public function rawMaterials()
+    {
+        return $this->belongsToMany(EcommerceRawMaterial::class, 'ecommerce_product_raw_material')
+            ->withPivot('quantity_required')
+            ->withTimestamps();
+    }
 
     public function getLiquidCostAttribute(): float
     {

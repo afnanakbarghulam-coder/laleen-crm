@@ -5,8 +5,10 @@ use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\Ecommerce\EcommerceDashboardController;
 use App\Http\Controllers\Ecommerce\EcommerceExpenseController;
+use App\Http\Controllers\Ecommerce\EcommerceInventoryController;
 use App\Http\Controllers\Ecommerce\EcommercePartnerController;
 use App\Http\Controllers\Ecommerce\EcommerceProductController;
+use App\Http\Controllers\Ecommerce\EcommerceProductionController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\Kpi\AdLeadEntryController;
 use App\Http\Controllers\Kpi\AdsConversionController;
@@ -229,6 +231,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/partners', [EcommercePartnerController::class, 'index'])->name('partners.index');
             Route::get('/products', [EcommerceProductController::class, 'index'])->name('products.index');
             Route::get('/expenses', [EcommerceExpenseController::class, 'index'])->name('expenses.index');
+            Route::get('/inventory', [EcommerceInventoryController::class, 'index'])->name('inventory.index');
         });
         Route::middleware('module:ecommerce,edit')->group(function () {
             Route::post('/partners', [EcommercePartnerController::class, 'storePartner'])->name('partners.store');
@@ -242,6 +245,14 @@ Route::middleware(['auth'])->group(function () {
 
             Route::post('/expenses', [EcommerceExpenseController::class, 'store'])->name('expenses.store');
             Route::delete('/expenses/{ecommerceExpense}', [EcommerceExpenseController::class, 'destroy'])->name('expenses.destroy');
+
+            Route::post('/raw-materials', [EcommerceInventoryController::class, 'storeRawMaterial'])->name('raw-materials.store');
+            Route::delete('/raw-materials/{ecommerceRawMaterial}', [EcommerceInventoryController::class, 'destroyRawMaterial'])->name('raw-materials.destroy');
+
+            Route::post('/products/{product}/recipe', [EcommerceInventoryController::class, 'storeRecipeItem'])->name('products.recipe.store');
+            Route::delete('/products/{product}/recipe/{rawMaterial}', [EcommerceInventoryController::class, 'destroyRecipeItem'])->name('products.recipe.destroy');
+
+            Route::post('/production-runs', [EcommerceProductionController::class, 'store'])->name('production.store');
         });
     });
 });
