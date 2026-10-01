@@ -18,9 +18,16 @@ class EcommerceExpenseController extends Controller
         $partnerLedgerExpenses = (float) $expenses->where('funding_source', 'partner_ledger')->sum('amount');
         $remainingBalance = $totalPool - $partnerLedgerExpenses;
 
+        $categories = EcommerceExpense::query()
+            ->whereNotNull('category')
+            ->where('category', '!=', '')
+            ->distinct()
+            ->orderBy('category')
+            ->pluck('category');
+
         return view('ecommerce.expenses', [
             'expenses' => $expenses,
-            'categories' => EcommerceExpense::CATEGORIES,
+            'categories' => $categories,
             'fundingSources' => EcommerceExpense::FUNDING_SOURCES,
             'totalExpenses' => $totalExpenses,
             'totalPool' => $totalPool,
@@ -30,6 +37,9 @@ class EcommerceExpenseController extends Controller
 
     public function store(Request $request)
     {
+        // The category combobox and its "+ Add New Category" text input swap
+        // which element owns name="category" client-side, so exactly one of
+        // them is ever present here — the selected category or the typed one.
         $validated = $request->validate([
             'expense_date' => 'required|date',
             'title' => 'required|string|max:255',

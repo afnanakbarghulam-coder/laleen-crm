@@ -122,12 +122,14 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Category</label>
-                                <input type="text" name="category" class="form-control" list="categoryOptions" placeholder="Select or type a category" required>
-                                <datalist id="categoryOptions">
+                                <select name="category" id="expenseCategorySelect" class="form-select">
+                                    <option value="" selected>Select a category</option>
                                     @foreach ($categories as $category)
                                         <option value="{{ $category }}">{{ $category }}</option>
                                     @endforeach
-                                </datalist>
+                                    <option value="__add_new__">+ Add New Category</option>
+                                </select>
+                                <input type="text" id="expenseCategoryCustomInput" class="form-control mt-2" placeholder="Type the new category name" style="display: none;">
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Paid Using</label>
@@ -164,5 +166,35 @@
                 </div>
             </div>
         </div>
+
+        <script>
+            const expenseCategorySelect = document.getElementById('expenseCategorySelect');
+            const expenseCategoryCustomInput = document.getElementById('expenseCategoryCustomInput');
+
+            expenseCategorySelect.addEventListener('change', function () {
+                if (this.value === '__add_new__') {
+                    expenseCategoryCustomInput.style.display = 'block';
+                    expenseCategoryCustomInput.name = 'category';
+                    expenseCategoryCustomInput.required = true;
+                    expenseCategorySelect.removeAttribute('name');
+                    expenseCategoryCustomInput.focus();
+                } else {
+                    expenseCategoryCustomInput.style.display = 'none';
+                    expenseCategoryCustomInput.removeAttribute('name');
+                    expenseCategoryCustomInput.required = false;
+                    expenseCategoryCustomInput.value = '';
+                    expenseCategorySelect.name = 'category';
+                }
+            });
+
+            document.getElementById('expenseModal').addEventListener('hidden.bs.modal', function () {
+                this.querySelector('form').reset();
+                expenseCategoryCustomInput.style.display = 'none';
+                expenseCategoryCustomInput.removeAttribute('name');
+                expenseCategoryCustomInput.required = false;
+                expenseCategoryCustomInput.value = '';
+                expenseCategorySelect.name = 'category';
+            });
+        </script>
     @endmoduleEdit
 @endsection
