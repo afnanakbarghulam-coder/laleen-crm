@@ -66,6 +66,7 @@
                 <thead>
                     <tr>
                         <th>Name</th>
+                        <th>Unit Size</th>
                         <th>SKU</th>
                         <th>Current Stock</th>
                         @moduleEdit('ecommerce')<th></th>@endmoduleEdit
@@ -75,6 +76,7 @@
                     @forelse ($products as $product)
                         <tr>
                             <td>{{ $product->name }}</td>
+                            <td>{{ $product->unit_size ?? '—' }}</td>
                             <td>{{ $product->sku ?? '—' }}</td>
                             <td class="{{ $product->current_stock < 0 ? 'ec-negative' : '' }}">{{ number_format($product->current_stock, 2) }}</td>
                             @moduleEdit('ecommerce')
@@ -87,7 +89,7 @@
                             @endmoduleEdit
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="text-center text-muted">No finished goods yet &mdash; use "+ Add Finished Product" above.</td></tr>
+                        <tr><td colspan="5" class="text-center text-muted">No finished goods yet &mdash; use "+ Add Finished Product" above.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -196,6 +198,10 @@
                             <div class="col-md-6">
                                 <label class="form-label">SKU</label>
                                 <input type="text" name="sku" id="f_sku" class="form-control" placeholder="e.g. RS-100" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Unit Size (e.g., 50ml, 100g)</label>
+                                <input type="text" name="unit_size" id="f_unit_size" class="form-control" placeholder="e.g. 50ml, 100g">
                             </div>
                         </div>
                         <div class="modal-footer">

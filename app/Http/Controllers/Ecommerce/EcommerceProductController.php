@@ -76,6 +76,7 @@ class EcommerceProductController extends Controller
                 'max:100',
                 Rule::unique('ecommerce_products', 'sku')->ignore($ignoreId),
             ],
+            'unit_size' => 'nullable|string|max:50',
             'selling_price' => 'nullable|numeric|min:0',
             'liquid_cost_per_ml' => 'nullable|numeric|min:0',
             'volume_ml' => 'nullable|numeric|min:0',

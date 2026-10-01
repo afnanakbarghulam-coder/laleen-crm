@@ -9,6 +9,7 @@ class EcommerceProduct extends Model
     protected $fillable = [
         'name',
         'sku',
+        'unit_size',
         'current_stock',
         'selling_price',
         'liquid_cost_per_ml',
