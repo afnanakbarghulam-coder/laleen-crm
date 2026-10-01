@@ -7,7 +7,7 @@
     <div class="ec-header">
         <div>
             <h4>Partner Investment &amp; Capital Ledger</h4>
-            <p>Capital parity across the three equal partners, plus the full injection/distribution history.</p>
+            <p>Capital matching across the partners, plus the full capital injection history.</p>
         </div>
         @moduleEdit('ecommerce')
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addPartnerModal">+ Add Partner</button>
@@ -38,38 +38,6 @@
                 </div>
             </div>
         @endforeach
-    </div>
-
-    <div class="ec-card">
-        <h6 class="mb-3">Profit Distribution Splitter</h6>
-        <form class="row g-3 align-items-end" onsubmit="return false;">
-            <div class="col-auto">
-                <label class="form-label small text-muted mb-1">Net Profit to Distribute (PKR)</label>
-                <input type="number" step="0.01" id="splitterAmount" class="form-control ec-form-control" placeholder="0.00" oninput="recalcSplit()">
-            </div>
-        </form>
-        <div class="table-responsive mt-3">
-            <table class="table ec-table align-middle">
-                <thead>
-                    <tr>
-                        <th>Partner</th>
-                        <th>Equity %</th>
-                        <th>Payout</th>
-                    </tr>
-                </thead>
-                <tbody id="splitterBody">
-                    @forelse ($partners as $partner)
-                        <tr data-equity="{{ $partner->equity_percentage }}">
-                            <td>{{ $partner->name }}</td>
-                            <td>{{ number_format($partner->equity_percentage, 2) }}%</td>
-                            <td class="splitter-payout">PKR 0.00</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="3" class="text-center text-muted">No partners yet</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
     </div>
 
     <div class="ec-card">
@@ -173,10 +141,8 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Type</label>
-                                <select name="type" class="form-select" required>
-                                    <option value="injection">Injection (money in)</option>
-                                    <option value="distribution">Distribution (profit out)</option>
-                                </select>
+                                <input type="text" class="form-control" value="Injection (money in)" disabled>
+                                <input type="hidden" name="type" value="injection">
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Amount (PKR)</label>
@@ -207,16 +173,4 @@
             </div>
         </div>
     @endmoduleEdit
-
-    <script>
-        function recalcSplit() {
-            const total = parseFloat(document.getElementById('splitterAmount').value) || 0;
-            document.querySelectorAll('#splitterBody tr').forEach(function (row) {
-                const equity = parseFloat(row.dataset.equity) || 0;
-                const payout = total * (equity / 100);
-                const cell = row.querySelector('.splitter-payout');
-                if (cell) cell.textContent = 'PKR ' + payout.toFixed(2);
-            });
-        }
-    </script>
 @endsection

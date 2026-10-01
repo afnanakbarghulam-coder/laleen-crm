@@ -55,7 +55,7 @@ class EcommercePartnerController extends Controller
     public function storeTransaction(Request $request, Partner $partner)
     {
         $validated = $request->validate([
-            'type' => 'required|in:injection,distribution',
+            'type' => 'required|in:injection',
             'amount' => 'required|numeric|min:0.01',
             'category' => 'nullable|string|max:100',
             'reference_note' => 'nullable|string|max:255',
