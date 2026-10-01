@@ -31,11 +31,14 @@ class EcommerceInventoryController extends Controller
     public function storeRawMaterial(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
             'type' => 'nullable|string|max:100',
             'current_stock' => 'required|numeric|min:0',
             'unit_of_measure' => 'required|string|max:50',
         ]);
+
+        // The 'name' column is still required at the database level, but the
+        // UI no longer collects it — fall back to the category so it's never null.
+        $validated['name'] = ($validated['type'] ?? '') !== '' ? $validated['type'] : 'Uncategorized';
 
         EcommerceRawMaterial::create($validated);
 

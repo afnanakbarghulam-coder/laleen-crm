@@ -27,8 +27,7 @@
             <table class="table ec-table align-middle">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Type</th>
+                        <th>Category</th>
                         <th>Remaining / Original</th>
                         @moduleEdit('ecommerce')<th></th>@endmoduleEdit
                     </tr>
@@ -36,8 +35,7 @@
                 <tbody>
                     @forelse ($rawMaterials as $material)
                         <tr>
-                            <td>{{ $material->name }}</td>
-                            <td>{{ $material->type ?? '—' }}</td>
+                            <td>{{ $material->type ?: '—' }}</td>
                             <td class="{{ $material->current_stock < 0 ? 'ec-negative' : '' }}">{{ number_format($material->current_stock, 2) }} / {{ number_format($material->initial_stock, 2) }} {{ $material->unit_of_measure }}</td>
                             @moduleEdit('ecommerce')
                                 <td>
@@ -49,7 +47,7 @@
                             @endmoduleEdit
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="text-center text-muted">No raw materials logged yet</td></tr>
+                        <tr><td colspan="3" class="text-center text-muted">No raw materials logged yet</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -113,10 +111,6 @@
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <div class="mb-3">
-                                <label class="form-label">Name</label>
-                                <input type="text" name="name" class="form-control" required>
-                            </div>
                             <div class="mb-3">
                                 <label class="form-label">Type</label>
                                 <select name="type" id="rawMaterialTypeSelect" class="form-select">
