@@ -124,10 +124,10 @@
                             <hr style="border-color: var(--ec-border);">
 
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h6 class="mb-0">B. Raw materials used for this entire batch</h6>
+                                <h6 class="mb-0">B. Raw materials used per unit</h6>
                                 <button type="button" class="btn btn-sm btn-outline-primary" id="addMaterialUsedRowBtn">+ Add Raw Material</button>
                             </div>
-                            <p class="ec-sub">Enter the <strong>total</strong> quantity of each raw material consumed for this whole production run &mdash; not per unit.</p>
+                            <p class="ec-sub">Enter the quantity of each raw material consumed for ONE unit. The system will automatically calculate the total based on the batch size.</p>
                             <div id="materialsUsedRows"></div>
                             @if ($rawMaterials->isEmpty())
                                 <p class="ec-sub mb-0">No raw materials yet &mdash; add some in Tier 1 above first.</p>
@@ -157,7 +157,7 @@
                         '</select>' +
                     '</div>' +
                     '<div class="col-4">' +
-                        '<input type="number" step="0.01" min="0.01" name="materials_used[' + index + '][quantity_used]" class="form-control" placeholder="Total used" required>' +
+                        '<input type="number" step="0.01" min="0.01" name="materials_used[' + index + '][amount_per_unit]" class="form-control" placeholder="Amount per unit" required>' +
                     '</div>' +
                     '<div class="col-2">' +
                         '<button type="button" class="btn btn-outline-danger w-100 remove-material-used-row">&times;</button>' +

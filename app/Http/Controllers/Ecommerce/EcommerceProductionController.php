@@ -17,7 +17,7 @@ class EcommerceProductionController extends Controller
             'quantity_produced' => 'required|numeric|min:0.01',
             'materials_used' => 'nullable|array',
             'materials_used.*.ecommerce_raw_material_id' => 'required|exists:ecommerce_raw_materials,id',
-            'materials_used.*.quantity_used' => 'required|numeric|min:0.01',
+            'materials_used.*.amount_per_unit' => 'required|numeric|min:0.01',
         ]);
 
         $quantityProduced = (float) $validated['quantity_produced'];
@@ -32,14 +32,14 @@ class EcommerceProductionController extends Controller
             ]);
 
             foreach ($materialsUsed as $item) {
-                $quantityUsed = (float) $item['quantity_used'];
+                $totalQuantityUsed = (float) $item['amount_per_unit'] * $quantityProduced;
 
                 $rawMaterial = EcommerceRawMaterial::lockForUpdate()->findOrFail($item['ecommerce_raw_material_id']);
-                $rawMaterial->decrement('current_stock', $quantityUsed);
+                $rawMaterial->decrement('current_stock', $totalQuantityUsed);
 
                 $run->materials()->create([
                     'ecommerce_raw_material_id' => $rawMaterial->id,
-                    'quantity_used' => $quantityUsed,
+                    'quantity_used' => $totalQuantityUsed,
                 ]);
             }
         });
