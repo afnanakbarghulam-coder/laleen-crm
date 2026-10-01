@@ -14,11 +14,17 @@ class EcommerceExpense extends Model
         'R&D & Compliance',
     ];
 
+    const FUNDING_SOURCES = [
+        'partner_ledger' => 'Partner Ledger (Total Pool)',
+        'sales' => 'Sales Revenue',
+    ];
+
     protected $fillable = [
         'expense_date',
         'title',
         'amount',
         'category',
+        'funding_source',
         'vendor',
         'notes',
         'receipt_path',

@@ -48,6 +48,7 @@
                         <th>Date</th>
                         <th>Title</th>
                         <th>Category</th>
+                        <th>Paid Using</th>
                         <th>Vendor</th>
                         <th>Amount</th>
                         <th>Receipt</th>
@@ -66,6 +67,13 @@
                                 @endif
                             </td>
                             <td><span class="ec-badge" style="background: rgba(217,143,131,0.14); color: var(--ec-ink);">{{ $expense->category }}</span></td>
+                            <td>
+                                @if ($expense->funding_source === 'sales')
+                                    <span class="ec-badge ec-badge-injection">Sales Revenue</span>
+                                @else
+                                    <span class="ec-badge ec-badge-distribution">Partner Ledger</span>
+                                @endif
+                            </td>
                             <td>{{ $expense->vendor ?? '—' }}</td>
                             <td>PKR {{ number_format($expense->amount, 2) }}</td>
                             <td>
@@ -86,7 +94,7 @@
                             @endmoduleEdit
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="text-center text-muted">No ecommerce expenses logged yet</td></tr>
+                        <tr><td colspan="9" class="text-center text-muted">No ecommerce expenses logged yet</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -120,6 +128,17 @@
                                         <option value="{{ $category }}">{{ $category }}</option>
                                     @endforeach
                                 </datalist>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Paid Using</label>
+                                <div class="d-flex gap-3">
+                                    @foreach ($fundingSources as $value => $label)
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="funding_source" id="funding_{{ $value }}" value="{{ $value }}" {{ $value === 'partner_ledger' ? 'checked' : '' }} required>
+                                            <label class="form-check-label" for="funding_{{ $value }}">{{ $label }}</label>
+                                        </div>
+                                    @endforeach
+                                </div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Amount (PKR)</label>

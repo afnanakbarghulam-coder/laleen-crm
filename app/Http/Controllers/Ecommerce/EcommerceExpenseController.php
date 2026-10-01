@@ -15,11 +15,13 @@ class EcommerceExpenseController extends Controller
 
         $totalExpenses = (float) $expenses->sum('amount');
         $totalPool = (float) PartnerTransaction::where('type', 'injection')->sum('amount');
-        $remainingBalance = $totalPool - $totalExpenses;
+        $partnerLedgerExpenses = (float) $expenses->where('funding_source', 'partner_ledger')->sum('amount');
+        $remainingBalance = $totalPool - $partnerLedgerExpenses;
 
         return view('ecommerce.expenses', [
             'expenses' => $expenses,
             'categories' => EcommerceExpense::CATEGORIES,
+            'fundingSources' => EcommerceExpense::FUNDING_SOURCES,
             'totalExpenses' => $totalExpenses,
             'totalPool' => $totalPool,
             'remainingBalance' => $remainingBalance,
@@ -33,6 +35,7 @@ class EcommerceExpenseController extends Controller
             'title' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0.01',
             'category' => 'required|string|max:100',
+            'funding_source' => 'required|in:partner_ledger,sales',
             'vendor' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:2000',
             'receipt' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',

@@ -18,7 +18,7 @@ class EcommercePartnerController extends Controller
 
         $equalization = Partner::equalizationSummary();
         $totalPool = (float) $partners->sum('total_injected');
-        $remainingBalance = $totalPool - (float) EcommerceExpense::sum('amount');
+        $remainingBalance = $totalPool - (float) EcommerceExpense::where('funding_source', 'partner_ledger')->sum('amount');
 
         $transactions = PartnerTransaction::with('partner')
             ->orderByDesc('transaction_date')
