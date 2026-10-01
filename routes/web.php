@@ -5,6 +5,7 @@ use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\Ecommerce\EcommerceExpenseController;
 use App\Http\Controllers\Ecommerce\EcommerceInventoryController;
+use App\Http\Controllers\Ecommerce\EcommerceOutboundController;
 use App\Http\Controllers\Ecommerce\EcommercePartnerController;
 use App\Http\Controllers\Ecommerce\EcommerceProductController;
 use App\Http\Controllers\Ecommerce\EcommerceProductionController;
@@ -230,6 +231,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/products', [EcommerceProductController::class, 'index'])->name('products.index');
             Route::get('/expenses', [EcommerceExpenseController::class, 'index'])->name('expenses.index');
             Route::get('/inventory', [EcommerceInventoryController::class, 'index'])->name('inventory.index');
+            Route::get('/outbound', [EcommerceOutboundController::class, 'index'])->name('outbound.index');
         });
         Route::middleware('module:ecommerce,edit')->group(function () {
             Route::post('/partners', [EcommercePartnerController::class, 'storePartner'])->name('partners.store');
@@ -248,6 +250,8 @@ Route::middleware(['auth'])->group(function () {
             Route::delete('/raw-materials/{ecommerceRawMaterial}', [EcommerceInventoryController::class, 'destroyRawMaterial'])->name('raw-materials.destroy');
 
             Route::post('/production-runs', [EcommerceProductionController::class, 'store'])->name('production.store');
+
+            Route::post('/outbound', [EcommerceOutboundController::class, 'store'])->name('outbound.store');
         });
     });
 });
