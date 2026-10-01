@@ -14,4 +14,5 @@ return [
     'products' => 'Products',
     'kpis' => 'KPIs',
     'staff_management' => 'Staff Management',
+    'ecommerce' => 'Ecommerce',
 ];

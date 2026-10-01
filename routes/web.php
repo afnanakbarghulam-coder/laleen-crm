@@ -3,6 +3,10 @@
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\Ecommerce\EcommerceDashboardController;
+use App\Http\Controllers\Ecommerce\EcommerceExpenseController;
+use App\Http\Controllers\Ecommerce\EcommercePartnerController;
+use App\Http\Controllers\Ecommerce\EcommerceProductController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\Kpi\AdLeadEntryController;
 use App\Http\Controllers\Kpi\AdsConversionController;
@@ -216,5 +220,28 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->post('/content-entries', [ContentEntryController::class, 'store'])->name('content-entries.store');
         Route::middleware('module:kpis,edit')->put('/content-entries/{contentEntry}', [ContentEntryController::class, 'update'])->name('content-entries.update');
         Route::middleware('module:kpis,edit')->delete('/content-entries/{contentEntry}', [ContentEntryController::class, 'destroy'])->name('content-entries.destroy');
+    });
+
+    // ---- Ecommerce ----
+    Route::prefix('ecommerce')->name('ecommerce.')->group(function () {
+        Route::middleware('module:ecommerce')->group(function () {
+            Route::get('/', [EcommerceDashboardController::class, 'index'])->name('dashboard');
+            Route::get('/partners', [EcommercePartnerController::class, 'index'])->name('partners.index');
+            Route::get('/products', [EcommerceProductController::class, 'index'])->name('products.index');
+            Route::get('/expenses', [EcommerceExpenseController::class, 'index'])->name('expenses.index');
+        });
+        Route::middleware('module:ecommerce,edit')->group(function () {
+            Route::post('/partners', [EcommercePartnerController::class, 'storePartner'])->name('partners.store');
+            Route::delete('/partners/{partner}', [EcommercePartnerController::class, 'destroyPartner'])->name('partners.destroy');
+            Route::post('/partners/{partner}/transactions', [EcommercePartnerController::class, 'storeTransaction'])->name('partners.transactions.store');
+            Route::delete('/transactions/{transaction}', [EcommercePartnerController::class, 'destroyTransaction'])->name('transactions.destroy');
+
+            Route::post('/products', [EcommerceProductController::class, 'store'])->name('products.store');
+            Route::put('/products/{ecommerceProduct}', [EcommerceProductController::class, 'update'])->name('products.update');
+            Route::delete('/products/{ecommerceProduct}', [EcommerceProductController::class, 'destroy'])->name('products.destroy');
+
+            Route::post('/expenses', [EcommerceExpenseController::class, 'store'])->name('expenses.store');
+            Route::delete('/expenses/{ecommerceExpense}', [EcommerceExpenseController::class, 'destroy'])->name('expenses.destroy');
+        });
     });
 });
