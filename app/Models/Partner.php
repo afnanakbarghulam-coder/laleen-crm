@@ -37,26 +37,25 @@ class Partner extends Model
     }
 
     /**
-     * Capital parity across all partners: each partner's cash contributed
-     * weighed against an equal fair share of the total pool, so a partner
-     * who has put in less than their share shows a positive "owes" balance.
+     * Capital matching across all partners: the target is the highest amount
+     * any single partner has injected, so every other partner's balance is
+     * what they still owe to match that top investor (never negative).
      */
     public static function equalizationSummary()
     {
         $partners = static::all();
         $pool = (float) $partners->sum('total_injected');
-        $count = max($partners->count(), 1);
-        $fairShare = $pool / $count;
+        $maxInjected = (float) $partners->max('total_injected');
 
-        return $partners->map(function (Partner $partner) use ($pool, $fairShare) {
+        return $partners->map(function (Partner $partner) use ($pool, $maxInjected) {
             $contributed = $partner->total_injected;
 
             return [
                 'partner' => $partner,
                 'contributed' => $contributed,
                 'percent' => $pool > 0 ? ($contributed / $pool) * 100 : 0,
-                'fair_share' => $fairShare,
-                'balance' => $fairShare - $contributed,
+                'max_injected' => $maxInjected,
+                'balance' => $maxInjected - $contributed,
             ];
         });
     }

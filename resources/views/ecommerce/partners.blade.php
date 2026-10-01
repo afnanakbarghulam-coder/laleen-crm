@@ -30,12 +30,10 @@
                     <div class="ec-value">QAR {{ number_format($row['contributed'], 2) }}</div>
                     <div class="ec-sub">{{ number_format($row['percent'], 1) }}% of total pool</div>
                     <hr style="border-color: var(--ec-border); margin: 10px 0;">
-                    @if (abs($row['balance']) < 0.01)
-                        <div class="ec-sub ec-positive">At parity &mdash; fair share met</div>
-                    @elseif ($row['balance'] > 0)
-                        <div class="ec-sub ec-negative">Owes QAR {{ number_format($row['balance'], 2) }} to reach 1/{{ $equalization->count() }} parity</div>
+                    @if ($row['balance'] <= 0.01)
+                        <div class="ec-sub ec-positive">Fully Matched</div>
                     @else
-                        <div class="ec-sub ec-positive">Ahead by QAR {{ number_format(abs($row['balance']), 2) }} vs. parity</div>
+                        <div class="ec-sub ec-negative">Owes QAR {{ number_format($row['balance'], 2) }} to match the top investor</div>
                     @endif
                 </div>
             </div>
