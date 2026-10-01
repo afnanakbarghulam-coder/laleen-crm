@@ -10,12 +10,21 @@ class EcommerceRawMaterial extends Model
         'name',
         'type',
         'current_stock',
+        'initial_stock',
         'unit_of_measure',
     ];
 
     protected $casts = [
         'current_stock' => 'decimal:2',
+        'initial_stock' => 'decimal:2',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (EcommerceRawMaterial $material) {
+            $material->initial_stock = $material->current_stock;
+        });
+    }
 
     public function products()
     {
