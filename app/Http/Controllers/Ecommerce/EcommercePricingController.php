@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
+use App\Models\EcommerceComponentType;
 use App\Models\EcommercePricingModel;
 use App\Models\EcommerceProduct;
 use App\Models\EcommerceRawMaterial;
@@ -24,19 +25,30 @@ class EcommercePricingController extends Controller
             ];
         });
 
-        $rawMaterialCosts = $rawMaterials->keyBy('id')->map(function ($material) {
-            return [
-                'name' => $material->name,
-                'unit_of_measure' => $material->unit_of_measure,
-                'last_purchased_unit_cost' => (float) $material->last_purchased_unit_cost,
-            ];
+        $productsForPricing = $products->mapWithKeys(function ($product) {
+            return [$product->id => [
+                'product_line_id' => $product->product_line_id,
+                'unit_size' => $product->unit_size,
+            ]];
         });
+
+        $rawMaterialsForPricing = $rawMaterials->mapWithKeys(function ($material) {
+            return [$material->id => [
+                'product_line_id' => $material->product_line_id,
+                'component_type_id' => $material->component_type_id,
+                'last_purchased_unit_cost' => (float) $material->last_purchased_unit_cost,
+            ]];
+        });
+
+        $componentTypeNames = EcommerceComponentType::pluck('name', 'id');
 
         return view('ecommerce.pricing', [
             'products' => $products,
             'pricingModels' => $pricingModels,
             'rawMaterials' => $rawMaterials,
-            'rawMaterialCosts' => $rawMaterialCosts,
+            'productsForPricing' => $productsForPricing,
+            'rawMaterialsForPricing' => $rawMaterialsForPricing,
+            'componentTypeNames' => $componentTypeNames,
             'selectedProductId' => $request->query('product'),
         ]);
     }

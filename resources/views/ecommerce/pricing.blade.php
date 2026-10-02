@@ -14,42 +14,23 @@
     @include('ecommerce._nav')
 
     <div class="ec-card">
-        <div class="mb-0">
-            <label class="form-label">Finished Product</label>
-            <select id="pricingProductSelect" class="form-select">
-                <option value="" {{ (string) $selectedProductId === '' ? 'selected' : '' }}>Select a product to price</option>
-                @foreach ($products as $product)
-                    <option value="{{ $product->id }}" {{ (string) $selectedProductId === (string) $product->id ? 'selected' : '' }}>{{ $product->name }}{{ $product->sku ? ' (' . $product->sku . ')' : '' }}</option>
-                @endforeach
-            </select>
-            @if ($products->isEmpty())
-                <p class="ec-sub mb-0 mt-2">No products yet &mdash; add some in Inventory &amp; Production first.</p>
-            @endif
-        </div>
-    </div>
-
-    <div class="ec-card">
-        <h6 class="mb-1" style="text-transform: none; font-size: 14px; letter-spacing: 0;">Auto-Calculate Liquid Cost</h6>
-        <p class="ec-sub mb-3">Pull a raw material's last purchased unit cost and multiply it by how much goes into one bottle.</p>
         <div class="row g-2 align-items-end">
-            <div class="col-md-5">
-                <label class="form-label">Ingredient (Raw Material)</label>
-                <select id="rawMaterialHelperSelect" class="form-select">
-                    <option value="" selected>Select a raw material</option>
-                    @foreach ($rawMaterials as $material)
-                        <option value="{{ $material->id }}">{{ $material->name }} ({{ $material->unit_of_measure }})</option>
+            <div class="col-md-8">
+                <label class="form-label">Finished Product</label>
+                <select id="pricingProductSelect" class="form-select">
+                    <option value="" {{ (string) $selectedProductId === '' ? 'selected' : '' }}>Select a product to price</option>
+                    @foreach ($products as $product)
+                        <option value="{{ $product->id }}" {{ (string) $selectedProductId === (string) $product->id ? 'selected' : '' }}>{{ $product->name }}{{ $product->sku ? ' (' . $product->sku . ')' : '' }}</option>
                     @endforeach
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">Amount used per bottle (units)</label>
-                <input type="number" step="0.01" min="0" id="rawMaterialHelperAmount" class="form-control" placeholder="e.g. 50">
-            </div>
-            <div class="col-md-3">
-                <button type="button" class="btn btn-outline-primary w-100" id="rawMaterialHelperApplyBtn">Apply to Liquid Cost</button>
+                <button type="button" class="btn btn-outline-primary w-100" id="pricingAutoFillBtn">Auto-Fill Costs from Inventory</button>
             </div>
         </div>
-        @if ($rawMaterials->isEmpty())
+        @if ($products->isEmpty())
+            <p class="ec-sub mb-0 mt-2">No products yet &mdash; add some in Inventory &amp; Production first.</p>
+        @elseif ($rawMaterials->isEmpty())
             <p class="ec-sub mb-0 mt-2">No raw materials yet &mdash; add some via a restock expense first.</p>
         @endif
     </div>
@@ -117,7 +98,10 @@
 
     <script>
         const pricingData = @json($pricingModels);
-        const rawMaterialCosts = @json($rawMaterialCosts);
+        const productsForPricing = @json($productsForPricing);
+        const rawMaterialsForPricing = @json($rawMaterialsForPricing);
+        const componentTypeNames = @json($componentTypeNames);
+        const PACKAGING_COMPONENT_TYPES = ['Bottle/Jar', 'Label', 'Pump/Cap', 'Outer Box'];
 
         const productSelect = document.getElementById('pricingProductSelect');
         const productIdInput = document.getElementById('pricingProductId');
@@ -154,6 +138,46 @@
             input.addEventListener('input', recalculate);
         });
 
+        // Smart BOM auto-fill: finds every raw material sharing the selected
+        // product's product_line_id, prices the Liquid Base component against
+        // the product's parsed unit_size, and sums every packaging component
+        // (Bottle/Jar, Label, Pump/Cap, Outer Box) into the packaging cost.
+        function autoFillCostsFromInventory() {
+            const productId = productSelect.value;
+            const product = productsForPricing[productId];
+
+            if (!product || !product.product_line_id) {
+                return;
+            }
+
+            const unitSizeValue = parseFloat(product.unit_size) || 0;
+            let liquidCost = 0;
+            let packagingCost = 0;
+
+            Object.keys(rawMaterialsForPricing).forEach(function (materialId) {
+                const material = rawMaterialsForPricing[materialId];
+
+                if (String(material.product_line_id) !== String(product.product_line_id)) {
+                    return;
+                }
+
+                const componentTypeName = componentTypeNames[material.component_type_id];
+                const unitCost = Number(material.last_purchased_unit_cost) || 0;
+
+                if (componentTypeName === 'Liquid Base') {
+                    liquidCost = unitCost * unitSizeValue;
+                } else if (PACKAGING_COMPONENT_TYPES.includes(componentTypeName)) {
+                    packagingCost += unitCost;
+                }
+            });
+
+            liquidCostInput.value = liquidCost.toFixed(2);
+            packagingCostInput.value = packagingCost.toFixed(2);
+            recalculate();
+        }
+
+        document.getElementById('pricingAutoFillBtn').addEventListener('click', autoFillCostsFromInventory);
+
         function applyPricingForSelectedProduct() {
             const productId = productSelect.value;
             productIdInput.value = productId;
@@ -169,6 +193,12 @@
             }
 
             recalculate();
+
+            // No saved pricing model yet for this product — auto-fill from
+            // Tier 1 inventory instead of leaving costs at 0.
+            if (!saved && productId !== '') {
+                autoFillCostsFromInventory();
+            }
         }
 
         productSelect.addEventListener('change', applyPricingForSelectedProduct);
@@ -177,24 +207,5 @@
         // ?product=<id> (e.g. redirected back here right after saving)
         // shows its data immediately instead of resetting to blank.
         applyPricingForSelectedProduct();
-
-        const rawMaterialHelperSelect = document.getElementById('rawMaterialHelperSelect');
-        const rawMaterialHelperAmount = document.getElementById('rawMaterialHelperAmount');
-        const rawMaterialHelperApplyBtn = document.getElementById('rawMaterialHelperApplyBtn');
-
-        rawMaterialHelperApplyBtn.addEventListener('click', function () {
-            const materialId = rawMaterialHelperSelect.value;
-            const amountPerBottle = parseFloat(rawMaterialHelperAmount.value) || 0;
-
-            if (!materialId || !Object.prototype.hasOwnProperty.call(rawMaterialCosts, materialId)) {
-                return;
-            }
-
-            const unitCost = Number(rawMaterialCosts[materialId].last_purchased_unit_cost) || 0;
-            const calculatedLiquidCost = unitCost * amountPerBottle;
-
-            liquidCostInput.value = calculatedLiquidCost.toFixed(2);
-            recalculate();
-        });
     </script>
 @endsection
