@@ -13,7 +13,6 @@ class EcommercePricingModel extends Model
         'label_cost',
         'pump_cost',
         'box_cost',
-        'fulfillment_cost',
         'selling_price',
     ];
 
@@ -23,7 +22,6 @@ class EcommercePricingModel extends Model
         'label_cost' => 'decimal:2',
         'pump_cost' => 'decimal:2',
         'box_cost' => 'decimal:2',
-        'fulfillment_cost' => 'decimal:2',
         'selling_price' => 'decimal:2',
     ];
 

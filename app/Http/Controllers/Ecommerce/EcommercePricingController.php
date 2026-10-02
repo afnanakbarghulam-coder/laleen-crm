@@ -24,7 +24,6 @@ class EcommercePricingController extends Controller
                 'label_cost' => (float) $model->label_cost,
                 'pump_cost' => (float) $model->pump_cost,
                 'box_cost' => (float) $model->box_cost,
-                'fulfillment_cost' => (float) $model->fulfillment_cost,
                 'selling_price' => (float) $model->selling_price,
             ];
         });
@@ -68,7 +67,6 @@ class EcommercePricingController extends Controller
             'label_cost' => 'nullable|numeric|min:0',
             'pump_cost' => 'nullable|numeric|min:0',
             'box_cost' => 'nullable|numeric|min:0',
-            'fulfillment_cost' => 'nullable|numeric|min:0',
             'selling_price' => 'nullable|numeric|min:0',
         ]);
 
@@ -80,7 +78,6 @@ class EcommercePricingController extends Controller
                 'label_cost' => $validated['label_cost'] ?? 0,
                 'pump_cost' => $validated['pump_cost'] ?? 0,
                 'box_cost' => $validated['box_cost'] ?? 0,
-                'fulfillment_cost' => $validated['fulfillment_cost'] ?? 0,
                 'selling_price' => $validated['selling_price'] ?? 0,
             ]
         );

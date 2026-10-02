@@ -62,10 +62,6 @@
                     <label class="form-label">Outer Box Cost</label>
                     <input type="number" step="0.01" min="0" name="box_cost" id="pricingBoxCost" class="form-control pricing-input" value="0">
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Fulfillment Cost (Labor)</label>
-                    <input type="number" step="0.01" min="0" name="fulfillment_cost" id="pricingFulfillmentCost" class="form-control pricing-input" value="0">
-                </div>
             </div>
         </div>
 
@@ -84,7 +80,7 @@
                 <div class="ec-card">
                     <h6>Total Cost Per Unit</h6>
                     <div class="ec-value" id="pricingTotalCost">PKR 0.00</div>
-                    <div class="ec-sub">Liquid + Bottle + Label + Pump + Box + Fulfillment</div>
+                    <div class="ec-sub">Liquid + Bottle + Label + Pump + Box</div>
                 </div>
             </div>
             <div class="col-md-4">
@@ -129,7 +125,6 @@
         const labelCostInput = document.getElementById('pricingLabelCost');
         const pumpCostInput = document.getElementById('pricingPumpCost');
         const boxCostInput = document.getElementById('pricingBoxCost');
-        const fulfillmentCostInput = document.getElementById('pricingFulfillmentCost');
         const sellingPriceInput = document.getElementById('pricingSellingPrice');
         const totalCostEl = document.getElementById('pricingTotalCost');
         const grossProfitEl = document.getElementById('pricingGrossProfit');
@@ -174,10 +169,9 @@
             const label = parseFloat(labelCostInput.value) || 0;
             const pump = parseFloat(pumpCostInput.value) || 0;
             const box = parseFloat(boxCostInput.value) || 0;
-            const fulfillment = parseFloat(fulfillmentCostInput.value) || 0;
             const sellingPrice = parseFloat(sellingPriceInput.value) || 0;
 
-            const totalCost = liquid + bottle + label + pump + box + fulfillment;
+            const totalCost = liquid + bottle + label + pump + box;
             const grossProfit = sellingPrice - totalCost;
             const margin = sellingPrice > 0 ? (grossProfit / sellingPrice) * 100 : 0;
 
@@ -246,7 +240,6 @@
             labelCostInput.value = saved ? Number(saved.label_cost) : 0;
             pumpCostInput.value = saved ? Number(saved.pump_cost) : 0;
             boxCostInput.value = saved ? Number(saved.box_cost) : 0;
-            fulfillmentCostInput.value = saved ? Number(saved.fulfillment_cost) : 0;
             sellingPriceInput.value = saved ? Number(saved.selling_price) : 0;
 
             // Apply visibility after loading saved values so any field made
