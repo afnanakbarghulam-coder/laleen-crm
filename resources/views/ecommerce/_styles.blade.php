@@ -125,10 +125,59 @@
         padding: 5px 14px;
     }
 
-    .ec-channel-filter:focus {
+    .ec-channel-filter:focus,
+    .ec-channel-filter:hover {
         border-color: var(--ec-primary);
         color: var(--ec-ink);
         box-shadow: 0 0 0 3px rgba(217, 143, 131, .15);
+    }
+
+    .ec-channel-filter-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 17px;
+        height: 17px;
+        padding: 0 5px;
+        margin-left: 6px;
+        border-radius: 20px;
+        background: var(--ec-primary);
+        color: #241e1c;
+        font-size: 10.5px;
+        font-weight: 700;
+    }
+
+    .ec-channel-filter-menu {
+        background-color: #241e1c;
+        border: 1px solid var(--ec-border-strong);
+        border-radius: 12px;
+        min-width: 260px;
+        box-shadow: 0 8px 24px rgba(16, 24, 40, .25);
+    }
+
+    .ec-channel-filter-list {
+        max-height: min(220px, 50vh);
+        overflow-y: auto;
+    }
+
+    .ec-channel-filter-menu .form-check {
+        padding-left: 1.6em;
+        margin-bottom: 6px;
+    }
+
+    .ec-channel-filter-menu .form-check-label {
+        color: #cbb8b0;
+        font-size: 13px;
+    }
+
+    .ec-channel-filter-menu .form-check-input {
+        background-color: #1a1513;
+        border: 1px solid var(--ec-border-strong);
+    }
+
+    .ec-channel-filter-menu .form-check-input:checked {
+        background-color: var(--ec-primary);
+        border-color: var(--ec-primary);
     }
 
     .modal .form-control:read-only {

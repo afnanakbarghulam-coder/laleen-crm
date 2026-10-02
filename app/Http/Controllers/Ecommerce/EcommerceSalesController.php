@@ -30,12 +30,15 @@ class EcommerceSalesController extends Controller
 
     public function index(Request $request)
     {
-        $selectedChannel = $request->query('channel') ?: 'All';
+        $selectedChannels = [];
+        if ($request->has('channels') && is_array($request->channels) && count($request->channels) > 0) {
+            $selectedChannels = array_values(array_intersect($request->channels, self::CHANNELS));
+        }
 
         $salesQuery = EcommerceSale::with('product')->orderByDesc('created_at');
 
-        if ($selectedChannel !== 'All') {
-            $salesQuery->where('channel', $selectedChannel);
+        if (!empty($selectedChannels)) {
+            $salesQuery->whereIn('channel', $selectedChannels);
         }
 
         $sales = $salesQuery->get();
@@ -54,7 +57,7 @@ class EcommerceSalesController extends Controller
             'totalItemsSoldRevenue' => $totalItemsSoldRevenue,
             'totalItemsUsedDamaged' => $totalItemsUsedDamaged,
             'channels' => self::CHANNELS,
-            'selectedChannel' => $selectedChannel,
+            'selectedChannels' => $selectedChannels,
         ]);
     }
 
