@@ -51,6 +51,23 @@ class EcommerceProductionController extends Controller
             }
         }
 
+        $rawMaterialsById = EcommerceRawMaterial::with(['productLine', 'componentType'])
+            ->whereIn('id', collect($materialsUsed)->pluck('ecommerce_raw_material_id'))
+            ->get()
+            ->keyBy('id');
+
+        foreach ($materialsUsed as $item) {
+            $rawMaterial = $rawMaterialsById->get($item['ecommerce_raw_material_id']);
+            $totalRequired = (float) $item['amount_per_unit'] * $quantityProduced;
+
+            if ($totalRequired > (float) $rawMaterial->current_stock) {
+                $productLineName = $rawMaterial->productLine->name ?? 'Uncategorized';
+                $componentTypeName = $rawMaterial->componentType->name ?? 'Uncategorized';
+
+                return back()->withErrors(['error' => "Insufficient stock for {$productLineName} - {$componentTypeName}. Required: " . number_format($totalRequired, 2) . ', Available: ' . number_format((float) $rawMaterial->current_stock, 2) . '.']);
+            }
+        }
+
         DB::transaction(function () use ($validated, $quantityProduced, $materialsUsed) {
             $product = EcommerceProduct::lockForUpdate()->findOrFail($validated['ecommerce_product_id']);
             $product->increment('current_stock', $quantityProduced);
