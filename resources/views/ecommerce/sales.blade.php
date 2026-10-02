@@ -97,6 +97,7 @@
                         <th class="text-end">Unit Price</th>
                         <th class="text-end">Total Revenue</th>
                         <th>Reason/Notes</th>
+                        @moduleEdit('ecommerce')<th class="text-end">Actions</th>@endmoduleEdit
                     </tr>
                 </thead>
                 <tbody>
@@ -111,9 +112,17 @@
                             <td class="text-end">PKR {{ number_format($sale->unit_price, 2) }}</td>
                             <td class="text-end">PKR {{ number_format($sale->total_price, 2) }}</td>
                             <td>{{ $sale->reason ?? '—' }}</td>
+                            @moduleEdit('ecommerce')
+                                <td class="text-end">
+                                    <form action="{{ route('ecommerce.sales.destroy', $sale->id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this record? This will add the items back to your inventory.');">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            @endmoduleEdit
                         </tr>
                     @empty
-                        <tr><td colspan="9" class="text-center text-muted">No sales logged yet &mdash; use "Log New Sale" above.</td></tr>
+                        <tr><td colspan="10" class="text-center text-muted">No sales logged yet &mdash; use "Log New Sale" above.</td></tr>
                     @endforelse
                 </tbody>
             </table>

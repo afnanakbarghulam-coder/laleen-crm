@@ -260,6 +260,7 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/stock/transfer', [EcommerceStockController::class, 'transfer'])->name('stock.transfer');
 
             Route::post('/sales', [EcommerceSalesController::class, 'store'])->name('sales.store');
+            Route::delete('/sales/{sale}', [EcommerceSalesController::class, 'destroy'])->name('sales.destroy');
         });
     });
 });

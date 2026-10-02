@@ -138,4 +138,23 @@ class EcommerceSalesController extends Controller
 
         return back()->with('success', 'Sale logged and stock updated.');
     }
+
+    public function destroy(EcommerceSale $sale)
+    {
+        DB::transaction(function () use ($sale) {
+            $isPakistan = str_contains($sale->channel, 'Pakistan');
+            $source = $isPakistan ? 'pakistan' : 'qatar';
+            $stockField = "stock_{$source}";
+            $soldField = "sold_{$source}";
+
+            $product = EcommerceProduct::lockForUpdate()->findOrFail($sale->ecommerce_product_id);
+            $product->{$stockField} += $sale->quantity;
+            $product->{$soldField} -= $sale->quantity;
+            $product->save();
+
+            $sale->delete();
+        });
+
+        return back()->with('success', 'Sale deleted and inventory restored.');
+    }
 }
