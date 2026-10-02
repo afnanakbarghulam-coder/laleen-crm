@@ -104,6 +104,52 @@
         @endmoduleEdit
     </form>
 
+    <div class="ec-card">
+        <h6 class="mb-3" style="text-transform: none; font-size: 14px; letter-spacing: 0;">Saved Pricing Models</h6>
+        <div class="table-responsive">
+            <table class="table ec-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Finished Product</th>
+                        <th>Total Cost</th>
+                        <th>Selling Price</th>
+                        <th>Gross Profit</th>
+                        <th>Profit Margin (%)</th>
+                        @moduleEdit('ecommerce')<th></th>@endmoduleEdit
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($savedPricingModels as $savedModel)
+                        @php
+                            $savedTotalCost = (float) $savedModel->liquid_cost + (float) $savedModel->bottle_cost + (float) $savedModel->label_cost + (float) $savedModel->pump_cost + (float) $savedModel->box_cost;
+                            $savedSellingPrice = (float) $savedModel->selling_price;
+                            $savedGrossProfit = $savedSellingPrice - $savedTotalCost;
+                            $savedMargin = $savedSellingPrice > 0 ? ($savedGrossProfit / $savedSellingPrice) * 100 : 0;
+                        @endphp
+                        <tr>
+                            <td>{{ $savedModel->product->name ?? 'Deleted Product' }}</td>
+                            <td>PKR {{ number_format($savedTotalCost, 2) }}</td>
+                            <td>PKR {{ number_format($savedSellingPrice, 2) }}</td>
+                            <td class="{{ $savedGrossProfit < 0 ? 'ec-negative' : 'ec-positive' }}">PKR {{ number_format($savedGrossProfit, 2) }}</td>
+                            <td class="{{ $savedMargin < 0 ? 'ec-negative' : 'ec-positive' }}">{{ number_format($savedMargin, 2) }}%</td>
+                            @moduleEdit('ecommerce')
+                                <td>
+                                    <form action="{{ route('ecommerce.pricing.destroy', $savedModel->id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this pricing model?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            @endmoduleEdit
+                        </tr>
+                    @empty
+                        <tr><td colspan="6" class="text-center text-muted">No pricing models saved yet</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <script>
         const pricingData = @json($pricingModels);
         const productsForPricing = @json($productsForPricing);

@@ -253,6 +253,7 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/production-runs', [EcommerceProductionController::class, 'store'])->name('production.store');
 
             Route::post('/pricing', [EcommercePricingController::class, 'store'])->name('pricing.store');
+            Route::delete('/pricing/{pricingModel}', [EcommercePricingController::class, 'destroy'])->name('pricing.destroy');
 
             Route::post('/outbound', [EcommerceOutboundController::class, 'store'])->name('outbound.store');
         });

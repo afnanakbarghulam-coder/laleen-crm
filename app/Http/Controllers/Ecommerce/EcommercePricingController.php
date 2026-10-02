@@ -46,9 +46,15 @@ class EcommercePricingController extends Controller
         $componentTypeNames = EcommerceComponentType::pluck('name', 'id');
         $productLineNames = EcommerceProductLine::pluck('name', 'id');
 
+        $savedPricingModels = EcommercePricingModel::with('product')
+            ->get()
+            ->sortBy(fn ($model) => $model->product->name ?? '')
+            ->values();
+
         return view('ecommerce.pricing', [
             'products' => $products,
             'pricingModels' => $pricingModels,
+            'savedPricingModels' => $savedPricingModels,
             'rawMaterials' => $rawMaterials,
             'productsForPricing' => $productsForPricing,
             'rawMaterialsForPricing' => $rawMaterialsForPricing,
@@ -85,5 +91,12 @@ class EcommercePricingController extends Controller
         return redirect()
             ->route('ecommerce.pricing.index', ['product' => $validated['ecommerce_product_id']])
             ->with('success', 'Pricing model saved.');
+    }
+
+    public function destroy(EcommercePricingModel $pricingModel)
+    {
+        $pricingModel->delete();
+
+        return back()->with('success', 'Pricing model deleted successfully.');
     }
 }
