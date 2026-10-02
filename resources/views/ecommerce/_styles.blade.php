@@ -131,4 +131,33 @@
 
     .ec-positive { color: var(--ec-success); }
     .ec-negative { color: var(--ec-danger); }
+
+    .ec-table-group-header {
+        text-align: center;
+        color: var(--ec-muted);
+        font-size: 11px;
+        letter-spacing: .8px;
+        text-transform: uppercase;
+        font-weight: 700;
+    }
+
+    .ec-col-divider {
+        border-right: 1px solid var(--ec-border-strong) !important;
+    }
+
+    .ec-stock-emphasis {
+        font-weight: 700;
+        color: #f3e9e7;
+        font-size: 14.5px;
+    }
+
+    .ec-unit-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+        background: rgba(217, 143, 131, 0.1);
+        color: var(--ec-muted);
+    }
 </style>

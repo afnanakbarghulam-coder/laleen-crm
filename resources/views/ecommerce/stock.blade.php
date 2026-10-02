@@ -21,14 +21,18 @@
             <table class="table ec-table align-middle">
                 <thead>
                     <tr>
-                        <th>Product Name</th>
-                        <th>Unit Size</th>
+                        <th rowspan="2" style="vertical-align: middle;">Product Name</th>
+                        <th rowspan="2" style="vertical-align: middle;">Unit Size</th>
+                        <th colspan="3" class="ec-table-group-header">Pakistan (Warehouse)</th>
+                        <th colspan="3" class="ec-table-group-header">Qatar (Retail)</th>
+                    </tr>
+                    <tr>
                         <th>Total Produced</th>
                         <th>Sold (Shopify/Organic)</th>
-                        <th>Remaining (Pakistan)</th>
+                        <th class="ec-col-divider">Remaining</th>
                         <th>Transferred In</th>
                         <th>Sold (Salon)</th>
-                        <th>Remaining (Qatar)</th>
+                        <th>Remaining</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -39,19 +43,25 @@
                         @endphp
                         <tr>
                             <td>{{ $product->name }}</td>
-                            <td>{{ $product->unit_size ?? '—' }}</td>
-                            <td>{{ number_format($totalProduced, 2) }}</td>
-                            <td>{{ number_format($product->sold_pakistan, 2) }}</td>
-                            <td class="{{ $product->stock_pakistan < 0 ? 'ec-negative' : '' }}">
-                                {{ number_format($product->stock_pakistan, 2) }}
+                            <td>
+                                @if ($product->unit_size)
+                                    <span class="ec-unit-badge">{{ $product->unit_size }}</span>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td>{{ number_format($totalProduced, 0) }}</td>
+                            <td>{{ number_format($product->sold_pakistan, 0) }}</td>
+                            <td class="ec-col-divider ec-stock-emphasis {{ $product->stock_pakistan < 0 ? 'ec-negative' : '' }}">
+                                {{ number_format($product->stock_pakistan, 0) }}
                                 @if ($product->stock_pakistan < 10)
                                     <span class="badge bg-danger">Low Stock</span>
                                 @endif
                             </td>
-                            <td>{{ number_format($transferredIn, 2) }}</td>
-                            <td>{{ number_format($product->sold_qatar, 2) }}</td>
-                            <td class="{{ $product->stock_qatar < 0 ? 'ec-negative' : '' }}">
-                                {{ number_format($product->stock_qatar, 2) }}
+                            <td>{{ number_format($transferredIn, 0) }}</td>
+                            <td>{{ number_format($product->sold_qatar, 0) }}</td>
+                            <td class="ec-stock-emphasis {{ $product->stock_qatar < 0 ? 'ec-negative' : '' }}">
+                                {{ number_format($product->stock_qatar, 0) }}
                                 @if ($product->stock_qatar < 10)
                                     <span class="badge bg-danger">Low Stock</span>
                                 @endif
@@ -82,7 +92,7 @@
                                 <select name="ecommerce_product_id" class="form-select" required>
                                     <option value="" disabled selected>Select product</option>
                                     @foreach ($products as $product)
-                                        <option value="{{ $product->id }}">{{ $product->name }}{{ $product->sku ? ' (' . $product->sku . ')' : '' }} &mdash; {{ number_format($product->stock_pakistan, 2) }} in Pakistan</option>
+                                        <option value="{{ $product->id }}">{{ $product->name }}{{ $product->sku ? ' (' . $product->sku . ')' : '' }} &mdash; {{ number_format($product->stock_pakistan, 0) }} in Pakistan</option>
                                     @endforeach
                                 </select>
                             </div>
