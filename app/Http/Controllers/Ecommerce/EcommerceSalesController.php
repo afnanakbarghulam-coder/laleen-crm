@@ -28,9 +28,17 @@ class EcommerceSalesController extends Controller
         'Damage/Expiry (Qatar)',
     ];
 
-    public function index()
+    public function index(Request $request)
     {
-        $sales = EcommerceSale::with('product')->orderByDesc('created_at')->get();
+        $selectedChannel = $request->query('channel') ?: 'All';
+
+        $salesQuery = EcommerceSale::with('product')->orderByDesc('created_at');
+
+        if ($selectedChannel !== 'All') {
+            $salesQuery->where('channel', $selectedChannel);
+        }
+
+        $sales = $salesQuery->get();
         $products = EcommerceProduct::orderBy('name')->get();
         $salePricesByProduct = EcommercePricingModel::pluck('selling_price', 'ecommerce_product_id');
 
@@ -45,6 +53,8 @@ class EcommerceSalesController extends Controller
             'totalRevenue' => $totalRevenue,
             'totalItemsSoldRevenue' => $totalItemsSoldRevenue,
             'totalItemsUsedDamaged' => $totalItemsUsedDamaged,
+            'channels' => self::CHANNELS,
+            'selectedChannel' => $selectedChannel,
         ]);
     }
 

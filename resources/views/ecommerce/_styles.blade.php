@@ -114,6 +114,23 @@
         box-shadow: 0 0 0 3px rgba(217, 143, 131, .15);
     }
 
+    .ec-channel-filter {
+        width: auto;
+        background-color: #241e1c;
+        border: 1px solid var(--ec-border-strong);
+        color: var(--ec-ink);
+        font-size: 12.5px;
+        font-weight: 600;
+        border-radius: 20px;
+        padding: 5px 14px;
+    }
+
+    .ec-channel-filter:focus {
+        border-color: var(--ec-primary);
+        color: var(--ec-ink);
+        box-shadow: 0 0 0 3px rgba(217, 143, 131, .15);
+    }
+
     .modal .form-control:read-only {
         background-color: rgba(154, 144, 136, 0.08);
         color: var(--ec-muted);

@@ -54,7 +54,18 @@
     </div>
 
     <div class="ec-card">
-        <h6 class="mb-3">Recent Sales</h6>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h6 class="mb-0">Recent Sales</h6>
+            <form method="GET" action="{{ route('ecommerce.sales.index') }}" class="d-flex align-items-center gap-2">
+                <label for="channelFilter" class="ec-sub mb-0">Filter by Channel</label>
+                <select name="channel" id="channelFilter" class="form-select form-select-sm ec-channel-filter" onchange="this.form.submit()">
+                    <option value="All" {{ $selectedChannel === 'All' ? 'selected' : '' }}>All Channels</option>
+                    @foreach ($channels as $channel)
+                        <option value="{{ $channel }}" {{ $selectedChannel === $channel ? 'selected' : '' }}>{{ $channel }}</option>
+                    @endforeach
+                </select>
+            </form>
+        </div>
         <div class="table-responsive">
             <table class="table ec-table align-middle">
                 <thead>
