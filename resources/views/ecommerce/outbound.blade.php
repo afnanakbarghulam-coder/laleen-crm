@@ -11,7 +11,7 @@
         </div>
         @moduleEdit('ecommerce')
             <div class="d-flex gap-2">
-                <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#salesModal">+ Log Sale</button>
+                <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#salesModal">Log New Sale</button>
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#outboundModal">+ Log Sales &amp; Usage</button>
             </div>
         @endmoduleEdit
@@ -50,7 +50,7 @@
         </div>
     </div>
 
-    @include('ecommerce.sales', ['products' => $products])
+    @include('ecommerce.sales', ['products' => $products, 'sales' => $sales, 'salePricesByProduct' => $salePricesByProduct])
 
     @moduleEdit('ecommerce')
         {{-- Log Sales & Usage Modal --}}

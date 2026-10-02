@@ -4,38 +4,56 @@ namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceProduct;
+use App\Models\EcommerceSale;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class EcommerceSalesController extends Controller
 {
-    private const PAKISTAN_CHANNELS = ['Shopify (Pakistan)', 'Organic (Pakistan)'];
-    private const QATAR_CHANNELS = ['Salon (Qatar)'];
+    private const CHANNELS = [
+        'Shopify (Pakistan)',
+        'Organic (Pakistan)',
+        'Salon (Qatar)',
+        'Organic (Qatar)',
+    ];
 
     public function store(Request $request)
     {
         $validated = $request->validate([
             'ecommerce_product_id' => 'required|exists:ecommerce_products,id',
-            'quantity' => 'required|numeric|min:0.01',
-            'sales_channel' => 'required|in:' . implode(',', [...self::PAKISTAN_CHANNELS, ...self::QATAR_CHANNELS]),
+            'quantity' => 'required|integer|min:1',
+            'channel' => 'required|in:' . implode(',', self::CHANNELS),
+            'unit_price' => 'required|numeric|min:0',
         ]);
 
-        $quantity = (float) $validated['quantity'];
-        $isPakistanChannel = in_array($validated['sales_channel'], self::PAKISTAN_CHANNELS, true);
-        $stockField = $isPakistanChannel ? 'stock_pakistan' : 'stock_qatar';
-        $soldField = $isPakistanChannel ? 'sold_pakistan' : 'sold_qatar';
-        $locationName = $isPakistanChannel ? 'Pakistan' : 'Qatar';
+        $quantity = (int) $validated['quantity'];
+        $totalPrice = $quantity * (float) $validated['unit_price'];
+
+        $isPakistan = str_contains($validated['channel'], 'Pakistan');
+        $source = $isPakistan ? 'pakistan' : 'qatar';
+        $stockField = "stock_{$source}";
+        $soldField = "sold_{$source}";
+        $locationName = $isPakistan ? 'Pakistan' : 'Qatar';
 
         $product = EcommerceProduct::findOrFail($validated['ecommerce_product_id']);
 
-        if ($quantity > (float) $product->{$stockField}) {
-            return back()->withErrors(['error' => "Insufficient stock in {$locationName} for {$product->name}. Requested: " . number_format($quantity, 2) . ', Available: ' . number_format((float) $product->{$stockField}, 2) . '.']);
+        if ((float) $product->{$stockField} < $quantity) {
+            return back()->withErrors(['error' => "Insufficient stock in {$locationName} for this sale."]);
         }
 
-        DB::transaction(function () use ($validated, $quantity, $stockField, $soldField) {
+        DB::transaction(function () use ($validated, $quantity, $totalPrice, $stockField, $soldField) {
+            EcommerceSale::create([
+                'ecommerce_product_id' => $validated['ecommerce_product_id'],
+                'quantity' => $quantity,
+                'channel' => $validated['channel'],
+                'unit_price' => $validated['unit_price'],
+                'total_price' => $totalPrice,
+            ]);
+
             $product = EcommerceProduct::lockForUpdate()->findOrFail($validated['ecommerce_product_id']);
-            $product->decrement($stockField, $quantity);
-            $product->increment($soldField, $quantity);
+            $product->{$stockField} -= $quantity;
+            $product->{$soldField} += $quantity;
+            $product->save();
         });
 
         return back()->with('success', 'Sale logged and stock updated.');

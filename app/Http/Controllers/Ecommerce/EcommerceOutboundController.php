@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceOutbound;
+use App\Models\EcommercePricingModel;
 use App\Models\EcommerceProduct;
+use App\Models\EcommerceSale;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -13,6 +15,7 @@ class EcommerceOutboundController extends Controller
     public function index()
     {
         $outbounds = EcommerceOutbound::with('product')->orderByDesc('created_at')->get();
+        $sales = EcommerceSale::with('product')->orderByDesc('created_at')->get();
         $products = EcommerceProduct::orderBy('name')->get();
 
         $reasons = EcommerceOutbound::query()
@@ -22,10 +25,14 @@ class EcommerceOutboundController extends Controller
             ->orderBy('reason')
             ->pluck('reason');
 
+        $salePricesByProduct = EcommercePricingModel::pluck('selling_price', 'ecommerce_product_id');
+
         return view('ecommerce.outbound', [
             'outbounds' => $outbounds,
+            'sales' => $sales,
             'products' => $products,
             'reasons' => $reasons,
+            'salePricesByProduct' => $salePricesByProduct,
         ]);
     }
 
