@@ -8,8 +8,10 @@ class EcommerceSale extends Model
 {
     protected $fillable = [
         'ecommerce_product_id',
+        'customer_name',
         'quantity',
         'channel',
+        'reason',
         'unit_price',
         'total_price',
     ];

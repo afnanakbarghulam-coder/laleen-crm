@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
+use App\Models\EcommercePricingModel;
 use App\Models\EcommerceProduct;
 use App\Models\EcommerceSale;
 use Illuminate\Http\Request;
@@ -15,19 +16,45 @@ class EcommerceSalesController extends Controller
         'Organic (Pakistan)',
         'Salon (Qatar)',
         'Organic (Qatar)',
+        'Backbar Use (Qatar)',
+        'Damage/Expiry (Pakistan)',
+        'Damage/Expiry (Qatar)',
     ];
+
+    private const NON_REVENUE_CHANNELS = [
+        'Backbar Use (Qatar)',
+        'Damage/Expiry (Pakistan)',
+        'Damage/Expiry (Qatar)',
+    ];
+
+    public function index()
+    {
+        $sales = EcommerceSale::with('product')->orderByDesc('created_at')->get();
+        $products = EcommerceProduct::orderBy('name')->get();
+        $salePricesByProduct = EcommercePricingModel::pluck('selling_price', 'ecommerce_product_id');
+
+        return view('ecommerce.sales', [
+            'sales' => $sales,
+            'products' => $products,
+            'salePricesByProduct' => $salePricesByProduct,
+        ]);
+    }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
             'ecommerce_product_id' => 'required|exists:ecommerce_products,id',
+            'customer_name' => 'nullable|string|max:255',
             'quantity' => 'required|integer|min:1',
             'channel' => 'required|in:' . implode(',', self::CHANNELS),
-            'unit_price' => 'required|numeric|min:0',
+            'reason' => 'nullable|string|max:255',
+            'unit_price' => 'nullable|numeric|min:0',
         ]);
 
         $quantity = (int) $validated['quantity'];
-        $totalPrice = $quantity * (float) $validated['unit_price'];
+        $isNonRevenue = in_array($validated['channel'], self::NON_REVENUE_CHANNELS, true);
+        $unitPrice = $isNonRevenue ? (float) ($validated['unit_price'] ?? 0) : (float) $validated['unit_price'];
+        $totalPrice = $quantity * $unitPrice;
 
         $isPakistan = str_contains($validated['channel'], 'Pakistan');
         $source = $isPakistan ? 'pakistan' : 'qatar';
@@ -41,12 +68,14 @@ class EcommerceSalesController extends Controller
             return back()->withErrors(['error' => "Insufficient stock in {$locationName} for this sale."]);
         }
 
-        DB::transaction(function () use ($validated, $quantity, $totalPrice, $stockField, $soldField) {
+        DB::transaction(function () use ($validated, $quantity, $unitPrice, $totalPrice, $stockField, $soldField) {
             EcommerceSale::create([
                 'ecommerce_product_id' => $validated['ecommerce_product_id'],
+                'customer_name' => $validated['customer_name'] ?? null,
                 'quantity' => $quantity,
                 'channel' => $validated['channel'],
-                'unit_price' => $validated['unit_price'],
+                'reason' => $validated['reason'] ?? null,
+                'unit_price' => $unitPrice,
                 'total_price' => $totalPrice,
             ]);
 

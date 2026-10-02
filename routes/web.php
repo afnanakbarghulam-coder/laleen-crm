@@ -5,7 +5,6 @@ use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\Ecommerce\EcommerceExpenseController;
 use App\Http\Controllers\Ecommerce\EcommerceInventoryController;
-use App\Http\Controllers\Ecommerce\EcommerceOutboundController;
 use App\Http\Controllers\Ecommerce\EcommercePartnerController;
 use App\Http\Controllers\Ecommerce\EcommercePricingController;
 use App\Http\Controllers\Ecommerce\EcommerceProductController;
@@ -236,7 +235,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/inventory', [EcommerceInventoryController::class, 'index'])->name('inventory.index');
             Route::get('/pricing', [EcommercePricingController::class, 'index'])->name('pricing.index');
             Route::get('/stock', [EcommerceStockController::class, 'index'])->name('stock.index');
-            Route::get('/outbound', [EcommerceOutboundController::class, 'index'])->name('outbound.index');
+            Route::get('/sales', [EcommerceSalesController::class, 'index'])->name('sales.index');
         });
         Route::middleware('module:ecommerce,edit')->group(function () {
             Route::post('/partners', [EcommercePartnerController::class, 'storePartner'])->name('partners.store');
@@ -260,7 +259,6 @@ Route::middleware(['auth'])->group(function () {
 
             Route::post('/stock/transfer', [EcommerceStockController::class, 'transfer'])->name('stock.transfer');
 
-            Route::post('/outbound', [EcommerceOutboundController::class, 'store'])->name('outbound.store');
             Route::post('/sales', [EcommerceSalesController::class, 'store'])->name('sales.store');
         });
     });
