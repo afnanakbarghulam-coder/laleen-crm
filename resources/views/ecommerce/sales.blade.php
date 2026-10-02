@@ -7,7 +7,8 @@
     $channelBadgeClasses = [
         'Shopify (Pakistan)' => 'ec-channel-shopify',
         'Organic (Pakistan)' => 'ec-channel-organic',
-        'Salon (Qatar)' => 'ec-channel-salon',
+        'Salon (Old Airport)' => 'ec-channel-salon',
+        'Salon (Wakrah)' => 'ec-channel-salon',
         'Organic (Qatar)' => 'ec-channel-organic',
         'Backbar Use (Qatar)' => 'ec-channel-backbar',
         'Damage/Expiry (Pakistan)' => 'ec-channel-damage',
@@ -28,6 +29,30 @@
 
     @include('ecommerce._nav')
 
+    <div class="row">
+        <div class="col-md-4">
+            <div class="ec-card">
+                <h6>Total Revenue</h6>
+                <div class="ec-value ec-positive">PKR {{ number_format($totalRevenue, 2) }}</div>
+                <div class="ec-sub">Across all revenue channels, all time</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="ec-card">
+                <h6>Total Items Sold (Revenue Channels)</h6>
+                <div class="ec-value">{{ number_format($totalItemsSoldRevenue, 0) }}</div>
+                <div class="ec-sub">Shopify, Organic &amp; Salon branches</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="ec-card">
+                <h6>Total Items Used/Damaged (Non-Revenue)</h6>
+                <div class="ec-value ec-negative">{{ number_format($totalItemsUsedDamaged, 0) }}</div>
+                <div class="ec-sub">Backbar use &amp; damage/expiry write-offs</div>
+            </div>
+        </div>
+    </div>
+
     <div class="ec-card">
         <h6 class="mb-3">Recent Sales</h6>
         <div class="table-responsive">
@@ -35,6 +60,7 @@
                 <thead>
                     <tr>
                         <th>Date</th>
+                        <th>Reference ID</th>
                         <th>Customer</th>
                         <th>Product</th>
                         <th class="text-end">Quantity</th>
@@ -48,6 +74,7 @@
                     @forelse ($sales as $sale)
                         <tr>
                             <td>{{ $sale->created_at->format('d M Y') }}</td>
+                            <td>{{ $sale->reference_id ?? '—' }}</td>
                             <td>{{ $sale->customer_name ?? '—' }}</td>
                             <td>{{ $sale->product->name ?? '—' }}</td>
                             <td class="text-end">{{ number_format($sale->quantity, 0) }}</td>
@@ -57,7 +84,7 @@
                             <td>{{ $sale->reason ?? '—' }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="text-center text-muted">No sales logged yet &mdash; use "Log New Sale" above.</td></tr>
+                        <tr><td colspan="9" class="text-center text-muted">No sales logged yet &mdash; use "Log New Sale" above.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -100,7 +127,8 @@
                                         <optgroup label="Revenue">
                                             <option value="Shopify (Pakistan)">Shopify (Pakistan)</option>
                                             <option value="Organic (Pakistan)">Organic (Pakistan)</option>
-                                            <option value="Salon (Qatar)">Salon (Qatar)</option>
+                                            <option value="Salon (Old Airport)">Salon (Old Airport)</option>
+                                            <option value="Salon (Wakrah)">Salon (Wakrah)</option>
                                             <option value="Organic (Qatar)">Organic (Qatar)</option>
                                         </optgroup>
                                         <optgroup label="Non-Revenue">
@@ -125,6 +153,11 @@
                                     <label class="form-label">Reason/Notes <span class="ec-sub">(optional)</span></label>
                                     <input type="text" name="reason" class="form-control" placeholder="e.g. Backbar restock, damaged in transit">
                                 </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Reference / Order ID <span class="ec-sub">(optional)</span></label>
+                                <input type="text" name="reference_id" class="form-control" placeholder="e.g. Shopify order #1042">
                             </div>
 
                             <div class="ec-grand-total">
@@ -155,11 +188,15 @@
                 salesGrandTotalValue.textContent = 'PKR ' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
 
+            function restoreDefaultPrice() {
+                const selectedOption = salesProductSelect.options[salesProductSelect.selectedIndex];
+                const price = selectedOption ? selectedOption.getAttribute('data-unit-price') : null;
+                salesUnitPriceInput.value = price ? parseFloat(price).toFixed(2) : '';
+            }
+
             salesProductSelect.addEventListener('change', function () {
-                const selectedOption = this.options[this.selectedIndex];
-                const price = selectedOption.getAttribute('data-unit-price');
-                if (price && !nonRevenueChannels.includes(salesChannelSelect.value)) {
-                    salesUnitPriceInput.value = parseFloat(price).toFixed(2);
+                if (!nonRevenueChannels.includes(salesChannelSelect.value)) {
+                    restoreDefaultPrice();
                 }
                 updateGrandTotal();
             });
@@ -167,9 +204,12 @@
             salesChannelSelect.addEventListener('change', function () {
                 if (nonRevenueChannels.includes(this.value)) {
                     salesUnitPriceInput.value = 0;
+                    salesUnitPriceInput.readOnly = true;
                     salesUnitPriceInput.required = false;
                 } else {
+                    salesUnitPriceInput.readOnly = false;
                     salesUnitPriceInput.required = true;
+                    restoreDefaultPrice();
                 }
                 updateGrandTotal();
             });
@@ -180,6 +220,7 @@
             document.getElementById('salesModal').addEventListener('hidden.bs.modal', function () {
                 this.querySelector('form').reset();
                 salesUnitPriceInput.required = true;
+                salesUnitPriceInput.readOnly = false;
                 updateGrandTotal();
             });
         </script>

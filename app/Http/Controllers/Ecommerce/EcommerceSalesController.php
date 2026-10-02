@@ -14,7 +14,8 @@ class EcommerceSalesController extends Controller
     private const CHANNELS = [
         'Shopify (Pakistan)',
         'Organic (Pakistan)',
-        'Salon (Qatar)',
+        'Salon (Old Airport)',
+        'Salon (Wakrah)',
         'Organic (Qatar)',
         'Backbar Use (Qatar)',
         'Damage/Expiry (Pakistan)',
@@ -33,10 +34,17 @@ class EcommerceSalesController extends Controller
         $products = EcommerceProduct::orderBy('name')->get();
         $salePricesByProduct = EcommercePricingModel::pluck('selling_price', 'ecommerce_product_id');
 
+        $totalRevenue = $sales->sum('total_price');
+        $totalItemsSoldRevenue = $sales->whereNotIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
+        $totalItemsUsedDamaged = $sales->whereIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
+
         return view('ecommerce.sales', [
             'sales' => $sales,
             'products' => $products,
             'salePricesByProduct' => $salePricesByProduct,
+            'totalRevenue' => $totalRevenue,
+            'totalItemsSoldRevenue' => $totalItemsSoldRevenue,
+            'totalItemsUsedDamaged' => $totalItemsUsedDamaged,
         ]);
     }
 
@@ -44,6 +52,7 @@ class EcommerceSalesController extends Controller
     {
         $validated = $request->validate([
             'ecommerce_product_id' => 'required|exists:ecommerce_products,id',
+            'reference_id' => 'nullable|string|max:255',
             'customer_name' => 'nullable|string|max:255',
             'quantity' => 'required|integer|min:1',
             'channel' => 'required|in:' . implode(',', self::CHANNELS),
@@ -71,6 +80,7 @@ class EcommerceSalesController extends Controller
         DB::transaction(function () use ($validated, $quantity, $unitPrice, $totalPrice, $stockField, $soldField) {
             EcommerceSale::create([
                 'ecommerce_product_id' => $validated['ecommerce_product_id'],
+                'reference_id' => $validated['reference_id'] ?? null,
                 'customer_name' => $validated['customer_name'] ?? null,
                 'quantity' => $quantity,
                 'channel' => $validated['channel'],

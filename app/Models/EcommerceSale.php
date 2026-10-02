@@ -8,6 +8,7 @@ class EcommerceSale extends Model
 {
     protected $fillable = [
         'ecommerce_product_id',
+        'reference_id',
         'customer_name',
         'quantity',
         'channel',

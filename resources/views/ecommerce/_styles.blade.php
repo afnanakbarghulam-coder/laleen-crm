@@ -114,6 +114,12 @@
         box-shadow: 0 0 0 3px rgba(217, 143, 131, .15);
     }
 
+    .modal .form-control:read-only {
+        background-color: rgba(154, 144, 136, 0.08);
+        color: var(--ec-muted);
+        cursor: not-allowed;
+    }
+
     .ec-table {
         color: #cbb8b0;
     }
