@@ -80,7 +80,7 @@
                 <div class="ec-card">
                     <h6>Total Cost Per Unit</h6>
                     <div class="ec-value" id="pricingTotalCost">PKR 0.00</div>
-                    <div class="ec-sub">Liquid + Bottle + Label + Pump + Box</div>
+                    <div class="ec-sub"><span id="totalCostFormulaText">Select a product</span></div>
                 </div>
             </div>
             <div class="col-md-4">
@@ -118,6 +118,11 @@
             'Shampoo': ['Bottle/Jar', 'Label', 'Pump/Cap'],
         };
 
+        const TOTAL_COST_FORMULA_TEXT_BY_PRODUCT_LINE = {
+            'Hair Oil': 'Liquid + Bottle + Label',
+            'Shampoo': 'Liquid + Bottle + Label + Pump',
+        };
+
         const productSelect = document.getElementById('pricingProductSelect');
         const productIdInput = document.getElementById('pricingProductId');
         const liquidCostInput = document.getElementById('pricingLiquidCost');
@@ -127,6 +132,7 @@
         const boxCostInput = document.getElementById('pricingBoxCost');
         const sellingPriceInput = document.getElementById('pricingSellingPrice');
         const totalCostEl = document.getElementById('pricingTotalCost');
+        const totalCostFormulaEl = document.getElementById('totalCostFormulaText');
         const grossProfitEl = document.getElementById('pricingGrossProfit');
         const marginEl = document.getElementById('pricingMargin');
         const saveBtn = document.getElementById('pricingSaveBtn');
@@ -159,6 +165,10 @@
                     COMPONENT_FIELD_INPUTS[componentTypeName].value = 0;
                 }
             });
+
+            totalCostFormulaEl.textContent = productSelect.value === ''
+                ? 'Select a product'
+                : (TOTAL_COST_FORMULA_TEXT_BY_PRODUCT_LINE[productLineName] || 'Liquid');
 
             return visibleComponents;
         }
