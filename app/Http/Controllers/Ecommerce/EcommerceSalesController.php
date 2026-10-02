@@ -49,6 +49,10 @@ class EcommerceSalesController extends Controller
         $totalItemsSoldRevenue = $sales->whereNotIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
         $totalItemsUsedDamaged = $sales->whereIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
 
+        $filterText = !empty($selectedChannels)
+            ? 'Filtered: ' . implode(', ', $selectedChannels)
+            : 'Across all channels, all time';
+
         return view('ecommerce.sales', [
             'sales' => $sales,
             'products' => $products,
@@ -56,6 +60,7 @@ class EcommerceSalesController extends Controller
             'totalRevenue' => $totalRevenue,
             'totalItemsSoldRevenue' => $totalItemsSoldRevenue,
             'totalItemsUsedDamaged' => $totalItemsUsedDamaged,
+            'filterText' => $filterText,
             'channels' => self::CHANNELS,
             'selectedChannels' => $selectedChannels,
         ]);

@@ -34,21 +34,21 @@
             <div class="ec-card">
                 <h6>Total Revenue</h6>
                 <div class="ec-value ec-positive">PKR {{ number_format($totalRevenue, 2) }}</div>
-                <div class="ec-sub">Across all revenue channels, all time</div>
+                <div class="ec-sub">{{ $filterText }}</div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="ec-card">
                 <h6>Total Items Sold (Revenue Channels)</h6>
                 <div class="ec-value">{{ number_format($totalItemsSoldRevenue, 0) }}</div>
-                <div class="ec-sub">Shopify, Organic &amp; Salon branches</div>
+                <div class="ec-sub">{{ $filterText }} (Revenue)</div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="ec-card">
                 <h6>Total Items Used/Damaged (Non-Revenue)</h6>
                 <div class="ec-value ec-negative">{{ number_format($totalItemsUsedDamaged, 0) }}</div>
-                <div class="ec-sub">Backbar use &amp; damage/expiry write-offs</div>
+                <div class="ec-sub">{{ $filterText }} (Non-Revenue)</div>
             </div>
         </div>
     </div>
