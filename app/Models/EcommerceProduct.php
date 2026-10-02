@@ -11,7 +11,8 @@ class EcommerceProduct extends Model
         'product_line_id',
         'sku',
         'unit_size',
-        'current_stock',
+        'stock_pakistan',
+        'stock_qatar',
         'selling_price',
         'liquid_cost_per_ml',
         'volume_ml',
@@ -25,7 +26,8 @@ class EcommerceProduct extends Model
     ];
 
     protected $casts = [
-        'current_stock' => 'decimal:2',
+        'stock_pakistan' => 'decimal:2',
+        'stock_qatar' => 'decimal:2',
         'selling_price' => 'decimal:2',
         'liquid_cost_per_ml' => 'decimal:4',
         'volume_ml' => 'decimal:2',

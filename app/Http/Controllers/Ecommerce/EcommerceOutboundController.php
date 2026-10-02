@@ -44,7 +44,7 @@ class EcommerceOutboundController extends Controller
         DB::transaction(function () use ($validated) {
             foreach ($validated['items'] as $item) {
                 $product = EcommerceProduct::lockForUpdate()->findOrFail($item['ecommerce_product_id']);
-                $product->decrement('current_stock', $item['quantity']);
+                $product->decrement('stock_pakistan', $item['quantity']);
 
                 EcommerceOutbound::create([
                     'ecommerce_product_id' => $item['ecommerce_product_id'],

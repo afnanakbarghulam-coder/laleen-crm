@@ -10,6 +10,7 @@ use App\Http\Controllers\Ecommerce\EcommercePartnerController;
 use App\Http\Controllers\Ecommerce\EcommercePricingController;
 use App\Http\Controllers\Ecommerce\EcommerceProductController;
 use App\Http\Controllers\Ecommerce\EcommerceProductionController;
+use App\Http\Controllers\Ecommerce\EcommerceStockController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\Kpi\AdLeadEntryController;
 use App\Http\Controllers\Kpi\AdsConversionController;
@@ -233,6 +234,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/expenses', [EcommerceExpenseController::class, 'index'])->name('expenses.index');
             Route::get('/inventory', [EcommerceInventoryController::class, 'index'])->name('inventory.index');
             Route::get('/pricing', [EcommercePricingController::class, 'index'])->name('pricing.index');
+            Route::get('/stock', [EcommerceStockController::class, 'index'])->name('stock.index');
             Route::get('/outbound', [EcommerceOutboundController::class, 'index'])->name('outbound.index');
         });
         Route::middleware('module:ecommerce,edit')->group(function () {
@@ -254,6 +256,9 @@ Route::middleware(['auth'])->group(function () {
 
             Route::post('/pricing', [EcommercePricingController::class, 'store'])->name('pricing.store');
             Route::delete('/pricing/{pricingModel}', [EcommercePricingController::class, 'destroy'])->name('pricing.destroy');
+
+            Route::post('/stock/transfer', [EcommerceStockController::class, 'transfer'])->name('stock.transfer');
+            Route::post('/stock/sale', [EcommerceStockController::class, 'sale'])->name('stock.sale');
 
             Route::post('/outbound', [EcommerceOutboundController::class, 'store'])->name('outbound.store');
         });

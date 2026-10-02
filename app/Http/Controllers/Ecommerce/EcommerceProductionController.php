@@ -70,7 +70,7 @@ class EcommerceProductionController extends Controller
 
         DB::transaction(function () use ($validated, $quantityProduced, $materialsUsed) {
             $product = EcommerceProduct::lockForUpdate()->findOrFail($validated['ecommerce_product_id']);
-            $product->increment('current_stock', $quantityProduced);
+            $product->increment('stock_pakistan', $quantityProduced);
 
             $run = $product->productionRuns()->create([
                 'quantity_produced' => $quantityProduced,
