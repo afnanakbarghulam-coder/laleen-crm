@@ -58,6 +58,13 @@ class EcommerceSalesController extends Controller
         $totalItemsSoldRevenue = $sales->whereNotIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
         $totalItemsUsedDamaged = $sales->whereIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
 
+        $salesByDate = $sales->sortBy('created_at')->groupBy(fn ($sale) => $sale->created_at->format('M d'));
+        $chartLabels = $salesByDate->keys()->values()->all();
+        $chartRevenue = $salesByDate->map(fn ($group) => round((float) $group->sum('total_price'), 2))->values()->all();
+        $chartUnits = $salesByDate->map(
+            fn ($group) => (int) $group->whereNotIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity')
+        )->values()->all();
+
         $totalChannelsCount = count(self::CHANNELS);
         $selectedChannelsCount = count($selectedChannels);
 
@@ -92,6 +99,9 @@ class EcommerceSalesController extends Controller
             'totalItemsUsedDamaged' => $totalItemsUsedDamaged,
             'filterText' => $filterText,
             'selectedChannels' => $selectedChannels,
+            'chartLabels' => $chartLabels,
+            'chartRevenue' => $chartRevenue,
+            'chartUnits' => $chartUnits,
         ]);
     }
 

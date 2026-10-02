@@ -58,6 +58,21 @@
         </div>
     </div>
 
+    <div class="ec-card ec-chart-card mt-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h6 class="mb-0">Sales Trend</h6>
+            <div class="ec-chart-legend">
+                <span><span class="ec-legend-dot" style="background: #e79a91;"></span>Revenue</span>
+                <span><span class="ec-legend-dot" style="background: #c9a66b;"></span>Units Sold</span>
+            </div>
+        </div>
+        @if (count($chartLabels) > 0)
+            <canvas id="salesTrendChart" height="90" class="mt-2"></canvas>
+        @else
+            <div class="ec-chart-empty">No sales data for this period yet.</div>
+        @endif
+    </div>
+
     <div class="ec-card">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
             <h6 class="mb-0">Recent Sales</h6>
@@ -76,6 +91,10 @@
                         @endif
                     </button>
                     <div class="dropdown-menu ec-channel-filter-menu p-3">
+                        <div class="ec-channel-filter-utility-row">
+                            <button type="button" id="channelSelectAllBtn" class="ec-channel-filter-utility-btn">Select All</button>
+                            <button type="button" id="channelClearAllBtn" class="ec-channel-filter-utility-btn">Clear All</button>
+                        </div>
                         <div class="ec-channel-filter-list">
                             @php $channelCheckIndex = 0; @endphp
                             @foreach ($channelGroups as $groupName => $groupChannels)
@@ -273,4 +292,121 @@
             });
         </script>
     @endmoduleEdit
+
+    <script>
+        document.getElementById('channelSelectAllBtn').addEventListener('click', function () {
+            document.querySelectorAll('input[name="channels[]"]').forEach(function (checkbox) {
+                checkbox.checked = true;
+            });
+        });
+
+        document.getElementById('channelClearAllBtn').addEventListener('click', function () {
+            document.querySelectorAll('input[name="channels[]"]').forEach(function (checkbox) {
+                checkbox.checked = false;
+            });
+        });
+    </script>
+
+    @if (count($chartLabels) > 0)
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script>
+            (function () {
+                const canvas = document.getElementById('salesTrendChart');
+                const ctx = canvas.getContext('2d');
+                const revenueFill = ctx.createLinearGradient(0, 0, 0, 240);
+                revenueFill.addColorStop(0, 'rgba(231, 154, 145, 0.32)');
+                revenueFill.addColorStop(1, 'rgba(231, 154, 145, 0)');
+
+                new Chart(ctx, {
+                    data: {
+                        labels: @json($chartLabels),
+                        datasets: [
+                            {
+                                type: 'line',
+                                label: 'Revenue',
+                                data: @json($chartRevenue),
+                                borderColor: '#e79a91',
+                                backgroundColor: revenueFill,
+                                fill: true,
+                                tension: 0.4,
+                                borderWidth: 2,
+                                pointRadius: 3,
+                                pointBackgroundColor: '#e79a91',
+                                pointHoverRadius: 5,
+                                pointBorderColor: '#241e1c',
+                                pointBorderWidth: 2,
+                                yAxisID: 'y',
+                                order: 1,
+                            },
+                            {
+                                type: 'bar',
+                                label: 'Units Sold',
+                                data: @json($chartUnits),
+                                backgroundColor: 'rgba(201, 166, 107, 0.4)',
+                                hoverBackgroundColor: 'rgba(201, 166, 107, 0.6)',
+                                borderRadius: 5,
+                                borderSkipped: false,
+                                barPercentage: 0.45,
+                                yAxisID: 'y1',
+                                order: 2,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#241e1c',
+                                titleColor: '#e79a91',
+                                bodyColor: '#f2e6e2',
+                                borderColor: 'rgba(217, 143, 131, 0.2)',
+                                borderWidth: 1,
+                                padding: 12,
+                                cornerRadius: 10,
+                                displayColors: true,
+                                boxPadding: 4,
+                                titleFont: { size: 12, weight: '600' },
+                                bodyFont: { size: 12 },
+                                callbacks: {
+                                    label: function (context) {
+                                        if (context.dataset.yAxisID === 'y') {
+                                            return '  Revenue: PKR ' + Number(context.parsed.y).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                        }
+                                        return '  Units Sold: ' + context.parsed.y;
+                                    },
+                                },
+                            },
+                        },
+                        scales: {
+                            x: {
+                                grid: { display: false, drawBorder: false },
+                                ticks: { color: '#9ca3af', font: { size: 11 } },
+                            },
+                            y: {
+                                position: 'left',
+                                beginAtZero: true,
+                                grid: { display: false, drawBorder: false },
+                                ticks: {
+                                    color: '#9ca3af',
+                                    font: { size: 11 },
+                                    callback: function (value) {
+                                        return 'PKR ' + Number(value).toLocaleString('en-US');
+                                    },
+                                },
+                            },
+                            y1: {
+                                position: 'right',
+                                beginAtZero: true,
+                                grid: { display: false, drawBorder: false },
+                                ticks: { color: '#9ca3af', font: { size: 11 }, precision: 0 },
+                            },
+                        },
+                    },
+                });
+            })();
+        </script>
+    @endif
 @endsection
