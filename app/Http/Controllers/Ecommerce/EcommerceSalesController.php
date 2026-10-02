@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\EcommercePricingModel;
 use App\Models\EcommerceProduct;
 use App\Models\EcommerceSale;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -41,6 +42,14 @@ class EcommerceSalesController extends Controller
             $salesQuery->whereIn('channel', $selectedChannels);
         }
 
+        if ($request->filled('start_date')) {
+            $salesQuery->whereDate('created_at', '>=', $request->start_date);
+        }
+
+        if ($request->filled('end_date')) {
+            $salesQuery->whereDate('created_at', '<=', $request->end_date);
+        }
+
         $sales = $salesQuery->get();
         $products = EcommerceProduct::orderBy('name')->get();
         $salePricesByProduct = EcommercePricingModel::pluck('selling_price', 'ecommerce_product_id');
@@ -51,7 +60,21 @@ class EcommerceSalesController extends Controller
 
         $filterText = !empty($selectedChannels)
             ? 'Filtered: ' . implode(', ', $selectedChannels)
-            : 'Across all channels, all time';
+            : 'Across all channels';
+
+        if ($request->filled('start_date') || $request->filled('end_date')) {
+            if ($request->filled('start_date') && $request->filled('end_date')) {
+                $dateRangeText = 'From ' . Carbon::parse($request->start_date)->format('M d, Y')
+                    . ' to ' . Carbon::parse($request->end_date)->format('M d, Y');
+            } elseif ($request->filled('start_date')) {
+                $dateRangeText = 'From ' . Carbon::parse($request->start_date)->format('M d, Y');
+            } else {
+                $dateRangeText = 'Up to ' . Carbon::parse($request->end_date)->format('M d, Y');
+            }
+            $filterText .= ' | ' . $dateRangeText;
+        } else {
+            $filterText .= ' | All time';
+        }
 
         return view('ecommerce.sales', [
             'sales' => $sales,

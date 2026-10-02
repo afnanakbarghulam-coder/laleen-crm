@@ -56,23 +56,31 @@
     <div class="ec-card">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
             <h6 class="mb-0">Recent Sales</h6>
-            <form method="GET" action="{{ route('ecommerce.sales.index') }}" class="dropdown">
-                <button class="btn btn-sm ec-channel-filter dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
-                    Filter by Channel
-                    @if (count($selectedChannels) > 0)
-                        <span class="ec-channel-filter-count">{{ count($selectedChannels) }}</span>
-                    @endif
-                </button>
-                <div class="dropdown-menu ec-channel-filter-menu p-3">
-                    <div class="ec-channel-filter-list">
-                        @foreach ($channels as $channel)
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="channels[]" value="{{ $channel }}" id="channelCheck{{ $loop->index }}" {{ in_array($channel, $selectedChannels, true) ? 'checked' : '' }}>
-                                <label class="form-check-label" for="channelCheck{{ $loop->index }}">{{ $channel }}</label>
-                            </div>
-                        @endforeach
+            <form method="GET" action="{{ route('ecommerce.sales.index') }}" class="d-flex align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <label for="startDateFilter" class="ec-sub mb-0">From</label>
+                    <input type="date" name="start_date" id="startDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ request('start_date') }}">
+                    <label for="endDateFilter" class="ec-sub mb-0">To</label>
+                    <input type="date" name="end_date" id="endDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ request('end_date') }}">
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-sm ec-channel-filter dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        Filter by Channel
+                        @if (count($selectedChannels) > 0)
+                            <span class="ec-channel-filter-count">{{ count($selectedChannels) }}</span>
+                        @endif
+                    </button>
+                    <div class="dropdown-menu ec-channel-filter-menu p-3">
+                        <div class="ec-channel-filter-list">
+                            @foreach ($channels as $channel)
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="channels[]" value="{{ $channel }}" id="channelCheck{{ $loop->index }}" {{ in_array($channel, $selectedChannels, true) ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="channelCheck{{ $loop->index }}">{{ $channel }}</label>
+                                </div>
+                            @endforeach
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-100 mt-3">Apply Filter</button>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm w-100 mt-3">Apply Filter</button>
                 </div>
             </form>
         </div>
