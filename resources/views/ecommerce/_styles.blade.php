@@ -180,6 +180,20 @@
         border-color: var(--ec-primary);
     }
 
+    .ec-channel-filter-group-label {
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+        color: var(--ec-muted);
+        opacity: .75;
+        margin: 12px 0 6px;
+    }
+
+    .ec-channel-filter-group-label:first-child {
+        margin-top: 0;
+    }
+
     .ec-date-filter {
         width: auto;
         background-color: #241e1c;

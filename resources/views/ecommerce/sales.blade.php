@@ -14,6 +14,11 @@
         'Damage/Expiry (Pakistan)' => 'ec-channel-damage',
         'Damage/Expiry (Qatar)' => 'ec-channel-damage',
     ];
+
+    $channelGroups = [
+        'Pakistan' => ['Shopify (Pakistan)', 'Organic (Pakistan)', 'Damage/Expiry (Pakistan)'],
+        'Qatar' => ['Salon (Old Airport)', 'Salon (Wakrah)', 'Organic (Qatar)', 'Backbar Use (Qatar)', 'Damage/Expiry (Qatar)'],
+    ];
 @endphp
 
 @section('content')
@@ -72,11 +77,16 @@
                     </button>
                     <div class="dropdown-menu ec-channel-filter-menu p-3">
                         <div class="ec-channel-filter-list">
-                            @foreach ($channels as $channel)
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="channels[]" value="{{ $channel }}" id="channelCheck{{ $loop->index }}" {{ in_array($channel, $selectedChannels, true) ? 'checked' : '' }}>
-                                    <label class="form-check-label" for="channelCheck{{ $loop->index }}">{{ $channel }}</label>
-                                </div>
+                            @php $channelCheckIndex = 0; @endphp
+                            @foreach ($channelGroups as $groupName => $groupChannels)
+                                <div class="ec-channel-filter-group-label">{{ $groupName }}</div>
+                                @foreach ($groupChannels as $channel)
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="channels[]" value="{{ $channel }}" id="channelCheck{{ $channelCheckIndex }}" {{ in_array($channel, $selectedChannels, true) ? 'checked' : '' }}>
+                                        <label class="form-check-label" for="channelCheck{{ $channelCheckIndex }}">{{ $channel }}</label>
+                                    </div>
+                                    @php $channelCheckIndex++; @endphp
+                                @endforeach
                             @endforeach
                         </div>
                         <button type="submit" class="btn btn-primary btn-sm w-100 mt-3">Apply Filter</button>

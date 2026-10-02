@@ -58,9 +58,16 @@ class EcommerceSalesController extends Controller
         $totalItemsSoldRevenue = $sales->whereNotIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
         $totalItemsUsedDamaged = $sales->whereIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
 
-        $filterText = !empty($selectedChannels)
-            ? 'Filtered: ' . implode(', ', $selectedChannels)
-            : 'Across all channels';
+        $totalChannelsCount = count(self::CHANNELS);
+        $selectedChannelsCount = count($selectedChannels);
+
+        if ($selectedChannelsCount === 0 || $selectedChannelsCount === $totalChannelsCount) {
+            $filterText = 'Across all channels';
+        } elseif ($selectedChannelsCount > 2) {
+            $filterText = 'Filtered: ' . $selectedChannelsCount . ' channels';
+        } else {
+            $filterText = 'Filtered: ' . implode(', ', $selectedChannels);
+        }
 
         if ($request->filled('start_date') || $request->filled('end_date')) {
             if ($request->filled('start_date') && $request->filled('end_date')) {
@@ -84,7 +91,6 @@ class EcommerceSalesController extends Controller
             'totalItemsSoldRevenue' => $totalItemsSoldRevenue,
             'totalItemsUsedDamaged' => $totalItemsUsedDamaged,
             'filterText' => $filterText,
-            'channels' => self::CHANNELS,
             'selectedChannels' => $selectedChannels,
         ]);
     }
