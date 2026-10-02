@@ -46,12 +46,24 @@
                     <label class="form-label">Liquid / Formulation Cost</label>
                     <input type="number" step="0.01" min="0" name="liquid_cost" id="pricingLiquidCost" class="form-control pricing-input" value="0">
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Packaging Cost (Bottle, Pump, Label)</label>
-                    <input type="number" step="0.01" min="0" name="packaging_cost" id="pricingPackagingCost" class="form-control pricing-input" value="0">
+                <div class="col-md-4" id="pricingBottleWrapper">
+                    <label class="form-label">Bottle/Jar Cost</label>
+                    <input type="number" step="0.01" min="0" name="bottle_cost" id="pricingBottleCost" class="form-control pricing-input" value="0">
+                </div>
+                <div class="col-md-4" id="pricingLabelWrapper">
+                    <label class="form-label">Label Cost</label>
+                    <input type="number" step="0.01" min="0" name="label_cost" id="pricingLabelCost" class="form-control pricing-input" value="0">
+                </div>
+                <div class="col-md-4" id="pricingPumpWrapper">
+                    <label class="form-label">Pump/Cap Cost</label>
+                    <input type="number" step="0.01" min="0" name="pump_cost" id="pricingPumpCost" class="form-control pricing-input" value="0">
+                </div>
+                <div class="col-md-4" id="pricingBoxWrapper">
+                    <label class="form-label">Outer Box Cost</label>
+                    <input type="number" step="0.01" min="0" name="box_cost" id="pricingBoxCost" class="form-control pricing-input" value="0">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Fulfillment Cost (Box &amp; Labor)</label>
+                    <label class="form-label">Fulfillment Cost (Labor)</label>
                     <input type="number" step="0.01" min="0" name="fulfillment_cost" id="pricingFulfillmentCost" class="form-control pricing-input" value="0">
                 </div>
             </div>
@@ -72,7 +84,7 @@
                 <div class="ec-card">
                     <h6>Total Cost Per Unit</h6>
                     <div class="ec-value" id="pricingTotalCost">PKR 0.00</div>
-                    <div class="ec-sub">Liquid + Packaging + Fulfillment</div>
+                    <div class="ec-sub">Liquid + Bottle + Label + Pump + Box + Fulfillment</div>
                 </div>
             </div>
             <div class="col-md-4">
@@ -101,12 +113,22 @@
         const productsForPricing = @json($productsForPricing);
         const rawMaterialsForPricing = @json($rawMaterialsForPricing);
         const componentTypeNames = @json($componentTypeNames);
-        const PACKAGING_COMPONENT_TYPES = ['Bottle/Jar', 'Label', 'Pump/Cap', 'Outer Box'];
+        const productLineNames = @json($productLineNames);
+
+        // Which packaging component fields are relevant to each Product Line,
+        // matching the strict BOM enforced server-side for production runs.
+        const VISIBLE_COMPONENTS_BY_PRODUCT_LINE = {
+            'Hair Oil': ['Bottle/Jar', 'Label'],
+            'Shampoo': ['Bottle/Jar', 'Label', 'Pump/Cap'],
+        };
 
         const productSelect = document.getElementById('pricingProductSelect');
         const productIdInput = document.getElementById('pricingProductId');
         const liquidCostInput = document.getElementById('pricingLiquidCost');
-        const packagingCostInput = document.getElementById('pricingPackagingCost');
+        const bottleCostInput = document.getElementById('pricingBottleCost');
+        const labelCostInput = document.getElementById('pricingLabelCost');
+        const pumpCostInput = document.getElementById('pricingPumpCost');
+        const boxCostInput = document.getElementById('pricingBoxCost');
         const fulfillmentCostInput = document.getElementById('pricingFulfillmentCost');
         const sellingPriceInput = document.getElementById('pricingSellingPrice');
         const totalCostEl = document.getElementById('pricingTotalCost');
@@ -114,13 +136,48 @@
         const marginEl = document.getElementById('pricingMargin');
         const saveBtn = document.getElementById('pricingSaveBtn');
 
+        const COMPONENT_FIELD_WRAPPERS = {
+            'Bottle/Jar': document.getElementById('pricingBottleWrapper'),
+            'Label': document.getElementById('pricingLabelWrapper'),
+            'Pump/Cap': document.getElementById('pricingPumpWrapper'),
+            'Outer Box': document.getElementById('pricingBoxWrapper'),
+        };
+        const COMPONENT_FIELD_INPUTS = {
+            'Bottle/Jar': bottleCostInput,
+            'Label': labelCostInput,
+            'Pump/Cap': pumpCostInput,
+            'Outer Box': boxCostInput,
+        };
+
+        // Shows only the packaging fields relevant to the given Product Line
+        // name, resetting (and keeping at 0) every field that's hidden so it
+        // never silently contributes to the total cost.
+        function updateVisibleComponentFields(productLineName) {
+            const visibleComponents = VISIBLE_COMPONENTS_BY_PRODUCT_LINE[productLineName] || [];
+
+            Object.keys(COMPONENT_FIELD_WRAPPERS).forEach(function (componentTypeName) {
+                const isVisible = visibleComponents.includes(componentTypeName);
+
+                COMPONENT_FIELD_WRAPPERS[componentTypeName].style.display = isVisible ? '' : 'none';
+
+                if (!isVisible) {
+                    COMPONENT_FIELD_INPUTS[componentTypeName].value = 0;
+                }
+            });
+
+            return visibleComponents;
+        }
+
         function recalculate() {
             const liquid = parseFloat(liquidCostInput.value) || 0;
-            const packaging = parseFloat(packagingCostInput.value) || 0;
+            const bottle = parseFloat(bottleCostInput.value) || 0;
+            const label = parseFloat(labelCostInput.value) || 0;
+            const pump = parseFloat(pumpCostInput.value) || 0;
+            const box = parseFloat(boxCostInput.value) || 0;
             const fulfillment = parseFloat(fulfillmentCostInput.value) || 0;
             const sellingPrice = parseFloat(sellingPriceInput.value) || 0;
 
-            const totalCost = liquid + packaging + fulfillment;
+            const totalCost = liquid + bottle + label + pump + box + fulfillment;
             const grossProfit = sellingPrice - totalCost;
             const margin = sellingPrice > 0 ? (grossProfit / sellingPrice) * 100 : 0;
 
@@ -140,8 +197,9 @@
 
         // Smart BOM auto-fill: finds every raw material sharing the selected
         // product's product_line_id, prices the Liquid Base component against
-        // the product's parsed unit_size, and sums every packaging component
-        // (Bottle/Jar, Label, Pump/Cap, Outer Box) into the packaging cost.
+        // the product's parsed unit_size, and maps each packaging component's
+        // last_purchased_unit_cost directly onto its own input — but only for
+        // component types the current Product Line's BOM actually shows.
         function autoFillCostsFromInventory() {
             const productId = productSelect.value;
             const product = productsForPricing[productId];
@@ -150,9 +208,10 @@
                 return;
             }
 
+            const productLineName = productLineNames[product.product_line_id];
+            const visibleComponents = updateVisibleComponentFields(productLineName);
             const unitSizeValue = parseFloat(product.unit_size) || 0;
             let liquidCost = 0;
-            let packagingCost = 0;
 
             Object.keys(rawMaterialsForPricing).forEach(function (materialId) {
                 const material = rawMaterialsForPricing[materialId];
@@ -166,13 +225,12 @@
 
                 if (componentTypeName === 'Liquid Base') {
                     liquidCost = unitCost * unitSizeValue;
-                } else if (PACKAGING_COMPONENT_TYPES.includes(componentTypeName)) {
-                    packagingCost += unitCost;
+                } else if (visibleComponents.includes(componentTypeName)) {
+                    COMPONENT_FIELD_INPUTS[componentTypeName].value = unitCost.toFixed(2);
                 }
             });
 
             liquidCostInput.value = liquidCost.toFixed(2);
-            packagingCostInput.value = packagingCost.toFixed(2);
             recalculate();
         }
 
@@ -184,9 +242,19 @@
 
             const saved = Object.prototype.hasOwnProperty.call(pricingData, productId) ? pricingData[productId] : null;
             liquidCostInput.value = saved ? Number(saved.liquid_cost) : 0;
-            packagingCostInput.value = saved ? Number(saved.packaging_cost) : 0;
+            bottleCostInput.value = saved ? Number(saved.bottle_cost) : 0;
+            labelCostInput.value = saved ? Number(saved.label_cost) : 0;
+            pumpCostInput.value = saved ? Number(saved.pump_cost) : 0;
+            boxCostInput.value = saved ? Number(saved.box_cost) : 0;
             fulfillmentCostInput.value = saved ? Number(saved.fulfillment_cost) : 0;
             sellingPriceInput.value = saved ? Number(saved.selling_price) : 0;
+
+            // Apply visibility after loading saved values so any field made
+            // irrelevant by the product's line is forced back to 0 rather
+            // than silently keeping a stale saved amount.
+            const product = productsForPricing[productId];
+            const productLineName = product ? productLineNames[product.product_line_id] : undefined;
+            updateVisibleComponentFields(productLineName);
 
             if (saveBtn) {
                 saveBtn.disabled = productId === '';

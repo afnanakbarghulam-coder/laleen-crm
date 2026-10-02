@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\EcommerceComponentType;
 use App\Models\EcommercePricingModel;
 use App\Models\EcommerceProduct;
+use App\Models\EcommerceProductLine;
 use App\Models\EcommerceRawMaterial;
 use Illuminate\Http\Request;
 
@@ -19,7 +20,10 @@ class EcommercePricingController extends Controller
         $pricingModels = EcommercePricingModel::all()->keyBy('ecommerce_product_id')->map(function ($model) {
             return [
                 'liquid_cost' => (float) $model->liquid_cost,
-                'packaging_cost' => (float) $model->packaging_cost,
+                'bottle_cost' => (float) $model->bottle_cost,
+                'label_cost' => (float) $model->label_cost,
+                'pump_cost' => (float) $model->pump_cost,
+                'box_cost' => (float) $model->box_cost,
                 'fulfillment_cost' => (float) $model->fulfillment_cost,
                 'selling_price' => (float) $model->selling_price,
             ];
@@ -41,6 +45,7 @@ class EcommercePricingController extends Controller
         });
 
         $componentTypeNames = EcommerceComponentType::pluck('name', 'id');
+        $productLineNames = EcommerceProductLine::pluck('name', 'id');
 
         return view('ecommerce.pricing', [
             'products' => $products,
@@ -49,6 +54,7 @@ class EcommercePricingController extends Controller
             'productsForPricing' => $productsForPricing,
             'rawMaterialsForPricing' => $rawMaterialsForPricing,
             'componentTypeNames' => $componentTypeNames,
+            'productLineNames' => $productLineNames,
             'selectedProductId' => $request->query('product'),
         ]);
     }
@@ -58,7 +64,10 @@ class EcommercePricingController extends Controller
         $validated = $request->validate([
             'ecommerce_product_id' => 'required|exists:ecommerce_products,id',
             'liquid_cost' => 'nullable|numeric|min:0',
-            'packaging_cost' => 'nullable|numeric|min:0',
+            'bottle_cost' => 'nullable|numeric|min:0',
+            'label_cost' => 'nullable|numeric|min:0',
+            'pump_cost' => 'nullable|numeric|min:0',
+            'box_cost' => 'nullable|numeric|min:0',
             'fulfillment_cost' => 'nullable|numeric|min:0',
             'selling_price' => 'nullable|numeric|min:0',
         ]);
@@ -67,7 +76,10 @@ class EcommercePricingController extends Controller
             ['ecommerce_product_id' => $validated['ecommerce_product_id']],
             [
                 'liquid_cost' => $validated['liquid_cost'] ?? 0,
-                'packaging_cost' => $validated['packaging_cost'] ?? 0,
+                'bottle_cost' => $validated['bottle_cost'] ?? 0,
+                'label_cost' => $validated['label_cost'] ?? 0,
+                'pump_cost' => $validated['pump_cost'] ?? 0,
+                'box_cost' => $validated['box_cost'] ?? 0,
                 'fulfillment_cost' => $validated['fulfillment_cost'] ?? 0,
                 'selling_price' => $validated['selling_price'] ?? 0,
             ]
