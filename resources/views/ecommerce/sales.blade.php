@@ -34,6 +34,45 @@
 
     @include('ecommerce._nav')
 
+    <div class="d-flex justify-content-end align-items-center mb-4">
+        <form method="GET" action="{{ route('ecommerce.sales.index') }}" class="d-flex align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <label for="startDateFilter" class="ec-sub mb-0">From</label>
+                <input type="date" name="start_date" id="startDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ request('start_date') }}">
+                <label for="endDateFilter" class="ec-sub mb-0">To</label>
+                <input type="date" name="end_date" id="endDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ request('end_date') }}">
+            </div>
+            <div class="dropdown">
+                <button class="btn btn-sm ec-channel-filter dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                    Filter by Channel
+                    @if (count($selectedChannels) > 0)
+                        <span class="ec-channel-filter-count">{{ count($selectedChannels) }}</span>
+                    @endif
+                </button>
+                <div class="dropdown-menu ec-channel-filter-menu p-3">
+                    <div class="ec-channel-filter-utility-row">
+                        <button type="button" id="channelSelectAllBtn" class="ec-channel-filter-utility-btn">Select All</button>
+                        <button type="button" id="channelClearAllBtn" class="ec-channel-filter-utility-btn">Clear All</button>
+                    </div>
+                    <div class="ec-channel-filter-list">
+                        @php $channelCheckIndex = 0; @endphp
+                        @foreach ($channelGroups as $groupName => $groupChannels)
+                            <div class="ec-channel-filter-group-label">{{ $groupName }}</div>
+                            @foreach ($groupChannels as $channel)
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="channels[]" value="{{ $channel }}" id="channelCheck{{ $channelCheckIndex }}" {{ in_array($channel, $selectedChannels, true) ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="channelCheck{{ $channelCheckIndex }}">{{ $channel }}</label>
+                                </div>
+                                @php $channelCheckIndex++; @endphp
+                            @endforeach
+                        @endforeach
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100 mt-3">Apply Filter</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
     <div class="row">
         <div class="col-md-4">
             <div class="ec-card">
@@ -74,45 +113,7 @@
     </div>
 
     <div class="ec-card">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-            <h6 class="mb-0">Recent Sales</h6>
-            <form method="GET" action="{{ route('ecommerce.sales.index') }}" class="d-flex align-items-center flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-2">
-                    <label for="startDateFilter" class="ec-sub mb-0">From</label>
-                    <input type="date" name="start_date" id="startDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ request('start_date') }}">
-                    <label for="endDateFilter" class="ec-sub mb-0">To</label>
-                    <input type="date" name="end_date" id="endDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ request('end_date') }}">
-                </div>
-                <div class="dropdown">
-                    <button class="btn btn-sm ec-channel-filter dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
-                        Filter by Channel
-                        @if (count($selectedChannels) > 0)
-                            <span class="ec-channel-filter-count">{{ count($selectedChannels) }}</span>
-                        @endif
-                    </button>
-                    <div class="dropdown-menu ec-channel-filter-menu p-3">
-                        <div class="ec-channel-filter-utility-row">
-                            <button type="button" id="channelSelectAllBtn" class="ec-channel-filter-utility-btn">Select All</button>
-                            <button type="button" id="channelClearAllBtn" class="ec-channel-filter-utility-btn">Clear All</button>
-                        </div>
-                        <div class="ec-channel-filter-list">
-                            @php $channelCheckIndex = 0; @endphp
-                            @foreach ($channelGroups as $groupName => $groupChannels)
-                                <div class="ec-channel-filter-group-label">{{ $groupName }}</div>
-                                @foreach ($groupChannels as $channel)
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="channels[]" value="{{ $channel }}" id="channelCheck{{ $channelCheckIndex }}" {{ in_array($channel, $selectedChannels, true) ? 'checked' : '' }}>
-                                        <label class="form-check-label" for="channelCheck{{ $channelCheckIndex }}">{{ $channel }}</label>
-                                    </div>
-                                    @php $channelCheckIndex++; @endphp
-                                @endforeach
-                            @endforeach
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-sm w-100 mt-3">Apply Filter</button>
-                    </div>
-                </div>
-            </form>
-        </div>
+        <h6 class="mb-3">Recent Sales</h6>
         <div class="table-responsive">
             <table class="table ec-table align-middle">
                 <thead>
