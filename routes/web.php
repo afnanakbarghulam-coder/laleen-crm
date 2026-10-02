@@ -10,6 +10,7 @@ use App\Http\Controllers\Ecommerce\EcommercePartnerController;
 use App\Http\Controllers\Ecommerce\EcommercePricingController;
 use App\Http\Controllers\Ecommerce\EcommerceProductController;
 use App\Http\Controllers\Ecommerce\EcommerceProductionController;
+use App\Http\Controllers\Ecommerce\EcommerceSalesController;
 use App\Http\Controllers\Ecommerce\EcommerceStockController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\Kpi\AdLeadEntryController;
@@ -258,9 +259,9 @@ Route::middleware(['auth'])->group(function () {
             Route::delete('/pricing/{pricingModel}', [EcommercePricingController::class, 'destroy'])->name('pricing.destroy');
 
             Route::post('/stock/transfer', [EcommerceStockController::class, 'transfer'])->name('stock.transfer');
-            Route::post('/stock/sale', [EcommerceStockController::class, 'sale'])->name('stock.sale');
 
             Route::post('/outbound', [EcommerceOutboundController::class, 'store'])->name('outbound.store');
+            Route::post('/sales', [EcommerceSalesController::class, 'store'])->name('sales.store');
         });
     });
 });

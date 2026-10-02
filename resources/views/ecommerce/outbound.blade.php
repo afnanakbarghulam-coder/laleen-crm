@@ -10,7 +10,10 @@
             <p>Finished goods leaving inventory &mdash; retail sales, backbar use, promos, and damage/expiry.</p>
         </div>
         @moduleEdit('ecommerce')
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#outboundModal">+ Log Sales &amp; Usage</button>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#salesModal">+ Log Sale</button>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#outboundModal">+ Log Sales &amp; Usage</button>
+            </div>
         @endmoduleEdit
     </div>
 
@@ -46,6 +49,8 @@
             </table>
         </div>
     </div>
+
+    @include('ecommerce.sales', ['products' => $products])
 
     @moduleEdit('ecommerce')
         {{-- Log Sales & Usage Modal --}}
