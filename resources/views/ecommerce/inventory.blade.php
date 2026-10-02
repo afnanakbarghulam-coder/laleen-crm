@@ -35,7 +35,7 @@
                     @forelse ($rawMaterials as $material)
                         <tr>
                             <td>{{ $material->productLine->name ?? 'Uncategorized' }} &mdash; {{ $material->componentType->name ?? 'Uncategorized' }}</td>
-                            <td class="{{ $material->current_stock < 0 ? 'ec-negative' : '' }}">{{ number_format($material->current_stock, 2) }} / {{ number_format($material->initial_stock, 2) }} {{ $material->unit_of_measure }}</td>
+                            <td class="{{ $material->current_stock < 0 ? 'ec-negative' : '' }}">{{ number_format($material->current_stock, 2) }} / {{ number_format($material->initial_stock, 2) }} {{ $material->componentType?->name === 'Liquid Base' ? 'ml' : 'units' }}</td>
                             <td>{{ $material->last_purchased_unit_cost !== null ? 'PKR ' . number_format($material->last_purchased_unit_cost, 2) : '—' }}</td>
                             @moduleEdit('ecommerce')
                                 <td>
