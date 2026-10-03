@@ -64,6 +64,157 @@
 
     .remaining-ok { background: rgba(142,168,138,0.14); color: #8ea88a; }
     .remaining-due { background: rgba(168,82,74,0.14); color: #a8524a; }
+
+    /* ---------------- CLIENT PICKER ---------------- */
+    .sale-client-picker {
+        position: relative;
+    }
+
+    .sale-client-trigger {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        background-color: rgba(20, 16, 14, 0.5);
+        border: 1px solid rgba(217, 143, 131, 0.3);
+        border-radius: 6px;
+        cursor: pointer;
+        transition: border-color .15s ease;
+    }
+
+    .sale-client-trigger:hover {
+        border-color: rgba(217, 143, 131, 0.5);
+    }
+
+    .sale-client-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: rgba(185,142,163,0.14);
+        color: #b98ea3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .sale-client-label {
+        font-weight: 700;
+        font-size: 13px;
+        color: #e79a91;
+        line-height: 1.2;
+    }
+
+    .sale-client-sub {
+        font-size: 11.5px;
+        color: #8d7f79;
+    }
+
+    .sale-client-panel {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        width: 100%;
+        min-width: 280px;
+        z-index: 1070;
+        background: #1c1715;
+        border: 1px solid rgba(217, 143, 131, 0.3);
+        border-radius: 10px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, .35);
+        padding: 10px;
+        max-height: 320px;
+        overflow-y: auto;
+    }
+
+    .sale-client-search-wrap {
+        position: relative;
+        margin-bottom: 6px;
+    }
+
+    .sale-client-search-wrap i {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #8d7f79;
+        font-size: 14px;
+    }
+
+    .sale-client-search-wrap input {
+        width: 100%;
+        background-color: #241e1c;
+        border: 1px solid rgba(217, 143, 131, 0.2);
+        border-radius: 6px;
+        padding: 6px 10px 6px 30px;
+        color: #e79a91;
+        font-size: 13px;
+    }
+
+    .sale-client-search-wrap input:focus {
+        outline: none;
+        border-color: #d98f83;
+    }
+
+    .sale-client-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+
+    .sale-client-row:hover {
+        background: rgba(217, 143, 131, 0.08);
+    }
+
+    .sale-client-row-avatar {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: rgba(217, 143, 131, 0.14);
+        color: #e79a91;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11.5px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .sale-client-row-name {
+        font-weight: 600;
+        color: #e79a91;
+    }
+
+    .sale-client-row-phone {
+        font-size: 11px;
+        color: #8d7f79;
+    }
+
+    .sale-client-footer {
+        text-align: right;
+        margin-top: 4px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(217, 143, 131, 0.16);
+    }
+
+    .sale-client-footer button {
+        background: none;
+        border: none;
+        color: #c9a39a;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 2px 4px;
+    }
+
+    .sale-client-footer button:hover {
+        color: #e79a91;
+        text-decoration: underline;
+    }
 </style>
 
 @section('content')
@@ -79,15 +230,60 @@
 
                 <div class="checkout-section">
                     <h6>Client (optional)</h6>
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <input type="text" name="customer_phone" id="salePhone" class="form-control form-control-sm" placeholder="Phone">
+                    <div class="sale-client-picker" id="saleClientPicker">
+                        <div class="sale-client-trigger" id="saleClientTrigger">
+                            <div class="sale-client-avatar" id="saleClientAvatar"><i class="bx bx-user-plus"></i></div>
+                            <div>
+                                <div class="sale-client-label" id="saleClientLabel">Add client</div>
+                                <div class="sale-client-sub" id="saleClientSub">Search or add a new client</div>
+                            </div>
                         </div>
-                        <div class="col-6">
-                            <input type="text" name="customer_name" id="saleCustomerName" class="form-control form-control-sm" placeholder="Name">
+
+                        <input type="hidden" name="customer_id" id="saleCustomerId" value="">
+                        <input type="hidden" name="customer_phone" id="saleCustomerPhone" value="">
+                        <input type="hidden" name="customer_name" id="saleCustomerName" value="">
+
+                        <div class="sale-client-panel d-none" id="saleClientPanel">
+                            <div class="sale-client-search-wrap">
+                                <i class="bx bx-search"></i>
+                                <input type="text" id="saleClientSearch" placeholder="Search by name or phone">
+                            </div>
+
+                            <div class="sale-client-row" id="saleAddNewClientRow">
+                                <div class="sale-client-row-avatar"><i class="bx bx-plus"></i></div>
+                                <div class="sale-client-row-name">Add new client</div>
+                            </div>
+
+                            <div id="saleAddClientForm" class="d-none border rounded p-2 my-2">
+                                <input type="text" id="saleNewClientName" class="form-control form-control-sm mb-2" placeholder="Client name">
+                                <div class="input-group input-group-sm mb-1">
+                                    <select id="saleNewClientCountryCode" class="form-select" style="max-width: 100px;">
+                                        <option value="+974" selected>🇶🇦 +974</option>
+                                        <option value="+971">🇦🇪 +971</option>
+                                        <option value="+966">🇸🇦 +966</option>
+                                        <option value="+973">🇧🇭 +973</option>
+                                        <option value="+965">🇰🇼 +965</option>
+                                        <option value="+968">🇴🇲 +968</option>
+                                        <option value="+20">🇪🇬 +20</option>
+                                        <option value="+91">🇮🇳 +91</option>
+                                        <option value="+92">🇵🇰 +92</option>
+                                        <option value="+63">🇵🇭 +63</option>
+                                        <option value="+44">🇬🇧 +44</option>
+                                        <option value="+1">🇺🇸 +1</option>
+                                    </select>
+                                    <input type="tel" id="saleNewClientPhone" class="form-control" placeholder="Phone number">
+                                </div>
+                                <small id="saleNewClientPhoneError" class="text-danger d-none mb-2 d-block">Enter a valid phone number.</small>
+                                <button type="button" class="btn btn-sm btn-primary w-100" id="saleConfirmNewClientBtn">Add Client</button>
+                            </div>
+
+                            <div id="saleClientResults"></div>
+
+                            <div class="sale-client-footer">
+                                <button type="button" id="saleClientCloseBtn">Close</button>
+                            </div>
                         </div>
                     </div>
-                    <small id="saleCustomerInfo" class="d-none d-block mt-1 text-success"></small>
                 </div>
 
                 <div class="checkout-section">
@@ -179,34 +375,136 @@
     <script>
         let productRows = [];
         let rowSeq = 0;
-        let lookupTimer = null;
 
-        function lookupCustomer(phone) {
-            const info = document.getElementById('saleCustomerInfo');
-            if (!phone || phone.replace(/\D/g, '').length < 4) {
-                info.classList.add('d-none');
+        /* ---------------- CLIENT PICKER ---------------- */
+        let selectedSaleClient = null; // { id, name, phone } or null (id omitted for a brand-new client)
+        let saleClientSearchTimer = null;
+
+        function saleUpdateTrigger() {
+            const avatar = document.getElementById('saleClientAvatar');
+            const label = document.getElementById('saleClientLabel');
+            const sub = document.getElementById('saleClientSub');
+
+            document.getElementById('saleCustomerId').value = selectedSaleClient && selectedSaleClient.id ? selectedSaleClient.id : '';
+            document.getElementById('saleCustomerName').value = selectedSaleClient ? (selectedSaleClient.name || '') : '';
+            document.getElementById('saleCustomerPhone').value = selectedSaleClient ? (selectedSaleClient.phone || '') : '';
+
+            if (!selectedSaleClient) {
+                avatar.innerHTML = '<i class="bx bx-user-plus"></i>';
+                label.textContent = 'Add client';
+                sub.textContent = 'Search or add a new client';
                 return;
             }
 
-            fetch("{{ route('customers.lookup') }}?phone=" + encodeURIComponent(phone))
-                .then(res => res.json())
-                .then(data => {
-                    if (!data.found) {
-                        info.classList.add('d-none');
+            avatar.textContent = selectedSaleClient.name ? selectedSaleClient.name.charAt(0).toUpperCase() : '?';
+            label.textContent = selectedSaleClient.name || 'Client';
+            sub.textContent = selectedSaleClient.phone || '';
+        }
+
+        function saleOpenClientPanel() {
+            document.getElementById('saleClientPanel').classList.remove('d-none');
+            document.getElementById('saleAddClientForm').classList.add('d-none');
+            document.getElementById('saleClientSearch').value = '';
+            saleRenderClientResults('');
+        }
+
+        function saleCloseClientPanel() {
+            document.getElementById('saleClientPanel').classList.add('d-none');
+        }
+
+        document.getElementById('saleClientTrigger').addEventListener('click', function(e) {
+            e.stopPropagation();
+            const panel = document.getElementById('saleClientPanel');
+            if (panel.classList.contains('d-none')) {
+                saleOpenClientPanel();
+            } else {
+                saleCloseClientPanel();
+            }
+        });
+
+        document.getElementById('saleClientPanel').addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+
+        document.addEventListener('click', function() {
+            saleCloseClientPanel();
+        });
+
+        document.getElementById('saleClientCloseBtn').addEventListener('click', saleCloseClientPanel);
+
+        function saleRenderClientResults(query) {
+            const box = document.getElementById('saleClientResults');
+            box.innerHTML = '<div class="text-muted small px-2">Searching…</div>';
+
+            fetch("{{ route('customers.search') }}?q=" + encodeURIComponent(query))
+                .then(r => r.json())
+                .then(list => {
+                    if (!list.length) {
+                        box.innerHTML = '<div class="text-muted small px-2">No clients found.</div>';
                         return;
                     }
-                    const nameField = document.getElementById('saleCustomerName');
-                    if (!nameField.value && data.name) nameField.value = data.name;
+                    box.innerHTML = list.map(c => `
+                        <div class="sale-client-row" data-id="${c.id}" data-name="${c.name.replace(/"/g,'&quot;')}" data-phone="${c.phone}">
+                            <div class="sale-client-row-avatar">${c.initials}</div>
+                            <div>
+                                <div class="sale-client-row-name">${c.name}</div>
+                                <div class="sale-client-row-phone">${c.phone}</div>
+                            </div>
+                        </div>
+                    `).join('');
 
-                    info.textContent = `Returning client · ${data.visit_count} visit${data.visit_count === 1 ? '' : 's'}`;
-                    info.classList.remove('d-none');
+                    box.querySelectorAll('.sale-client-row').forEach(row => {
+                        row.addEventListener('click', () => saleSelectExistingClient({
+                            id: row.dataset.id, name: row.dataset.name, phone: row.dataset.phone
+                        }));
+                    });
                 });
         }
 
-        document.getElementById('salePhone').addEventListener('input', function() {
-            clearTimeout(lookupTimer);
-            const phone = this.value;
-            lookupTimer = setTimeout(() => lookupCustomer(phone), 400);
+        document.getElementById('saleClientSearch').addEventListener('input', function() {
+            clearTimeout(saleClientSearchTimer);
+            const q = this.value;
+            saleClientSearchTimer = setTimeout(() => saleRenderClientResults(q), 300);
+        });
+
+        function saleSelectExistingClient(client) {
+            selectedSaleClient = { id: client.id, name: client.name, phone: client.phone };
+            saleUpdateTrigger();
+            saleCloseClientPanel();
+        }
+
+        document.getElementById('saleAddNewClientRow').addEventListener('click', () => {
+            document.getElementById('saleAddClientForm').classList.remove('d-none');
+        });
+
+        document.getElementById('saleConfirmNewClientBtn').addEventListener('click', () => {
+            const name = document.getElementById('saleNewClientName').value.trim();
+            const countryCode = document.getElementById('saleNewClientCountryCode').value;
+            const rawPhone = document.getElementById('saleNewClientPhone').value.trim();
+            const errorEl = document.getElementById('saleNewClientPhoneError');
+            const localDigits = rawPhone.replace(/\D/g, '');
+            const fullPhone = countryCode + localDigits;
+
+            errorEl.classList.add('d-none');
+
+            if (!name) {
+                errorEl.textContent = "Please enter the client's name.";
+                errorEl.classList.remove('d-none');
+                return;
+            }
+
+            // E.164-style check: + then 7-15 digits total, first digit non-zero.
+            if (!/^\+[1-9]\d{6,14}$/.test(fullPhone)) {
+                errorEl.textContent = localDigits
+                    ? 'Enter a valid phone number for the selected country.'
+                    : 'Please enter a phone number.';
+                errorEl.classList.remove('d-none');
+                return;
+            }
+
+            selectedSaleClient = { name, phone: fullPhone };
+            saleUpdateTrigger();
+            saleCloseClientPanel();
         });
 
         function renderProductRows() {

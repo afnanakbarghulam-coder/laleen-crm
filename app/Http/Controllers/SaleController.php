@@ -19,6 +19,7 @@ class SaleController extends Controller
     public function store(Request $request)
     {
         $request->validate([
+            'customer_id' => 'nullable|exists:customers,id',
             'customer_phone' => 'nullable|string|max:20',
             'customer_name' => 'nullable|string|max:255',
             'branch' => 'required|in:old_airport,wakrah,home_service',
@@ -79,8 +80,17 @@ class SaleController extends Controller
                 ))->withInput();
         }
 
+        // An existing client picked from search already has a real id - use
+        // it directly rather than re-matching by phone, which could land on
+        // the wrong record if two customers share overlapping digits. The
+        // phone-based lookup below only applies to a brand-new client typed
+        // into the "Add new client" form, which has no id yet.
         $customer = null;
-        if ($request->filled('customer_phone')) {
+        if ($request->filled('customer_id')) {
+            $customer = \App\Models\Customer::find($request->customer_id);
+        }
+
+        if (!$customer && $request->filled('customer_phone')) {
             $phone = preg_replace('/\D/', '', $request->customer_phone);
             $customer = \App\Models\Customer::firstOrNew(['phone' => $phone]);
             if ($request->customer_name) {
