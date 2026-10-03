@@ -702,6 +702,38 @@ select option {
     flex-shrink: 0;
 }
 
+.kpi-alert-accordion {
+    display: block;
+}
+
+.kpi-alert-accordion .kpi-alert-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+}
+
+.kpi-alert-accordion .kpi-alert-header-main {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.kpi-alert-chevron {
+    flex-shrink: 0;
+    color: var(--luxe-muted);
+    transition: transform 0.2s ease;
+}
+
+.kpi-alert-chevron.is-open {
+    transform: rotate(180deg);
+}
+
+.kpi-alert-accordion .kpi-alert-body {
+    margin-top: 10px;
+}
+
 .kpi-stat-card {
     background: var(--luxe-surface);
     border: 1px solid var(--luxe-border);

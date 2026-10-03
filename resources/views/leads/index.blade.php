@@ -119,43 +119,57 @@
     </div>
 
     @if ($overdueLeads->count())
-        <div class="kpi-alert kpi-alert-red">
-            <i class="bx bx-error-circle"></i>
-            <div class="flex-grow-1">
-                <strong>{{ $overdueLeads->count() }} {{ Str::plural('lead', $overdueLeads->count()) }} overdue for follow-up!</strong>
-                <div class="text-muted small mb-2">Next Follow-up Date has passed and Needful Done isn't marked Yes.</div>
-                <div style="max-height: 170px; overflow-y: auto;">
-                    @foreach ($overdueLeads as $lead)
-                        <div class="d-flex justify-content-between small mb-1 pe-2">
-                            <span>{{ $lead->customer->name ?? 'Unnamed' }} &middot; {{ $lead->phone }}</span>
-                            <span class="text-muted">Was due {{ $lead->next_followup_date->format('d M Y') }}</span>
-                        </div>
-                    @endforeach
+        <div class="kpi-alert kpi-alert-red kpi-alert-accordion">
+            <div class="kpi-alert-header" onclick="toggleLeadAlertAccordion(this)">
+                <div class="kpi-alert-header-main">
+                    <i class="bx bx-error-circle"></i>
+                    <div>
+                        <strong>{{ $overdueLeads->count() }} {{ Str::plural('lead', $overdueLeads->count()) }} overdue for follow-up!</strong>
+                        <div class="text-muted small">Next Follow-up Date has passed and Needful Done isn't marked Yes.</div>
+                    </div>
                 </div>
+                <svg class="kpi-alert-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </div>
+            <div class="kpi-alert-body" style="display: none; max-height: 170px; overflow-y: auto;">
+                @foreach ($overdueLeads as $lead)
+                    <div class="d-flex justify-content-between small mb-1 pe-2">
+                        <span>{{ $lead->customer->name ?? 'Unnamed' }} &middot; {{ $lead->phone }}</span>
+                        <span class="text-muted">Was due {{ $lead->next_followup_date->format('d M Y') }}</span>
+                    </div>
+                @endforeach
             </div>
         </div>
     @endif
 
     @if ($unscheduledLeads->count())
-        <div class="kpi-alert kpi-alert-amber">
-            <i class="bx bx-calendar-x"></i>
-            <div class="flex-grow-1">
-                <strong>{{ $unscheduledLeads->count() }} Cancelled/No-show {{ Str::plural('lead', $unscheduledLeads->count()) }} need a follow-up date!</strong>
-                <div class="text-muted small mb-2">Contact the client, agree a rebooking timeline, and set Next Follow-up Date.</div>
-                <div style="max-height: 170px; overflow-y: auto;">
-                    @foreach ($unscheduledLeads as $lead)
-                        <div class="d-flex justify-content-between align-items-center small mb-1 pe-2">
-                            <span>
-                                {{ $lead->customer->name ?? 'Unnamed' }} &middot; {{ $lead->phone }}
-                                <span class="lead-badge cat-{{ $lead->category }} ms-1">{{ \App\Models\Lead::CATEGORIES[$lead->category] }}</span>
-                                <span class="text-muted">{{ implode(', ', $lead->service_interest ?? []) }}</span>
-                            </span>
-                            @moduleEdit('leads')
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#editLeadModal{{ $lead->id }}">Set date</button>
-                            @endmoduleEdit
-                        </div>
-                    @endforeach
+        <div class="kpi-alert kpi-alert-amber kpi-alert-accordion">
+            <div class="kpi-alert-header" onclick="toggleLeadAlertAccordion(this)">
+                <div class="kpi-alert-header-main">
+                    <i class="bx bx-calendar-x"></i>
+                    <div>
+                        <strong>{{ $unscheduledLeads->count() }} Cancelled/No-show {{ Str::plural('lead', $unscheduledLeads->count()) }} need a follow-up date!</strong>
+                        <div class="text-muted small">Contact the client, agree a rebooking timeline, and set Next Follow-up Date.</div>
+                    </div>
                 </div>
+                <svg class="kpi-alert-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </div>
+            <div class="kpi-alert-body" style="display: none; max-height: 170px; overflow-y: auto;">
+                @foreach ($unscheduledLeads as $lead)
+                    <div class="d-flex justify-content-between align-items-center small mb-1 pe-2">
+                        <span>
+                            {{ $lead->customer->name ?? 'Unnamed' }} &middot; {{ $lead->phone }}
+                            <span class="lead-badge cat-{{ $lead->category }} ms-1">{{ \App\Models\Lead::CATEGORIES[$lead->category] }}</span>
+                            <span class="text-muted">{{ implode(', ', $lead->service_interest ?? []) }}</span>
+                        </span>
+                        @moduleEdit('leads')
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#editLeadModal{{ $lead->id }}">Set date</button>
+                        @endmoduleEdit
+                    </div>
+                @endforeach
             </div>
         </div>
     @endif
@@ -507,6 +521,14 @@
 
         function closePopup() {
             document.getElementById("followupPopup").style.display = "none";
+        }
+
+        function toggleLeadAlertAccordion(headerEl) {
+            const body = headerEl.nextElementSibling;
+            const chevron = headerEl.querySelector('.kpi-alert-chevron');
+            const isOpening = body.style.display === 'none';
+            body.style.display = isOpening ? 'block' : 'none';
+            chevron.classList.toggle('is-open', isOpening);
         }
     </script>
 
