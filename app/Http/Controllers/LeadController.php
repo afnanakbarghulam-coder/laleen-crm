@@ -37,8 +37,20 @@ class LeadController extends Controller
             $query->where('phone', 'like', '%' . $normalizedPhone . '%');
         }
 
+        if ($request->filled('start_date')) {
+            $query->whereDate('created_at', '>=', $request->start_date);
+        }
+
+        if ($request->filled('end_date')) {
+            $query->whereDate('created_at', '<=', $request->end_date);
+        }
+
+        if ($request->filled('agent_id')) {
+            $query->where('assigned_agent_id', $request->agent_id);
+        }
+
         // With no filters at all, keep the table to recent leads rather than the full history.
-        if (!$request->hasAny(['category', 'followup_date', 'phone_number'])) {
+        if (!$request->hasAny(['category', 'followup_date', 'phone_number', 'start_date', 'end_date', 'agent_id'])) {
             $query->where('created_at', '>=', now()->subMonth());
         }
 

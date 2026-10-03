@@ -178,14 +178,14 @@
             </form>
         </div>
 
-        <div class="collapse mt-3 {{ request()->hasAny(['category', 'phone_number']) ? 'show' : '' }}" id="filterCollapse">
+        <div class="collapse mt-3 {{ request()->hasAny(['category', 'phone_number', 'start_date', 'end_date', 'agent_id']) ? 'show' : '' }}" id="filterCollapse">
             <div class="card card-body shadow-sm border-0">
                 <form method="GET" action="{{ route('leads.index') }}">
                     @if (request('followup_date'))
                         <input type="hidden" name="followup_date" value="{{ request('followup_date') }}">
                     @endif
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-6">
+                    <div class="leads-filter-grid">
+                        <div>
                             <label class="form-label">Category</label>
                             <select name="category[]" class="form-select leads-multiselect" multiple data-placeholder="All Categories">
                                 @foreach (\App\Models\Lead::CATEGORIES as $key => $label)
@@ -194,7 +194,27 @@
                             </select>
                         </div>
 
-                        <div class="col-md-6">
+                        <div>
+                            <label class="form-label">Agent</label>
+                            <select name="agent_id" class="form-select">
+                                <option value="">All Agents</option>
+                                @foreach ($agents as $agent)
+                                    <option value="{{ $agent->id }}" {{ (string) request('agent_id') === (string) $agent->id ? 'selected' : '' }}>{{ $agent->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="form-label">From</label>
+                            <input type="date" name="start_date" class="form-control" value="{{ request('start_date') }}">
+                        </div>
+
+                        <div>
+                            <label class="form-label">To</label>
+                            <input type="date" name="end_date" class="form-control" value="{{ request('end_date') }}">
+                        </div>
+
+                        <div class="leads-filter-grid-span-2">
                             <label class="form-label">Contact (WhatsApp Number)</label>
                             <div class="input-group">
                                 <select name="country_code" class="form-select" style="width: 110px; flex: 0 0 110px;">
@@ -207,7 +227,7 @@
                             </div>
                         </div>
 
-                        <div class="col-md-12 d-flex gap-2">
+                        <div class="leads-filter-grid-span-2 d-flex gap-2 align-items-end">
                             <button type="submit" class="btn btn-primary w-100">Filter</button>
                             <a href="{{ route('leads.index') }}" class="btn btn-secondary w-100">Reset</a>
                         </div>
@@ -216,6 +236,25 @@
             </div>
         </div>
     </div>
+
+    <style>
+        .leads-filter-grid {
+            display: grid;
+            grid-template-columns: repeat(1, minmax(0, 1fr));
+            gap: 1rem;
+            align-items: end;
+        }
+
+        @media (min-width: 768px) {
+            .leads-filter-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+
+            .leads-filter-grid-span-2 {
+                grid-column: span 2 / span 2;
+            }
+        }
+    </style>
 
 
     <!-- Lead Table -->
