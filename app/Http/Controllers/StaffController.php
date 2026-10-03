@@ -19,7 +19,7 @@ class StaffController extends Controller
 {
     public function index(Request $request)
     {
-        $activeTab = in_array($request->query('tab'), ['directory', 'payroll', 'complaints', 'notices'], true)
+        $activeTab = in_array($request->query('tab'), ['directory', 'payroll', 'complaints', 'notices', 'workspace'], true)
             ? $request->query('tab')
             : 'directory';
 
@@ -49,7 +49,7 @@ class StaffController extends Controller
         $categories = ServiceCategory::with('services')->orderBy('sort_order')->get();
 
         // Full roster, used by the pickers in the Payroll/Complaints/Notices tabs.
-        $allStaff = Staff::orderBy('name')->get();
+        $allStaff = Staff::with('services:id')->orderBy('name')->get();
 
         // Plain-array projections for the tabs' JS (never pass a chained/argument
         // expression to Blade's @json() directly — see StaffPayrollCalculator's
@@ -65,6 +65,21 @@ class StaffController extends Controller
             'id' => $s->id,
             'name' => $s->name,
         ])->values();
+
+        // For the Staff Workspace tab's staff picker - each member's current
+        // Services/Location/Settings, so the JS can populate the form
+        // in-place without a round trip when the admin switches who they're
+        // editing.
+        $staffWorkspaceOptions = $allStaff->map(fn ($s) => [
+            'id' => $s->id,
+            'name' => $s->name,
+            'branch' => $s->branch,
+            'bookable' => (bool) $s->bookable,
+            'service_ids' => $s->services->pluck('id'),
+        ])->values();
+        $selectedWorkspaceStaffId = $request->filled('staff') && $allStaff->contains('id', (int) $request->staff)
+            ? (int) $request->staff
+            : optional($allStaff->first())->id;
 
         // ---- Payroll & Overtime ----
         $payrollBranch = $request->filled('payroll_branch') && in_array($request->payroll_branch, ['old_airport', 'wakrah'], true)
@@ -127,6 +142,7 @@ class StaffController extends Controller
 
         return view('staff.index', compact(
             'staff', 'services', 'categories', 'activeTab', 'allStaff', 'allStaffOptions', 'serviceOptions',
+            'staffWorkspaceOptions', 'selectedWorkspaceStaffId',
             'payrollBranch', 'payrollFrom', 'payrollTo', 'payrollRows', 'overtimeEntries',
             'complaints', 'deductions', 'complaintsStaffFilter', 'openComplaints', 'openComplaintOptions',
             'notices', 'noticesStaffFilter'
@@ -143,7 +159,9 @@ class StaffController extends Controller
             'profile_picture' => $profilePath,
         ]));
 
-        $staff->services()->sync($request->input('service_ids', []));
+        // Branch and services are managed on the Staff Workspace tab, not
+        // this form - a new member starts with the branch column's own
+        // default ('both') and no services until set up there.
         $this->syncAccess($request, $staff);
 
         return redirect()->back()->with('success', 'Staff member added.');
@@ -162,11 +180,34 @@ class StaffController extends Controller
 
         $validated['name'] = $this->fullName($validated);
 
+        // Branch, bookability, and services are managed on the Staff
+        // Workspace tab now, not this form - leave them untouched here.
         $staff->update($validated);
-        $staff->services()->sync($request->input('service_ids', []));
         $this->syncAccess($request, $staff);
 
         return redirect()->back()->with('success', 'Staff updated.');
+    }
+
+    /**
+     * Saves the Services/Location/Settings trio from the standalone Staff
+     * Workspace tab. Split out from update() because that method's
+     * validation requires the full HR profile (first_name, etc.) - the
+     * Workspace form only ever submits these three fields for whichever
+     * staff member is currently selected.
+     */
+    public function updateWorkspace(Request $request, Staff $staff)
+    {
+        $validated = $request->validate([
+            'branch' => ['required', Rule::in(['old_airport', 'wakrah', 'both'])],
+            'bookable' => 'nullable|boolean',
+        ]);
+        $validated['bookable'] = $request->boolean('bookable');
+
+        $staff->update($validated);
+        $staff->services()->sync($request->input('service_ids', []));
+
+        return redirect()->route('staffs.index', ['tab' => 'workspace', 'staff' => $staff->id])
+            ->with('success', 'Workspace updated for ' . $staff->name . '.');
     }
 
     public function destroy(Staff $staff)
@@ -195,9 +236,6 @@ class StaffController extends Controller
             'emergency_contact_phone' => 'nullable|string|max:30',
             'emergency_contact_relationship' => 'nullable|string|max:100',
 
-            'branch' => ['required', Rule::in(['old_airport', 'wakrah', 'both'])],
-            'bookable' => 'nullable|boolean',
-
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
             'employment_type' => 'nullable|string|max:30',
@@ -209,8 +247,6 @@ class StaffController extends Controller
 
             'profile_picture' => 'nullable|image|max:2048',
         ]);
-
-        $data['bookable'] = $request->boolean('bookable');
 
         unset($data['profile_picture']);
 

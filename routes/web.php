@@ -111,6 +111,7 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('module:staff_management,edit')->group(function () {
         Route::post('/staffs', [StaffController::class, 'store'])->name('staffs.store');
         Route::put('/staffs/{staff}', [StaffController::class, 'update'])->name('staffs.update');
+        Route::put('/staffs/{staff}/workspace', [StaffController::class, 'updateWorkspace'])->name('staffs.workspace.update');
         Route::delete('/staffs/{staff}', [StaffController::class, 'destroy'])->name('staffs.destroy');
         Route::post('/scheduled-shifts/{staff}/pattern', [ShiftController::class, 'savePattern'])->name('shifts.pattern.store');
         Route::post('/scheduled-shifts/{staff}/time-off', [ShiftController::class, 'storeTimeOff'])->name('shifts.timeoff.store');

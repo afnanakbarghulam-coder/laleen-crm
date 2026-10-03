@@ -95,32 +95,6 @@
         height: 100%;
         object-fit: cover;
     }
-
-    #addStaffModal .svc-catalog-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 7px 8px;
-        border-radius: 6px;
-        font-size: 13px;
-    }
-
-    #addStaffModal .svc-catalog-row:hover {
-        background: rgba(217, 143, 131,0.06);
-    }
-
-    #addStaffModal .svc-catalog-row .meta {
-        font-size: 11px;
-        color: #c9a39a;
-    }
-
-    #addStaffModal .svc-cat-header {
-        font-weight: 700;
-        font-size: 12.5px;
-        color: #e79a91;
-        background: rgba(217, 143, 131,0.06);
-        border-radius: 6px;
-    }
 </style>
 
 <div class="modal fade" id="addStaffModal" tabindex="-1">
@@ -141,11 +115,6 @@
                         <div class="stf-nav-item active" data-pane="profile"><span>Profile</span></div>
                         <div class="stf-nav-item" data-pane="address"><span>Addresses</span></div>
                         <div class="stf-nav-item" data-pane="emergency"><span>Emergency contact</span></div>
-
-                        <div class="stf-nav-group">Workspace</div>
-                        <div class="stf-nav-item" data-pane="services"><span>Services</span><span class="badge rounded-pill" id="stfServiceCount">0</span></div>
-                        <div class="stf-nav-item" data-pane="location"><span>Location</span></div>
-                        <div class="stf-nav-item" data-pane="settings"><span>Settings</span></div>
 
                         <div class="stf-nav-group">Pay &amp; Employment</div>
                         <div class="stf-nav-item" data-pane="employment"><span>Employment details</span></div>
@@ -230,92 +199,6 @@
                                     <label class="form-label">Phone number</label>
                                     <input type="text" name="emergency_contact_phone" id="stfEmPhone" class="form-control" maxlength="30">
                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- SERVICES -->
-                        <div class="stf-pane" id="stf-services">
-                            <h6 class="fw-bold">Services</h6>
-                            <p class="text-muted small">Choose the services this team member provides. This controls who shows up as available on the booking calendar.</p>
-
-                            <input type="text" id="stfServiceSearch" class="form-control form-control-sm mb-2" placeholder="Search services">
-
-                            <div class="svc-catalog-row svc-cat-header">
-                                <label class="mb-0 flex-grow-1"><input type="checkbox" id="stfAllServices" class="form-check-input me-2">All services</label>
-                            </div>
-
-                            <div id="stfServiceList" style="max-height:320px; overflow-y:auto;">
-                                @foreach ($categories as $cat)
-                                    <div class="svc-cat-block" data-cat-name="{{ strtolower($cat->name) }}">
-                                        <div class="svc-catalog-row svc-cat-header mt-2">
-                                            <label class="mb-0 flex-grow-1">
-                                                <input type="checkbox" class="form-check-input me-2 cat-checkbox" data-cat="{{ $cat->id }}">
-                                                {{ $cat->name }} <span class="text-muted">({{ $cat->services->count() }})</span>
-                                            </label>
-                                        </div>
-                                        @foreach ($cat->services as $svc)
-                                            <div class="svc-catalog-row" data-svc-name="{{ strtolower($svc->name) }}" data-cat="{{ $cat->id }}">
-                                                <label class="mb-0 flex-grow-1">
-                                                    <input type="checkbox" name="service_ids[]" value="{{ $svc->id }}" class="form-check-input me-2 svc-checkbox" data-cat="{{ $cat->id }}">
-                                                    {{ $svc->name }}
-                                                    <span class="meta">{{ $svc->duration }}min</span>
-                                                </label>
-                                                <span>{{ number_format($svc->price, 2) }} QAR</span>
-                                            </div>
-                                        @endforeach
-                                    </div>
-                                @endforeach
-
-                                @php $uncategorized = $services->whereNull('category_id'); @endphp
-                                @if ($uncategorized->count())
-                                    <div class="svc-cat-block" data-cat-name="uncategorized">
-                                        <div class="svc-catalog-row svc-cat-header mt-2">
-                                            <span>Uncategorized</span>
-                                        </div>
-                                        @foreach ($uncategorized as $svc)
-                                            <div class="svc-catalog-row" data-svc-name="{{ strtolower($svc->name) }}">
-                                                <label class="mb-0 flex-grow-1">
-                                                    <input type="checkbox" name="service_ids[]" value="{{ $svc->id }}" class="form-check-input me-2 svc-checkbox">
-                                                    {{ $svc->name }}
-                                                    <span class="meta">{{ $svc->duration }}min</span>
-                                                </label>
-                                                <span>{{ number_format($svc->price, 2) }} QAR</span>
-                                            </div>
-                                        @endforeach
-                                    </div>
-                                @endif
-                            </div>
-                        </div>
-
-                        <!-- LOCATION -->
-                        <div class="stf-pane" id="stf-location">
-                            <h6 class="fw-bold">Location</h6>
-                            <p class="text-muted small">Which branch does this team member work from?</p>
-
-                            <select name="branch" id="stfBranch" class="form-select" required>
-                                <option value="old_airport">Old Airport</option>
-                                <option value="wakrah">Wakrah</option>
-                                <option value="both">Both</option>
-                            </select>
-                        </div>
-
-                        <!-- SETTINGS -->
-                        <div class="stf-pane" id="stf-settings">
-                            <h6 class="fw-bold">Settings</h6>
-                            <p class="text-muted small">Calendar bookability</p>
-
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" name="bookable" id="stfBookable" value="1" checked>
-                                <label class="form-check-label" for="stfBookable">
-                                    Bookable on the calendar
-                                    <div class="text-muted small">Turn off for staff who don't provide services directly (e.g. receptionists, managers)</div>
-                                </label>
-                            </div>
-
-                            <div class="alert alert-light border small mb-0">
-                                <i class="bx bx-info-circle me-1"></i>
-                                Working hours and time off are managed in
-                                <a href="{{ route('shifts.index') }}">Scheduled shifts</a>.
                             </div>
                         </div>
 
@@ -447,30 +330,6 @@
             document.getElementById('stfPhotoInput').click();
         });
 
-        function updateServiceCount() {
-            document.getElementById('stfServiceCount').textContent =
-                modalEl.querySelectorAll('.svc-checkbox:checked').length;
-        }
-
-        document.getElementById('stfAllServices').addEventListener('change', function() {
-            modalEl.querySelectorAll('.svc-checkbox, .cat-checkbox').forEach(cb => cb.checked = this.checked);
-            updateServiceCount();
-        });
-        modalEl.querySelectorAll('.cat-checkbox').forEach(cb => {
-            cb.addEventListener('change', function() {
-                modalEl.querySelectorAll(`.svc-checkbox[data-cat="${this.dataset.cat}"]`).forEach(sc => sc.checked = this.checked);
-                updateServiceCount();
-            });
-        });
-        modalEl.querySelectorAll('.svc-checkbox').forEach(cb => cb.addEventListener('change', updateServiceCount));
-
-        document.getElementById('stfServiceSearch').addEventListener('input', function() {
-            const q = this.value.trim().toLowerCase();
-            modalEl.querySelectorAll('.svc-catalog-row[data-svc-name]').forEach(row => {
-                row.style.display = row.dataset.svcName.includes(q) ? '' : 'none';
-            });
-        });
-
         document.getElementById('stfHasAccess').addEventListener('change', function() {
             document.getElementById('stfAccessFields').classList.toggle('d-none', !this.checked);
         });
@@ -487,10 +346,9 @@
             modalEl.querySelectorAll('.stf-pane').forEach(p => p.classList.remove('active'));
             modalEl.querySelector('[data-pane="profile"]').classList.add('active');
             document.getElementById('stf-profile').classList.add('active');
-            updateServiceCount();
         };
 
-        window.editStaff = function(member, serviceIds, hasAccess, accessRole, accessEmail) {
+        window.editStaff = function(member, hasAccess, accessRole, accessEmail) {
             resetStaffForm();
 
             document.getElementById('staffModalTitle').innerText = 'Edit team member';
@@ -511,9 +369,6 @@
             document.getElementById('stfEmRelationship').value = member.emergency_contact_relationship || '';
             document.getElementById('stfEmPhone').value = member.emergency_contact_phone || '';
 
-            document.getElementById('stfBranch').value = member.branch;
-            document.getElementById('stfBookable').checked = !!member.bookable;
-
             document.getElementById('stfStartDate').value = member.start_date ? member.start_date.slice(0, 10) : '';
             document.getElementById('stfEndDate').value = member.end_date ? member.end_date.slice(0, 10) : '';
             document.getElementById('stfEmploymentType').value = member.employment_type || '';
@@ -523,18 +378,6 @@
             document.getElementById('stfBaseSalary').value = member.base_salary || '';
             document.getElementById('stfWage').value = member.hourly_wage || '';
             document.getElementById('stfCommission').value = member.commission_rate || '';
-
-            modalEl.querySelectorAll('.svc-checkbox').forEach(cb => {
-                cb.checked = serviceIds.includes(Number(cb.value));
-            });
-            modalEl.querySelectorAll('.cat-checkbox').forEach(cb => {
-                const catBoxes = modalEl.querySelectorAll(`.svc-checkbox[data-cat="${cb.dataset.cat}"]`);
-                cb.checked = catBoxes.length > 0 && [...catBoxes].every(b => b.checked);
-            });
-            document.getElementById('stfAllServices').checked =
-                modalEl.querySelectorAll('.svc-checkbox').length > 0 &&
-                [...modalEl.querySelectorAll('.svc-checkbox')].every(b => b.checked);
-            updateServiceCount();
 
             if (member.profile_picture) {
                 const preview = document.getElementById('stfPhotoPreview');

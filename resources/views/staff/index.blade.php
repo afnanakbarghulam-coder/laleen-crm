@@ -265,6 +265,168 @@
         color: var(--luxe-muted);
         font-size: 12px;
     }
+
+    /* ---------------- STAFF WORKSPACE ---------------- */
+    .svc-catalog-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 7px 8px;
+        border-radius: 6px;
+        font-size: 13px;
+    }
+
+    .svc-catalog-row:hover {
+        background: rgba(217, 143, 131, 0.06);
+    }
+
+    .svc-catalog-row .meta {
+        font-size: 11px;
+        color: var(--luxe-muted);
+    }
+
+    .svc-cat-header {
+        font-weight: 700;
+        font-size: 12.5px;
+        color: var(--luxe-ink);
+        background: rgba(217, 143, 131, 0.06);
+        border-radius: 6px;
+    }
+
+    .ws-subtab-pane {
+        display: none;
+    }
+
+    .ws-subtab-pane.active {
+        display: block;
+    }
+
+    .ws-staff-picker {
+        position: relative;
+    }
+
+    .ws-staff-trigger {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        background-color: rgba(20, 16, 14, 0.5);
+        border: 1px solid var(--luxe-border-strong);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: border-color .15s ease;
+    }
+
+    .ws-staff-trigger:hover {
+        border-color: rgba(217, 143, 131, 0.5);
+    }
+
+    .ws-staff-avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: rgba(185, 142, 163, 0.14);
+        color: #b98ea3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .ws-staff-name {
+        font-weight: 700;
+        font-size: 13.5px;
+        color: var(--luxe-ink);
+    }
+
+    .ws-staff-sub {
+        font-size: 11.5px;
+        color: var(--luxe-muted);
+    }
+
+    .ws-staff-panel {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        width: 100%;
+        min-width: 260px;
+        z-index: 1070;
+        background: #1c1715;
+        border: 1px solid var(--luxe-border-strong);
+        border-radius: 10px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, .35);
+        padding: 10px;
+        max-height: 360px;
+        overflow-y: auto;
+    }
+
+    .ws-staff-search-wrap {
+        position: relative;
+        margin-bottom: 6px;
+    }
+
+    .ws-staff-search-wrap i {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--luxe-muted);
+        font-size: 14px;
+    }
+
+    .ws-staff-search-wrap input {
+        width: 100%;
+        background-color: #241e1c;
+        border: 1px solid rgba(217, 143, 131, 0.2);
+        border-radius: 6px;
+        padding: 6px 10px 6px 30px;
+        color: var(--luxe-ink);
+        font-size: 13px;
+    }
+
+    .ws-staff-search-wrap input:focus {
+        outline: none;
+        border-color: var(--luxe-accent);
+    }
+
+    .ws-staff-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 6px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+
+    .ws-staff-row:hover {
+        background: rgba(217, 143, 131, 0.08);
+    }
+
+    .ws-staff-row.active {
+        background: rgba(217, 143, 131, 0.14);
+    }
+
+    .ws-staff-row-avatar {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: rgba(217, 143, 131, 0.14);
+        color: var(--luxe-ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11.5px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .ws-staff-row-sub {
+        font-size: 11px;
+        color: var(--luxe-muted);
+    }
 </style>
 
 @section('content')
@@ -290,6 +452,7 @@
 
     <div class="d-flex gap-2 mb-4 flex-wrap">
         <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'directory' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="directory">Staff Directory</button>
+        <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'workspace' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="workspace">Staff Workspace</button>
         <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'payroll' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="payroll">Payroll &amp; Overtime</button>
         <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'complaints' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="complaints">Complaints &amp; Deductions</button>
         <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'notices' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="notices">Notices</button>
@@ -405,7 +568,6 @@
                                             <div class="dropdown-menu dropdown-menu-end">
                                                 <button type="button" class="dropdown-item edit-btn"
                                                     data-staff='@json($member)'
-                                                    data-service-ids='@json($member->services->pluck("id"))'
                                                     data-has-access="{{ $member->user ? 1 : 0 }}"
                                                     data-access-role="{{ $member->user->role ?? '' }}"
                                                     data-access-email="{{ $member->user->email ?? '' }}">
@@ -434,6 +596,142 @@
                 </table>
             </div>
         </div>
+    </div>
+
+    {{-- ================= STAFF WORKSPACE ================= --}}
+    <div id="staff-pane-workspace" class="staff-tab-pane {{ $activeTab === 'workspace' ? '' : 'd-none' }}">
+        @moduleEdit('staff_management')
+            <div class="row g-3">
+                <div class="col-md-4 col-lg-3">
+                    <div class="ws-staff-picker" id="wsStaffPicker">
+                        <label class="form-label small text-muted mb-1">Select staff member</label>
+                        <div class="ws-staff-trigger" id="wsStaffTrigger">
+                            <div class="ws-staff-avatar" id="wsStaffAvatar">?</div>
+                            <div class="flex-grow-1">
+                                <div class="ws-staff-name" id="wsStaffName">Select a team member</div>
+                                <div class="ws-staff-sub" id="wsStaffSub">Click to search</div>
+                            </div>
+                            <i class="bx bx-chevron-down"></i>
+                        </div>
+
+                        <div class="ws-staff-panel d-none" id="wsStaffPanel">
+                            <div class="ws-staff-search-wrap">
+                                <i class="bx bx-search"></i>
+                                <input type="text" id="wsStaffSearch" placeholder="Search team members">
+                            </div>
+                            <div id="wsStaffResults" class="ws-staff-results"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-8 col-lg-9">
+                    <div id="wsNoStaffNotice" class="alert alert-light border small {{ $selectedWorkspaceStaffId ? 'd-none' : '' }}">
+                        No team members yet — add one from Staff Directory first.
+                    </div>
+
+                    <form method="POST" id="wsForm" class="{{ $selectedWorkspaceStaffId ? '' : 'd-none' }}">
+                        @csrf
+                        <input type="hidden" name="_method" value="PUT">
+
+                        <div class="d-flex gap-2 mb-3">
+                            <button type="button" class="ws-subtab-btn btn btn-sm btn-dark" data-ws-pane="services">Services <span class="badge rounded-pill" id="wsServiceCount">0</span></button>
+                            <button type="button" class="ws-subtab-btn btn btn-sm btn-outline-secondary" data-ws-pane="location">Location</button>
+                            <button type="button" class="ws-subtab-btn btn btn-sm btn-outline-secondary" data-ws-pane="settings">Settings</button>
+                        </div>
+
+                        <!-- SERVICES -->
+                        <div class="ws-subtab-pane active" id="ws-services">
+                            <h6 class="fw-bold">Services</h6>
+                            <p class="text-muted small">Choose the services this team member provides. This controls who shows up as available on the booking calendar.</p>
+
+                            <input type="text" id="wsServiceSearch" class="form-control form-control-sm mb-2" placeholder="Search services">
+
+                            <div class="svc-catalog-row svc-cat-header">
+                                <label class="mb-0 flex-grow-1"><input type="checkbox" id="wsAllServices" class="form-check-input me-2">All services</label>
+                            </div>
+
+                            <div id="wsServiceList" style="max-height:360px; overflow-y:auto;">
+                                @foreach ($categories as $cat)
+                                    <div class="svc-cat-block" data-cat-name="{{ strtolower($cat->name) }}">
+                                        <div class="svc-catalog-row svc-cat-header mt-2">
+                                            <label class="mb-0 flex-grow-1">
+                                                <input type="checkbox" class="form-check-input me-2 ws-cat-checkbox" data-cat="{{ $cat->id }}">
+                                                {{ $cat->name }} <span class="text-muted">({{ $cat->services->count() }})</span>
+                                            </label>
+                                        </div>
+                                        @foreach ($cat->services as $svc)
+                                            <div class="svc-catalog-row" data-svc-name="{{ strtolower($svc->name) }}" data-cat="{{ $cat->id }}">
+                                                <label class="mb-0 flex-grow-1">
+                                                    <input type="checkbox" name="service_ids[]" value="{{ $svc->id }}" class="form-check-input me-2 ws-svc-checkbox" data-cat="{{ $cat->id }}">
+                                                    {{ $svc->name }}
+                                                    <span class="meta">{{ $svc->duration }}min</span>
+                                                </label>
+                                                <span>{{ number_format($svc->price, 2) }} QAR</span>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endforeach
+
+                                @php $wsUncategorized = $services->whereNull('category_id'); @endphp
+                                @if ($wsUncategorized->count())
+                                    <div class="svc-cat-block" data-cat-name="uncategorized">
+                                        <div class="svc-catalog-row svc-cat-header mt-2">
+                                            <span>Uncategorized</span>
+                                        </div>
+                                        @foreach ($wsUncategorized as $svc)
+                                            <div class="svc-catalog-row" data-svc-name="{{ strtolower($svc->name) }}">
+                                                <label class="mb-0 flex-grow-1">
+                                                    <input type="checkbox" name="service_ids[]" value="{{ $svc->id }}" class="form-check-input me-2 ws-svc-checkbox">
+                                                    {{ $svc->name }}
+                                                    <span class="meta">{{ $svc->duration }}min</span>
+                                                </label>
+                                                <span>{{ number_format($svc->price, 2) }} QAR</span>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+
+                        <!-- LOCATION -->
+                        <div class="ws-subtab-pane" id="ws-location">
+                            <h6 class="fw-bold">Location</h6>
+                            <p class="text-muted small">Which branch does this team member work from?</p>
+
+                            <select name="branch" id="wsBranch" class="form-select" style="max-width: 320px;" required>
+                                <option value="old_airport">Old Airport</option>
+                                <option value="wakrah">Wakrah</option>
+                                <option value="both">Both</option>
+                            </select>
+                        </div>
+
+                        <!-- SETTINGS -->
+                        <div class="ws-subtab-pane" id="ws-settings">
+                            <h6 class="fw-bold">Settings</h6>
+                            <p class="text-muted small">Calendar bookability</p>
+
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" name="bookable" id="wsBookable" value="1">
+                                <label class="form-check-label" for="wsBookable">
+                                    Bookable on the calendar
+                                    <div class="text-muted small">Turn off for staff who don't provide services directly (e.g. receptionists, managers)</div>
+                                </label>
+                            </div>
+
+                            <div class="alert alert-light border small mb-0">
+                                <i class="bx bx-info-circle me-1"></i>
+                                Working hours and time off are managed in
+                                <a href="{{ route('shifts.index') }}">Scheduled shifts</a>.
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-dark">Save Workspace</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        @endmoduleEdit
     </div>
 
     {{-- ================= PAYROLL & OVERTIME ================= --}}
@@ -933,7 +1231,6 @@
                 btn.addEventListener('click', function() {
                     editStaff(
                         JSON.parse(this.dataset.staff),
-                        JSON.parse(this.dataset.serviceIds),
                         this.dataset.hasAccess === '1',
                         this.dataset.accessRole,
                         this.dataset.accessEmail
@@ -957,6 +1254,142 @@
                 document.getElementById('staff-pane-' + this.dataset.tab).classList.remove('d-none');
             });
         });
+
+        /* ---------------- STAFF WORKSPACE ---------------- */
+        (function() {
+            const picker = document.getElementById('wsStaffPicker');
+            if (!picker) return; // view-only users don't get the Workspace form at all
+
+            const STAFF_WORKSPACE_DATA = @json($staffWorkspaceOptions);
+            let wsSelectedStaffId = @json($selectedWorkspaceStaffId);
+
+            function wsBranchLabel(branch) {
+                return branch === 'old_airport' ? 'Old Airport' : branch === 'wakrah' ? 'Wakrah' : 'Both branches';
+            }
+
+            function wsInitials(name) {
+                return name ? name.charAt(0).toUpperCase() : '?';
+            }
+
+            function wsOpenPanel() {
+                document.getElementById('wsStaffPanel').classList.remove('d-none');
+                document.getElementById('wsStaffSearch').value = '';
+                wsRenderStaffResults('');
+            }
+
+            function wsClosePanel() {
+                document.getElementById('wsStaffPanel').classList.add('d-none');
+            }
+
+            document.getElementById('wsStaffTrigger').addEventListener('click', function(e) {
+                e.stopPropagation();
+                const panel = document.getElementById('wsStaffPanel');
+                panel.classList.contains('d-none') ? wsOpenPanel() : wsClosePanel();
+            });
+            document.getElementById('wsStaffPanel').addEventListener('click', e => e.stopPropagation());
+            document.addEventListener('click', wsClosePanel);
+
+            function wsRenderStaffResults(query) {
+                const q = query.trim().toLowerCase();
+                const box = document.getElementById('wsStaffResults');
+                const matches = STAFF_WORKSPACE_DATA.filter(s => s.name.toLowerCase().includes(q));
+
+                if (!matches.length) {
+                    box.innerHTML = '<div class="text-muted small px-2">No team members found.</div>';
+                    return;
+                }
+
+                box.innerHTML = matches.map(s => `
+                    <div class="ws-staff-row ${s.id === wsSelectedStaffId ? 'active' : ''}" data-id="${s.id}">
+                        <div class="ws-staff-row-avatar">${wsInitials(s.name)}</div>
+                        <div>
+                            <div>${s.name}</div>
+                            <div class="ws-staff-row-sub">${wsBranchLabel(s.branch)}</div>
+                        </div>
+                    </div>
+                `).join('');
+
+                box.querySelectorAll('.ws-staff-row').forEach(row => {
+                    row.addEventListener('click', () => wsSelectStaff(Number(row.dataset.id)));
+                });
+            }
+
+            document.getElementById('wsStaffSearch').addEventListener('input', function() {
+                wsRenderStaffResults(this.value);
+            });
+
+            function wsUpdateServiceCount() {
+                document.getElementById('wsServiceCount').textContent =
+                    document.querySelectorAll('.ws-svc-checkbox:checked').length;
+            }
+
+            function wsSelectStaff(id) {
+                const member = STAFF_WORKSPACE_DATA.find(s => s.id === id);
+                if (!member) return;
+                wsSelectedStaffId = id;
+
+                document.getElementById('wsStaffAvatar').textContent = wsInitials(member.name);
+                document.getElementById('wsStaffName').textContent = member.name;
+                document.getElementById('wsStaffSub').textContent = wsBranchLabel(member.branch);
+
+                document.getElementById('wsForm').action = `/staffs/${id}/workspace`;
+                document.getElementById('wsBranch').value = member.branch;
+                document.getElementById('wsBookable').checked = !!member.bookable;
+
+                document.querySelectorAll('.ws-svc-checkbox').forEach(cb => {
+                    cb.checked = member.service_ids.includes(Number(cb.value));
+                });
+                document.querySelectorAll('.ws-cat-checkbox').forEach(cb => {
+                    const catBoxes = document.querySelectorAll(`.ws-svc-checkbox[data-cat="${cb.dataset.cat}"]`);
+                    cb.checked = catBoxes.length > 0 && [...catBoxes].every(b => b.checked);
+                });
+                document.getElementById('wsAllServices').checked =
+                    document.querySelectorAll('.ws-svc-checkbox').length > 0 &&
+                    [...document.querySelectorAll('.ws-svc-checkbox')].every(b => b.checked);
+                wsUpdateServiceCount();
+
+                document.getElementById('wsNoStaffNotice').classList.add('d-none');
+                document.getElementById('wsForm').classList.remove('d-none');
+
+                wsClosePanel();
+            }
+
+            document.getElementById('wsAllServices').addEventListener('change', function() {
+                document.querySelectorAll('.ws-svc-checkbox, .ws-cat-checkbox').forEach(cb => cb.checked = this.checked);
+                wsUpdateServiceCount();
+            });
+            document.querySelectorAll('.ws-cat-checkbox').forEach(cb => {
+                cb.addEventListener('change', function() {
+                    document.querySelectorAll(`.ws-svc-checkbox[data-cat="${this.dataset.cat}"]`).forEach(sc => sc.checked = this.checked);
+                    wsUpdateServiceCount();
+                });
+            });
+            document.querySelectorAll('.ws-svc-checkbox').forEach(cb => cb.addEventListener('change', wsUpdateServiceCount));
+
+            document.getElementById('wsServiceSearch').addEventListener('input', function() {
+                const q = this.value.trim().toLowerCase();
+                document.querySelectorAll('#wsServiceList .svc-catalog-row[data-svc-name]').forEach(row => {
+                    row.style.display = row.dataset.svcName.includes(q) ? '' : 'none';
+                });
+            });
+
+            document.querySelectorAll('.ws-subtab-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.ws-subtab-btn').forEach(b => {
+                        b.classList.remove('btn-dark');
+                        b.classList.add('btn-outline-secondary');
+                    });
+                    this.classList.remove('btn-outline-secondary');
+                    this.classList.add('btn-dark');
+                    document.querySelectorAll('.ws-subtab-pane').forEach(p => p.classList.remove('active'));
+                    document.getElementById('ws-' + this.dataset.wsPane).classList.add('active');
+                });
+            });
+
+            if (wsSelectedStaffId) {
+                wsSelectStaff(wsSelectedStaffId);
+            }
+        })();
 
         /* ---------------- PAYROLL & OPERATIONS: INLINE LEDGERS ---------------- */
         const CAN_EDIT_STAFF = @json(auth()->check() && auth()->user()->canEdit('staff_management'));
