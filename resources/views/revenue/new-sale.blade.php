@@ -4,12 +4,13 @@
 <style>
     .checkout-wrap {
         display: flex;
-        justify-content: flex-end;
+        justify-content: center;
     }
 
     .checkout-drawer {
         width: 100%;
-        max-width: 520px;
+        max-width: 640px;
+        margin: 0 auto;
         background: #241e1c;
         border: 1px solid rgba(217, 143, 131,0.16);
         border-radius: 14px;
@@ -18,7 +19,7 @@
     }
 
     .checkout-header, .checkout-section {
-        padding: 18px 22px;
+        padding: 8px 20px;
         border-bottom: 1px solid rgba(217, 143, 131,0.07);
     }
 
@@ -28,29 +29,29 @@
         text-transform: uppercase;
         letter-spacing: .04em;
         color: #c9a39a;
-        margin-bottom: 12px;
+        margin-bottom: 4px;
     }
 
     .product-row {
         display: flex;
         align-items: center;
         gap: 8px;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
     }
 
     .summary-row {
         display: flex;
         justify-content: space-between;
-        padding: 4px 0;
+        padding: 2px 0;
         font-size: 14px;
     }
 
     .summary-row.total {
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 700;
         border-top: 1px solid rgba(217, 143, 131,0.16);
-        margin-top: 8px;
-        padding-top: 10px;
+        margin-top: 4px;
+        padding-top: 6px;
     }
 
     .remaining-pill {

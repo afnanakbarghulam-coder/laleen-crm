@@ -28,6 +28,12 @@
             $backTarget = $routeName === 'appointments.revenue.index' ? null : route('appointments.revenue.index');
         } elseif ($routeName === 'appointments.calendar') {
             $backTarget = null;
+        } elseif ($routeName === 'sales.create') {
+            // The walk-in "New Sale" quick-sale form is only ever reached
+            // from the Enhanced Calendar's "Add" menu, not the Bookings
+            // list, so it should return there instead of the generic
+            // Bookings index the branch below falls back to.
+            $backTarget = route('appointments.calendar');
         } elseif (str_starts_with($routeName, 'appointments') || str_starts_with($routeName, 'sales') || str_starts_with($routeName, 'staff-blocks')) {
             $backTarget = $routeName === 'appointments.index' ? null : route('appointments.index');
         } elseif (str_starts_with($routeName, 'leads')) {
