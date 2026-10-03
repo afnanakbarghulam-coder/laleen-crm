@@ -579,7 +579,8 @@ select option {
     color: var(--luxe-body);
 }
 
-.select2-container--default .select2-results__option[aria-selected="true"] {
+.select2-container--default .select2-results__option[aria-selected="true"],
+.select2-container--default .select2-results__option--selected {
     background: rgba(217, 143, 131, 0.08) !important;
     color: var(--luxe-ink) !important;
 }
