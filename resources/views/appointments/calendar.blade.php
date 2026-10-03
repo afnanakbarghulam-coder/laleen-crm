@@ -1367,6 +1367,10 @@
                 </div>
 
                 <div id="drawerRescheduleForm" class="d-none border rounded p-2 mb-2 bg-light">
+                    <select id="drawerRescheduleBranch" class="form-select form-select-sm mb-2">
+                        <option value="old_airport">Old Airport</option>
+                        <option value="wakrah">Al Wakrah</option>
+                    </select>
                     <div class="row g-2">
                         <div class="col-6">
                             <input type="date" id="drawerRescheduleDate" class="form-control form-control-sm">
@@ -2075,6 +2079,7 @@
             checkoutBtn.classList.toggle('d-none', isFinal || !CAN_EDIT_FINANCE);
 
             // Reschedule form prefill
+            document.getElementById('drawerRescheduleBranch').value = a.branch_raw;
             document.getElementById('drawerRescheduleDate').value = a.date;
             document.getElementById('drawerRescheduleTime').value = a.time;
             if (a.staff_id) document.getElementById('drawerRescheduleStaff').value = a.staff_id;
@@ -2490,6 +2495,7 @@
             const date = document.getElementById('drawerRescheduleDate').value;
             const time = document.getElementById('drawerRescheduleTime').value;
             const staffId = document.getElementById('drawerRescheduleStaff').value;
+            const branch = document.getElementById('drawerRescheduleBranch').value;
             if (!date || !time) {
                 showCalToast('Please pick a date and time.', 'error');
                 return;
@@ -2499,10 +2505,10 @@
                     document.getElementById('drawerRescheduleForm').classList.add('d-none');
                     fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
                 }
-            });
+            }, branch);
         });
 
-        function rescheduleAppointment(appointmentId, datetime, staffId, callback) {
+        function rescheduleAppointment(appointmentId, datetime, staffId, callback, branch) {
             if (!CAN_EDIT_BOOKINGS) return;
             fetch(`/appointments/${appointmentId}/reschedule`, {
                     method: 'PATCH',
@@ -2511,7 +2517,7 @@
                         'X-CSRF-TOKEN': '{{ csrf_token() }}',
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ appointment_datetime: datetime, staff_id: staffId || null })
+                    body: JSON.stringify({ appointment_datetime: datetime, staff_id: staffId || null, branch: branch || null })
                 })
                 .then(r => r.json().then(data => ({ ok: r.ok, data })))
                 .then(({ ok, data }) => {

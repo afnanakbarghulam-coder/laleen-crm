@@ -1453,12 +1453,14 @@ class AppointmentController extends Controller
         $request->validate([
             'appointment_datetime' => 'required|date',
             'staff_id' => 'nullable|exists:staff,id',
+            'branch' => 'nullable|in:old_airport,wakrah',
         ]);
 
         $newStart = Carbon::parse($request->appointment_datetime);
         $staffId = $request->staff_id ?: $appointment->staff_id;
+        $branch = $request->branch ?: $appointment->branch;
 
-        $workingHours = $this->branchWorkingHours($appointment->branch, $newStart);
+        $workingHours = $this->branchWorkingHours($branch, $newStart);
         $startBranch = Carbon::createFromFormat('H:i', $workingHours['start'])
             ->setDate($newStart->year, $newStart->month, $newStart->day);
         $endBranch = Carbon::createFromFormat('H:i', $workingHours['end'])
@@ -1504,6 +1506,7 @@ class AppointmentController extends Controller
         $appointment->update([
             'appointment_datetime' => $newStart,
             'staff_id' => $staffId,
+            'branch' => $branch,
         ]);
 
         return response()->json([
