@@ -542,8 +542,12 @@ class AppointmentController extends Controller
 
     public function destroy(Appointment $appointment)
     {
+        // Safe to hard-delete: appointment_services/upsells/price_overrides
+        // cascade at the DB level (their only value is tied to this
+        // appointment), while sales/leads/client_packages referencing this
+        // appointment_id are set-null, so those independent records survive.
         $appointment->delete();
-        return redirect()->back()->with('success', 'Appointment deleted successfully.');
+        return redirect()->back()->with('success', 'Booking successfully deleted.');
     }
 
     public function calendar(Request $request)

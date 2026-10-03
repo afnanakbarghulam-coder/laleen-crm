@@ -506,12 +506,23 @@
                                             'price' => (float) $appointment->price,
                                         ];
                                     @endphp
-                                    <button type="button" class="btn btn-sm btn-outline-primary"
-                                        data-appt="{{ json_encode($apptData) }}"
-                                        onclick="openBookingEditModal(this)">
-                                        <i class="bx bx-edit-alt"></i>
-                                        {{ in_array($appointment->status, ['cancelled', 'no_show']) ? 'Reschedule' : 'Edit' }}
-                                    </button>
+                                    <div class="d-flex gap-2 justify-content-center">
+                                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                            data-appt="{{ json_encode($apptData) }}"
+                                            onclick="openBookingEditModal(this)">
+                                            <i class="bx bx-edit-alt"></i>
+                                            {{ in_array($appointment->status, ['cancelled', 'no_show']) ? 'Reschedule' : 'Edit' }}
+                                        </button>
+
+                                        <form action="{{ route('appointments.destroy', $appointment->id) }}" method="POST"
+                                            onsubmit="return confirm('Are you sure you want to delete this booking? This action cannot be undone.');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Booking">
+                                                <i class="bx bx-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
                                 @endif
                             </td>
                         </tr>
