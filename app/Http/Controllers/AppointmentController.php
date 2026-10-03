@@ -642,6 +642,17 @@ class AppointmentController extends Controller
             ]);
     }
 
+    /**
+     * The calendar no longer offers an "All Locations" option - every view
+     * is strictly scoped to one branch to prevent cross-branch booking
+     * errors, so this always resolves to a concrete branch and never to
+     * null/empty, even if a request omits the param entirely.
+     */
+    private function resolveBranch(Request $request): string
+    {
+        return $request->filled('branch') ? $request->branch : 'old_airport';
+    }
+
     private function filteredAppointmentQuery(Request $request)
     {
         // Cancelled/no-show bookings no longer occupy a slot, so the
@@ -650,7 +661,7 @@ class AppointmentController extends Controller
         // is immediately free for a new booking.
         $query = Appointment::query()->whereNotIn('status', ['cancelled', 'no_show']);
 
-        if ($request->filled('branch'))       $query->where('branch', $request->branch);
+        $query->where('branch', $this->resolveBranch($request));
         if ($request->filled('staff_id'))     $query->where('staff_id', $request->staff_id);
         if ($request->filled('service_name')) $query->where('service_name', 'like', '%' . $request->service_name . '%');
         if ($request->filled('agent_id'))     $query->where('booking_agent_id', $request->agent_id);
@@ -692,7 +703,7 @@ class AppointmentController extends Controller
     {
         $view = in_array($request->view, ['week', '3day', 'month']) ? $request->view : 'day';
         $anchor = $request->date ? Carbon::parse($request->date)->startOfDay() : now()->startOfDay();
-        $branch = $request->branch ?? 'old_airport';
+        $branch = $this->resolveBranch($request);
 
         $staffQuery = Staff::select('id', 'name', 'weekly_off', 'availability_status', 'off_from', 'off_to', 'profile_picture')
             ->with('services:id,name')
@@ -702,11 +713,9 @@ class AppointmentController extends Controller
             $staffQuery->where('id', $request->staff_id);
         }
 
-        if ($request->filled('branch')) {
-            $staffQuery->where(function ($q) use ($request) {
-                $q->where('branch', $request->branch)->orWhere('branch', 'both');
-            });
-        }
+        $staffQuery->where(function ($q) use ($branch) {
+            $q->where('branch', $branch)->orWhere('branch', 'both');
+        });
 
         $staffs = $staffQuery->get();
 

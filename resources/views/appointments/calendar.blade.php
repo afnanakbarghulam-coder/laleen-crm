@@ -1152,7 +1152,6 @@
                         <div class="cal-filter-field">
                             <label for="filterBranch">Location</label>
                             <select id="filterBranch" class="cal-filter-select">
-                                <option value="">All Locations</option>
                                 <option value="old_airport">Old Airport</option>
                                 <option value="wakrah">Al Wakrah</option>
                             </select>
@@ -1485,18 +1484,26 @@
             return `${y}-${m}-${day}`;
         }
 
+        // No "All Locations" option exists any more - every view is scoped
+        // to one branch to prevent cross-branch booking errors, so this
+        // must never resolve to an empty/null branch, even for a session
+        // that cached an empty value from before that option was removed.
+        const DEFAULT_BRANCH = 'old_airport';
+
         function loadFilters() {
             let saved = {};
             try {
                 saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY)) || {};
             } catch (e) {}
-            return Object.assign({
+            const state = Object.assign({
                 view: 'day',
                 date: toLocalISODate(new Date()),
-                branch: '',
+                branch: DEFAULT_BRANCH,
                 staff_id: '',
                 zoom: 56
             }, saved);
+            if (!state.branch) state.branch = DEFAULT_BRANCH;
+            return state;
         }
 
         function saveFilters() {
@@ -1545,7 +1552,10 @@
             document.getElementById('activeBranchHeading').textContent =
                 'Laleen — ' + (CAL_BRANCH_LABELS[state.branch] || 'All Locations');
 
-            const activeFilters = (state.branch ? 1 : 0) + (state.staff_id ? 1 : 0);
+            // Location is now a mandatory branch scope, not an optional
+            // filter (there's no "All Locations" to clear back to), so only
+            // the team-member filter counts toward the badge/Clear button.
+            const activeFilters = state.staff_id ? 1 : 0;
             const badge = document.getElementById('filterBadge');
             badge.textContent = activeFilters;
             badge.classList.toggle('d-none', activeFilters === 0);
@@ -1934,7 +1944,8 @@
             loadCalendar();
         });
         document.getElementById('filterClearBtn').addEventListener('click', function() {
-            state.branch = '';
+            // Location is a mandatory branch scope now, not a clearable
+            // filter - only the team-member selection resets here.
             state.staff_id = '';
             saveFilters();
             syncToolbar();
