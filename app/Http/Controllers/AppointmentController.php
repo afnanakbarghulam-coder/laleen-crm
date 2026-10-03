@@ -1471,6 +1471,7 @@ class AppointmentController extends Controller
             'branch' => 'nullable|in:old_airport,wakrah',
         ]);
 
+        $oldStart = Carbon::parse($appointment->appointment_datetime);
         $newStart = Carbon::parse($request->appointment_datetime);
         $staffId = $request->staff_id ?: $appointment->staff_id;
         $branch = $request->branch ?: $appointment->branch;
@@ -1523,6 +1524,19 @@ class AppointmentController extends Controller
             'staff_id' => $staffId,
             'branch' => $branch,
         ]);
+
+        // The calendar grid positions each block from its own
+        // AppointmentService line items (start_time/staff_id), not from the
+        // appointment's own fields just updated above - without this, a
+        // rescheduled appointment keeps rendering at its old slot even
+        // though the appointment row itself moved correctly.
+        $minuteDelta = $oldStart->diffInMinutes($newStart, false);
+        $appointment->appointmentServices->each(function ($line) use ($minuteDelta, $staffId) {
+            $line->update([
+                'start_time' => Carbon::parse($line->start_time)->addMinutes($minuteDelta),
+                'staff_id' => $staffId,
+            ]);
+        });
 
         return response()->json([
             'success' => true,
