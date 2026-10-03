@@ -26,6 +26,11 @@
         z-index: 20;
     }
 
+    .cal-branch-heading {
+        font-size: 17px;
+        margin: 0 0 10px;
+    }
+
     .cal-toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -148,13 +153,26 @@
         letter-spacing: -.01em;
     }
 
-    .cal-filter-panel {
+    /* Compound selector (not just .cal-filter-panel) so this reliably
+       outranks luxury-theme.css's global ".dropdown-menu" background rule -
+       this page's own style block renders ahead of that stylesheet in the
+       document (it sits outside the named content block in this
+       extends-based view), so on equal specificity the later, global rule
+       would otherwise win despite !important. */
+    .dropdown-menu.cal-filter-panel {
         width: 290px;
         padding: 16px;
-        border: 1px solid var(--cal-border);
+        /* Solid, opaque background - this panel sits over the staff header
+           row and calendar grid, and the translucent .dropdown-menu
+           background (--luxe-surface, 60% alpha + blur) let both bleed
+           through it. */
+        background: #1a1818 !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        border: 1px solid #3a3230 !important;
         border-radius: 14px;
-        box-shadow: 0 12px 32px rgba(16, 24, 40, .12);
-        z-index: 500;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, .75) !important;
+        z-index: 1060 !important;
     }
 
     .cal-filter-title {
@@ -1097,6 +1115,7 @@
     <div class="cal-toast-container" id="calToastContainer"></div>
 
     <div class="cal-toolbar-card">
+        <h6 class="cal-branch-heading" id="activeBranchHeading">Laleen &mdash; All Locations</h6>
         <div class="cal-toolbar">
             <div class="cal-toolbar-left">
                 <div class="cal-view-toggle">
@@ -1485,6 +1504,7 @@
         }
 
         let state = loadFilters();
+        const CAL_BRANCH_LABELS = { old_airport: 'Old Airport', wakrah: 'Al Wakrah' };
         let latestData = null;
         let nowLineTimer = null;
         const DRAWER_SERVICES_CATALOG = @json($servicesCatalog);
@@ -1522,6 +1542,8 @@
             });
             document.getElementById('filterBranch').value = state.branch;
             document.getElementById('filterStaff').value = state.staff_id;
+            document.getElementById('activeBranchHeading').textContent =
+                'Laleen — ' + (CAL_BRANCH_LABELS[state.branch] || 'All Locations');
 
             const activeFilters = (state.branch ? 1 : 0) + (state.staff_id ? 1 : 0);
             const badge = document.getElementById('filterBadge');

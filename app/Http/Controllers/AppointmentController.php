@@ -702,6 +702,12 @@ class AppointmentController extends Controller
             $staffQuery->where('id', $request->staff_id);
         }
 
+        if ($request->filled('branch')) {
+            $staffQuery->where(function ($q) use ($request) {
+                $q->where('branch', $request->branch)->orWhere('branch', 'both');
+            });
+        }
+
         $staffs = $staffQuery->get();
 
         $palette = ['#1abc9c', '#3498db', '#9b59b6', '#e67e22', '#e74c3c', '#16a085', '#2ecc71', '#8e44ad'];
