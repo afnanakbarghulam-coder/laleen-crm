@@ -81,7 +81,8 @@ class LeadController extends Controller
             'customer_name' => 'required|string|max:255',
             'assigned_agent_id' => 'nullable|exists:users,id',
             'category' => 'required|in:' . implode(',', array_keys(Lead::MANUAL_CATEGORIES)),
-            'service_interest' => 'required|string|max:255',
+            'service_interest' => 'required|array|min:1',
+            'service_interest.*' => 'string|max:255',
             'next_followup_date' => 'required|date',
             'customer_id' => 'nullable|exists:customers,id',
         ]);
@@ -137,7 +138,8 @@ class LeadController extends Controller
             'customer_name' => 'required|string|max:255',
             'assigned_agent_id' => 'required|exists:users,id',
             'category' => 'required|in:' . implode(',', $allowedCategories),
-            'service_interest' => 'required|string|max:255',
+            'service_interest' => 'required|array|min:1',
+            'service_interest.*' => 'string|max:255',
             'next_followup_date' => 'required|date',
             'customer_id' => 'nullable|exists:customers,id',
         ]);
@@ -303,18 +305,27 @@ class LeadController extends Controller
      * Manicure) - so matching on phone alone would wrongly treat a genuinely
      * new lead as a duplicate of an unrelated one and silently discard it.
      * Only phone + category + service_interest together mean "this exact
-     * open lead already exists"; anything else is a distinct lead.
+     * open lead already exists"; anything else is a distinct lead. Since
+     * service_interest is now a multi-select array, "the same" means the
+     * same set of services regardless of pick order, so the comparison is
+     * done in PHP (sorted) rather than as a raw column match.
      */
-    private function findDuplicateLead(string $normalizedPhone, ?string $category, ?string $serviceInterest, ?int $excludeLeadId = null)
+    private function findDuplicateLead(string $normalizedPhone, ?string $category, array $serviceInterest, ?int $excludeLeadId = null)
     {
+        $normalizedServices = collect($serviceInterest)->map(fn($s) => trim($s))->sort()->values()->all();
+
         return Lead::whereRaw(
             "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'(',''),')',''),'+','') = ?",
             [$normalizedPhone]
         )
             ->where('category', $category)
-            ->where('service_interest', $serviceInterest)
             ->when($excludeLeadId, fn($q) => $q->where('id', '!=', $excludeLeadId))
-            ->first();
+            ->get()
+            ->first(function ($lead) use ($normalizedServices) {
+                $leadServices = collect($lead->service_interest ?? [])->map(fn($s) => trim($s))->sort()->values()->all();
+
+                return $leadServices === $normalizedServices;
+            });
     }
 
     /**

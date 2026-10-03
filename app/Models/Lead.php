@@ -60,6 +60,7 @@ class Lead extends Model
 
     protected $casts = [
         'next_followup_date' => 'date',
+        'service_interest' => 'array',
     ];
 
     public function agent()

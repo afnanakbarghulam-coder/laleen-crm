@@ -1384,7 +1384,9 @@ class AppointmentController extends Controller
             'appointment_id' => $appointment->id,
             'assigned_agent_id' => $appointment->booking_agent_id,
             'category' => $category,
-            'service_interest' => $appointment->service_name,
+            'service_interest' => $appointment->service_name
+                ? array_map('trim', explode(',', $appointment->service_name))
+                : null,
             'next_followup_date' => null,
         ]);
     }

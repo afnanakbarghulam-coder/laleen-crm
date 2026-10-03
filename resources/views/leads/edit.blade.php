@@ -71,13 +71,7 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label">Service Interest <span class="text-danger">*</span></label>
-                            <select name="service_interest" class="form-select" required>
-                                <option value="">-- Select Service --</option>
-                                @foreach ($services ?? [] as $serviceName)
-                                    <option value="{{ $serviceName }}" {{ $lead->service_interest === $serviceName ? 'selected' : '' }}>{{ $serviceName }}</option>
-                                @endforeach
-                            </select>
+                            @include('leads._service-interest-select', ['uid' => 'edit-' . $lead->id, 'services' => $services ?? [], 'selected' => $lead->service_interest ?? []])
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Next Follow-up Date <span class="text-danger">*</span></label>

@@ -148,7 +148,7 @@
                             <span>
                                 {{ $lead->customer->name ?? 'Unnamed' }} &middot; {{ $lead->phone }}
                                 <span class="lead-badge cat-{{ $lead->category }} ms-1">{{ \App\Models\Lead::CATEGORIES[$lead->category] }}</span>
-                                <span class="text-muted">{{ $lead->service_interest }}</span>
+                                <span class="text-muted">{{ implode(', ', $lead->service_interest ?? []) }}</span>
                             </span>
                             @moduleEdit('leads')
                                 <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#editLeadModal{{ $lead->id }}">Set date</button>
@@ -236,10 +236,6 @@
                 </thead>
                 <tbody class="table-border-bottom-0">
                     @forelse($leads as $lead)
-                        @moduleEdit('leads')
-                            @include('leads.edit', ['lead' => $lead])
-                        @endmoduleEdit
-
                         <tr>
                             <td>{{ $lead->created_at->format('d M Y') }}</td>
                             <td>
@@ -258,7 +254,7 @@
                                 @endif
                             </td>
                             <td>{{ $lead->customer_remarks ?? '—' }}</td>
-                            <td>{{ $lead->service_interest ?? '—' }}</td>
+                            <td>{{ !empty($lead->service_interest) ? implode(', ', $lead->service_interest) : '—' }}</td>
                             <td>{{ $lead->agent->name ?? '—' }}</td>
                             <td>
                                 @moduleEdit('leads')
@@ -325,10 +321,18 @@
     </div>
 
 
-    {{-- The unscheduled-leads banner above can link to leads outside the table's own
-         filter/pagination, so their edit modals need rendering here too (skipping any
-         already in $leads to avoid duplicate modal IDs). --}}
+    {{-- Edit modals render here rather than inside the table body above: a <form>
+         placed directly in <tbody> (before any <tr>) gets corrupted by the browser's
+         table foster-parenting rules, which silently drops any hidden input added to
+         it by JavaScript after page load. --}}
     @moduleEdit('leads')
+        @foreach ($leads as $lead)
+            @include('leads.edit', ['lead' => $lead])
+        @endforeach
+
+        {{-- The unscheduled-leads banner above can link to leads outside the table's own
+             filter/pagination, so their edit modals need rendering here too (skipping any
+             already in $leads to avoid duplicate modal IDs). --}}
         @foreach ($unscheduledLeads->whereNotIn('id', $leads->pluck('id')) as $lead)
             @include('leads.edit', ['lead' => $lead])
         @endforeach
