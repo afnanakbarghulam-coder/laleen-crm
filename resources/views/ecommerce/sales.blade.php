@@ -315,8 +315,8 @@
                 const canvas = document.getElementById('salesTrendChart');
                 const ctx = canvas.getContext('2d');
                 const revenueFill = ctx.createLinearGradient(0, 0, 0, 240);
-                revenueFill.addColorStop(0, 'rgba(231, 154, 145, 0.32)');
-                revenueFill.addColorStop(1, 'rgba(231, 154, 145, 0)');
+                revenueFill.addColorStop(0, 'rgba(223, 166, 166, 0.3)');
+                revenueFill.addColorStop(1, 'rgba(223, 166, 166, 0)');
 
                 new Chart(ctx, {
                     data: {
@@ -326,28 +326,33 @@
                                 type: 'line',
                                 label: 'Revenue',
                                 data: @json($chartRevenue),
-                                borderColor: '#e79a91',
+                                borderColor: '#dfa6a6',
                                 backgroundColor: revenueFill,
                                 fill: true,
                                 tension: 0.4,
                                 borderWidth: 2,
-                                pointRadius: 3,
-                                pointBackgroundColor: '#e79a91',
-                                pointHoverRadius: 5,
+                                pointRadius: 0,
+                                pointBackgroundColor: '#dfa6a6',
+                                pointHoverRadius: 6,
                                 pointBorderColor: '#241e1c',
                                 pointBorderWidth: 2,
                                 yAxisID: 'y',
                                 order: 1,
                             },
                             {
-                                type: 'bar',
+                                type: 'line',
                                 label: 'Units Sold',
                                 data: @json($chartUnits),
-                                backgroundColor: 'rgba(201, 166, 107, 0.4)',
-                                hoverBackgroundColor: 'rgba(201, 166, 107, 0.6)',
-                                borderRadius: 5,
-                                borderSkipped: false,
-                                barPercentage: 0.45,
+                                borderColor: '#c9a66b',
+                                backgroundColor: 'transparent',
+                                fill: false,
+                                tension: 0.4,
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                pointBackgroundColor: '#c9a66b',
+                                pointHoverRadius: 6,
+                                pointBorderColor: '#241e1c',
+                                pointBorderWidth: 2,
                                 yAxisID: 'y1',
                                 order: 2,
                             },
@@ -389,7 +394,7 @@
                             y: {
                                 position: 'left',
                                 beginAtZero: true,
-                                grid: { display: false, drawBorder: false },
+                                grid: { display: true, color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
                                 ticks: {
                                     color: '#9ca3af',
                                     font: { size: 11 },
