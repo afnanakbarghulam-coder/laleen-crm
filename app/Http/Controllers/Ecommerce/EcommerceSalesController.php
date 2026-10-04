@@ -58,12 +58,36 @@ class EcommerceSalesController extends Controller
         $totalItemsSoldRevenue = $sales->whereNotIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
         $totalItemsUsedDamaged = $sales->whereIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
 
-        $salesByDate = $sales->sortBy('created_at')->groupBy(fn ($sale) => $sale->created_at->format('M d'));
-        $chartLabels = $salesByDate->keys()->values()->all();
-        $chartRevenue = $salesByDate->map(fn ($group) => round((float) $group->sum('total_price'), 2))->values()->all();
-        $chartUnits = $salesByDate->map(
-            fn ($group) => (int) $group->whereNotIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity')
-        )->values()->all();
+        $chartFrom = $request->filled('start_date') ? Carbon::parse($request->start_date)->startOfDay() : now()->startOfMonth();
+        $chartTo = $request->filled('end_date') ? Carbon::parse($request->end_date)->startOfDay() : now()->startOfDay();
+        if ($chartFrom->gt($chartTo)) {
+            [$chartFrom, $chartTo] = [$chartTo->copy(), $chartFrom->copy()];
+        }
+
+        // Falls back to weekly buckets once the range is too wide for a legible daily x-axis,
+        // mirroring the Bookings Trend chart so both modules bucket consistently.
+        $weekly = $chartFrom->diffInDays($chartTo) > 62;
+        $bucketKey = fn ($date) => $weekly ? $date->format('o-W') : $date->format('Y-m-d');
+        $bucketLabel = fn ($date) => $weekly ? 'Wk ' . $date->format('W M') : $date->format('d M');
+
+        $grouped = $sales->groupBy(fn ($sale) => $bucketKey($sale->created_at));
+
+        $chartLabels = [];
+        $chartRevenue = [];
+        $chartUnits = [];
+        $seenBuckets = [];
+        $cursor = $chartFrom->copy();
+        while ($cursor->lte($chartTo)) {
+            $key = $bucketKey($cursor);
+            if (!in_array($key, $seenBuckets, true)) {
+                $seenBuckets[] = $key;
+                $group = $grouped->get($key, collect());
+                $chartLabels[] = $bucketLabel($cursor);
+                $chartRevenue[] = round((float) $group->sum('total_price'), 2);
+                $chartUnits[] = (int) $group->whereNotIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
+            }
+            $cursor->addDay();
+        }
 
         $totalChannelsCount = count(self::CHANNELS);
         $selectedChannelsCount = count($selectedChannels);
