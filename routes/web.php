@@ -5,6 +5,7 @@ use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\Ecommerce\EcommerceExpenseController;
 use App\Http\Controllers\Ecommerce\EcommerceInventoryController;
+use App\Http\Controllers\Ecommerce\EcommerceNetProfitController;
 use App\Http\Controllers\Ecommerce\EcommercePartnerController;
 use App\Http\Controllers\Ecommerce\EcommercePricingController;
 use App\Http\Controllers\Ecommerce\EcommerceProductController;
@@ -237,6 +238,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/pricing', [EcommercePricingController::class, 'index'])->name('pricing.index');
             Route::get('/stock', [EcommerceStockController::class, 'index'])->name('stock.index');
             Route::get('/sales', [EcommerceSalesController::class, 'index'])->name('sales.index');
+            Route::get('/net-profit', [EcommerceNetProfitController::class, 'index'])->name('net-profit.index');
         });
         Route::middleware('module:ecommerce,edit')->group(function () {
             Route::post('/partners', [EcommercePartnerController::class, 'storePartner'])->name('partners.store');

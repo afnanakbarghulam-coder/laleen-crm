@@ -19,6 +19,19 @@ class EcommerceExpense extends Model
         'sales' => 'Sales Revenue',
     ];
 
+    // Standardized cost categories deducted from revenue on the Net Profit
+    // dashboard. Kept distinct from CATEGORIES above since not every
+    // logged expense (e.g. raw liquid, software) is a profit deduction.
+    const NET_PROFIT_DEDUCTION_CATEGORIES = [
+        'Stickers',
+        'Bottles',
+        'Labels',
+        'Courier/Shipping',
+        'Packaging',
+        'Taxes',
+        'Meta Ads',
+    ];
+
     protected $fillable = [
         'expense_date',
         'title',

@@ -5,4 +5,5 @@
     <a href="{{ route('ecommerce.pricing.index') }}" class="ec-tab {{ request()->routeIs('ecommerce.pricing.index') ? 'active' : '' }}">Pricing &amp; Profit</a>
     <a href="{{ route('ecommerce.stock.index') }}" class="ec-tab {{ request()->routeIs('ecommerce.stock.index') ? 'active' : '' }}">Stock Levels</a>
     <a href="{{ route('ecommerce.sales.index') }}" class="ec-tab {{ request()->routeIs('ecommerce.sales.index') ? 'active' : '' }}">Sales &amp; Usage</a>
+    <a href="{{ route('ecommerce.net-profit.index') }}" class="ec-tab {{ request()->routeIs('ecommerce.net-profit.index') ? 'active' : '' }}">Net Profit</a>
 </div>

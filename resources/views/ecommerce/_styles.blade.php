@@ -290,6 +290,62 @@
     .ec-positive { color: var(--ec-success); }
     .ec-negative { color: var(--ec-danger); }
 
+    .ec-card-highlight {
+        background: linear-gradient(160deg, rgba(217, 143, 131, 0.16), rgba(36, 30, 28, 0.6));
+        border-color: var(--ec-border-strong);
+        box-shadow: 0 0 0 1px rgba(217, 143, 131, 0.3), 0 12px 28px rgba(16, 24, 40, .18);
+    }
+
+    .ec-card-highlight h6 { color: var(--ec-primary); }
+    .ec-card-highlight .ec-value { font-size: 30px; }
+
+    .ec-breakdown-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--ec-border);
+    }
+
+    .ec-breakdown-row:last-child { border-bottom: none; }
+
+    .ec-breakdown-label {
+        flex: 0 0 160px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #cbb8b0;
+    }
+
+    .ec-breakdown-bar-track {
+        flex: 1;
+        height: 8px;
+        border-radius: 20px;
+        background: rgba(217, 143, 131, 0.1);
+        overflow: hidden;
+    }
+
+    .ec-breakdown-bar-fill {
+        height: 100%;
+        border-radius: 20px;
+        background: linear-gradient(90deg, var(--ec-primary), var(--ec-gold));
+    }
+
+    .ec-breakdown-amount {
+        flex: 0 0 150px;
+        text-align: right;
+        font-size: 13.5px;
+        font-weight: 700;
+        color: var(--ec-ink);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .ec-breakdown-pct {
+        flex: 0 0 56px;
+        text-align: right;
+        font-size: 11.5px;
+        color: var(--ec-muted);
+    }
+
     .ec-table-group-header {
         text-align: center;
         color: var(--ec-muted);

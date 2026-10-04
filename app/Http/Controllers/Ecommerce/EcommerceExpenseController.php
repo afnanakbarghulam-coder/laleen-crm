@@ -26,8 +26,11 @@ class EcommerceExpenseController extends Controller
             ->whereNotNull('category')
             ->where('category', '!=', '')
             ->distinct()
-            ->orderBy('category')
-            ->pluck('category');
+            ->pluck('category')
+            ->merge(EcommerceExpense::NET_PROFIT_DEDUCTION_CATEGORIES)
+            ->unique()
+            ->sort()
+            ->values();
 
         $productLines = EcommerceProductLine::orderBy('name')->get();
         $componentTypes = EcommerceComponentType::orderBy('name')->get();
