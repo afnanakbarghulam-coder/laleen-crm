@@ -8,6 +8,7 @@ use App\Models\EcommerceExpense;
 use App\Models\EcommerceProductLine;
 use App\Models\EcommerceRawMaterial;
 use App\Models\PartnerTransaction;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -32,12 +33,21 @@ class EcommerceExpenseController extends Controller
             ->sort()
             ->values();
 
+        $vendors = EcommerceExpense::query()
+            ->whereNotNull('vendor')
+            ->where('vendor', '!=', '')
+            ->distinct()
+            ->pluck('vendor')
+            ->sort()
+            ->values();
+
         $productLines = EcommerceProductLine::orderBy('name')->get();
         $componentTypes = EcommerceComponentType::orderBy('name')->get();
 
         return view('ecommerce.expenses', [
             'expenses' => $expenses,
             'categories' => $categories,
+            'vendors' => $vendors,
             'productLines' => $productLines,
             'componentTypes' => $componentTypes,
             'fundingSources' => EcommerceExpense::FUNDING_SOURCES,
@@ -49,12 +59,11 @@ class EcommerceExpenseController extends Controller
 
     public function store(Request $request)
     {
-        // The category combobox and its "+ Add New Category" text input swap
-        // which element owns name="category" client-side, so exactly one of
-        // them is ever present here — the selected category or the typed one.
+        // The category/vendor comboboxes and their "+ Add New" text inputs swap
+        // which element owns name="category"/name="vendor" client-side, so exactly
+        // one of them is ever present here — the selected value or the typed one.
         $validated = $request->validate([
             'expense_date' => 'required|date',
-            'title' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0.01',
             'category' => 'required|string|max:100',
             'funding_source' => 'required|in:partner_ledger,sales',
@@ -73,10 +82,12 @@ class EcommerceExpenseController extends Controller
             && !empty($validated['component_type_id'])
             && !empty($validated['quantity_received']);
 
-        DB::transaction(function () use ($validated, $receiptPath, $isRestock) {
+        $title = $validated['category'] . ' - ' . Carbon::parse($validated['expense_date'])->format('d M Y');
+
+        DB::transaction(function () use ($validated, $receiptPath, $isRestock, $title) {
             EcommerceExpense::create([
                 'expense_date' => $validated['expense_date'],
-                'title' => $validated['title'],
+                'title' => $title,
                 'amount' => $validated['amount'],
                 'category' => $validated['category'],
                 'funding_source' => $validated['funding_source'],

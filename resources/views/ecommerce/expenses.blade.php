@@ -113,10 +113,6 @@
                         </div>
                         <div class="modal-body">
                             <div class="mb-3">
-                                <label class="form-label">Title</label>
-                                <input type="text" name="title" class="form-control" required>
-                            </div>
-                            <div class="mb-3">
                                 <label class="form-label">Description / Note</label>
                                 <textarea name="notes" class="form-control" rows="3" placeholder="What was this expense for?"></textarea>
                             </div>
@@ -148,7 +144,14 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Vendor</label>
-                                <input type="text" name="vendor" class="form-control">
+                                <select name="vendor" id="expenseVendorSelect" class="form-select">
+                                    <option value="" selected>Select a vendor (optional)</option>
+                                    @foreach ($vendors as $vendor)
+                                        <option value="{{ $vendor }}">{{ $vendor }}</option>
+                                    @endforeach
+                                    <option value="__add_new__">+ Add New Vendor</option>
+                                </select>
+                                <input type="text" id="expenseVendorCustomInput" class="form-control mt-2" placeholder="Type the new vendor name" style="display: none;">
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Date</label>
@@ -220,6 +223,23 @@
                 }
             });
 
+            const expenseVendorSelect = document.getElementById('expenseVendorSelect');
+            const expenseVendorCustomInput = document.getElementById('expenseVendorCustomInput');
+
+            expenseVendorSelect.addEventListener('change', function () {
+                if (this.value === '__add_new__') {
+                    expenseVendorCustomInput.style.display = 'block';
+                    expenseVendorCustomInput.name = 'vendor';
+                    expenseVendorSelect.removeAttribute('name');
+                    expenseVendorCustomInput.focus();
+                } else {
+                    expenseVendorCustomInput.style.display = 'none';
+                    expenseVendorCustomInput.removeAttribute('name');
+                    expenseVendorCustomInput.value = '';
+                    expenseVendorSelect.name = 'vendor';
+                }
+            });
+
             const expenseRestockCheckbox = document.getElementById('expenseRestockCheckbox');
             const expenseRestockFields = document.getElementById('expenseRestockFields');
             const expenseRestockProductLineSelect = document.getElementById('expenseRestockProductLineSelect');
@@ -250,6 +270,11 @@
                 expenseCategoryCustomInput.required = false;
                 expenseCategoryCustomInput.value = '';
                 expenseCategorySelect.name = 'category';
+
+                expenseVendorCustomInput.style.display = 'none';
+                expenseVendorCustomInput.removeAttribute('name');
+                expenseVendorCustomInput.value = '';
+                expenseVendorSelect.name = 'vendor';
 
                 expenseRestockFields.style.display = 'none';
                 expenseRestockProductLineSelect.required = false;
