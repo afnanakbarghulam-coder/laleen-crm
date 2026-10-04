@@ -287,8 +287,10 @@
         vertical-align: middle;
     }
 
-    .ec-positive { color: var(--ec-success); }
-    .ec-negative { color: var(--ec-danger); }
+    /* .ec-value.ec-positive/.ec-negative (not just .ec-positive) to outrank
+       .ec-card .ec-value's color on specificity instead of source order. */
+    .ec-value.ec-positive { color: var(--ec-success); }
+    .ec-value.ec-negative { color: var(--ec-danger); }
 
     .ec-card-highlight {
         background: linear-gradient(160deg, rgba(217, 143, 131, 0.16), rgba(36, 30, 28, 0.6));
