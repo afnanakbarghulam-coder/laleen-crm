@@ -425,6 +425,16 @@
         white-space: nowrap;
     }
 
+    .ec-bom-callout {
+        background: rgba(217, 143, 131, 0.08);
+        border: 1px solid var(--ec-border-strong);
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ec-ink);
+    }
+
     .ec-channel-shopify { background: rgba(142, 168, 138, 0.18); color: var(--ec-success); }
     .ec-channel-organic { background: rgba(138, 166, 171, 0.18); color: var(--ec-info); }
     .ec-channel-salon { background: rgba(201, 166, 107, 0.2); color: var(--ec-gold); }

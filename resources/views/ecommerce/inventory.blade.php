@@ -17,10 +17,30 @@
     @include('ecommerce._nav')
 
     <div class="ec-card">
-        <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h6 class="mb-0">Tier 1 &mdash; Raw Materials</h6>
+            <form method="GET" action="{{ route('ecommerce.inventory.index') }}" class="d-flex align-items-center gap-2">
+                <label for="rawMaterialsProductLineFilter" class="ec-sub mb-0">Product Line</label>
+                <select name="product_line" id="rawMaterialsProductLineFilter" class="form-select form-select-sm ec-form-select" style="min-width: 160px;" onchange="this.form.submit()">
+                    <option value="" {{ $filterProductLine ? '' : 'selected' }}>All</option>
+                    @foreach ($filterableProductLines as $productLine)
+                        <option value="{{ $productLine->name }}" {{ $filterProductLine === $productLine->name ? 'selected' : '' }}>{{ $productLine->name }}</option>
+                    @endforeach
+                </select>
+            </form>
         </div>
         <p class="ec-sub mb-3">Stock is created and topped up exclusively by logging a restock expense on the Expenses tab.</p>
+
+        @if ($filterProductLine === 'Shampoo')
+            <div class="ec-bom-callout mb-3">
+                💡 Production Requirements (Shampoo): 1 Bottle/Jar, 1 Pump/Cap, 1 Label, 1 Outer Box, and Liquid Base.
+            </div>
+        @elseif ($filterProductLine === 'Hair Oil')
+            <div class="ec-bom-callout mb-3">
+                💡 Production Requirements (Hair Oil): 1 Bottle/Jar, 1 Label, 1 Outer Box, and Liquid Base.
+            </div>
+        @endif
+
         <div class="table-responsive">
             <table class="table ec-table align-middle">
                 <thead>
@@ -141,7 +161,7 @@
         </div>
 
         <script>
-            const materialOptionsHtml = `@foreach ($rawMaterials as $material)<option value="{{ $material->id }}">{{ $material->name }} ({{ $material->unit_of_measure }})</option>@endforeach`;
+            const materialOptionsHtml = `@foreach ($allRawMaterials as $material)<option value="{{ $material->id }}">{{ $material->name }} ({{ $material->unit_of_measure }})</option>@endforeach`;
             const productsForRecipe = @json($productsForRecipe);
             const rawMaterialsForRecipe = @json($rawMaterialsForRecipe);
             let materialUsedRowIndex = 0;
