@@ -43,7 +43,7 @@
             <h6 class="mb-3" style="text-transform: none; font-size: 14px; letter-spacing: 0;">Cost Inputs</h6>
             <div class="row g-3">
                 <div class="col-md-4">
-                    <label class="form-label">Liquid / Formulation Cost</label>
+                    <label class="form-label">Liquid Base Cost</label>
                     <input type="number" step="0.01" min="0" name="liquid_cost" id="pricingLiquidCost" class="form-control pricing-input" value="0">
                 </div>
                 <div class="col-md-4" id="pricingBottleWrapper">
@@ -160,13 +160,13 @@
         // Which packaging component fields are relevant to each Product Line,
         // matching the strict BOM enforced server-side for production runs.
         const VISIBLE_COMPONENTS_BY_PRODUCT_LINE = {
-            'Hair Oil': ['Bottle/Jar', 'Label'],
-            'Shampoo': ['Bottle/Jar', 'Label', 'Pump/Cap'],
+            'Hair Oil': ['Bottle/Jar', 'Label', 'Outer Box'],
+            'Shampoo': ['Bottle/Jar', 'Label', 'Pump/Cap', 'Outer Box'],
         };
 
         const TOTAL_COST_FORMULA_TEXT_BY_PRODUCT_LINE = {
-            'Hair Oil': 'Liquid + Bottle + Label',
-            'Shampoo': 'Liquid + Bottle + Label + Pump',
+            'Hair Oil': 'Liquid + Bottle + Label + Box',
+            'Shampoo': 'Liquid + Bottle + Label + Box + Pump',
         };
 
         const productSelect = document.getElementById('pricingProductSelect');
