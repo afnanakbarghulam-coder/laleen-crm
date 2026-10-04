@@ -145,8 +145,8 @@
 
                             <hr style="border-color: var(--ec-border);">
 
-                            <h6 class="mb-2">B. Raw materials used per unit</h6>
-                            <p class="ec-sub">Materials are determined automatically by the product's line. Amounts default to the calculated value but can be corrected if a batch needs an override &mdash; restock Tier 1 inventory if a required component is missing.</p>
+                            <h6 class="mb-2">B. Total Materials Required &amp; Projected Stock</h6>
+                            <p class="ec-sub">Totals are calculated automatically for the entire batch based on Quantity Produced, and can be corrected if a batch needs an override. Projected Remaining updates live &mdash; restock Tier 1 inventory first if any component would go negative.</p>
                             <div id="materialsUsedRows"></div>
                             @if ($rawMaterials->isEmpty())
                                 <p class="ec-sub mb-0">No raw materials yet &mdash; add some in Tier 1 above first.</p>
@@ -164,48 +164,105 @@
             const materialOptionsHtml = `@foreach ($allRawMaterials as $material)<option value="{{ $material->id }}">{{ $material->name }} ({{ $material->unit_of_measure }})</option>@endforeach`;
             const productsForRecipe = @json($productsForRecipe);
             const rawMaterialsForRecipe = @json($rawMaterialsForRecipe);
+            const materialsUsedRowsContainer = document.getElementById('materialsUsedRows');
+            const quantityProducedInput = document.querySelector('input[name="quantity_produced"]');
             let materialUsedRowIndex = 0;
 
-            function addMaterialUsedRow(presetMaterialId, presetAmountPerUnit) {
+            function formatQty(value) {
+                return Number.isFinite(value) ? value.toFixed(2) : '0.00';
+            }
+
+            // Reads the row's currently selected raw material and total input,
+            // then shows Current Stock - Total Required, turning red (ec-negative)
+            // when the batch would overdraw that component.
+            function refreshProjectedRemaining(row) {
+                const select = row.querySelector('.material-select');
+                const totalInput = row.querySelector('.material-total-input');
+                const display = row.querySelector('.projected-remaining');
+                const material = rawMaterialsForRecipe[select.value];
+
+                if (!material) {
+                    display.textContent = '';
+                    display.classList.remove('ec-negative');
+                    return;
+                }
+
+                const totalRequired = parseFloat(totalInput.value) || 0;
+                const remaining = material.current_stock - totalRequired;
+                const unit = material.unit_of_measure || 'units';
+
+                display.textContent = 'Projected Remaining: ' + formatQty(remaining) + ' ' + unit;
+                display.classList.toggle('ec-negative', remaining < 0);
+            }
+
+            function addMaterialUsedRow(presetMaterialId, rate) {
                 const index = materialUsedRowIndex++;
                 const row = document.createElement('div');
-                row.className = 'row g-2 align-items-end mb-2 material-used-row';
+                row.className = 'mb-3 material-used-row';
+                row.dataset.rate = rate ?? 0;
                 row.innerHTML =
-                    '<div class="col-7">' +
-                        '<select name="materials_used[' + index + '][ecommerce_raw_material_id]" class="form-select" required>' +
-                            '<option value="" disabled selected>Select raw material</option>' +
-                            materialOptionsHtml +
-                        '</select>' +
+                    '<div class="row g-2 align-items-end">' +
+                        '<div class="col-7">' +
+                            '<select name="materials_used[' + index + '][ecommerce_raw_material_id]" class="form-select material-select" required>' +
+                                '<option value="" disabled selected>Select raw material</option>' +
+                                materialOptionsHtml +
+                            '</select>' +
+                        '</div>' +
+                        '<div class="col-5">' +
+                            '<input type="number" step="0.01" min="0.01" name="materials_used[' + index + '][quantity_used]" class="form-control material-total-input" placeholder="Total required" required>' +
+                        '</div>' +
                     '</div>' +
-                    '<div class="col-5">' +
-                        '<input type="number" step="0.01" min="0.01" name="materials_used[' + index + '][amount_per_unit]" class="form-control" placeholder="Amount per unit" required>' +
-                    '</div>';
+                    '<div class="ec-sub mt-1 projected-remaining"></div>';
 
-                document.getElementById('materialsUsedRows').appendChild(row);
+                materialsUsedRowsContainer.appendChild(row);
+
+                const select = row.querySelector('.material-select');
+                const totalInput = row.querySelector('.material-total-input');
 
                 if (presetMaterialId) {
-                    row.querySelector('select').value = presetMaterialId;
+                    select.value = presetMaterialId;
                 }
-                if (presetAmountPerUnit !== undefined && presetAmountPerUnit !== null) {
-                    row.querySelector('input[type="number"]').value = presetAmountPerUnit;
-                }
+
+                select.addEventListener('change', function () {
+                    refreshProjectedRemaining(row);
+                });
+                totalInput.addEventListener('input', function () {
+                    refreshProjectedRemaining(row);
+                });
 
                 return row;
             }
 
+            // Reactive hook: every time Quantity Produced changes, every row's
+            // total is recalculated from its stored per-unit rate (1 for
+            // packaging, the product's unit_size for Liquid Base) and the
+            // Projected Remaining display is refreshed alongside it.
+            function recalculateAllTotals() {
+                const quantityProduced = parseFloat(quantityProducedInput.value) || 0;
+
+                materialsUsedRowsContainer.querySelectorAll('.material-used-row').forEach(function (row) {
+                    const rate = parseFloat(row.dataset.rate) || 0;
+                    const totalInput = row.querySelector('.material-total-input');
+                    totalInput.value = (rate * quantityProduced).toFixed(2);
+                    refreshProjectedRemaining(row);
+                });
+            }
+
+            quantityProducedInput.addEventListener('input', recalculateAllTotals);
+
             // Smart Recipe: selecting a finished product rebuilds Section B from
             // every raw material that shares the product's product_line_id,
-            // pre-filling the per-unit amount (unit_size for the Liquid Base
-            // component, 1 for packaging) — still fully editable afterward.
+            // storing the per-unit rate (unit_size for Liquid Base, 1 for
+            // packaging) on each row so totals can be recalculated reactively.
             document.getElementById('productionProductSelect').addEventListener('change', function () {
-                document.getElementById('materialsUsedRows').innerHTML = '';
+                materialsUsedRowsContainer.innerHTML = '';
 
                 const product = productsForRecipe[this.value];
                 if (!product || !product.product_line_id) {
                     return;
                 }
 
-                const liquidAmountPerUnit = parseFloat(product.unit_size) || 0;
+                const liquidRatePerUnit = parseFloat(product.unit_size) || 0;
 
                 Object.keys(rawMaterialsForRecipe).forEach(function (materialId) {
                     const material = rawMaterialsForRecipe[materialId];
@@ -214,17 +271,19 @@
                         return;
                     }
 
-                    const amountPerUnit = material.component_type_name === 'Liquid Base'
-                        ? liquidAmountPerUnit
+                    const rate = material.component_type_name === 'Liquid Base'
+                        ? liquidRatePerUnit
                         : 1;
 
-                    addMaterialUsedRow(materialId, amountPerUnit);
+                    addMaterialUsedRow(materialId, rate);
                 });
+
+                recalculateAllTotals();
             });
 
             document.getElementById('productionModal').addEventListener('hidden.bs.modal', function () {
                 this.querySelector('form').reset();
-                document.getElementById('materialsUsedRows').innerHTML = '';
+                materialsUsedRowsContainer.innerHTML = '';
             });
         </script>
 

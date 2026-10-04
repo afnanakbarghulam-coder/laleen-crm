@@ -367,6 +367,17 @@
         font-size: 14.5px;
     }
 
+    .projected-remaining {
+        font-size: 12.5px;
+        color: var(--ec-muted);
+        margin-top: 2px;
+    }
+
+    .projected-remaining.ec-negative {
+        color: var(--ec-danger);
+        font-weight: 700;
+    }
+
     .ec-unit-badge {
         display: inline-block;
         padding: 2px 10px;

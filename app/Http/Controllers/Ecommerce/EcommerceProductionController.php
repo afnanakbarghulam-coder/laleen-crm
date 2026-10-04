@@ -19,7 +19,7 @@ class EcommerceProductionController extends Controller
             'quantity_produced' => 'required|numeric|min:0.01',
             'materials_used' => 'nullable|array',
             'materials_used.*.ecommerce_raw_material_id' => 'required|exists:ecommerce_raw_materials,id',
-            'materials_used.*.amount_per_unit' => 'required|numeric|min:0.01',
+            'materials_used.*.quantity_used' => 'required|numeric|min:0.01',
         ]);
 
         $quantityProduced = (float) $validated['quantity_produced'];
@@ -55,8 +55,12 @@ class EcommerceProductionController extends Controller
                     ->get()
                     ->keyBy('id');
 
+                // The form now submits the batch TOTAL for each material directly
+                // (quantity_used), not a per-unit rate — so it's used as-is here
+                // rather than multiplied by $quantityProduced again, which would
+                // double-deduct stock.
                 $requestedAmountByRawMaterialId = collect($materialsUsed)
-                    ->mapWithKeys(fn ($item) => [$item['ecommerce_raw_material_id'] => (float) $item['amount_per_unit'] * $quantityProduced]);
+                    ->mapWithKeys(fn ($item) => [$item['ecommerce_raw_material_id'] => (float) $item['quantity_used']]);
 
                 if (!empty($requiredComponentTypes)) {
                     $rawMaterialByComponentType = $rawMaterialsById

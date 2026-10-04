@@ -53,6 +53,8 @@ class EcommerceInventoryController extends Controller
             return [$material->id => [
                 'product_line_id' => $material->product_line_id,
                 'component_type_name' => $material->componentType->name ?? null,
+                'current_stock' => (float) $material->current_stock,
+                'unit_of_measure' => $material->unit_of_measure,
             ]];
         });
 
