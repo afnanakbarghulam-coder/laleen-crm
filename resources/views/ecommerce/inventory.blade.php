@@ -251,14 +251,17 @@
                                 <label class="form-label">Product Line</label>
                                 <select name="product_line_id" id="f_product_line_id" class="form-select" required>
                                     <option value="" disabled selected>Select a product line</option>
-                                    @foreach ($productLines as $productLine)
+                                    @foreach ($filterableProductLines as $productLine)
                                         <option value="{{ $productLine->id }}">{{ $productLine->name }}</option>
                                     @endforeach
                                 </select>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Unit Size (e.g., 50ml, 100g)</label>
-                                <input type="text" name="unit_size" id="f_unit_size" class="form-control" placeholder="e.g. 50ml, 100g">
+                                <label class="form-label">Unit Size</label>
+                                <div class="position-relative">
+                                    <input type="number" step="0.01" min="0" name="unit_size" id="f_unit_size" class="form-control" placeholder="e.g. 100" style="padding-right: 38px;">
+                                    <span class="position-absolute text-muted" style="right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none;">ml</span>
+                                </div>
                             </div>
                         </div>
                         <div class="modal-footer">

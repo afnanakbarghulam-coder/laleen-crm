@@ -68,7 +68,7 @@ class EcommerceProductController extends Controller
 
     private function validated(Request $request, ?int $ignoreId = null): array
     {
-        return $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'sku' => [
                 'required',
@@ -77,7 +77,7 @@ class EcommerceProductController extends Controller
                 Rule::unique('ecommerce_products', 'sku')->ignore($ignoreId),
             ],
             'product_line_id' => 'required|exists:ecommerce_product_lines,id',
-            'unit_size' => 'nullable|string|max:50',
+            'unit_size' => 'nullable|numeric|min:0',
             'selling_price' => 'nullable|numeric|min:0',
             'liquid_cost_per_ml' => 'nullable|numeric|min:0',
             'volume_ml' => 'nullable|numeric|min:0',
@@ -89,5 +89,14 @@ class EcommerceProductController extends Controller
             'shipping_cost' => 'nullable|numeric|min:0',
             'payment_gateway_fee_percent' => 'nullable|numeric|min:0|max:100',
         ]);
+
+        // The "Add Finished Product" modal only collects the numeric amount —
+        // the unit is fixed to ml, so it's appended here rather than trusted
+        // from the client.
+        if (isset($validated['unit_size'])) {
+            $validated['unit_size'] = $validated['unit_size'] . 'ml';
+        }
+
+        return $validated;
     }
 }
