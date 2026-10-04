@@ -123,8 +123,12 @@ class EcommerceExpenseController extends Controller
                     ->first();
 
                 if ($rawMaterial) {
+                    // initial_stock is the lifetime total ever received, not just
+                    // the first batch — it must grow with current_stock on every
+                    // restock, or "Remaining" drifts past "Original" over time.
                     $rawMaterial->update([
                         'current_stock' => (float) $rawMaterial->current_stock + $quantityReceived,
+                        'initial_stock' => (float) $rawMaterial->initial_stock + $quantityReceived,
                         'last_purchased_unit_cost' => $unitCost,
                     ]);
                 } else {
