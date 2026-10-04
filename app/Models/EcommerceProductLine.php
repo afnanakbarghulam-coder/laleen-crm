@@ -17,7 +17,7 @@ class EcommerceProductLine extends Model
      */
     public const COMPONENT_TYPES_BY_PRODUCT_LINE = [
         self::SHAMPOO => ['Bottle/Jar', 'Pump/Cap', 'Label', 'Liquid Base', 'Outer Box'],
-        self::HAIR_OIL => ['Bottle/Jar', 'Label', 'Outer Box'],
+        self::HAIR_OIL => ['Bottle/Jar', 'Label', 'Liquid Base', 'Outer Box'],
     ];
 
     protected $fillable = [
