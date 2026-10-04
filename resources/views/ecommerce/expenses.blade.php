@@ -181,11 +181,8 @@
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label">Component Type</label>
-                                        <select name="component_type_id" id="expenseRestockComponentTypeSelect" class="form-select">
-                                            <option value="" disabled selected>Select a component type</option>
-                                            @foreach ($componentTypes as $componentType)
-                                                <option value="{{ $componentType->id }}">{{ $componentType->name }}</option>
-                                            @endforeach
+                                        <select name="component_type_id" id="expenseRestockComponentTypeSelect" class="form-select" disabled>
+                                            <option value="" disabled selected>Select a product line first</option>
                                         </select>
                                     </div>
                                 </div>
@@ -246,6 +243,39 @@
             const expenseRestockComponentTypeSelect = document.getElementById('expenseRestockComponentTypeSelect');
             const expenseRestockQuantityInput = document.getElementById('expenseRestockQuantityInput');
 
+            // Component Type options depend on the selected Product Line's Bill
+            // of Materials (e.g. Shampoo allows Pump/Cap, Hair Oil does not).
+            const componentTypesByProductLine = @json($componentTypesByProductLine);
+
+            function resetComponentTypeSelect(placeholderText) {
+                expenseRestockComponentTypeSelect.innerHTML = '';
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.disabled = true;
+                placeholder.selected = true;
+                placeholder.textContent = placeholderText;
+                expenseRestockComponentTypeSelect.appendChild(placeholder);
+            }
+
+            expenseRestockProductLineSelect.addEventListener('change', function () {
+                const allowedComponentTypes = componentTypesByProductLine[this.value] || [];
+
+                if (!this.value || allowedComponentTypes.length === 0) {
+                    resetComponentTypeSelect('Select a product line first');
+                    expenseRestockComponentTypeSelect.disabled = true;
+                    return;
+                }
+
+                resetComponentTypeSelect('Select a component type');
+                allowedComponentTypes.forEach(function (componentType) {
+                    const option = document.createElement('option');
+                    option.value = componentType.id;
+                    option.textContent = componentType.name;
+                    expenseRestockComponentTypeSelect.appendChild(option);
+                });
+                expenseRestockComponentTypeSelect.disabled = false;
+            });
+
             expenseRestockCheckbox.addEventListener('change', function () {
                 if (this.checked) {
                     expenseRestockFields.style.display = 'block';
@@ -258,7 +288,8 @@
                     expenseRestockComponentTypeSelect.required = false;
                     expenseRestockQuantityInput.required = false;
                     expenseRestockProductLineSelect.value = '';
-                    expenseRestockComponentTypeSelect.value = '';
+                    resetComponentTypeSelect('Select a product line first');
+                    expenseRestockComponentTypeSelect.disabled = true;
                     expenseRestockQuantityInput.value = '';
                 }
             });
@@ -280,6 +311,8 @@
                 expenseRestockProductLineSelect.required = false;
                 expenseRestockComponentTypeSelect.required = false;
                 expenseRestockQuantityInput.required = false;
+                resetComponentTypeSelect('Select a product line first');
+                expenseRestockComponentTypeSelect.disabled = true;
             });
         </script>
     @endmoduleEdit

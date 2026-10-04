@@ -41,8 +41,23 @@ class EcommerceExpenseController extends Controller
             ->sort()
             ->values();
 
-        $productLines = EcommerceProductLine::orderBy('name')->get();
+        // Only product lines with a defined Bill of Materials are eligible for
+        // the restock recipe below (Hair Mask / Serum are not yet supported).
+        $productLines = EcommerceProductLine::whereIn('name', array_keys(EcommerceProductLine::COMPONENT_TYPES_BY_PRODUCT_LINE))
+            ->orderBy('name')
+            ->get();
+
         $componentTypes = EcommerceComponentType::orderBy('name')->get();
+
+        $componentTypesByProductLine = $productLines->mapWithKeys(function (EcommerceProductLine $productLine) use ($componentTypes) {
+            $allowedNames = EcommerceProductLine::COMPONENT_TYPES_BY_PRODUCT_LINE[$productLine->name] ?? [];
+
+            $allowed = $componentTypes->whereIn('name', $allowedNames)
+                ->map(fn (EcommerceComponentType $componentType) => ['id' => $componentType->id, 'name' => $componentType->name])
+                ->values();
+
+            return [$productLine->id => $allowed];
+        });
 
         return view('ecommerce.expenses', [
             'expenses' => $expenses,
@@ -50,6 +65,7 @@ class EcommerceExpenseController extends Controller
             'vendors' => $vendors,
             'productLines' => $productLines,
             'componentTypes' => $componentTypes,
+            'componentTypesByProductLine' => $componentTypesByProductLine,
             'fundingSources' => EcommerceExpense::FUNDING_SOURCES,
             'totalExpenses' => $totalExpenses,
             'totalPool' => $totalPool,

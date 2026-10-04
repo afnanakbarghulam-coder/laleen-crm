@@ -4,22 +4,14 @@ namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceProduct;
+use App\Models\EcommerceProductLine;
 use App\Models\EcommerceRawMaterial;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class EcommerceProductionController extends Controller
 {
-    /**
-     * Component types every production run must include, keyed by the
-     * finished product's Product Line name. Product lines not listed here
-     * have no required Bill of Materials.
-     */
-    private const REQUIRED_COMPONENT_TYPES_BY_PRODUCT_LINE = [
-        'Hair Oil' => ['Liquid Base', 'Bottle/Jar', 'Label'],
-        'Shampoo' => ['Liquid Base', 'Bottle/Jar', 'Label', 'Pump/Cap'],
-    ];
-
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -33,62 +25,108 @@ class EcommerceProductionController extends Controller
         $quantityProduced = (float) $validated['quantity_produced'];
         $materialsUsed = $validated['materials_used'] ?? [];
 
-        $product = EcommerceProduct::with('productLine')->findOrFail($validated['ecommerce_product_id']);
-        $requiredComponentTypes = self::REQUIRED_COMPONENT_TYPES_BY_PRODUCT_LINE[$product->productLine->name ?? ''] ?? null;
+        try {
+            DB::transaction(function () use ($validated, $quantityProduced, $materialsUsed) {
+                // Lock the finished product row first so two concurrent runs
+                // against the same product can't both pass validation before
+                // either one's stock decrements land.
+                $product = EcommerceProduct::with('productLine')->lockForUpdate()->findOrFail($validated['ecommerce_product_id']);
+                $productLineName = $product->productLine->name ?? null;
+                $requiredComponentTypes = EcommerceProductLine::COMPONENT_TYPES_BY_PRODUCT_LINE[$productLineName] ?? [];
 
-        if ($requiredComponentTypes) {
-            $submittedComponentTypes = EcommerceRawMaterial::whereIn('id', collect($materialsUsed)->pluck('ecommerce_raw_material_id'))
-                ->with('componentType')
-                ->get()
-                ->pluck('componentType.name')
-                ->filter()
-                ->unique();
+                $submittedRawMaterialIds = collect($materialsUsed)->pluck('ecommerce_raw_material_id');
 
-            $missingComponentTypes = collect($requiredComponentTypes)->diff($submittedComponentTypes);
+                // Lock every raw material row this run could touch: the ones
+                // explicitly submitted, plus every component the product
+                // line's BOM requires (so a required component the form
+                // never offered a row for still gets checked and locked).
+                $rawMaterialsById = EcommerceRawMaterial::with(['productLine', 'componentType'])
+                    ->where(function ($query) use ($submittedRawMaterialIds, $product, $requiredComponentTypes) {
+                        $query->whereIn('id', $submittedRawMaterialIds);
 
-            if ($missingComponentTypes->isNotEmpty()) {
-                return back()->withErrors(['error' => 'Production blocked: You are missing required components for this product line (e.g., Label, Pump). Please restock Tier 1 inventory first.']);
-            }
-        }
+                        if (!empty($requiredComponentTypes)) {
+                            $query->orWhere(function ($bomQuery) use ($product, $requiredComponentTypes) {
+                                $bomQuery->where('product_line_id', $product->product_line_id)
+                                    ->whereHas('componentType', fn ($q) => $q->whereIn('name', $requiredComponentTypes));
+                            });
+                        }
+                    })
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
 
-        $rawMaterialsById = EcommerceRawMaterial::with(['productLine', 'componentType'])
-            ->whereIn('id', collect($materialsUsed)->pluck('ecommerce_raw_material_id'))
-            ->get()
-            ->keyBy('id');
+                $requestedAmountByRawMaterialId = collect($materialsUsed)
+                    ->mapWithKeys(fn ($item) => [$item['ecommerce_raw_material_id'] => (float) $item['amount_per_unit'] * $quantityProduced]);
 
-        foreach ($materialsUsed as $item) {
-            $rawMaterial = $rawMaterialsById->get($item['ecommerce_raw_material_id']);
-            $totalRequired = (float) $item['amount_per_unit'] * $quantityProduced;
+                if (!empty($requiredComponentTypes)) {
+                    $rawMaterialByComponentType = $rawMaterialsById
+                        ->filter(fn (EcommerceRawMaterial $material) => $material->product_line_id === $product->product_line_id)
+                        ->keyBy(fn (EcommerceRawMaterial $material) => $material->componentType->name ?? null);
 
-            if ($totalRequired > (float) $rawMaterial->current_stock) {
-                $productLineName = $rawMaterial->productLine->name ?? 'Uncategorized';
-                $componentTypeName = $rawMaterial->componentType->name ?? 'Uncategorized';
+                    $insufficientComponentTypes = collect($requiredComponentTypes)->filter(function (string $componentTypeName) use ($rawMaterialByComponentType, $requestedAmountByRawMaterialId) {
+                        $rawMaterial = $rawMaterialByComponentType->get($componentTypeName);
 
-                return back()->withErrors(['error' => "Insufficient stock for {$productLineName} - {$componentTypeName}. Required: " . number_format($totalRequired, 2) . ', Available: ' . number_format((float) $rawMaterial->current_stock, 2) . '.']);
-            }
-        }
+                        if (!$rawMaterial || (float) $rawMaterial->current_stock <= 0) {
+                            return true;
+                        }
 
-        DB::transaction(function () use ($validated, $quantityProduced, $materialsUsed) {
-            $product = EcommerceProduct::lockForUpdate()->findOrFail($validated['ecommerce_product_id']);
-            $product->increment('stock_pakistan', $quantityProduced);
+                        $requestedAmount = $requestedAmountByRawMaterialId->get($rawMaterial->id, 0.0);
 
-            $run = $product->productionRuns()->create([
-                'quantity_produced' => $quantityProduced,
-            ]);
+                        return $requestedAmount > (float) $rawMaterial->current_stock;
+                    })->values();
 
-            foreach ($materialsUsed as $item) {
-                $totalQuantityUsed = (float) $item['amount_per_unit'] * $quantityProduced;
+                    if ($insufficientComponentTypes->isNotEmpty()) {
+                        throw new RuntimeException(
+                            'Production failed: Insufficient ' . $this->joinWithAnd($insufficientComponentTypes->all())
+                                . " stock for this {$productLineName} run."
+                        );
+                    }
+                }
 
-                $rawMaterial = EcommerceRawMaterial::lockForUpdate()->findOrFail($item['ecommerce_raw_material_id']);
-                $rawMaterial->decrement('current_stock', $totalQuantityUsed);
+                foreach ($materialsUsed as $item) {
+                    $rawMaterial = $rawMaterialsById->get($item['ecommerce_raw_material_id']);
+                    $totalRequired = $requestedAmountByRawMaterialId->get($item['ecommerce_raw_material_id']);
 
-                $run->materials()->create([
-                    'ecommerce_raw_material_id' => $rawMaterial->id,
-                    'quantity_used' => $totalQuantityUsed,
+                    if (!$rawMaterial || $totalRequired > (float) $rawMaterial->current_stock) {
+                        $productLineLabel = $rawMaterial->productLine->name ?? 'Uncategorized';
+                        $componentTypeLabel = $rawMaterial->componentType->name ?? 'Uncategorized';
+
+                        throw new RuntimeException("Insufficient stock for {$productLineLabel} - {$componentTypeLabel}. Required: " . number_format($totalRequired, 2) . ', Available: ' . number_format((float) $rawMaterial->current_stock, 2) . '.');
+                    }
+                }
+
+                $product->increment('stock_pakistan', $quantityProduced);
+
+                $run = $product->productionRuns()->create([
+                    'quantity_produced' => $quantityProduced,
                 ]);
-            }
-        });
+
+                foreach ($materialsUsed as $item) {
+                    $totalQuantityUsed = $requestedAmountByRawMaterialId->get($item['ecommerce_raw_material_id']);
+                    $rawMaterial = $rawMaterialsById->get($item['ecommerce_raw_material_id']);
+                    $rawMaterial->decrement('current_stock', $totalQuantityUsed);
+
+                    $run->materials()->create([
+                        'ecommerce_raw_material_id' => $rawMaterial->id,
+                        'quantity_used' => $totalQuantityUsed,
+                    ]);
+                }
+            });
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
 
         return back()->with('success', 'Production run logged and stock levels updated.');
+    }
+
+    private function joinWithAnd(array $items): string
+    {
+        if (count($items) <= 1) {
+            return $items[0] ?? '';
+        }
+
+        $last = array_pop($items);
+
+        return implode(', ', $items) . ' and ' . $last;
     }
 }
