@@ -127,8 +127,13 @@
                         <th class="text-end">Label Cost</th>
                         <th class="text-end">Pump Cost</th>
                         <th class="text-end">Box Cost</th>
+                        <th class="text-end">Shipping</th>
+                        <th class="text-end">Taxes</th>
+                        <th class="text-end">Meta Ads</th>
                         <th class="text-end">Gross Profit</th>
-                        <th class="text-end">Margin %</th>
+                        <th class="text-end">Gross Margin %</th>
+                        <th class="text-end">True Net Profit</th>
+                        <th class="text-end">Net Margin %</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -142,7 +147,13 @@
                             $saleBoxCost = (float) $sale->quantity * (float) ($sale->unit_outer_box_cost ?? 0);
                             $saleCogs = $saleLiquidCost + $saleBottleCost + $saleLabelCost + $salePumpCost + $saleBoxCost;
                             $saleGrossProfit = $saleRevenue - $saleCogs;
-                            $saleMargin = $saleRevenue > 0 ? ($saleGrossProfit / $saleRevenue) * 100 : 0;
+                            $saleGrossMargin = $saleRevenue > 0 ? ($saleGrossProfit / $saleRevenue) * 100 : 0;
+
+                            $saleShipping = (float) ($sale->shipping_cost ?? 0);
+                            $saleTax = (float) ($sale->tax_amount ?? 0);
+                            $saleMetaAd = (float) ($sale->meta_ad_allocation ?? 0);
+                            $saleTrueNetProfit = $saleGrossProfit - $saleShipping - $saleTax - $saleMetaAd;
+                            $saleNetMargin = $saleRevenue > 0 ? ($saleTrueNetProfit / $saleRevenue) * 100 : 0;
                         @endphp
                         <tr>
                             <td>{{ $sale->created_at->format('d M Y') }}</td>
@@ -155,11 +166,16 @@
                             <td class="text-end">{{ $saleLabelCost > 0 ? 'PKR ' . number_format($saleLabelCost, 2) : '—' }}</td>
                             <td class="text-end">{{ $salePumpCost > 0 ? 'PKR ' . number_format($salePumpCost, 2) : '—' }}</td>
                             <td class="text-end">{{ $saleBoxCost > 0 ? 'PKR ' . number_format($saleBoxCost, 2) : '—' }}</td>
+                            <td class="text-end">{{ $saleShipping > 0 ? 'PKR ' . number_format($saleShipping, 2) : '—' }}</td>
+                            <td class="text-end">{{ $saleTax > 0 ? 'PKR ' . number_format($saleTax, 2) : '—' }}</td>
+                            <td class="text-end">{{ $saleMetaAd > 0 ? 'PKR ' . number_format($saleMetaAd, 2) : '—' }}</td>
                             <td class="text-end {{ $saleGrossProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($saleGrossProfit, 2) }}</td>
-                            <td class="text-end {{ $saleMargin >= 0 ? 'ec-positive' : 'ec-negative' }}">{{ number_format($saleMargin, 1) }}%</td>
+                            <td class="text-end {{ $saleGrossMargin >= 0 ? 'ec-positive' : 'ec-negative' }}">{{ number_format($saleGrossMargin, 1) }}%</td>
+                            <td class="text-end {{ $saleTrueNetProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($saleTrueNetProfit, 2) }}</td>
+                            <td class="text-end {{ $saleNetMargin >= 0 ? 'ec-positive' : 'ec-negative' }}">{{ number_format($saleNetMargin, 1) }}%</td>
                         </tr>
                     @empty
-                        <tr><td colspan="12" class="text-center text-muted">No sales in this date range</td></tr>
+                        <tr><td colspan="17" class="text-center text-muted">No sales in this date range</td></tr>
                     @endforelse
                 </tbody>
             </table>

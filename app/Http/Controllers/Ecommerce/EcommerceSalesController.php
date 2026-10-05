@@ -139,9 +139,15 @@ class EcommerceSalesController extends Controller
             'channel' => 'required|in:' . implode(',', self::CHANNELS),
             'reason' => 'nullable|string|max:255',
             'unit_price' => 'nullable|numeric|min:0',
+            'shipping_cost' => 'nullable|numeric|min:0',
+            'tax_amount' => 'nullable|numeric|min:0',
+            'meta_ad_allocation' => 'nullable|numeric|min:0',
         ]);
 
         $quantity = (int) $validated['quantity'];
+        $shippingCost = (float) ($validated['shipping_cost'] ?? 0);
+        $taxAmount = (float) ($validated['tax_amount'] ?? 0);
+        $metaAdAllocation = (float) ($validated['meta_ad_allocation'] ?? 0);
         $isNonRevenue = in_array($validated['channel'], self::NON_REVENUE_CHANNELS, true);
         $unitPrice = $isNonRevenue ? (float) ($validated['unit_price'] ?? 0) : (float) $validated['unit_price'];
         $totalPrice = $quantity * $unitPrice;
@@ -183,6 +189,9 @@ class EcommerceSalesController extends Controller
             $unitLabelCost,
             $unitPumpCost,
             $unitOuterBoxCost,
+            $shippingCost,
+            $taxAmount,
+            $metaAdAllocation,
             $stockField,
             $soldField
         ) {
@@ -201,6 +210,9 @@ class EcommerceSalesController extends Controller
                 'unit_label_cost' => $unitLabelCost,
                 'unit_pump_cost' => $unitPumpCost,
                 'unit_outer_box_cost' => $unitOuterBoxCost,
+                'shipping_cost' => $shippingCost,
+                'tax_amount' => $taxAmount,
+                'meta_ad_allocation' => $metaAdAllocation,
             ]);
 
             $product = EcommerceProduct::lockForUpdate()->findOrFail($validated['ecommerce_product_id']);

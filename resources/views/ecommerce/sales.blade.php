@@ -228,6 +228,21 @@
                                 <input type="text" name="reference_id" class="form-control" placeholder="e.g. Shopify order #1042">
                             </div>
 
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Courier/Shipping Cost (PKR) <span class="ec-sub">(optional)</span></label>
+                                    <input type="number" step="0.01" min="0" name="shipping_cost" class="form-control" placeholder="0.00">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Taxes (PKR) <span class="ec-sub">(optional)</span></label>
+                                    <input type="number" step="0.01" min="0" name="tax_amount" class="form-control" placeholder="0.00">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Attributed Meta Ads Cost (CAC) <span class="ec-sub">(optional)</span></label>
+                                    <input type="number" step="0.01" min="0" name="meta_ad_allocation" class="form-control" placeholder="0.00">
+                                </div>
+                            </div>
+
                             <div class="ec-grand-total">
                                 <span class="ec-grand-total-label">Grand Total</span>
                                 <span class="ec-grand-total-value" id="salesGrandTotalValue">PKR 0.00</span>

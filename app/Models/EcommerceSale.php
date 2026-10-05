@@ -21,6 +21,9 @@ class EcommerceSale extends Model
         'unit_label_cost',
         'unit_pump_cost',
         'unit_outer_box_cost',
+        'shipping_cost',
+        'tax_amount',
+        'meta_ad_allocation',
     ];
 
     protected $casts = [
@@ -33,6 +36,9 @@ class EcommerceSale extends Model
         'unit_label_cost' => 'decimal:2',
         'unit_pump_cost' => 'decimal:2',
         'unit_outer_box_cost' => 'decimal:2',
+        'shipping_cost' => 'decimal:2',
+        'tax_amount' => 'decimal:2',
+        'meta_ad_allocation' => 'decimal:2',
     ];
 
     public function product()
