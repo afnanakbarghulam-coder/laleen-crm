@@ -158,15 +158,34 @@ class EcommerceSalesController extends Controller
             return back()->withErrors(['error' => "Insufficient stock in {$locationName} for this sale."]);
         }
 
-        // Snapshot the product's current BOM cost per unit (Liquid + Bottle +
-        // Label + Box + Pump) onto the sale itself, so Net Profit's COGS and
+        // Snapshot the product's current BOM cost per unit — both the total
+        // (Liquid + Bottle + Label + Box + Pump) and each component — onto
+        // the sale itself, so Net Profit's itemized COGS breakdown and
         // margin figures for this transaction stay accurate even if the
         // Pricing & Profit model is edited later. No saved pricing model yet
-        // means PKR 0 COGS for this sale.
+        // means every component snapshots as PKR 0.
         $pricingModel = EcommercePricingModel::where('ecommerce_product_id', $product->id)->first();
         $unitCogs = $pricingModel?->bomUnitCost() ?? 0.0;
+        $unitLiquidCost = (float) ($pricingModel->liquid_cost ?? 0);
+        $unitBottleCost = (float) ($pricingModel->bottle_cost ?? 0);
+        $unitLabelCost = (float) ($pricingModel->label_cost ?? 0);
+        $unitPumpCost = (float) ($pricingModel->pump_cost ?? 0);
+        $unitOuterBoxCost = (float) ($pricingModel->box_cost ?? 0);
 
-        DB::transaction(function () use ($validated, $quantity, $unitPrice, $totalPrice, $unitCogs, $stockField, $soldField) {
+        DB::transaction(function () use (
+            $validated,
+            $quantity,
+            $unitPrice,
+            $totalPrice,
+            $unitCogs,
+            $unitLiquidCost,
+            $unitBottleCost,
+            $unitLabelCost,
+            $unitPumpCost,
+            $unitOuterBoxCost,
+            $stockField,
+            $soldField
+        ) {
             EcommerceSale::create([
                 'ecommerce_product_id' => $validated['ecommerce_product_id'],
                 'reference_id' => $validated['reference_id'] ?? null,
@@ -177,6 +196,11 @@ class EcommerceSalesController extends Controller
                 'unit_price' => $unitPrice,
                 'total_price' => $totalPrice,
                 'unit_cogs' => $unitCogs,
+                'unit_liquid_cost' => $unitLiquidCost,
+                'unit_bottle_cost' => $unitBottleCost,
+                'unit_label_cost' => $unitLabelCost,
+                'unit_pump_cost' => $unitPumpCost,
+                'unit_outer_box_cost' => $unitOuterBoxCost,
             ]);
 
             $product = EcommerceProduct::lockForUpdate()->findOrFail($validated['ecommerce_product_id']);

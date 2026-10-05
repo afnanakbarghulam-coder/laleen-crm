@@ -112,7 +112,7 @@
 
     <div class="ec-card mt-3">
         <h6 class="mb-3">Per-Transaction Profitability</h6>
-        <p class="ec-sub mb-3">{{ $filterText }} &middot; COGS is each sale's BOM cost snapshot at the time it was logged, not today's pricing.</p>
+        <p class="ec-sub mb-3">{{ $filterText }} &middot; Each cost column is a snapshot of the product's BOM at the time the sale was logged, not today's pricing.</p>
         <div class="table-responsive">
             <table class="table ec-table align-middle">
                 <thead>
@@ -122,7 +122,11 @@
                         <th>Channel</th>
                         <th class="text-end">Quantity</th>
                         <th class="text-end">Total Revenue</th>
-                        <th class="text-end">Total COGS</th>
+                        <th class="text-end">Liquid Cost</th>
+                        <th class="text-end">Bottle Cost</th>
+                        <th class="text-end">Label Cost</th>
+                        <th class="text-end">Pump Cost</th>
+                        <th class="text-end">Box Cost</th>
                         <th class="text-end">Gross Profit</th>
                         <th class="text-end">Margin %</th>
                     </tr>
@@ -131,7 +135,12 @@
                     @forelse ($sales as $sale)
                         @php
                             $saleRevenue = (float) $sale->total_price;
-                            $saleCogs = (float) $sale->quantity * (float) ($sale->unit_cogs ?? 0);
+                            $saleLiquidCost = (float) $sale->quantity * (float) ($sale->unit_liquid_cost ?? 0);
+                            $saleBottleCost = (float) $sale->quantity * (float) ($sale->unit_bottle_cost ?? 0);
+                            $saleLabelCost = (float) $sale->quantity * (float) ($sale->unit_label_cost ?? 0);
+                            $salePumpCost = (float) $sale->quantity * (float) ($sale->unit_pump_cost ?? 0);
+                            $saleBoxCost = (float) $sale->quantity * (float) ($sale->unit_outer_box_cost ?? 0);
+                            $saleCogs = $saleLiquidCost + $saleBottleCost + $saleLabelCost + $salePumpCost + $saleBoxCost;
                             $saleGrossProfit = $saleRevenue - $saleCogs;
                             $saleMargin = $saleRevenue > 0 ? ($saleGrossProfit / $saleRevenue) * 100 : 0;
                         @endphp
@@ -141,12 +150,16 @@
                             <td><span class="ec-channel-badge {{ $channelBadgeClasses[$sale->channel] ?? 'ec-channel-backbar' }}">{{ $sale->channel }}</span></td>
                             <td class="text-end">{{ number_format($sale->quantity, 0) }}</td>
                             <td class="text-end">PKR {{ number_format($saleRevenue, 2) }}</td>
-                            <td class="text-end">PKR {{ number_format($saleCogs, 2) }}</td>
+                            <td class="text-end">{{ $saleLiquidCost > 0 ? 'PKR ' . number_format($saleLiquidCost, 2) : '—' }}</td>
+                            <td class="text-end">{{ $saleBottleCost > 0 ? 'PKR ' . number_format($saleBottleCost, 2) : '—' }}</td>
+                            <td class="text-end">{{ $saleLabelCost > 0 ? 'PKR ' . number_format($saleLabelCost, 2) : '—' }}</td>
+                            <td class="text-end">{{ $salePumpCost > 0 ? 'PKR ' . number_format($salePumpCost, 2) : '—' }}</td>
+                            <td class="text-end">{{ $saleBoxCost > 0 ? 'PKR ' . number_format($saleBoxCost, 2) : '—' }}</td>
                             <td class="text-end {{ $saleGrossProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($saleGrossProfit, 2) }}</td>
                             <td class="text-end {{ $saleMargin >= 0 ? 'ec-positive' : 'ec-negative' }}">{{ number_format($saleMargin, 1) }}%</td>
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="text-center text-muted">No sales in this date range</td></tr>
+                        <tr><td colspan="12" class="text-center text-muted">No sales in this date range</td></tr>
                     @endforelse
                 </tbody>
             </table>

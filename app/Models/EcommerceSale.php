@@ -16,6 +16,11 @@ class EcommerceSale extends Model
         'unit_price',
         'total_price',
         'unit_cogs',
+        'unit_liquid_cost',
+        'unit_bottle_cost',
+        'unit_label_cost',
+        'unit_pump_cost',
+        'unit_outer_box_cost',
     ];
 
     protected $casts = [
@@ -23,6 +28,11 @@ class EcommerceSale extends Model
         'unit_price' => 'decimal:2',
         'total_price' => 'decimal:2',
         'unit_cogs' => 'decimal:2',
+        'unit_liquid_cost' => 'decimal:2',
+        'unit_bottle_cost' => 'decimal:2',
+        'unit_label_cost' => 'decimal:2',
+        'unit_pump_cost' => 'decimal:2',
+        'unit_outer_box_cost' => 'decimal:2',
     ];
 
     public function product()
