@@ -5,13 +5,23 @@ namespace App\Http\Controllers\Ecommerce;
 use App\Http\Controllers\Controller;
 use App\Models\EcommercePricingModel;
 use App\Models\EcommerceProduct;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class EcommerceStockController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        // Defaults to month-to-date, matching the Sales & Usage / Net Profit
+        // filters. This range scopes historical data ONLY (the Batch History
+        // modal) — current stock counts and Total Capital are always live.
+        $from = $request->filled('start_date') ? Carbon::parse($request->start_date)->startOfDay() : now()->startOfMonth();
+        $to = $request->filled('end_date') ? Carbon::parse($request->end_date)->startOfDay() : now()->startOfDay();
+        if ($from->gt($to)) {
+            [$from, $to] = [$to->copy(), $from->copy()];
+        }
+
         $products = EcommerceProduct::with(['productionRuns' => function ($query) {
             $query->with('creator')->orderByDesc('created_at');
         }])->orderBy('name')->get();
@@ -23,6 +33,7 @@ class EcommerceStockController extends Controller
 
         // Total Capital in Inventory: every unsold unit (Pakistan + Qatar)
         // valued at its BOM cost per unit, summed across all finished goods.
+        // Always live/unfiltered — never scoped by the date range above.
         $totalCapitalInInventory = $products->sum(function (EcommerceProduct $product) use ($pricingModels) {
             $unitCost = $this->bomUnitCost($pricingModels->get($product->id));
             $totalStock = (float) $product->stock_pakistan + (float) $product->stock_qatar;
@@ -34,6 +45,10 @@ class EcommerceStockController extends Controller
             'products' => $products,
             'pricingModels' => $pricingModels,
             'totalCapitalInInventory' => $totalCapitalInInventory,
+            'startDate' => $request->input('start_date'),
+            'endDate' => $request->input('end_date'),
+            'historyRangeFrom' => $from,
+            'historyRangeTo' => $to,
         ]);
     }
 

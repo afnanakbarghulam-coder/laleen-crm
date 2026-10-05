@@ -100,6 +100,7 @@
 
     .ec-badge-injection { background: rgba(142, 168, 138, 0.18); color: var(--ec-success); }
     .ec-badge-distribution { background: rgba(168, 82, 74, 0.18); color: var(--ec-danger); }
+    .ec-badge-live { background: rgba(142, 168, 138, 0.18); color: var(--ec-success); }
 
     .ec-form-control, .ec-form-select {
         background-color: #241e1c;

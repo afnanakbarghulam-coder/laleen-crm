@@ -16,6 +16,24 @@
 
     @include('ecommerce._nav')
 
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <p class="ec-sub mb-0">Scopes Batch History only &mdash; live stock and capital figures below always reflect right now.</p>
+        <form method="GET" action="{{ route('ecommerce.stock.index') }}" class="d-flex align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <label for="startDateFilter" class="ec-sub mb-0">From</label>
+                <input type="date" name="start_date" id="startDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ $startDate }}">
+                <label for="endDateFilter" class="ec-sub mb-0">To</label>
+                <input type="date" name="end_date" id="endDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ $endDate }}">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Apply Filter</button>
+        </form>
+    </div>
+
+    <div class="d-flex align-items-center gap-2 mb-2">
+        <h6 class="mb-0" style="text-transform: none; font-size: 14px; letter-spacing: 0; color: var(--ec-ink);">Live Inventory Snapshot</h6>
+        <span class="ec-badge ec-badge-live">Live (Unfiltered)</span>
+    </div>
+
     <div class="row mb-3">
         <div class="col-md-4">
             <div class="ec-card ec-card-highlight">
@@ -52,12 +70,19 @@
                         @php
                             $totalProduced = (float) $product->stock_pakistan + (float) $product->sold_pakistan;
                             $transferredIn = (float) $product->stock_qatar + (float) $product->sold_qatar;
+                            // "Last Produced" always reflects the true most recent run,
+                            // regardless of the date filter — it's a live fact, not a
+                            // historical report. Only the Batch History modal's list
+                            // (below) is scoped to the selected date range.
                             $lastProductionRun = $product->productionRuns->first();
-                            $productionHistory = $product->productionRuns->map(fn ($run) => [
-                                'date' => $run->created_at->format('d M Y, h:i A'),
-                                'quantity' => number_format((float) $run->quantity_produced, 2),
-                                'logged_by' => $run->creator->name ?? '—',
-                            ]);
+                            $productionHistory = $product->productionRuns
+                                ->filter(fn ($run) => $run->created_at->between($historyRangeFrom, $historyRangeTo->copy()->endOfDay()))
+                                ->map(fn ($run) => [
+                                    'date' => $run->created_at->format('d M Y, h:i A'),
+                                    'quantity' => number_format((float) $run->quantity_produced, 2),
+                                    'logged_by' => $run->creator->name ?? '—',
+                                ])
+                                ->values();
 
                             $pricingModel = $pricingModels->get($product->id);
                             $unitCost = $pricingModel
@@ -124,6 +149,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <p class="ec-sub mb-3">Showing runs from {{ $historyRangeFrom->format('d M Y') }} to {{ $historyRangeTo->format('d M Y') }}</p>
                     <div class="table-responsive">
                         <table class="table ec-table align-middle mb-0">
                             <thead>
@@ -155,7 +181,7 @@
                 rows.innerHTML = '';
 
                 if (history.length === 0) {
-                    rows.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No production runs yet</td></tr>';
+                    rows.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No production runs in the selected date range</td></tr>';
                     return;
                 }
 
