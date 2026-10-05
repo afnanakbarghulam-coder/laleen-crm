@@ -16,6 +16,16 @@
 
     @include('ecommerce._nav')
 
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <div class="ec-card ec-card-highlight">
+                <h6>Total Capital in Inventory</h6>
+                <div class="ec-value">PKR {{ number_format($totalCapitalInInventory, 2) }}</div>
+                <div class="ec-sub">Unsold stock (Pakistan + Qatar) &times; BOM cost per unit</div>
+            </div>
+        </div>
+    </div>
+
     <div class="ec-card">
         <div class="table-responsive">
             <table class="table ec-table align-middle">
@@ -24,6 +34,7 @@
                         <th rowspan="2" style="vertical-align: middle;">Product Name</th>
                         <th rowspan="2" style="vertical-align: middle;">Unit Size</th>
                         <th rowspan="2" style="vertical-align: middle;">Last Produced</th>
+                        <th rowspan="2" style="vertical-align: middle;">Total Value</th>
                         <th colspan="3" class="ec-table-group-header">Pakistan (Warehouse)</th>
                         <th colspan="3" class="ec-table-group-header">Qatar (Retail)</th>
                     </tr>
@@ -47,6 +58,13 @@
                                 'quantity' => number_format((float) $run->quantity_produced, 2),
                                 'logged_by' => $run->creator->name ?? '—',
                             ]);
+
+                            $pricingModel = $pricingModels->get($product->id);
+                            $unitCost = $pricingModel
+                                ? (float) $pricingModel->liquid_cost + (float) $pricingModel->bottle_cost + (float) $pricingModel->label_cost + (float) $pricingModel->box_cost + (float) $pricingModel->pump_cost
+                                : 0.0;
+                            $totalStockBothLocations = (float) $product->stock_pakistan + (float) $product->stock_qatar;
+                            $totalValue = $totalStockBothLocations * $unitCost;
                         @endphp
                         <tr>
                             <td>{{ $product->name }}</td>
@@ -71,6 +89,7 @@
                                     <span class="text-muted">—</span>
                                 @endif
                             </td>
+                            <td class="ec-stock-emphasis">PKR {{ number_format($totalValue, 2) }}</td>
                             <td>{{ number_format($totalProduced, 0) }}</td>
                             <td>{{ number_format($product->sold_pakistan, 0) }}</td>
                             <td class="ec-col-divider ec-stock-emphasis {{ $product->stock_pakistan < 0 ? 'ec-negative' : '' }}">
@@ -89,7 +108,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="9" class="text-center text-muted">No finished goods yet &mdash; add some in Inventory &amp; Production first.</td></tr>
+                        <tr><td colspan="10" class="text-center text-muted">No finished goods yet &mdash; add some in Inventory &amp; Production first.</td></tr>
                     @endforelse
                 </tbody>
             </table>
