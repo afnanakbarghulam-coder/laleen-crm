@@ -18,7 +18,10 @@ class EcommerceNetProfitController extends Controller
             [$from, $to] = [$to->copy(), $from->copy()];
         }
 
-        $sales = EcommerceSale::whereBetween('created_at', [$from, $to->copy()->endOfDay()])->get();
+        $sales = EcommerceSale::with('product')
+            ->whereBetween('created_at', [$from, $to->copy()->endOfDay()])
+            ->orderByDesc('created_at')
+            ->get();
 
         $deductionCategories = EcommerceExpense::NET_PROFIT_DEDUCTION_CATEGORIES;
         $deductionExpenses = EcommerceExpense::whereIn('category', $deductionCategories)
@@ -27,6 +30,15 @@ class EcommerceNetProfitController extends Controller
 
         $totalRevenue = (float) $sales->sum('total_price');
 
+        // COGS is read from each sale's own unit_cogs snapshot (taken at the
+        // moment it was logged), not recalculated against current pricing —
+        // so this stays accurate even after the BOM cost model changes later.
+        // Sales logged before this column existed have a null unit_cogs and
+        // correctly contribute PKR 0 COGS (their cost was never captured).
+        $totalCogs = (float) $sales->sum(fn (EcommerceSale $sale) => (float) $sale->quantity * (float) ($sale->unit_cogs ?? 0));
+        $grossProfit = $totalRevenue - $totalCogs;
+        $grossMargin = $totalRevenue > 0 ? ($grossProfit / $totalRevenue) * 100 : 0;
+
         $amountsByCategory = $deductionExpenses->groupBy('category')->map->sum('amount');
         $deductionBreakdown = collect($deductionCategories)->map(fn ($category) => [
             'category' => $category,
@@ -34,8 +46,8 @@ class EcommerceNetProfitController extends Controller
         ]);
 
         $totalDeductions = (float) $deductionBreakdown->sum('amount');
-        $netProfit = $totalRevenue - $totalDeductions;
-        $netMargin = $totalRevenue > 0 ? ($netProfit / $totalRevenue) * 100 : 0;
+        $trueNetProfit = $grossProfit - $totalDeductions;
+        $trueNetMargin = $totalRevenue > 0 ? ($trueNetProfit / $totalRevenue) * 100 : 0;
 
         // Falls back to weekly buckets once the range is too wide for a legible daily x-axis,
         // mirroring the Sales Trend and Bookings Trend charts so every module buckets consistently.
@@ -67,10 +79,14 @@ class EcommerceNetProfitController extends Controller
             : 'This month to date';
 
         return view('ecommerce.net-profit', [
+            'sales' => $sales,
             'totalRevenue' => $totalRevenue,
+            'totalCogs' => $totalCogs,
+            'grossProfit' => $grossProfit,
+            'grossMargin' => $grossMargin,
             'totalDeductions' => $totalDeductions,
-            'netProfit' => $netProfit,
-            'netMargin' => $netMargin,
+            'trueNetProfit' => $trueNetProfit,
+            'trueNetMargin' => $trueNetMargin,
             'deductionBreakdown' => $deductionBreakdown,
             'filterText' => $filterText,
             'startDate' => $request->input('start_date'),

@@ -29,4 +29,18 @@ class EcommercePricingModel extends Model
     {
         return $this->belongsTo(EcommerceProduct::class, 'ecommerce_product_id');
     }
+
+    /**
+     * The product's BOM cost per unit (Liquid + Bottle + Label + Box + Pump).
+     * Single source of truth for this formula — used by Stock Levels'
+     * capital valuation and as the COGS snapshot taken at time of sale.
+     */
+    public function bomUnitCost(): float
+    {
+        return (float) $this->liquid_cost
+            + (float) $this->bottle_cost
+            + (float) $this->label_cost
+            + (float) $this->box_cost
+            + (float) $this->pump_cost;
+    }
 }

@@ -15,12 +15,14 @@ class EcommerceSale extends Model
         'reason',
         'unit_price',
         'total_price',
+        'unit_cogs',
     ];
 
     protected $casts = [
         'quantity' => 'integer',
         'unit_price' => 'decimal:2',
         'total_price' => 'decimal:2',
+        'unit_cogs' => 'decimal:2',
     ];
 
     public function product()

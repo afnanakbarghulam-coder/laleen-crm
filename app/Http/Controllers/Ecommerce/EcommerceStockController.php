@@ -35,7 +35,7 @@ class EcommerceStockController extends Controller
         // valued at its BOM cost per unit, summed across all finished goods.
         // Always live/unfiltered — never scoped by the date range above.
         $totalCapitalInInventory = $products->sum(function (EcommerceProduct $product) use ($pricingModels) {
-            $unitCost = $this->bomUnitCost($pricingModels->get($product->id));
+            $unitCost = $pricingModels->get($product->id)?->bomUnitCost() ?? 0.0;
             $totalStock = (float) $product->stock_pakistan + (float) $product->stock_qatar;
 
             return $totalStock * $unitCost;
@@ -50,19 +50,6 @@ class EcommerceStockController extends Controller
             'historyRangeFrom' => $from,
             'historyRangeTo' => $to,
         ]);
-    }
-
-    private function bomUnitCost(?EcommercePricingModel $pricingModel): float
-    {
-        if (!$pricingModel) {
-            return 0.0;
-        }
-
-        return (float) $pricingModel->liquid_cost
-            + (float) $pricingModel->bottle_cost
-            + (float) $pricingModel->label_cost
-            + (float) $pricingModel->box_cost
-            + (float) $pricingModel->pump_cost;
     }
 
     public function transfer(Request $request)
