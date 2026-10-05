@@ -11,7 +11,9 @@ class EcommerceStockController extends Controller
 {
     public function index()
     {
-        $products = EcommerceProduct::orderBy('name')->get();
+        $products = EcommerceProduct::with(['productionRuns' => function ($query) {
+            $query->with('creator')->orderByDesc('created_at');
+        }])->orderBy('name')->get();
 
         return view('ecommerce.stock', [
             'products' => $products,

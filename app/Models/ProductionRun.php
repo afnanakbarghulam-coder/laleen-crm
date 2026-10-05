@@ -9,6 +9,7 @@ class ProductionRun extends Model
     protected $fillable = [
         'ecommerce_product_id',
         'quantity_produced',
+        'created_by',
     ];
 
     protected $casts = [
@@ -18,6 +19,11 @@ class ProductionRun extends Model
     public function product()
     {
         return $this->belongsTo(EcommerceProduct::class, 'ecommerce_product_id');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function materials()

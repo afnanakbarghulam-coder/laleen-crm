@@ -103,6 +103,7 @@ class EcommerceProductionController extends Controller
 
                 $run = $product->productionRuns()->create([
                     'quantity_produced' => $quantityProduced,
+                    'created_by' => auth()->id(),
                 ]);
 
                 foreach ($materialsUsed as $item) {
