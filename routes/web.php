@@ -18,6 +18,7 @@ use App\Http\Controllers\Kpi\AdsConversionController;
 use App\Http\Controllers\Kpi\AgentShiftLogController;
 use App\Http\Controllers\Kpi\AgentTargetController;
 use App\Http\Controllers\Kpi\ChatEvaluationController;
+use App\Http\Controllers\Kpi\ContentCalendarController;
 use App\Http\Controllers\Kpi\ContentEntryController;
 use App\Http\Controllers\Kpi\ContentKpiController;
 use App\Http\Controllers\Kpi\StaffSalesController;
@@ -226,6 +227,9 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->post('/content-entries', [ContentEntryController::class, 'store'])->name('content-entries.store');
         Route::middleware('module:kpis,edit')->put('/content-entries/{contentEntry}', [ContentEntryController::class, 'update'])->name('content-entries.update');
         Route::middleware('module:kpis,edit')->delete('/content-entries/{contentEntry}', [ContentEntryController::class, 'destroy'])->name('content-entries.destroy');
+
+        Route::middleware('module:kpis')->get('/content-calendar', [ContentCalendarController::class, 'index'])->name('content-calendar.index');
+        Route::middleware('module:kpis,edit')->post('/content-calendar', [ContentCalendarController::class, 'updateWeek'])->name('content-calendar.update');
     });
 
     // ---- Ecommerce ----

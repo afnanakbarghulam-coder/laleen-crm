@@ -39,10 +39,10 @@
             </a>
         </div>
         <div class="col-md-6 col-xl-4">
-            <a href="{{ route('kpi.content.index') }}" class="kpi-hub-card">
-                <div class="kpi-hub-icon"><i class="bx bx-image-alt"></i></div>
-                <h6 class="mb-1">Content KPI Report</h6>
-                <p class="text-muted small mb-0">Daily posting &amp; standards compliance for feed and stories.</p>
+            <a href="{{ route('kpi.content-calendar.index') }}" class="kpi-hub-card">
+                <div class="kpi-hub-icon"><i class="bx bx-calendar"></i></div>
+                <h6 class="mb-1">Weekly Content Calendar</h6>
+                <p class="text-muted small mb-0">Plan daily reels and stories schedules.</p>
             </a>
         </div>
     </div>
