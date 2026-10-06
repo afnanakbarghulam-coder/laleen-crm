@@ -46,20 +46,38 @@
                                     <span class="cc-day-badge">{{ strtoupper($plan->day_of_week) }}</span>
                                 </td>
                                 <td>
-                                    <textarea
-                                        name="days[{{ $plan->day_of_week }}][reel_content]"
-                                        class="cc-textarea"
-                                        rows="3"
-                                        placeholder="Reel concept for {{ $plan->day_of_week }}&hellip;"
-                                    >{{ $plan->reel_content }}</textarea>
+                                    <div class="position-relative cc-textarea-wrapper">
+                                        <button
+                                            type="button"
+                                            class="cc-status-pill {{ $plan->is_reel_posted ? 'is-posted' : '' }}"
+                                            data-target="reel-{{ $plan->day_of_week }}"
+                                        >{{ $plan->is_reel_posted ? 'Posted ✓' : 'Pending' }}</button>
+                                        <textarea
+                                            id="reel-{{ $plan->day_of_week }}-textarea"
+                                            name="days[{{ $plan->day_of_week }}][reel_content]"
+                                            class="cc-textarea {{ $plan->is_reel_posted ? 'is-posted' : '' }}"
+                                            rows="3"
+                                            placeholder="Reel concept for {{ $plan->day_of_week }}&hellip;"
+                                        >{{ $plan->reel_content }}</textarea>
+                                        <input type="hidden" id="reel-{{ $plan->day_of_week }}-input" name="days[{{ $plan->day_of_week }}][is_reel_posted]" value="{{ $plan->is_reel_posted ? 1 : 0 }}">
+                                    </div>
                                 </td>
                                 <td>
-                                    <textarea
-                                        name="days[{{ $plan->day_of_week }}][stories_content]"
-                                        class="cc-textarea"
-                                        rows="3"
-                                        placeholder="&bull; Story idea 1&#10;&bull; Story idea 2&#10;&bull; Story idea 3"
-                                    >{{ $plan->stories_content }}</textarea>
+                                    <div class="position-relative cc-textarea-wrapper">
+                                        <button
+                                            type="button"
+                                            class="cc-status-pill {{ $plan->are_stories_posted ? 'is-posted' : '' }}"
+                                            data-target="stories-{{ $plan->day_of_week }}"
+                                        >{{ $plan->are_stories_posted ? 'Posted ✓' : 'Pending' }}</button>
+                                        <textarea
+                                            id="stories-{{ $plan->day_of_week }}-textarea"
+                                            name="days[{{ $plan->day_of_week }}][stories_content]"
+                                            class="cc-textarea {{ $plan->are_stories_posted ? 'is-posted' : '' }}"
+                                            rows="3"
+                                            placeholder="&bull; Story idea 1&#10;&bull; Story idea 2&#10;&bull; Story idea 3"
+                                        >{{ $plan->stories_content }}</textarea>
+                                        <input type="hidden" id="stories-{{ $plan->day_of_week }}-input" name="days[{{ $plan->day_of_week }}][are_stories_posted]" value="{{ $plan->are_stories_posted ? 1 : 0 }}">
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach
@@ -132,6 +150,7 @@
             width: 100%;
             min-height: 90px;
             padding: 16px 18px;
+            padding-top: 40px;
             background: transparent;
             border: none;
             outline: none;
@@ -140,6 +159,7 @@
             font-size: 13.5px;
             line-height: 1.5;
             font-family: inherit;
+            transition: opacity .15s ease, box-shadow .15s ease;
         }
 
         .cc-textarea::placeholder {
@@ -152,8 +172,66 @@
             box-shadow: inset 0 0 0 1px var(--luxe-accent);
         }
 
+        .cc-textarea.is-posted {
+            opacity: .55;
+            box-shadow: inset 0 0 0 1px rgba(142, 168, 138, .45);
+        }
+
         .cc-table tbody tr:not(:last-child) td {
             border-bottom: 1px solid var(--luxe-border);
         }
+
+        .cc-textarea-wrapper {
+            height: 100%;
+        }
+
+        .cc-status-pill {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            z-index: 2;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .03em;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--luxe-border-strong);
+            background: var(--luxe-bg-elevated);
+            color: var(--luxe-muted);
+            cursor: pointer;
+            transition: background .15s ease, color .15s ease, border-color .15s ease;
+        }
+
+        .cc-status-pill:hover {
+            border-color: var(--luxe-accent);
+        }
+
+        .cc-status-pill.is-posted {
+            background: rgba(142, 168, 138, .16);
+            color: #b7cdb3;
+            border-color: rgba(142, 168, 138, .45);
+        }
     </style>
+
+    <script>
+        document.querySelectorAll('.cc-status-pill').forEach(function (pill) {
+            pill.addEventListener('click', function () {
+                var target = pill.getAttribute('data-target');
+                var textarea = document.getElementById(target + '-textarea');
+                var input = document.getElementById(target + '-input');
+                var isPosted = input.value === '1';
+
+                isPosted = !isPosted;
+
+                input.value = isPosted ? '1' : '0';
+                pill.classList.toggle('is-posted', isPosted);
+                pill.textContent = isPosted ? 'Posted ✓' : 'Pending';
+                textarea.classList.toggle('is-posted', isPosted);
+            });
+        });
+    </script>
 @endsection

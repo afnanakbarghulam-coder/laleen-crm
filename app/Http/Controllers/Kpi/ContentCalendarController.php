@@ -57,6 +57,8 @@ class ContentCalendarController extends Controller
             'days' => 'nullable|array',
             'days.*.reel_content' => 'nullable|string',
             'days.*.stories_content' => 'nullable|string',
+            'days.*.is_reel_posted' => 'nullable|boolean',
+            'days.*.are_stories_posted' => 'nullable|boolean',
         ]);
 
         $weekStart = Carbon::parse($validated['week_start_date'])->startOfWeek(Carbon::MONDAY)->toDateString();
@@ -70,6 +72,8 @@ class ContentCalendarController extends Controller
                 [
                     'reel_content' => $content['reel_content'] ?? null,
                     'stories_content' => $content['stories_content'] ?? null,
+                    'is_reel_posted' => $request->boolean("days.{$dayName}.is_reel_posted"),
+                    'are_stories_posted' => $request->boolean("days.{$dayName}.are_stories_posted"),
                 ]
             );
         }

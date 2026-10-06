@@ -21,10 +21,18 @@ class SocialContentPlan extends Model
         'day_of_week',
         'reel_content',
         'stories_content',
+        'is_reel_posted',
+        'are_stories_posted',
     ];
 
-    // Deliberately uncast: kept as a plain 'Y-m-d' string end-to-end. A
-    // 'date' cast formats the attribute with a time suffix when writing
-    // (via the model's generic $dateFormat), which stops it matching the
-    // bare date strings used in firstOrCreate/where lookups elsewhere.
+    protected $casts = [
+        'is_reel_posted' => 'boolean',
+        'are_stories_posted' => 'boolean',
+    ];
+
+    // week_start_date is deliberately uncast: kept as a plain 'Y-m-d' string
+    // end-to-end. A 'date' cast formats the attribute with a time suffix
+    // when writing (via the model's generic $dateFormat), which stops it
+    // matching the bare date strings used in firstOrCreate/where lookups
+    // elsewhere.
 }
