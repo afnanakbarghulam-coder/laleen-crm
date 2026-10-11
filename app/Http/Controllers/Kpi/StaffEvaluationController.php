@@ -24,6 +24,10 @@ class StaffEvaluationController extends Controller
 
         $period = $request->query('period') === 'previous' ? 'previous' : 'current';
 
+        $branchFilter = $request->filled('branch') && array_key_exists($request->query('branch'), KpiStaffEvaluation::BRANCHES)
+            ? $request->query('branch')
+            : null;
+
         $evaluationsQuery = KpiStaffEvaluation::with(['staff', 'evaluator']);
 
         if ($period === 'current') {
@@ -32,30 +36,53 @@ class StaffEvaluationController extends Controller
             $evaluationsQuery->where('evaluation_date', '<', $weekStart->toDateTimeString());
         }
 
+        if ($branchFilter) {
+            $evaluationsQuery->where('branch', $branchFilter);
+        }
+
         $evaluations = $evaluationsQuery
             ->orderByDesc('evaluation_date')
             ->orderByDesc('id')
             ->paginate(15)
             ->withQueryString();
 
-        $staffList = Staff::active()->orderBy('name')->get(['id', 'name']);
+        $staffList = Staff::active()->orderBy('name')->get(['id', 'name', 'branch']);
+
+        // Staff assigned to "both" branches belong in each branch's list —
+        // the New Evaluation modal's Staff dropdown filters from this per
+        // the selected Branch, so a "both" stylist must appear either way.
+        $staffByBranch = collect(KpiStaffEvaluation::BRANCHES)->keys()->mapWithKeys(
+            fn ($branchKey) => [
+                $branchKey => $staffList
+                    ->filter(fn ($staff) => in_array($staff->branch, [$branchKey, 'both'], true))
+                    ->map(fn ($staff) => ['id' => $staff->id, 'name' => $staff->name])
+                    ->values(),
+            ]
+        );
 
         return view('kpi.evaluations.index', [
             'evaluations' => $evaluations,
             'staffList' => $staffList,
+            'staffByBranch' => $staffByBranch,
             'rubric' => KpiStaffEvaluation::RUBRIC,
             'branches' => KpiStaffEvaluation::BRANCHES,
             'defaultBranch' => KpiStaffEvaluation::defaultBranchFor($request->user()),
             'weeklyStatus' => $this->weeklyStatus($weekStart, $weekEnd),
             'weakestMetric' => $this->weakestMetricThisWeek($weekStart, $weekEnd),
             'period' => $period,
+            'branchFilter' => $branchFilter,
             'weekStart' => $weekStart,
             'weekEnd' => $weekEnd,
+            'isMonday' => now()->isMonday(),
         ]);
     }
 
     public function store(Request $request)
     {
+        if (!now()->isMonday()) {
+            abort(403, 'Evaluations can only be submitted on Mondays.');
+        }
+
         $validated = $request->validate([
             'staff_id' => 'required|exists:staff,id',
             'branch' => 'required|in:old_airport,wakrah',

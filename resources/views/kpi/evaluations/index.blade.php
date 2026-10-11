@@ -7,12 +7,19 @@
             <h4>Salon Staff Evaluation</h4>
             <p>Weekly ROI-focused performance scoring — Wakrah (Rhea) &amp; Old Airport (Ahana).</p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex align-items-center gap-2">
             <a href="{{ route('kpi.hub') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to KPIs</a>
             @moduleEdit('kpis')
-                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newEvaluationModal">
-                    <i class="bx bx-plus me-1"></i> New Evaluation
-                </button>
+                @if ($isMonday)
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newEvaluationModal">
+                        <i class="bx bx-plus me-1"></i> New Evaluation
+                    </button>
+                @else
+                    <button type="button" class="btn btn-primary opacity-50 cursor-not-allowed" disabled title="Evaluations unlock on Mondays">
+                        <i class="bx bx-plus me-1"></i> New Evaluation
+                    </button>
+                    <span class="text-muted small">Evaluations unlock on Mondays</span>
+                @endif
             @endmoduleEdit
         </div>
     </div>
@@ -53,9 +60,16 @@
         </div>
     </div>
 
-    <div class="d-flex gap-2 mb-3">
-        <a href="{{ route('kpi.evaluations.index', ['period' => 'current']) }}" class="btn btn-sm {{ $period === 'current' ? 'btn-dark' : 'btn-outline-secondary' }}">This Week</a>
-        <a href="{{ route('kpi.evaluations.index', ['period' => 'previous']) }}" class="btn btn-sm {{ $period === 'previous' ? 'btn-dark' : 'btn-outline-secondary' }}">Previous Weeks</a>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <a href="{{ route('kpi.evaluations.index', array_filter(['period' => 'current', 'branch' => $branchFilter])) }}" class="btn btn-sm {{ $period === 'current' ? 'btn-dark' : 'btn-outline-secondary' }}">This Week</a>
+        <a href="{{ route('kpi.evaluations.index', array_filter(['period' => 'previous', 'branch' => $branchFilter])) }}" class="btn btn-sm {{ $period === 'previous' ? 'btn-dark' : 'btn-outline-secondary' }}">Previous Weeks</a>
+
+        <select id="dashboardBranchFilter" class="form-select form-select-sm ms-md-2" style="max-width: 200px;">
+            <option value="" @selected(!$branchFilter)>All Branches</option>
+            @foreach ($branches as $key => $label)
+                <option value="{{ $key }}" @selected($branchFilter === $key)>{{ $label }}</option>
+            @endforeach
+        </select>
     </div>
 
     <div class="kpi-panel p-0" style="overflow:hidden;">
@@ -125,21 +139,18 @@
                     <div class="modal-body">
                         <div class="row g-3 mb-4">
                             <div class="col-md-4">
-                                <label class="form-label">Staff Member</label>
-                                <select name="staff_id" class="form-select" required>
-                                    <option value="">Select staff member&hellip;</option>
-                                    @foreach ($staffList as $staff)
-                                        <option value="{{ $staff->id }}" @selected(old('staff_id') == $staff->id)>{{ $staff->name }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div class="col-md-4">
                                 <label class="form-label">Branch</label>
-                                <select name="branch" class="form-select" required>
+                                <select name="branch" id="evalBranchSelect" class="form-select" required>
                                     <option value="">Select branch&hellip;</option>
                                     @foreach ($branches as $key => $label)
                                         <option value="{{ $key }}" @selected(old('branch', $defaultBranch) === $key)>{{ $label }}</option>
                                     @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Staff Member</label>
+                                <select name="staff_id" id="evalStaffSelect" class="form-select" required>
+                                    <option value="">Select a branch first&hellip;</option>
                                 </select>
                             </div>
                             <div class="col-md-4">
@@ -355,6 +366,14 @@
             white-space: pre-wrap;
             margin: 0;
         }
+
+        .opacity-50 {
+            opacity: .5;
+        }
+
+        .cursor-not-allowed {
+            cursor: not-allowed;
+        }
     </style>
 
     <script>
@@ -364,6 +383,62 @@
                 new bootstrap.Modal(modalEl).show();
             }
         });
+
+        // Dashboard "Filter by Branch" — reuses the current URL so the
+        // active period (This Week / Previous Weeks) survives the change.
+        document.getElementById('dashboardBranchFilter').addEventListener('change', function () {
+            var url = new URL(window.location.href);
+            if (this.value) {
+                url.searchParams.set('branch', this.value);
+            } else {
+                url.searchParams.delete('branch');
+            }
+            window.location.href = url.toString();
+        });
+
+        // New Evaluation modal: Staff Member options depend on the chosen
+        // Branch, filtered client-side with no page reload.
+        var STAFF_BY_BRANCH = @json($staffByBranch);
+        var OLD_STAFF_ID = @json(old('staff_id'));
+
+        function populateEvalStaffDropdown(branch) {
+            var staffSelect = document.getElementById('evalStaffSelect');
+            staffSelect.innerHTML = '';
+
+            var staffForBranch = branch ? STAFF_BY_BRANCH[branch] : null;
+
+            if (!staffForBranch) {
+                var placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = 'Select a branch first…';
+                staffSelect.appendChild(placeholder);
+                staffSelect.disabled = true;
+                return;
+            }
+
+            staffSelect.disabled = false;
+
+            var emptyOption = document.createElement('option');
+            emptyOption.value = '';
+            emptyOption.textContent = 'Select staff member…';
+            staffSelect.appendChild(emptyOption);
+
+            staffForBranch.forEach(function (staff) {
+                var option = document.createElement('option');
+                option.value = staff.id;
+                option.textContent = staff.name;
+                if (OLD_STAFF_ID && String(OLD_STAFF_ID) === String(staff.id)) {
+                    option.selected = true;
+                }
+                staffSelect.appendChild(option);
+            });
+        }
+
+        document.getElementById('evalBranchSelect').addEventListener('change', function () {
+            populateEvalStaffDropdown(this.value);
+        });
+
+        populateEvalStaffDropdown(document.getElementById('evalBranchSelect').value);
 
         var STAFF_EVAL_RUBRIC_TITLES = @json(collect($rubric)->map(fn ($block) => $block['title']));
 

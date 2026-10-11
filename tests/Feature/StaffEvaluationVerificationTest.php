@@ -13,6 +13,17 @@ class StaffEvaluationVerificationTest extends TestCase
 {
     use RefreshDatabase;
 
+    // A fixed Monday/Tuesday pair so store() tests don't depend on which
+    // day the suite actually runs on.
+    private const A_MONDAY = '2026-10-12 10:00:00';
+    private const A_TUESDAY = '2026-10-13 10:00:00';
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
+
     private function makeEvaluation(Staff $staff, User $evaluator, string $branch, Carbon $date, array $scores, ?string $notes = null): KpiStaffEvaluation
     {
         return KpiStaffEvaluation::create([
@@ -38,7 +49,7 @@ class StaffEvaluationVerificationTest extends TestCase
         ]);
     }
 
-    public function test_index_page_renders_weekly_cards_and_toggle(): void
+    public function test_index_page_renders_weekly_cards_toggle_and_branch_filter(): void
     {
         $user = User::factory()->create(['role' => 'admin']);
 
@@ -52,11 +63,67 @@ class StaffEvaluationVerificationTest extends TestCase
             ->assertSee('Wakrah (Rhea)')
             ->assertSee('Salon Weakest Metric')
             ->assertSee('This Week')
-            ->assertSee('Previous Weeks');
+            ->assertSee('Previous Weeks')
+            ->assertSee('All Branches')
+            ->assertSee('id="dashboardBranchFilter"', false);
+    }
+
+    public function test_new_evaluation_button_disabled_outside_monday(): void
+    {
+        Carbon::setTestNow(self::A_TUESDAY);
+
+        $user = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($user)
+            ->get(route('kpi.evaluations.index'))
+            ->assertOk()
+            ->assertSee('Evaluations unlock on Mondays')
+            ->assertSee('disabled', false);
+    }
+
+    public function test_new_evaluation_button_enabled_on_monday(): void
+    {
+        Carbon::setTestNow(self::A_MONDAY);
+
+        $user = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($user)
+            ->get(route('kpi.evaluations.index'))
+            ->assertOk()
+            ->assertDontSee('Evaluations unlock on Mondays')
+            ->assertSee('data-bs-target="#newEvaluationModal"', false);
+    }
+
+    public function test_store_blocked_outside_monday(): void
+    {
+        Carbon::setTestNow(self::A_TUESDAY);
+
+        $user = User::factory()->create(['role' => 'admin']);
+        $staff = Staff::create(['name' => 'Tuesday Stylist']);
+
+        $payload = [
+            'staff_id' => $staff->id,
+            'branch' => 'wakrah',
+            'evaluation_date' => now()->format('Y-m-d'),
+            'score_cleanliness' => 5,
+            'score_dress_code' => 1,
+            'score_attitude' => 5,
+            'score_sales' => 1,
+            'score_teamwork' => 5,
+            'score_communication' => 1,
+        ];
+
+        $this->actingAs($user)
+            ->post(route('kpi.evaluations.store'), $payload)
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('kpi_staff_evaluations', 0);
     }
 
     public function test_store_saves_binary_scores_and_branch_and_computes_average(): void
     {
+        Carbon::setTestNow(self::A_MONDAY);
+
         $user = User::factory()->create(['role' => 'admin']);
         $staff = Staff::create(['name' => 'Verification Stylist']);
 
@@ -95,6 +162,8 @@ class StaffEvaluationVerificationTest extends TestCase
 
     public function test_store_rejects_mid_scale_scores(): void
     {
+        Carbon::setTestNow(self::A_MONDAY);
+
         $user = User::factory()->create(['role' => 'admin']);
         $staff = Staff::create(['name' => 'Mid Scale Stylist']);
 
@@ -119,6 +188,8 @@ class StaffEvaluationVerificationTest extends TestCase
 
     public function test_store_rejects_invalid_branch(): void
     {
+        Carbon::setTestNow(self::A_MONDAY);
+
         $user = User::factory()->create(['role' => 'admin']);
         $staff = Staff::create(['name' => 'Branchless Stylist']);
 
@@ -203,6 +274,61 @@ class StaffEvaluationVerificationTest extends TestCase
             ->assertOk()
             ->assertSee('Previous week note')
             ->assertDontSee('Current week note');
+    }
+
+    public function test_dashboard_branch_filter_restricts_table_to_selected_branch(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+        $staff = Staff::create(['name' => 'Branch Filter Stylist']);
+
+        $this->makeEvaluation($staff, $user, 'wakrah', now(), [5, 5, 5, 5, 5, 5], 'Wakrah branch note');
+        $this->makeEvaluation($staff, $user, 'old_airport', now(), [1, 1, 1, 1, 1, 1], 'Old Airport branch note');
+
+        $this->actingAs($user)
+            ->get(route('kpi.evaluations.index', ['branch' => 'wakrah']))
+            ->assertOk()
+            ->assertSee('Wakrah branch note')
+            ->assertDontSee('Old Airport branch note');
+
+        $this->actingAs($user)
+            ->get(route('kpi.evaluations.index', ['branch' => 'old_airport']))
+            ->assertOk()
+            ->assertSee('Old Airport branch note')
+            ->assertDontSee('Wakrah branch note');
+
+        $this->actingAs($user)
+            ->get(route('kpi.evaluations.index'))
+            ->assertOk()
+            ->assertSee('Wakrah branch note')
+            ->assertSee('Old Airport branch note');
+    }
+
+    public function test_staff_by_branch_grouping_includes_both_branch_staff_in_each_list(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+        Staff::create(['name' => 'Wakrah Only Stylist', 'branch' => 'wakrah']);
+        Staff::create(['name' => 'Old Airport Only Stylist', 'branch' => 'old_airport']);
+        Staff::create(['name' => 'Floating Stylist', 'branch' => 'both']);
+
+        $response = $this->actingAs($user)->get(route('kpi.evaluations.index'));
+
+        $response->assertOk();
+
+        $html = $response->getContent();
+        preg_match('/var STAFF_BY_BRANCH = (\{.*?\});/s', $html, $matches);
+        $this->assertNotEmpty($matches, 'STAFF_BY_BRANCH JSON not found in page.');
+
+        $staffByBranch = json_decode($matches[1], true);
+        $wakrahNames = array_column($staffByBranch['wakrah'], 'name');
+        $oldAirportNames = array_column($staffByBranch['old_airport'], 'name');
+
+        $this->assertContains('Wakrah Only Stylist', $wakrahNames);
+        $this->assertContains('Floating Stylist', $wakrahNames);
+        $this->assertNotContains('Old Airport Only Stylist', $wakrahNames);
+
+        $this->assertContains('Old Airport Only Stylist', $oldAirportNames);
+        $this->assertContains('Floating Stylist', $oldAirportNames);
+        $this->assertNotContains('Wakrah Only Stylist', $oldAirportNames);
     }
 
     public function test_view_details_payload_includes_full_binary_breakdown(): void
