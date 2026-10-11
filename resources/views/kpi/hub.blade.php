@@ -9,73 +9,46 @@
         </div>
     </div>
 
-    <h3 class="kpi-section-title">Marketing</h3>
-    <div class="row g-3">
-        <div class="col-md-6 col-xl-4">
-            <a href="{{ route('kpi.ads.index') }}" class="kpi-hub-card">
-                <div class="kpi-hub-icon"><i class="bx bx-trending-up"></i></div>
-                <h6 class="mb-1">Ads Conversion Report</h6>
-                <p class="text-muted small mb-0">Leads-to-booking conversion by category, branch split, and 20% target tracking.</p>
+    <div class="row g-4">
+        <div class="col-md-4">
+            <a href="{{ route('kpi.marketing') }}" class="kpi-hub-card kpi-master-card">
+                <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-line-chart"></i></div>
+                <h5 class="mb-1">Marketing</h5>
+                <p class="text-muted mb-0">Manage ad conversions and weekly content schedules.</p>
             </a>
         </div>
-        <div class="col-md-6 col-xl-4">
-            <a href="{{ route('kpi.content-calendar.index') }}" class="kpi-hub-card">
-                <div class="kpi-hub-icon"><i class="bx bx-calendar"></i></div>
-                <h6 class="mb-1">Weekly Content Calendar</h6>
-                <p class="text-muted small mb-0">Plan daily reels and stories schedules.</p>
+        <div class="col-md-4">
+            <a href="{{ route('kpi.customer-service') }}" class="kpi-hub-card kpi-master-card">
+                <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-support"></i></div>
+                <h5 class="mb-1">Customer Service</h5>
+                <p class="text-muted mb-0">Track agent targets and evaluate chat quality.</p>
             </a>
         </div>
-    </div>
-
-    <h3 class="kpi-section-title">Customer Service</h3>
-    <div class="row g-3">
-        <div class="col-md-6 col-xl-4">
-            <a href="{{ route('kpi.agents.index') }}" class="kpi-hub-card">
-                <div class="kpi-hub-icon"><i class="bx bx-target-lock"></i></div>
-                <h6 class="mb-1">Agents Target Report</h6>
-                <p class="text-muted small mb-0">Morning &amp; evening shift booking targets with recovery math.</p>
-            </a>
-        </div>
-        <div class="col-md-6 col-xl-4">
-            <a href="{{ route('kpi.chat-eval.index') }}" class="kpi-hub-card">
-                <div class="kpi-hub-icon"><i class="bx bx-chat"></i></div>
-                <h6 class="mb-1">Chat Evaluation Report</h6>
-                <p class="text-muted small mb-0">15-question quality scorecard with performance journey trend.</p>
-            </a>
-        </div>
-    </div>
-
-    <h3 class="kpi-section-title">Salon Staff</h3>
-    <div class="row g-3">
-        <div class="col-md-6 col-xl-4">
-            <a href="{{ route('kpi.staff-sales.index') }}" class="kpi-hub-card">
-                <div class="kpi-hub-icon"><i class="bx bx-store"></i></div>
-                <h6 class="mb-1">Staff Sales Performance</h6>
-                <p class="text-muted small mb-0">Per-branch upsell tracking against prorated monthly targets.</p>
-            </a>
-        </div>
-        <div class="col-md-6 col-xl-4">
-            <a href="{{ route('kpi.evaluations.index') }}" class="kpi-hub-card">
-                <div class="kpi-hub-icon"><i class="bx bx-star"></i></div>
-                <h6 class="mb-1">Salon Staff Evaluation</h6>
-                <p class="text-muted small mb-0">Monthly ROI-focused performance scoring by branch leaders.</p>
+        <div class="col-md-4">
+            <a href="{{ route('kpi.salon-staff') }}" class="kpi-hub-card kpi-master-card">
+                <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-cut"></i></div>
+                <h5 class="mb-1">Salon Staff</h5>
+                <p class="text-muted mb-0">Monitor staff sales performance and weekly evaluations.</p>
             </a>
         </div>
     </div>
 
     <style>
-        .kpi-section-title {
-            color: var(--luxe-accent);
-            font-weight: 600;
-            font-size: 18px;
-            margin-top: 32px;
-            margin-bottom: 16px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--luxe-border);
+        .kpi-master-card {
+            padding: 32px 28px;
+            text-align: center;
         }
 
-        .kpi-section-title:first-of-type {
-            margin-top: 0;
+        .kpi-hub-icon-lg {
+            width: 64px;
+            height: 64px;
+            font-size: 30px;
+            border-radius: 16px;
+            margin: 0 auto 18px;
+        }
+
+        .kpi-master-card h5 {
+            font-size: 20px;
         }
     </style>
 @endsection

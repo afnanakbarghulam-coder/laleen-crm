@@ -7,7 +7,7 @@
             <h4>Weekly Content Calendar</h4>
             <p>Plan daily reels and stories schedules.</p>
         </div>
-        <a href="{{ route('kpi.hub') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to KPIs</a>
+        <a href="{{ route('kpi.marketing') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Marketing</a>
     </div>
 
     <div class="kpi-panel mb-3">

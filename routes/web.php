@@ -21,6 +21,7 @@ use App\Http\Controllers\Kpi\ChatEvaluationController;
 use App\Http\Controllers\Kpi\ContentCalendarController;
 use App\Http\Controllers\Kpi\ContentEntryController;
 use App\Http\Controllers\Kpi\ContentKpiController;
+use App\Http\Controllers\Kpi\KpiHubController;
 use App\Http\Controllers\Kpi\StaffEvaluationController;
 use App\Http\Controllers\Kpi\StaffSalesController;
 use App\Http\Controllers\LeadController;
@@ -190,9 +191,10 @@ Route::middleware(['auth'])->group(function () {
     // NOTE: each subresource's literal 'create' path is registered before its
     // '{report}' wildcard (show), same reasoning as the Leads section above.
     Route::prefix('kpis')->name('kpi.')->group(function () {
-        Route::middleware('module:kpis')->get('/', function () {
-            return view('kpi.hub');
-        })->name('hub');
+        Route::middleware('module:kpis')->get('/', [KpiHubController::class, 'index'])->name('hub');
+        Route::middleware('module:kpis')->get('/marketing', [KpiHubController::class, 'marketing'])->name('marketing');
+        Route::middleware('module:kpis')->get('/customer-service', [KpiHubController::class, 'customerService'])->name('customer-service');
+        Route::middleware('module:kpis')->get('/salon-staff', [KpiHubController::class, 'salonStaff'])->name('salon-staff');
 
         Route::middleware('module:kpis')->get('/ads', [AdsConversionController::class, 'index'])->name('ads.index');
         Route::middleware('module:kpis,edit')->post('/ads', [AdsConversionController::class, 'store'])->name('ads.store');
