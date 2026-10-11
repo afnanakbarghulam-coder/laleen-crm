@@ -2,123 +2,83 @@
 @section('title', 'Branch Evaluation Report')
 
 @php
-    $sections = [
-        [
-            'title' => 'SECTION 1 — ATTENDANCE & PUNCTUALITY',
-            'score' => 10,
-            'max' => 10,
-            'questions' => [
-                ['num' => 1, 'question' => 'Was the salon open, clean, and ready at opening time?', 'answer' => '✅ Yes', 'score' => '5 / 5', 'status' => 'pass'],
-                ['num' => 2, 'question' => 'Were all staff present and at their assigned stations?', 'answer' => '✅ Yes', 'score' => '5 / 5', 'status' => 'pass'],
-            ],
-        ],
-        [
-            'title' => 'SECTION 2 — DRESS CODE & HYGIENE',
-            'score' => 5,
-            'max' => 15,
-            'questions' => [
-                ['num' => 3, 'question' => 'Were all staff in proper Laleen uniform?', 'answer' => '✅ Yes', 'score' => '5 / 5', 'status' => 'pass'],
-                ['num' => 4, 'question' => 'Did all staff look clean, groomed, and presentable?', 'answer' => '❌ No — open hair', 'score' => '0 / 5', 'status' => 'fail'],
-                ['num' => 5, 'question' => 'Was the salon spotless — floors, mirrors, stations, reception?', 'answer' => '❌ No — store & reception messy', 'score' => '0 / 5', 'status' => 'fail'],
-            ],
-        ],
-        [
-            'title' => 'SECTION 3 — CUSTOMER CARE & COMMUNICATION',
-            'score' => 32,
-            'max' => 50,
-            'questions' => [
-                ['num' => 6, 'question' => 'Were you acknowledged and greeted the moment you walked in?', 'answer' => '✅ Yes', 'score' => '8 / 8', 'status' => 'pass'],
-                ['num' => 7, 'question' => 'Were you offered tea, coffee, or water within 2 minutes?', 'answer' => '✅ Yes', 'score' => '8 / 8', 'status' => 'pass'],
-                ['num' => 8, 'question' => 'Did the beautician explain the product/service before starting?', 'answer' => '⚠️ 50/50', 'score' => '4 / 8', 'status' => 'warn'],
-                ['num' => 9, 'question' => 'Did she check on your comfort during the service?', 'answer' => '✅ Yes', 'score' => '8 / 8', 'status' => 'pass'],
-                ['num' => 10, 'question' => 'Did she walk you back to reception and thank you warmly?', 'answer' => '⚠️ Inconsistent', 'score' => '4 / 8', 'status' => 'warn'],
-                ['num' => 11, 'question' => 'Did staff stand up and greet when customers arrived?', 'answer' => '❌ No', 'score' => '0 / 10', 'status' => 'fail'],
-            ],
-        ],
-        [
-            'title' => 'SECTION 4 — ZERO COMPLAINTS',
-            'score' => 15,
-            'max' => 15,
-            'questions' => [
-                ['num' => 12, 'question' => 'Was there any idle staff sitting and ignoring customers?', 'answer' => '✅ No', 'score' => '5 / 5', 'status' => 'pass'],
-                ['num' => 13, 'question' => 'Did anything make you uncomfortable or frustrated?', 'answer' => '✅ No', 'score' => '5 / 5', 'status' => 'pass'],
-                ['num' => 14, 'question' => 'Was there any unprofessional behavior or argument?', 'answer' => '✅ No', 'score' => '5 / 5', 'status' => 'pass'],
-            ],
-        ],
-        [
-            'title' => 'SECTION 5 — TEAMWORK & ATTITUDE',
-            'score' => 10,
-            'max' => 10,
-            'questions' => [
-                ['num' => 15, 'question' => 'Did staff work together smoothly as a team?', 'answer' => '✅ Yes', 'score' => '4 / 4', 'status' => 'pass'],
-                ['num' => 16, 'question' => 'Was the overall salon atmosphere positive, warm, and welcoming?', 'answer' => '✅ Yes', 'score' => '3 / 3', 'status' => 'pass'],
-                ['num' => 17, 'question' => 'Did any staff member seem disinterested, bored, or lazy?', 'answer' => '✅ No', 'score' => '3 / 3', 'status' => 'pass'],
-            ],
-        ],
-        [
-            'title' => 'SECTION 6 — MANAGER EVALUATION (FAYE)',
-            'score' => 25,
-            'max' => 40,
-            'questions' => [
-                ['num' => 18, 'question' => 'Did the manager greet you with a genuine warm smile?', 'answer' => '✅ Yes', 'score' => '5 / 5', 'status' => 'pass'],
-                ['num' => 19, 'question' => 'Did she proactively offer refreshments without being asked?', 'answer' => '❌ No', 'score' => '0 / 5', 'status' => 'fail'],
-                ['num' => 20, 'question' => 'Did she check on your satisfaction during or after the service?', 'answer' => '❌ No', 'score' => '0 / 5', 'status' => 'fail'],
-                ['num' => 21, 'question' => 'Was she actively managing bookings and operations?', 'answer' => '✅ Yes', 'score' => '5 / 5', 'status' => 'pass'],
-                ['num' => 22, 'question' => 'Was she monitoring staff and ensuring KPIs were followed?', 'answer' => '❌ No', 'score' => '0 / 5', 'status' => 'fail'],
-                ['num' => 23, 'question' => 'Did she recommend any additional service or product naturally?', 'answer' => '✅ Yes', 'score' => '5 / 5', 'status' => 'pass'],
-                ['num' => 24, 'question' => 'Did she create positive energy and a welcoming atmosphere?', 'answer' => '✅ Yes', 'score' => '5 / 5', 'status' => 'pass'],
-                ['num' => 25, 'question' => 'Was she fully present — not on her phone or distracted?', 'answer' => '✅ Yes — Active', 'score' => '5 / 5', 'status' => 'pass'],
-            ],
-        ],
-        [
-            'title' => 'SECTION 7 — BONUS OBSERVATIONS',
-            'score' => 10,
-            'max' => 10,
-            'questions' => [
-                ['num' => 26, 'question' => 'Did anyone recommend an additional service or product?', 'answer' => '✅ Yes', 'score' => '5 / 5', 'status' => 'pass'],
-                ['num' => 27, 'question' => 'Would you return as a real customer?', 'answer' => '✅ Yes', 'score' => '5 / 5', 'status' => 'pass'],
-            ],
-        ],
-    ];
+    $branchLabel = \App\Models\BranchEvaluation::BRANCHES[$evaluation->branch] ?? $evaluation->branch;
+    $visit = $evaluation->visitPosition();
+    $sectionResults = $evaluation->sectionResults();
+    $questionResults = $evaluation->questionResults();
 
-    $totalScore = collect($sections)->sum('score');
-    $totalMax = collect($sections)->sum('max');
-    $totalPct = round($totalScore / $totalMax * 100, 1);
+    $sectionsForPartial = $sectionResults->map(function ($section) use ($questionResults) {
+        return [
+            'title' => $section['title'],
+            'score' => $section['score'],
+            'max' => $section['max'],
+            'questions' => $questionResults->where('section', $section['title'])->map(fn ($q) => [
+                'num' => $q['num'],
+                'question' => $q['question'],
+                'answer' => $q['status'] === 'pass' ? '✅ Pass' : '❌ Fail',
+                'score' => $q['answer'] . ' / ' . \App\Models\BranchEvaluation::POINTS_PER_QUESTION,
+                'status' => $q['status'],
+            ])->values(),
+        ];
+    });
+
+    $criticalSections = $sectionResults->where('tier', 'red')->values();
+    $perfectSections = $sectionResults->where('perfect', true)->values();
+
+    $pctDisplay = rtrim(rtrim(number_format((float) $evaluation->percentage, 2), '0'), '.');
+
+    $bannerTier = match ($evaluation->grade) {
+        'Excellent' => 'green',
+        'Pass' => 'green',
+        default => 'amber',
+    };
+
+    $bannerTitle = match ($evaluation->grade) {
+        'Excellent' => $evaluation->grade . ' — ' . $pctDisplay . '% · No action required',
+        'Pass' => $evaluation->grade . ' — ' . $pctDisplay . '% · Minor coaching recommended',
+        default => $evaluation->grade . ' — ' . $pctDisplay . '% · Formal coaching required within 48 hours',
+    };
+
+    $bannerSub = $criticalSections->isNotEmpty()
+        ? 'Driven primarily by shortfalls in: ' . $criticalSections->pluck('title')->implode(', ') . '.'
+        : 'No sections scored below 50% this visit.';
+
+    $gradeColor = $evaluation->grade === 'Warning' ? 'var(--luxe-warning)' : '#b7cdb3';
 @endphp
 
 @section('content')
     <div class="kpi-header">
         <div>
-            <h4>Branch Evaluation Report — Old Airport</h4>
-            <p>Mystery Shopper Assessment &middot; Manager: Faye &middot; 16 June 2026</p>
+            <h4>Branch Evaluation Report — {{ $branchLabel }}</h4>
+            <p>Mystery Shopper Assessment &middot; Manager: {{ $evaluation->manager }} &middot; {{ $evaluation->evaluation_date->format('d F Y') }}</p>
         </div>
-        <a href="{{ route('kpi.salon-staff.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Salon Staff</a>
+        <a href="{{ route('kpi.branch-evaluation.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Branch Evaluations</a>
     </div>
 
     <div class="be-pill-row">
         <div class="be-pill">
             <div class="be-pill-label">Branch</div>
-            <div class="be-pill-value">Old Airport</div>
+            <div class="be-pill-value">{{ $branchLabel }}</div>
         </div>
         <div class="be-pill">
             <div class="be-pill-label">Manager</div>
-            <div class="be-pill-value">Faye</div>
+            <div class="be-pill-value">{{ $evaluation->manager }}</div>
         </div>
         <div class="be-pill">
             <div class="be-pill-label">Visit</div>
-            <div class="be-pill-value">Visit 1 of 3</div>
+            <div class="be-pill-value">Visit {{ $visit['number'] }} of {{ $visit['total'] }}</div>
         </div>
         <div class="be-pill">
             <div class="be-pill-label">Date</div>
-            <div class="be-pill-value">16 Jun 2026</div>
+            <div class="be-pill-value">{{ $evaluation->evaluation_date->format('d M Y') }}</div>
         </div>
     </div>
 
-    <div class="be-warning-banner">
-        <i class="bx bx-error"></i>
+    <div class="be-warning-banner tier-{{ $bannerTier }}">
+        <i class="bx bx-{{ $bannerTier === 'green' ? 'check-shield' : 'error' }}"></i>
         <div>
-            <div class="be-warning-title">Warning — {{ $totalPct }}% &middot; Formal coaching required within 48 hours</div>
-            <div class="be-warning-sub">Driven primarily by hygiene failures (open hair, messy store &amp; reception) and gaps in manager hospitality (no proactive refreshments, no satisfaction check-ins).</div>
+            <div class="be-warning-title">{{ $bannerTitle }}</div>
+            <div class="be-warning-sub">{{ $bannerSub }}</div>
         </div>
     </div>
 
@@ -126,34 +86,34 @@
         <div class="col-md-3 col-6">
             <div class="kpi-stat-card">
                 <div class="kpi-stat-label">Total Score</div>
-                <div class="kpi-stat-value">{{ $totalScore }} <small class="fs-6">/ {{ $totalMax }}</small></div>
-                <div class="kpi-stat-sub">{{ $totalPct }}% overall</div>
+                <div class="kpi-stat-value">{{ $evaluation->total_score }} <small class="fs-6">/ {{ \App\Models\BranchEvaluation::maxScore() }}</small></div>
+                <div class="kpi-stat-sub">{{ $pctDisplay }}% overall</div>
             </div>
         </div>
         <div class="col-md-3 col-6">
             <div class="kpi-stat-card">
                 <div class="kpi-stat-label">Grade</div>
-                <div class="kpi-stat-value" style="color: var(--luxe-warning); font-size: 20px;">Warning</div>
+                <div class="kpi-stat-value" style="color: {{ $gradeColor }}; font-size: 20px;">{{ $evaluation->grade }}</div>
                 <div class="kpi-stat-sub">Target: 75%+</div>
             </div>
         </div>
         <div class="col-md-3 col-6">
             <div class="kpi-stat-card">
                 <div class="kpi-stat-label">Critical Sections</div>
-                <div class="kpi-stat-value" style="color: #d4948c; font-size: 20px;">2</div>
-                <div class="kpi-stat-sub">Hygiene + Manager</div>
+                <div class="kpi-stat-value" style="color: #d4948c; font-size: 20px;">{{ $criticalSections->count() }}</div>
+                <div class="kpi-stat-sub">{{ $criticalSections->isNotEmpty() ? $criticalSections->pluck('title')->implode(', ') : 'None' }}</div>
             </div>
         </div>
         <div class="col-md-3 col-6">
             <div class="kpi-stat-card">
                 <div class="kpi-stat-label">Perfect Sections</div>
-                <div class="kpi-stat-value" style="color: #b7cdb3; font-size: 20px;">4</div>
-                <div class="kpi-stat-sub">Attendance, Complaints, Teamwork, Bonus</div>
+                <div class="kpi-stat-value" style="color: #b7cdb3; font-size: 20px;">{{ $perfectSections->count() }}</div>
+                <div class="kpi-stat-sub">{{ $perfectSections->isNotEmpty() ? $perfectSections->pluck('title')->implode(', ') : 'None' }}</div>
             </div>
         </div>
     </div>
 
-    @foreach ($sections as $section)
+    @foreach ($sectionsForPartial as $section)
         @include('kpi.branch-evaluations._section', $section)
     @endforeach
 
@@ -161,10 +121,9 @@
         <div class="col-lg-6">
             <div class="kpi-panel h-100">
                 <h6>Section Breakdown</h6>
-                @foreach ($sections as $section)
+                @foreach ($sectionResults as $section)
                     @php
-                        $sPct = $section['max'] > 0 ? round($section['score'] / $section['max'] * 100, 1) : 0;
-                        $sPctDisplay = rtrim(rtrim(number_format($sPct, 1), '0'), '.');
+                        $sPctDisplay = rtrim(rtrim(number_format($section['percentage'], 1), '0'), '.');
                     @endphp
                     <div class="be-breakdown-row">
                         <span class="be-breakdown-title">{{ $section['title'] }}</span>
@@ -175,28 +134,12 @@
         </div>
         <div class="col-lg-6">
             <div class="kpi-panel h-100">
-                <h6>Action Plan for Faye</h6>
-
-                <div class="be-action-item">
-                    <span class="kpi-badge kpi-badge-red">Urgent</span>
-                    <span>Staff hygiene — open hair is not acceptable. Faye must conduct a uniform and grooming check every morning before opening. No exceptions.</span>
-                </div>
-                <div class="be-action-item">
-                    <span class="kpi-badge kpi-badge-red">Urgent</span>
-                    <span>Salon cleanliness — messy store and reception directly contributed to the 5,000 QAR municipality fine. Faye is responsible for this.</span>
-                </div>
-                <div class="be-action-item">
-                    <span class="kpi-badge kpi-badge-amber">Train</span>
-                    <span>Staff must stand up when a client enters — scored 0/10. This is the highest-weighted customer care question and a direct repeat of the fine violation.</span>
-                </div>
-                <div class="be-action-item">
-                    <span class="kpi-badge kpi-badge-amber">Train</span>
-                    <span>Faye must offer tea/coffee herself to clients — not just delegate it to staff. She scored 0/5 on hospitality and 0/5 on client feedback.</span>
-                </div>
-                <div class="be-action-item">
-                    <span class="kpi-badge kpi-badge-green">Positive</span>
-                    <span>Bookings managed well, energy positive, upselling done, present and active. Good foundation — hygiene and hospitality will get her to Pass.</span>
-                </div>
+                <h6>Action Plan</h6>
+                @if ($evaluation->action_plan)
+                    <p class="be-action-text">{{ $evaluation->action_plan }}</p>
+                @else
+                    <p class="text-muted small mb-0">No action plan notes were recorded for this visit.</p>
+                @endif
             </div>
         </div>
     </div>
@@ -244,6 +187,11 @@
             margin-bottom: 20px;
         }
 
+        .be-warning-banner.tier-green {
+            background: rgba(142, 168, 138, .12);
+            border-color: rgba(142, 168, 138, .4);
+        }
+
         .be-warning-banner > .bx {
             font-size: 24px;
             line-height: 1.3;
@@ -251,11 +199,19 @@
             flex-shrink: 0;
         }
 
+        .be-warning-banner.tier-green > .bx {
+            color: var(--luxe-success);
+        }
+
         .be-warning-title {
             font-weight: 700;
             font-size: 15px;
             color: var(--luxe-warning);
             margin-bottom: 4px;
+        }
+
+        .be-warning-banner.tier-green .be-warning-title {
+            color: #b7cdb3;
         }
 
         .be-warning-sub {
@@ -355,24 +311,12 @@
             white-space: nowrap;
         }
 
-        .be-action-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            padding: 10px 0;
-            border-bottom: 1px solid var(--luxe-border);
+        .be-action-text {
             font-size: 13px;
-            line-height: 1.5;
+            line-height: 1.6;
             color: var(--luxe-muted);
-        }
-
-        .be-action-item:last-child {
-            border-bottom: none;
-        }
-
-        .be-action-item .kpi-badge {
-            flex-shrink: 0;
-            margin-top: 1px;
+            white-space: pre-wrap;
+            margin: 0;
         }
     </style>
 @endsection

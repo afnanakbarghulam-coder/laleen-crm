@@ -239,6 +239,9 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->post('/evaluations', [StaffEvaluationController::class, 'store'])->name('evaluations.store');
 
         Route::middleware('module:kpis')->get('/salon-staff/branch-evaluation', [BranchEvaluationController::class, 'index'])->name('branch-evaluation.index');
+        Route::middleware('module:kpis,edit')->get('/salon-staff/branch-evaluation/create', [BranchEvaluationController::class, 'create'])->name('branch-evaluation.create');
+        Route::middleware('module:kpis,edit')->post('/salon-staff/branch-evaluation', [BranchEvaluationController::class, 'store'])->name('branch-evaluation.store');
+        Route::middleware('module:kpis')->get('/salon-staff/branch-evaluation/{branchEvaluation}', [BranchEvaluationController::class, 'show'])->name('branch-evaluation.show');
     });
 
     // ---- Ecommerce ----
