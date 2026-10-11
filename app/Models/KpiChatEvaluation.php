@@ -84,6 +84,22 @@ class KpiChatEvaluation extends Model
         return $answer === 'pass' ? self::QUESTIONS[$questionNumber]['weight'] : 0;
     }
 
+    /** The "answers" JSON key for a question number, e.g. 1 -> "q1". */
+    public static function answerKey(int $questionNumber): string
+    {
+        return "q{$questionNumber}";
+    }
+
+    /** Red/amber/green tier for a percentage, per the report's exact 0% / between / 100% rule. */
+    public static function tierFor(float $pct): string
+    {
+        return match (true) {
+            $pct >= 100 => 'green',
+            $pct <= 0 => 'red',
+            default => 'amber',
+        };
+    }
+
     public static function gradeFor(float $pct): string
     {
         return match (true) {
@@ -99,24 +115,25 @@ class KpiChatEvaluation extends Model
         return self::gradeFor((float) $this->percentage);
     }
 
-    /** Every question merged with its text, weight, saved pass/fail answer, and resulting score. */
+    /** Every question merged with its text, weight, saved score/remark, and pass/fail status. */
     public function questionResults(): Collection
     {
         return collect(self::QUESTIONS)->map(function ($question, $num) {
-            $answer = $this->answers[$num] ?? 'fail';
+            $saved = $this->answers[self::answerKey($num)] ?? [];
+            $score = (int) ($saved['score'] ?? 0);
 
             return [
                 'num' => $num,
                 'text' => $question['text'],
                 'weight' => $question['weight'],
-                'answer' => $answer,
-                'passed' => $answer === 'pass',
-                'score' => self::scoreFor($num, $answer),
+                'score' => $score,
+                'remark' => $saved['remark'] ?? null,
+                'passed' => $score >= $question['weight'],
             ];
         })->values();
     }
 
-    /** Score Breakdown groups — label, score, max, percentage — derived from questionResults(). */
+    /** Score Breakdown groups — label, score, max, percentage, color tier — derived from questionResults(). */
     public function sectionBreakdown(): Collection
     {
         $results = $this->questionResults()->keyBy('num');
@@ -124,12 +141,14 @@ class KpiChatEvaluation extends Model
         return collect(self::BREAKDOWN_GROUPS)->map(function ($questionNumbers, $label) use ($results) {
             $score = collect($questionNumbers)->sum(fn ($num) => $results[$num]['score']);
             $max = collect($questionNumbers)->sum(fn ($num) => $results[$num]['weight']);
+            $pct = $max > 0 ? round($score / $max * 100, 1) : 0;
 
             return [
                 'label' => $label,
                 'score' => $score,
                 'max' => $max,
-                'percentage' => $max > 0 ? round($score / $max * 100, 1) : 0,
+                'percentage' => $pct,
+                'tier' => self::tierFor($pct),
             ];
         })->values();
     }

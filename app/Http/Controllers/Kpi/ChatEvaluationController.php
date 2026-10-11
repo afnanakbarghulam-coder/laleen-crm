@@ -74,7 +74,7 @@ class ChatEvaluationController extends Controller
         return User::where('role', 'agent')->orderBy('name')->get(['id', 'name']);
     }
 
-    /** Shared by store() and update() so both validate the 15 binary answers identically. */
+    /** Shared by store() and update() so both validate the 15 binary answers + remarks identically. */
     private function validationRules(): array
     {
         $rules = [
@@ -84,7 +84,9 @@ class ChatEvaluationController extends Controller
         ];
 
         foreach (array_keys(KpiChatEvaluation::QUESTIONS) as $num) {
-            $rules["answers.{$num}"] = 'required|in:pass,fail';
+            $key = KpiChatEvaluation::answerKey($num);
+            $rules["answers.{$key}.answer"] = 'required|in:pass,fail';
+            $rules["answers.{$key}.remark"] = 'nullable|string|max:1000';
         }
 
         return $rules;
@@ -92,15 +94,26 @@ class ChatEvaluationController extends Controller
 
     /**
      * Validated input -> model attributes. The score is always computed
-     * here from the weighted questions — a submitted pass/fail answer can
-     * never carry its own score value, unlike the old free-score system.
+     * here from the weighted questions and each question's Pass/Fail
+     * toggle — a submitted score value is never trusted, unlike the old
+     * free-score system. The remark is free text and stored as given.
      */
     private function scoredAttributes(array $validated): array
     {
         $totalScore = 0;
+        $answers = [];
 
-        foreach ($validated['answers'] as $num => $answer) {
-            $totalScore += KpiChatEvaluation::scoreFor((int) $num, $answer);
+        foreach (array_keys(KpiChatEvaluation::QUESTIONS) as $num) {
+            $key = KpiChatEvaluation::answerKey($num);
+            $submitted = $validated['answers'][$key];
+            $score = KpiChatEvaluation::scoreFor($num, $submitted['answer']);
+
+            $answers[$key] = [
+                'score' => $score,
+                'remark' => $submitted['remark'] ?? null,
+            ];
+
+            $totalScore += $score;
         }
 
         $percentage = round($totalScore / KpiChatEvaluation::maxScore() * 100, 2);
@@ -108,7 +121,7 @@ class ChatEvaluationController extends Controller
         return [
             'agent_id' => $validated['agent_id'],
             'evaluation_date' => $validated['evaluation_date'],
-            'answers' => $validated['answers'],
+            'answers' => $answers,
             'total_score' => $totalScore,
             'percentage' => $percentage,
         ];

@@ -5,7 +5,7 @@
     <div class="kpi-header">
         <div>
             <h4>Edit Chat Evaluation</h4>
-            <p>15-question weighted scorecard &mdash; Pass scores the question's full weight, Fail scores 0.</p>
+            <p>15-question weighted scorecard, grouped by category &mdash; Pass scores the question's full weight, Fail scores 0.</p>
         </div>
         <a href="{{ route('kpi.chat-eval.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Chat Evaluations</a>
     </div>
@@ -38,30 +38,47 @@
             </div>
         </div>
 
-        <div class="ce-section">
-            <div class="ce-section-header">
-                <div class="ce-section-title">15-Question Scorecard</div>
-                <div class="ce-section-fraction">Max {{ \App\Models\KpiChatEvaluation::maxScore() }} points</div>
-            </div>
-            <div class="ce-section-table">
-                @foreach ($questions as $num => $question)
-                    @php $savedAnswer = old("answers.$num", $report->answers[$num] ?? null); @endphp
-                    <div class="ce-q-row">
-                        <div class="ce-q-text">{{ $num }}. {{ $question['text'] }} <span class="ce-q-weight">({{ $question['weight'] }} pts)</span></div>
-                        <div class="ce-q-choices" role="radiogroup" aria-label="{{ $question['text'] }}">
-                            <label class="ce-q-pill fail">
-                                <input type="radio" name="answers[{{ $num }}]" value="fail" @checked($savedAnswer === 'fail') required>
-                                <span>Fail &middot; 0</span>
-                            </label>
-                            <label class="ce-q-pill pass">
-                                <input type="radio" name="answers[{{ $num }}]" value="pass" @checked($savedAnswer === 'pass') required>
-                                <span>Pass &middot; {{ $question['weight'] }}</span>
-                            </label>
+        @foreach (\App\Models\KpiChatEvaluation::BREAKDOWN_GROUPS as $category => $questionNumbers)
+            <div class="ce-section">
+                <div class="ce-section-header">
+                    <div class="ce-section-title">{{ $category }}</div>
+                    <div class="ce-section-fraction">Max {{ collect($questionNumbers)->sum(fn ($n) => $questions[$n]['weight']) }} points</div>
+                </div>
+                <div class="ce-section-table">
+                    @foreach ($questionNumbers as $num)
+                        @php
+                            $question = $questions[$num];
+                            $saved = $report->answers["q$num"] ?? [];
+                            $savedPassed = ($saved['score'] ?? 0) >= $question['weight'];
+                            $savedAnswer = old("answers.q$num.answer", $savedPassed ? 'pass' : 'fail');
+                            $savedRemark = old("answers.q$num.remark", $saved['remark'] ?? '');
+                        @endphp
+                        <div class="ce-q-row">
+                            <div class="ce-q-main">
+                                <div class="ce-q-text">{{ $num }}. {{ $question['text'] }} <span class="ce-q-weight">({{ $question['weight'] }} pts)</span></div>
+                                <div class="ce-q-choices" role="radiogroup" aria-label="{{ $question['text'] }}">
+                                    <label class="ce-q-pill fail">
+                                        <input type="radio" name="answers[q{{ $num }}][answer]" value="fail" @checked($savedAnswer === 'fail') required>
+                                        <span>Fail &middot; 0</span>
+                                    </label>
+                                    <label class="ce-q-pill pass">
+                                        <input type="radio" name="answers[q{{ $num }}][answer]" value="pass" @checked($savedAnswer === 'pass') required>
+                                        <span>Pass &middot; {{ $question['weight'] }}</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <input
+                                type="text"
+                                name="answers[q{{ $num }}][remark]"
+                                class="ce-q-remark"
+                                placeholder="Add a remark (optional)&hellip;"
+                                value="{{ $savedRemark }}"
+                            >
                         </div>
-                    </div>
-                @endforeach
+                    @endforeach
+                </div>
             </div>
-        </div>
+        @endforeach
 
         <div class="d-flex justify-content-end mt-4">
             <button type="submit" class="btn btn-primary btn-lg px-5">Update Report</button>
@@ -88,8 +105,8 @@
 
         .ce-section-title {
             font-weight: 700;
-            font-size: 13.5px;
-            letter-spacing: .03em;
+            font-size: 14px;
+            letter-spacing: .02em;
             color: var(--luxe-ink);
         }
 
@@ -108,17 +125,20 @@
         }
 
         .ce-q-row {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 12px 20px;
+            padding: 14px 20px;
             border-bottom: 1px solid var(--luxe-border);
         }
 
         .ce-q-row:last-child {
             border-bottom: none;
+        }
+
+        .ce-q-main {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
         }
 
         .ce-q-text {
@@ -173,6 +193,27 @@
             background: rgba(142, 168, 138, .16);
             border-color: rgba(142, 168, 138, .5);
             color: #9fc19a;
+        }
+
+        .ce-q-remark {
+            width: 100%;
+            margin-top: 10px;
+            background: var(--luxe-surface-2);
+            border: 1px solid var(--luxe-border);
+            border-radius: var(--luxe-radius-sm);
+            padding: 8px 12px;
+            font-size: 13px;
+            color: var(--luxe-body);
+        }
+
+        .ce-q-remark::placeholder {
+            color: var(--luxe-muted);
+        }
+
+        .ce-q-remark:focus {
+            outline: none;
+            border-color: var(--luxe-accent);
+            background: var(--luxe-surface-hover);
         }
     </style>
 @endsection

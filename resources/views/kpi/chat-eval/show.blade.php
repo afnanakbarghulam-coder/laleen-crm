@@ -2,8 +2,8 @@
 @section('title', 'Chat Evaluation Report')
 
 @php
-    $questionResults = $report->questionResults();
-    $sectionBreakdown = $report->sectionBreakdown();
+    $questionResults = $report->questionResults()->keyBy('num');
+    $sectionBreakdown = $report->sectionBreakdown()->keyBy('label');
     $grade = $report->grade();
     $gradeBadge = match ($grade) {
         'Excellent' => 'kpi-badge-green',
@@ -63,34 +63,34 @@
 
     <div class="row g-3">
         <div class="col-lg-8">
-            <div class="kpi-panel p-0" style="overflow:hidden;">
-                <div class="table-responsive">
-                    <table class="table kpi-table mb-0">
-                        <thead>
-                            <tr>
-                                <th style="width:56px;">#</th>
-                                <th>Question</th>
-                                <th style="width:140px;">Answer</th>
-                                <th class="text-end" style="width:100px;">Score</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach ($questionResults as $q)
-                                <tr>
-                                    <td>{{ $q['num'] }}</td>
-                                    <td>{{ $q['text'] }}</td>
-                                    <td>
+            @foreach (\App\Models\KpiChatEvaluation::BREAKDOWN_GROUPS as $category => $questionNumbers)
+                @php $group = $sectionBreakdown[$category]; @endphp
+                <div class="ce-section">
+                    <div class="ce-section-header">
+                        <div class="ce-section-title">{{ $category }}</div>
+                        <div class="ce-section-fraction">{{ $group['score'] }}/{{ $group['max'] }}</div>
+                    </div>
+                    <div class="ce-section-table">
+                        @foreach ($questionNumbers as $num)
+                            @php $q = $questionResults[$num]; @endphp
+                            <div class="ce-q-row">
+                                <div class="ce-q-main">
+                                    <div class="ce-q-text">{{ $num }}. {{ $q['text'] }}</div>
+                                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
                                         <span class="ce-answer is-{{ $q['passed'] ? 'pass' : 'fail' }}">
                                             {{ $q['passed'] ? '✅ Pass' : '❌ Fail' }}
                                         </span>
-                                    </td>
-                                    <td class="text-end">{{ $q['score'] }} / {{ $q['weight'] }}</td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+                                        <span class="ce-q-score">{{ $q['score'] }} / {{ $q['weight'] }}</span>
+                                    </div>
+                                </div>
+                                @if ($q['remark'])
+                                    <div class="ce-remark">{{ $q['remark'] }}</div>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
                 </div>
-            </div>
+            @endforeach
         </div>
 
         <div class="col-lg-4">
@@ -101,8 +101,8 @@
                         <span class="ce-breakdown-title">{{ $group['label'] }}</span>
                         <span class="ce-breakdown-value">{{ $group['score'] }}/{{ $group['max'] }}</span>
                     </div>
-                    <div class="kpi-progress-track mb-2">
-                        <div class="kpi-progress-fill {{ $group['percentage'] >= 90 ? 'green' : ($group['percentage'] < 50 ? 'red' : 'amber') }}" style="width:{{ $group['percentage'] }}%"></div>
+                    <div class="ce-progress-track mb-3">
+                        <div class="ce-progress-fill tier-{{ $group['tier'] }}" style="width:{{ $group['percentage'] }}%"></div>
                     </div>
                 @endforeach
             </div>
@@ -110,9 +110,77 @@
     </div>
 
     <style>
+        .ce-section {
+            margin-bottom: 20px;
+        }
+
+        .ce-section-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: var(--luxe-surface);
+            border: 1px solid var(--luxe-border);
+            border-left: 5px solid var(--luxe-accent);
+            border-radius: var(--luxe-radius) var(--luxe-radius) 0 0;
+            padding: 14px 20px;
+        }
+
+        .ce-section-title {
+            font-weight: 700;
+            font-size: 14px;
+            letter-spacing: .02em;
+            color: var(--luxe-ink);
+        }
+
+        .ce-section-fraction {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--luxe-muted);
+        }
+
+        .ce-section-table {
+            background: var(--luxe-surface);
+            border: 1px solid var(--luxe-border);
+            border-top: none;
+            border-radius: 0 0 var(--luxe-radius) var(--luxe-radius);
+            overflow: hidden;
+        }
+
+        .ce-q-row {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--luxe-border);
+        }
+
+        .ce-q-row:last-child {
+            border-bottom: none;
+        }
+
+        .ce-q-main {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .ce-q-text {
+            font-size: 13.5px;
+            color: var(--luxe-body);
+            flex: 1 1 320px;
+        }
+
+        .ce-q-score {
+            font-size: 12.5px;
+            color: var(--luxe-muted);
+            white-space: nowrap;
+        }
+
         .ce-answer {
             font-weight: 600;
             font-size: 13px;
+            white-space: nowrap;
         }
 
         .ce-answer.is-pass {
@@ -121,6 +189,17 @@
 
         .ce-answer.is-fail {
             color: #e2a299;
+        }
+
+        .ce-remark {
+            margin-top: 10px;
+            padding: 8px 12px;
+            border-left: 2px solid var(--luxe-border-strong);
+            border-radius: 0 var(--luxe-radius-sm) var(--luxe-radius-sm) 0;
+            background: var(--luxe-surface-2);
+            color: var(--luxe-muted);
+            font-size: 12.5px;
+            font-style: italic;
         }
 
         .ce-breakdown-row {
@@ -140,6 +219,32 @@
         .ce-breakdown-value {
             color: var(--luxe-muted);
             white-space: nowrap;
+        }
+
+        .ce-progress-track {
+            width: 100%;
+            height: 8px;
+            border-radius: 999px;
+            background: var(--luxe-surface-2);
+            overflow: hidden;
+        }
+
+        .ce-progress-fill {
+            height: 100%;
+            border-radius: 999px;
+            transition: width .4s ease;
+        }
+
+        .ce-progress-fill.tier-green {
+            background: rgba(16, 185, 129, .8);
+        }
+
+        .ce-progress-fill.tier-amber {
+            background: rgba(234, 179, 8, .8);
+        }
+
+        .ce-progress-fill.tier-red {
+            background: rgba(244, 63, 94, .8);
         }
     </style>
 @endsection
