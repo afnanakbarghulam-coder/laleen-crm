@@ -19,7 +19,7 @@
     <form method="POST" action="{{ route('kpi.chat-eval.store') }}">
         @csrf
 
-        <div class="kpi-panel mb-4">
+        <div class="kpi-panel mb-3">
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label">Agent</label>
@@ -45,8 +45,11 @@
                 </div>
                 <div class="ce-section-table">
                     @foreach ($questionNumbers as $num)
-                        @php $question = $questions[$num]; @endphp
-                        <div class="ce-q-row">
+                        @php
+                            $question = $questions[$num];
+                            $remarkValue = old("answers.q$num.remark");
+                        @endphp
+                        <div class="ce-q-row" data-remark-open="{{ $remarkValue ? 'true' : 'false' }}">
                             <div class="ce-q-main">
                                 <div class="ce-q-text">{{ $num }}. {{ $question['text'] }} <span class="ce-q-weight">({{ $question['weight'] }} pts)</span></div>
                                 <div class="ce-q-choices" role="radiogroup" aria-label="{{ $question['text'] }}">
@@ -58,6 +61,10 @@
                                         <input type="radio" name="answers[q{{ $num }}][answer]" value="pass" @checked(old("answers.q$num.answer") === 'pass') required>
                                         <span>Pass &middot; {{ $question['weight'] }}</span>
                                     </label>
+                                    <button type="button" class="ce-remark-toggle" data-remark-toggle>
+                                        <i class="bx bx-message-rounded-dots"></i>
+                                        <span data-remark-toggle-label>{{ $remarkValue ? '− Remark' : '+ Remark' }}</span>
+                                    </button>
                                 </div>
                             </div>
                             <input
@@ -65,7 +72,9 @@
                                 name="answers[q{{ $num }}][remark]"
                                 class="ce-q-remark"
                                 placeholder="Add a remark (optional)&hellip;"
-                                value="{{ old("answers.q$num.remark") }}"
+                                value="{{ $remarkValue }}"
+                                data-remark-field
+                                style="{{ $remarkValue ? '' : 'display:none;' }}"
                             >
                         </div>
                     @endforeach
@@ -89,7 +98,7 @@
 
     <style>
         .ce-section {
-            margin-bottom: 20px;
+            margin-bottom: 14px;
         }
 
         .ce-section-header {
@@ -102,7 +111,7 @@
             border: 1px solid var(--luxe-border);
             border-left: 5px solid var(--luxe-accent);
             border-radius: var(--luxe-radius) var(--luxe-radius) 0 0;
-            padding: 14px 20px;
+            padding: 10px 18px;
         }
 
         .ce-section-title {
@@ -127,7 +136,7 @@
         }
 
         .ce-q-row {
-            padding: 14px 20px;
+            padding: 9px 18px;
             border-bottom: 1px solid var(--luxe-border);
         }
 
@@ -156,6 +165,7 @@
 
         .ce-q-choices {
             display: flex;
+            align-items: center;
             gap: 8px;
             flex-shrink: 0;
         }
@@ -166,7 +176,7 @@
             gap: 6px;
             border: 1px solid var(--luxe-border-strong);
             border-radius: 999px;
-            padding: 6px 14px;
+            padding: 5px 12px;
             font-size: 12.5px;
             font-weight: 600;
             color: var(--luxe-muted);
@@ -197,13 +207,36 @@
             color: #9fc19a;
         }
 
+        .ce-remark-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            background: none;
+            border: none;
+            padding: 0;
+            margin-left: 4px;
+            font-size: 11.5px;
+            color: var(--luxe-muted);
+            cursor: pointer;
+            transition: color .15s ease;
+            white-space: nowrap;
+        }
+
+        .ce-remark-toggle:hover {
+            color: var(--luxe-accent);
+        }
+
+        .ce-remark-toggle .bx {
+            font-size: 13px;
+        }
+
         .ce-q-remark {
             width: 100%;
-            margin-top: 10px;
+            margin-top: 8px;
             background: var(--luxe-surface-2);
             border: 1px solid var(--luxe-border);
             border-radius: var(--luxe-radius-sm);
-            padding: 8px 12px;
+            padding: 7px 12px;
             font-size: 13px;
             color: var(--luxe-body);
         }
@@ -219,7 +252,25 @@
         }
 
         .ce-notes-body {
-            padding: 18px 20px;
+            padding: 14px 18px;
         }
     </style>
+
+    <script>
+        document.querySelectorAll('[data-remark-toggle]').forEach(function (btn) {
+            var row = btn.closest('.ce-q-row');
+            var input = row.querySelector('[data-remark-field]');
+            var label = btn.querySelector('[data-remark-toggle-label]');
+
+            function setOpen(open) {
+                input.style.display = open ? '' : 'none';
+                label.textContent = open ? '− Remark' : '+ Remark';
+                row.dataset.remarkOpen = open ? 'true' : 'false';
+            }
+
+            btn.addEventListener('click', function () {
+                setOpen(row.dataset.remarkOpen !== 'true');
+            });
+        });
+    </script>
 @endsection

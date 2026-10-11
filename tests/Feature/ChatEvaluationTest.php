@@ -412,4 +412,35 @@ class ChatEvaluationTest extends TestCase
             ->assertOk()
             ->assertSee('Pre-filled note for editing.');
     }
+
+    public function test_create_page_hides_every_remark_field_by_default(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+
+        $html = $this->actingAs($user)->get(route('kpi.chat-eval.create'))->getContent();
+
+        $this->assertSame(count(KpiChatEvaluation::QUESTIONS), substr_count($html, 'data-remark-open="false"'));
+        $this->assertSame(0, substr_count($html, 'data-remark-open="true"'));
+        $this->assertSame(count(KpiChatEvaluation::QUESTIONS), substr_count($html, 'display:none;'));
+    }
+
+    public function test_edit_page_opens_only_the_remark_field_that_has_a_saved_remark(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+        $agent = User::factory()->create(['role' => 'agent']);
+
+        $report = KpiChatEvaluation::create([
+            'agent_id' => $agent->id,
+            'evaluator_id' => $user->id,
+            'evaluation_date' => '2026-10-05',
+            'answers' => $this->storedAnswers([4], [4 => 'Dropped the follow-up thread.']),
+            'total_score' => 155,
+            'percentage' => round(155 / 170 * 100, 2),
+        ]);
+
+        $html = $this->actingAs($user)->get(route('kpi.chat-eval.edit', $report))->getContent();
+
+        $this->assertSame(1, substr_count($html, 'data-remark-open="true"'));
+        $this->assertSame(count(KpiChatEvaluation::QUESTIONS) - 1, substr_count($html, 'data-remark-open="false"'));
+    }
 }
