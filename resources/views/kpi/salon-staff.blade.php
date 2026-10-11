@@ -25,5 +25,12 @@
                 <p class="text-muted small mb-0">Monthly ROI-focused performance scoring by branch leaders.</p>
             </a>
         </div>
+        <div class="col-md-6 col-xl-4">
+            <a href="{{ route('kpi.branch-evaluation.index') }}" class="kpi-hub-card">
+                <div class="kpi-hub-icon"><i class="bx bx-clipboard"></i></div>
+                <h6 class="mb-1">Branch Evaluation</h6>
+                <p class="text-muted small mb-0">Comprehensive mystery shopper and manager assessments.</p>
+            </a>
+        </div>
     </div>
 @endsection

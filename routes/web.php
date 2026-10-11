@@ -17,6 +17,7 @@ use App\Http\Controllers\Kpi\AdLeadEntryController;
 use App\Http\Controllers\Kpi\AdsConversionController;
 use App\Http\Controllers\Kpi\AgentShiftLogController;
 use App\Http\Controllers\Kpi\AgentTargetController;
+use App\Http\Controllers\Kpi\BranchEvaluationController;
 use App\Http\Controllers\Kpi\ChatEvaluationController;
 use App\Http\Controllers\Kpi\ContentCalendarController;
 use App\Http\Controllers\Kpi\ContentEntryController;
@@ -236,6 +237,8 @@ Route::middleware(['auth'])->group(function () {
 
         Route::middleware('module:kpis')->get('/evaluations', [StaffEvaluationController::class, 'index'])->name('evaluations.index');
         Route::middleware('module:kpis,edit')->post('/evaluations', [StaffEvaluationController::class, 'store'])->name('evaluations.store');
+
+        Route::middleware('module:kpis')->get('/salon-staff/branch-evaluation', [BranchEvaluationController::class, 'index'])->name('branch-evaluation.index');
     });
 
     // ---- Ecommerce ----
