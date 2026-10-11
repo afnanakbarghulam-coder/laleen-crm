@@ -290,4 +290,126 @@ class ChatEvaluationTest extends TestCase
 
         $this->assertDatabaseCount('kpi_chat_evaluations', 0);
     }
+
+    public function test_store_saves_overall_notes(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+        $agent = User::factory()->create(['role' => 'agent']);
+
+        $payload = [
+            'agent_id' => $agent->id,
+            'evaluation_date' => '2026-10-05',
+            'answers' => $this->submittedAnswers(),
+            'notes' => 'Strong overall call quality this cycle.',
+        ];
+
+        $this->actingAs($user)->post(route('kpi.chat-eval.store'), $payload);
+
+        $report = KpiChatEvaluation::first();
+
+        $this->assertSame('Strong overall call quality this cycle.', $report->notes);
+    }
+
+    public function test_store_allows_omitted_notes(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+        $agent = User::factory()->create(['role' => 'agent']);
+
+        $payload = [
+            'agent_id' => $agent->id,
+            'evaluation_date' => '2026-10-05',
+            'answers' => $this->submittedAnswers(),
+        ];
+
+        $this->actingAs($user)
+            ->post(route('kpi.chat-eval.store'), $payload)
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull(KpiChatEvaluation::first()->notes);
+    }
+
+    public function test_update_overwrites_overall_notes(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+        $agent = User::factory()->create(['role' => 'agent']);
+
+        $report = KpiChatEvaluation::create([
+            'agent_id' => $agent->id,
+            'evaluator_id' => $user->id,
+            'evaluation_date' => '2026-10-05',
+            'answers' => $this->storedAnswers(),
+            'total_score' => 170,
+            'percentage' => 100,
+            'notes' => 'Original note.',
+        ]);
+
+        $payload = [
+            'agent_id' => $agent->id,
+            'evaluation_date' => '2026-10-05',
+            'answers' => $this->submittedAnswers(),
+            'notes' => 'Revised note after re-review.',
+        ];
+
+        $this->actingAs($user)->put(route('kpi.chat-eval.update', $report), $payload);
+
+        $this->assertSame('Revised note after re-review.', $report->refresh()->notes);
+    }
+
+    public function test_show_page_renders_leader_notes_only_when_present(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+        $agent = User::factory()->create(['role' => 'agent']);
+
+        $withNotes = KpiChatEvaluation::create([
+            'agent_id' => $agent->id,
+            'evaluator_id' => $user->id,
+            'evaluation_date' => '2026-10-05',
+            'answers' => $this->storedAnswers(),
+            'total_score' => 170,
+            'percentage' => 100,
+            'notes' => 'Coach on follow-up discipline.',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('kpi.chat-eval.show', $withNotes))
+            ->assertOk()
+            ->assertSee('Leader Notes')
+            ->assertSee('Coach on follow-up discipline.');
+
+        $withoutNotes = KpiChatEvaluation::create([
+            'agent_id' => $agent->id,
+            'evaluator_id' => $user->id,
+            'evaluation_date' => '2026-10-06',
+            'answers' => $this->storedAnswers(),
+            'total_score' => 170,
+            'percentage' => 100,
+            'notes' => null,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('kpi.chat-eval.show', $withoutNotes))
+            ->assertOk()
+            ->assertDontSee('Leader Notes');
+    }
+
+    public function test_edit_page_prefills_overall_notes_textarea(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+        $agent = User::factory()->create(['role' => 'agent']);
+
+        $report = KpiChatEvaluation::create([
+            'agent_id' => $agent->id,
+            'evaluator_id' => $user->id,
+            'evaluation_date' => '2026-10-05',
+            'answers' => $this->storedAnswers(),
+            'total_score' => 170,
+            'percentage' => 100,
+            'notes' => 'Pre-filled note for editing.',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('kpi.chat-eval.edit', $report))
+            ->assertOk()
+            ->assertSee('Pre-filled note for editing.');
+    }
 }

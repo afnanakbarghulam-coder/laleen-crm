@@ -54,6 +54,7 @@ class KpiChatEvaluation extends Model
         'answers',
         'total_score',
         'percentage',
+        'notes',
     ];
 
     protected $casts = [

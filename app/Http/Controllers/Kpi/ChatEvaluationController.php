@@ -81,6 +81,7 @@ class ChatEvaluationController extends Controller
             'agent_id' => ['required', Rule::exists('users', 'id')->where('role', 'agent')],
             'evaluation_date' => 'required|date',
             'answers' => 'required|array|size:' . count(KpiChatEvaluation::QUESTIONS),
+            'notes' => 'nullable|string',
         ];
 
         foreach (array_keys(KpiChatEvaluation::QUESTIONS) as $num) {
@@ -124,6 +125,7 @@ class ChatEvaluationController extends Controller
             'answers' => $answers,
             'total_score' => $totalScore,
             'percentage' => $percentage,
+            'notes' => $validated['notes'] ?? null,
         ];
     }
 }

@@ -80,6 +80,15 @@
             </div>
         @endforeach
 
+        <div class="ce-section">
+            <div class="ce-section-header">
+                <div class="ce-section-title">Overall Evaluation Notes</div>
+            </div>
+            <div class="ce-notes-body">
+                <textarea name="notes" class="form-control" rows="4" placeholder="Enter overall feedback or summary notes here&hellip;">{{ old('notes', $report->notes) }}</textarea>
+            </div>
+        </div>
+
         <div class="d-flex justify-content-end mt-4">
             <button type="submit" class="btn btn-primary btn-lg px-5">Update Report</button>
         </div>
@@ -214,6 +223,10 @@
             outline: none;
             border-color: var(--luxe-accent);
             background: var(--luxe-surface-hover);
+        }
+
+        .ce-notes-body {
+            padding: 18px 20px;
         }
     </style>
 @endsection

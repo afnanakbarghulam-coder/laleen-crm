@@ -91,6 +91,13 @@
                     </div>
                 </div>
             @endforeach
+
+            @if ($report->notes)
+                <div class="ce-leader-notes">
+                    <div class="ce-leader-notes-title">Leader Notes</div>
+                    <p class="ce-leader-notes-text">{{ $report->notes }}</p>
+                </div>
+            @endif
         </div>
 
         <div class="col-lg-4">
@@ -245,6 +252,31 @@
 
         .ce-progress-fill.tier-red {
             background: rgba(244, 63, 94, .8);
+        }
+
+        .ce-leader-notes {
+            background: var(--luxe-surface-2);
+            border-left: 2px solid var(--luxe-accent);
+            border-radius: 0 var(--luxe-radius-sm) var(--luxe-radius-sm) 0;
+            padding: 16px 18px;
+            margin-top: 24px;
+        }
+
+        .ce-leader-notes-title {
+            font-weight: 700;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--luxe-accent);
+            margin-bottom: 8px;
+        }
+
+        .ce-leader-notes-text {
+            font-size: 13.5px;
+            line-height: 1.6;
+            color: var(--luxe-muted);
+            white-space: pre-wrap;
+            margin: 0;
         }
     </style>
 @endsection
