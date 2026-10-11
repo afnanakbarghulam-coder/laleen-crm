@@ -10,16 +10,9 @@
         <div class="d-flex align-items-center gap-2">
             <a href="{{ route('kpi.hub') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to KPIs</a>
             @moduleEdit('kpis')
-                @if ($isMonday)
-                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newEvaluationModal">
-                        <i class="bx bx-plus me-1"></i> New Evaluation
-                    </button>
-                @else
-                    <button type="button" class="btn btn-primary opacity-50 cursor-not-allowed" disabled title="Evaluations unlock on Mondays">
-                        <i class="bx bx-plus me-1"></i> New Evaluation
-                    </button>
-                    <span class="text-muted small">Evaluations unlock on Mondays</span>
-                @endif
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newEvaluationModal">
+                    <i class="bx bx-plus me-1"></i> New Evaluation
+                </button>
             @endmoduleEdit
         </div>
     </div>
@@ -183,9 +176,21 @@
                             <textarea name="leader_notes" class="form-control" rows="3" placeholder="Coaching notes, context, or action items&hellip;">{{ old('leader_notes') }}</textarea>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save Evaluation</button>
+                    <div class="modal-footer flex-wrap justify-content-between">
+                        @unless ($isMonday)
+                            <div class="se-monday-warning w-100 text-center mb-2">
+                                <i class="bx bx-lock-alt me-1"></i>Evaluations can only be submitted on Mondays.
+                            </div>
+                        @endunless
+                        <div class="d-flex gap-2 ms-auto">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button
+                                type="submit"
+                                class="btn btn-primary {{ $isMonday ? '' : 'opacity-50 cursor-not-allowed' }}"
+                                @disabled(!$isMonday)
+                                title="{{ $isMonday ? '' : 'Evaluations can only be submitted on Mondays.' }}"
+                            >Save Evaluation</button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -373,6 +378,16 @@
 
         .cursor-not-allowed {
             cursor: not-allowed;
+        }
+
+        .se-monday-warning {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--luxe-warning);
+            background: rgba(201, 166, 107, .12);
+            border: 1px solid rgba(201, 166, 107, .35);
+            border-radius: var(--luxe-radius-sm);
+            padding: 8px 14px;
         }
     </style>
 

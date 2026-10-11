@@ -68,30 +68,71 @@ class StaffEvaluationVerificationTest extends TestCase
             ->assertSee('id="dashboardBranchFilter"', false);
     }
 
-    public function test_new_evaluation_button_disabled_outside_monday(): void
+    /**
+     * Extracts a single button's opening tag from rendered HTML so tests can
+     * assert on its attributes without confusing it with other buttons on
+     * the page (e.g. the dashboard trigger vs. the modal's submit button,
+     * both of which can carry "disabled" depending on the day).
+     */
+    private function extractButtonTag(string $html, string $needle): string
+    {
+        $pos = strpos($html, $needle);
+        $this->assertNotFalse($pos, "Could not find \"{$needle}\" in response HTML.");
+
+        $tagStart = strrpos(substr($html, 0, $pos), '<button');
+        $tagEnd = strpos($html, '>', $pos);
+
+        return substr($html, $tagStart, $tagEnd - $tagStart + 1);
+    }
+
+    public function test_dashboard_new_evaluation_button_always_enabled(): void
+    {
+        foreach ([self::A_MONDAY, self::A_TUESDAY] as $day) {
+            Carbon::setTestNow($day);
+
+            $user = User::factory()->create(['role' => 'admin']);
+
+            $response = $this->actingAs($user)->get(route('kpi.evaluations.index'));
+            $response->assertOk();
+            $response->assertDontSee('Evaluations unlock on Mondays');
+
+            $tag = $this->extractButtonTag($response->getContent(), 'data-bs-target="#newEvaluationModal"');
+            $this->assertStringNotContainsString('disabled', $tag);
+            $this->assertStringNotContainsString('opacity-50', $tag);
+            $this->assertStringNotContainsString('cursor-not-allowed', $tag);
+        }
+    }
+
+    public function test_submit_button_disabled_outside_monday_with_warning(): void
     {
         Carbon::setTestNow(self::A_TUESDAY);
 
         $user = User::factory()->create(['role' => 'admin']);
 
-        $this->actingAs($user)
-            ->get(route('kpi.evaluations.index'))
-            ->assertOk()
-            ->assertSee('Evaluations unlock on Mondays')
-            ->assertSee('disabled', false);
+        $response = $this->actingAs($user)->get(route('kpi.evaluations.index'));
+        $response->assertOk();
+        $response->assertSee('Evaluations can only be submitted on Mondays.');
+
+        $tag = $this->extractButtonTag($response->getContent(), '>Save Evaluation<');
+        $this->assertStringContainsString('disabled', $tag);
+        $this->assertStringContainsString('opacity-50', $tag);
+        $this->assertStringContainsString('cursor-not-allowed', $tag);
     }
 
-    public function test_new_evaluation_button_enabled_on_monday(): void
+    public function test_submit_button_enabled_on_monday(): void
     {
         Carbon::setTestNow(self::A_MONDAY);
 
         $user = User::factory()->create(['role' => 'admin']);
 
-        $this->actingAs($user)
-            ->get(route('kpi.evaluations.index'))
-            ->assertOk()
-            ->assertDontSee('Evaluations unlock on Mondays')
-            ->assertSee('data-bs-target="#newEvaluationModal"', false);
+        $response = $this->actingAs($user)->get(route('kpi.evaluations.index'));
+        $response->assertOk();
+        $response->assertDontSee('Evaluations can only be submitted on Mondays.');
+
+        $tag = $this->extractButtonTag($response->getContent(), '>Save Evaluation<');
+        $this->assertStringNotContainsString('disabled', $tag);
+        $this->assertStringNotContainsString('opacity-50', $tag);
+        $this->assertStringNotContainsString('cursor-not-allowed', $tag);
     }
 
     public function test_store_blocked_outside_monday(): void
