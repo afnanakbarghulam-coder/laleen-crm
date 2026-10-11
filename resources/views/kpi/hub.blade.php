@@ -45,5 +45,12 @@
                 <p class="text-muted small mb-0">Plan daily reels and stories schedules.</p>
             </a>
         </div>
+        <div class="col-md-6 col-xl-4">
+            <a href="{{ route('kpi.evaluations.index') }}" class="kpi-hub-card">
+                <div class="kpi-hub-icon"><i class="bx bx-star"></i></div>
+                <h6 class="mb-1">Salon Staff Evaluation</h6>
+                <p class="text-muted small mb-0">Monthly ROI-focused performance scoring by branch leaders.</p>
+            </a>
+        </div>
     </div>
 @endsection

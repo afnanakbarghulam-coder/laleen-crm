@@ -21,6 +21,7 @@ use App\Http\Controllers\Kpi\ChatEvaluationController;
 use App\Http\Controllers\Kpi\ContentCalendarController;
 use App\Http\Controllers\Kpi\ContentEntryController;
 use App\Http\Controllers\Kpi\ContentKpiController;
+use App\Http\Controllers\Kpi\StaffEvaluationController;
 use App\Http\Controllers\Kpi\StaffSalesController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\ProductController;
@@ -230,6 +231,9 @@ Route::middleware(['auth'])->group(function () {
 
         Route::middleware('module:kpis')->get('/content-calendar', [ContentCalendarController::class, 'index'])->name('content-calendar.index');
         Route::middleware('module:kpis,edit')->post('/content-calendar', [ContentCalendarController::class, 'updateWeek'])->name('content-calendar.update');
+
+        Route::middleware('module:kpis')->get('/evaluations', [StaffEvaluationController::class, 'index'])->name('evaluations.index');
+        Route::middleware('module:kpis,edit')->post('/evaluations', [StaffEvaluationController::class, 'store'])->name('evaluations.store');
     });
 
     // ---- Ecommerce ----
