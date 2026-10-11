@@ -84,18 +84,19 @@
 
                         @foreach ($rubric as $field => $block)
                             <div class="se-score-block">
-                                <h6 class="se-score-title">{{ $block['title'] }} &rarr; <span class="se-score-subtitle">{{ $block['subtitle'] }}</span></h6>
-                                <blockquote class="se-lens">{{ $block['lens'] }}</blockquote>
+                                <h6 class="se-score-title">{{ $block['title'] }}</h6>
 
-                                <div class="se-scale" role="radiogroup" aria-label="{{ $block['title'] }} score">
-                                    @for ($i = 1; $i <= 5; $i++)
-                                        <input type="radio" name="{{ $field }}" id="{{ $field }}-{{ $i }}" value="{{ $i }}" @checked(old($field) == $i) required>
-                                        <label for="{{ $field }}-{{ $i }}">{{ $i }}</label>
-                                    @endfor
-                                </div>
-                                <div class="se-scale-captions">
-                                    <span class="se-caption-left">{{ $block['one_star'] }}</span>
-                                    <span class="se-caption-right">{{ $block['five_star'] }}</span>
+                                <div class="se-choice-row" role="radiogroup" aria-label="{{ $block['title'] }} score">
+                                    <div class="se-choice se-choice-1">
+                                        <input type="radio" name="{{ $field }}" id="{{ $field }}-1" value="1" @checked(old($field) == 1) required>
+                                        <label for="{{ $field }}-1">1</label>
+                                        <p class="se-choice-text">{{ $block['one_star'] }}</p>
+                                    </div>
+                                    <div class="se-choice se-choice-5">
+                                        <input type="radio" name="{{ $field }}" id="{{ $field }}-5" value="5" @checked(old($field) == 5) required>
+                                        <label for="{{ $field }}-5">5</label>
+                                        <p class="se-choice-text">{{ $block['five_star'] }}</p>
+                                    </div>
                                 </div>
                             </div>
                         @endforeach
@@ -139,82 +140,69 @@
             color: var(--luxe-ink);
             font-weight: 700;
             font-size: 14.5px;
-            margin-bottom: 10px;
+            margin-bottom: 14px;
         }
 
-        .se-score-subtitle {
-            color: var(--luxe-muted);
-            font-weight: 600;
-        }
-
-        .se-lens {
-            border-left: 2px solid var(--luxe-accent);
-            padding-left: 12px;
-            margin: 0 0 14px;
-            font-size: 13px;
-            line-height: 1.5;
-            color: var(--luxe-muted);
-            font-style: italic;
-        }
-
-        .se-scale {
+        .se-choice-row {
             display: flex;
-            gap: 10px;
-            margin-bottom: 8px;
+            justify-content: space-between;
+            gap: 2rem;
         }
 
-        .se-scale input[type="radio"] {
+        .se-choice {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 0;
+        }
+
+        .se-choice-5 {
+            align-items: flex-end;
+            text-align: right;
+        }
+
+        .se-choice input[type="radio"] {
             position: absolute;
             opacity: 0;
             width: 1px;
             height: 1px;
         }
 
-        .se-scale label {
-            width: 36px;
-            height: 36px;
+        .se-choice label {
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             border: 1px solid var(--luxe-border-strong);
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: 13px;
+            font-size: 14px;
             color: var(--luxe-muted);
             cursor: pointer;
+            margin-bottom: 10px;
             transition: background .15s ease, color .15s ease, border-color .15s ease;
         }
 
-        .se-scale label:hover {
+        .se-choice label:hover {
             border-color: var(--luxe-accent);
         }
 
-        .se-scale input[type="radio"]:checked + label {
+        .se-choice input[type="radio"]:checked + label {
             background: var(--luxe-accent);
             border-color: var(--luxe-accent);
             color: var(--luxe-accent-ink);
         }
 
-        .se-scale input[type="radio"]:focus-visible + label {
+        .se-choice input[type="radio"]:focus-visible + label {
             outline: 2px solid var(--luxe-accent);
             outline-offset: 2px;
         }
 
-        .se-scale-captions {
-            display: flex;
-            justify-content: space-between;
-            gap: 16px;
-            font-size: 11.5px;
+        .se-choice-text {
+            margin: 0;
+            font-size: 13px;
             line-height: 1.45;
             color: var(--luxe-muted);
-        }
-
-        .se-caption-left {
-            text-align: left;
-        }
-
-        .se-caption-right {
-            text-align: right;
         }
     </style>
 

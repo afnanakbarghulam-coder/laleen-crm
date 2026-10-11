@@ -16,53 +16,40 @@ class KpiStaffEvaluation extends Model
     ];
 
     /**
-     * The six-block ROI-focused rubric shown on the evaluation form, keyed by
-     * score column. Each "Hormozi Lens" framing and the 1/5-star anchors are
-     * fixed copy, not database content, so they live here next to the field
-     * they score.
+     * The six-block rubric shown on the evaluation form, keyed by score
+     * column. Scoring is binary (1 or 5 only) — each block just anchors
+     * what the low and high ends look like.
      */
     const RUBRIC = [
         'score_cleanliness' => [
-            'title' => 'Cleanliness and Hygiene',
-            'subtitle' => 'The "Frictionless Reset"',
-            'lens' => 'The Hormozi Lens: A dirty station creates friction for the next sale and ruins the premium brand perception.',
-            'one_star' => "Leaves hair on the floor, station is a mess, tools aren't sanitized. Costs the business money by slowing down turnover.",
-            'five_star' => 'Station is instantly reset to "brand new" the second a client stands up. Tools are spotless. Zero friction for the next booking.',
+            'title' => 'Cleanliness & Hygiene',
+            'one_star' => 'Leaves the station messy, hair on the floor, or tools dirty. Slows down the next booking.',
+            'five_star' => 'Cleans the station and sanitizes tools immediately after a client leaves. Ready for the next client instantly.',
         ],
         'score_dress_code' => [
             'title' => 'Dress Code',
-            'subtitle' => '"Visual Authority"',
-            'lens' => "The Hormozi Lens: People buy from people they respect. If the staff looks sloppy, the client won't trust them with a high-ticket balayage or an expensive Apricot Oil purchase.",
-            'one_star' => 'Uniform is wrinkled, stained, or incomplete. Looks like an amateur.',
-            'five_star' => 'Flawless grooming. Looks like an absolute professional who commands premium pricing.',
+            'one_star' => 'Uniform is dirty, wrinkled, or incomplete. Looks unprofessional.',
+            'five_star' => 'Uniform is perfectly clean and neat. Looks highly professional to clients.',
         ],
         'score_attitude' => [
-            'title' => 'Staff Attitude Towards Work',
-            'subtitle' => '"Execution & Capacity"',
-            'lens' => 'The Hormozi Lens: "Attitude" is just your willingness to do the work without creating drag. Does this person maximize their chair time, or do they complain and drain the manager\'s energy?',
-            'one_star' => 'Complains, avoids walk-ins, creates drama, drags their feet when fully booked.',
-            'five_star' => "A machine. Takes the next client immediately, handles back-to-back bookings with zero complaints, and makes the manager's life effortless.",
+            'title' => 'Work Attitude',
+            'one_star' => 'Complains, avoids taking walk-in clients, or creates drama on the salon floor.',
+            'five_star' => 'Works hard, takes the next client quickly with zero complaints, and keeps a positive energy.',
         ],
         'score_sales' => [
-            'title' => 'Sales Focused',
-            'subtitle' => '"Ticket Maximization & Ascension"',
-            'lens' => 'The Hormozi Lens: This is the most critical metric. Are they just an order-taker, or are they actively increasing the Average Order Value (AOV) by pitching backbar treatments and retail bottles?',
-            'one_star' => 'Does exactly what the client booked and nothing else. Lets them walk out without mentioning a single retail product.',
-            'five_star' => 'Consistently upsells deep conditioning treatments on the floor and closes retail (shampoos/oils) at the register. Maximizes the cash collected per chair hour.',
+            'title' => 'Sales Focus',
+            'one_star' => 'Only does the booked service. Never tries to sell extra treatments or retail products.',
+            'five_star' => 'Always offers extra deep-conditioning treatments and successfully sells retail products (like shampoos or oils) at the register.',
         ],
         'score_teamwork' => [
-            'title' => 'Team Work',
-            'subtitle' => '"Bottleneck Removal"',
-            'lens' => 'The Hormozi Lens: "Teamwork" means removing bottlenecks so the business can process more volume. If the wash basins are full, does the stylist wait around, or do they jump in to clear the queue?',
-            'one_star' => '"That\'s not my job." Stands around while the Wakrah branch waiting area is backed up.',
-            'five_star' => "Proactively sweeps floors, folds towels, or washes hair for other stylists to keep the entire salon's money-making machine moving fast.",
+            'title' => 'Teamwork',
+            'one_star' => "Says 'Not my job.' Stands around while the salon is very busy.",
+            'five_star' => 'Helps others without being asked. Steps in to sweep floors or wash hair when the salon is busy.',
         ],
         'score_communication' => [
-            'title' => 'Communication with Customers',
-            'subtitle' => '"LTV & Rebooking Engine"',
-            'lens' => 'The Hormozi Lens: Good communication isn\'t just being chatty. It is specifically scripting the client to guarantee they come back and leave a 5-star review.',
-            'one_star' => "Silent or awkward. Doesn't educate the client on the process. Client leaves without rebooking.",
-            'five_star' => 'Controls the frame. Educates the client on exactly what they are doing, asks for the review, and locks in the next appointment before the client walks out the door.',
+            'title' => 'Customer Communication',
+            'one_star' => 'Quiet or awkward. Does not explain the service or ask the client to book again.',
+            'five_star' => 'Speaks warmly, explains the service well, asks for a review, and asks the client to book their next visit before they leave.',
         ],
     ];
 

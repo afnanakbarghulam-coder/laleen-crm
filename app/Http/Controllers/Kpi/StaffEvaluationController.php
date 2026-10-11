@@ -30,12 +30,12 @@ class StaffEvaluationController extends Controller
         $validated = $request->validate([
             'staff_id' => 'required|exists:staff,id',
             'evaluation_date' => 'required|date',
-            'score_cleanliness' => 'required|integer|min:1|max:5',
-            'score_dress_code' => 'required|integer|min:1|max:5',
-            'score_attitude' => 'required|integer|min:1|max:5',
-            'score_sales' => 'required|integer|min:1|max:5',
-            'score_teamwork' => 'required|integer|min:1|max:5',
-            'score_communication' => 'required|integer|min:1|max:5',
+            'score_cleanliness' => 'required|in:1,5',
+            'score_dress_code' => 'required|in:1,5',
+            'score_attitude' => 'required|in:1,5',
+            'score_sales' => 'required|in:1,5',
+            'score_teamwork' => 'required|in:1,5',
+            'score_communication' => 'required|in:1,5',
             'leader_notes' => 'nullable|string',
         ]);
 
