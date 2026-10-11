@@ -3,82 +3,85 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 
 class KpiChatEvaluation extends Model
 {
+    /** The 15-question weighted script. Every question is binary: Pass scores the full weight, Fail scores 0. */
     const QUESTIONS = [
-        1  => ['text' => "Did the agent greet warmly?", 'max' => 15],
-        2  => ['text' => "Was the agent's response time acceptable?", 'max' => 15],
-        3  => ['text' => "Did the agent show empathy?", 'max' => 15],
-        4  => ['text' => "Was the sales video shared?", 'max' => 15],
-        5  => ['text' => "Did the agent present the offer clearly?", 'max' => 25],
-        6  => ['text' => "Was pricing communicated correctly?", 'max' => 15],
-        7  => ['text' => "Was the follow-up list updated?", 'max' => 15],
-        8  => ['text' => "Did the agent handle objections well?", 'max' => 10],
-        9  => ['text' => "Was the conversation tone professional?", 'max' => 10],
-        10 => ['text' => "Did the agent confirm details accurately?", 'max' => 10],
-        11 => ['text' => "Was urgency created appropriately?", 'max' => 5],
-        12 => ['text' => "Were service benefits mentioned?", 'max' => 5],
-        13 => ['text' => "Was the client's name used?", 'max' => 5],
-        14 => ['text' => "Was a booking attempt made?", 'max' => 5],
-        15 => ['text' => "Was a closing assist line used?", 'max' => 5],
+        1 => ['text' => 'Real intent to close?', 'weight' => 15],
+        2 => ['text' => 'Asked for booking directly?', 'weight' => 15],
+        3 => ['text' => 'Handled objections correctly?', 'weight' => 15],
+        4 => ['text' => 'Followed up if client went quiet?', 'weight' => 15],
+        5 => ['text' => 'Genuine empathy?', 'weight' => 25],
+        6 => ['text' => 'Prompt responses — no delays?', 'weight' => 15],
+        7 => ['text' => 'List updated accurately?', 'weight' => 15],
+        8 => ['text' => 'Tone warm, professional, confident?', 'weight' => 10],
+        9 => ['text' => 'Reviewed all pending chats before shift end?', 'weight' => 10],
+        10 => ['text' => 'Close confirmed or next step set?', 'weight' => 10],
+        11 => ['text' => 'Identified what client wants?', 'weight' => 5],
+        12 => ['text' => 'Presented right service or offer?', 'weight' => 5],
+        13 => ['text' => 'Correct greeting script?', 'weight' => 5],
+        14 => ['text' => 'Replied within 3 minutes?', 'weight' => 5],
+        15 => ['text' => 'Asked if anything else to assist?', 'weight' => 5],
+    ];
+
+    /**
+     * How the 15 questions roll up into the report's "Score Breakdown".
+     * Keyed by group label => question numbers; the group's max is derived
+     * from QUESTIONS, never hardcoded, so it always stays in sync.
+     */
+    const BREAKDOWN_GROUPS = [
+        'Closing + Booking' => [1, 2],
+        'Objection' => [3],
+        'Follow-Up' => [4],
+        'Empathy' => [5],
+        'Responses' => [6],
+        'List' => [7],
+        'Tone' => [8],
+        'Shift Review' => [9],
+        'Close' => [10],
+        'Identify + Service' => [11, 12],
+        'Greeting + Reply + Assist' => [13, 14, 15],
     ];
 
     protected $table = 'kpi_chat_evaluations';
 
     protected $fillable = [
-        'eval_date',
-        'coordinator_name',
-        'chats_reviewed',
+        'agent_id',
+        'evaluator_id',
+        'evaluation_date',
         'answers',
-        'created_by',
+        'total_score',
+        'percentage',
     ];
 
     protected $casts = [
-        'eval_date' => 'date',
+        'evaluation_date' => 'date',
         'answers' => 'array',
+        'percentage' => 'decimal:2',
     ];
 
-    public function creator()
+    public function agent()
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(User::class, 'agent_id');
     }
 
-    public static function maxPossible(): int
+    public function evaluator()
     {
-        return array_sum(array_column(self::QUESTIONS, 'max'));
+        return $this->belongsTo(User::class, 'evaluator_id');
     }
 
-    /**
-     * Answers merged with question text/max points.
-     */
-    public function computedAnswers(): array
+    /** Max achievable score — always the live sum of question weights, not a magic number. */
+    public static function maxScore(): int
     {
-        return array_map(function ($qNum) {
-            $answer = $this->answers[$qNum] ?? ['answer' => 'No', 'score' => 0];
-            $question = self::QUESTIONS[$qNum];
-
-            return [
-                'number' => $qNum,
-                'text' => $question['text'],
-                'max' => $question['max'],
-                'answer' => $answer['answer'] ?? 'No',
-                'score' => (float) ($answer['score'] ?? 0),
-                'passed' => ($answer['answer'] ?? 'No') === 'Yes',
-            ];
-        }, array_keys(self::QUESTIONS));
+        return array_sum(array_column(self::QUESTIONS, 'weight'));
     }
 
-    public function totalScore(): float
+    /** Score a single question's stored answer ('pass'/'fail') against its weight. */
+    public static function scoreFor(int $questionNumber, ?string $answer): int
     {
-        return round(array_sum(array_column($this->computedAnswers(), 'score')), 1);
-    }
-
-    public function percentage(): float
-    {
-        $max = self::maxPossible();
-
-        return $max > 0 ? round($this->totalScore() / $max * 100, 1) : 0.0;
+        return $answer === 'pass' ? self::QUESTIONS[$questionNumber]['weight'] : 0;
     }
 
     public static function gradeFor(float $pct): string
@@ -93,12 +96,47 @@ class KpiChatEvaluation extends Model
 
     public function grade(): string
     {
-        return self::gradeFor($this->percentage());
+        return self::gradeFor((float) $this->percentage);
+    }
+
+    /** Every question merged with its text, weight, saved pass/fail answer, and resulting score. */
+    public function questionResults(): Collection
+    {
+        return collect(self::QUESTIONS)->map(function ($question, $num) {
+            $answer = $this->answers[$num] ?? 'fail';
+
+            return [
+                'num' => $num,
+                'text' => $question['text'],
+                'weight' => $question['weight'],
+                'answer' => $answer,
+                'passed' => $answer === 'pass',
+                'score' => self::scoreFor($num, $answer),
+            ];
+        })->values();
+    }
+
+    /** Score Breakdown groups — label, score, max, percentage — derived from questionResults(). */
+    public function sectionBreakdown(): Collection
+    {
+        $results = $this->questionResults()->keyBy('num');
+
+        return collect(self::BREAKDOWN_GROUPS)->map(function ($questionNumbers, $label) use ($results) {
+            $score = collect($questionNumbers)->sum(fn ($num) => $results[$num]['score']);
+            $max = collect($questionNumbers)->sum(fn ($num) => $results[$num]['weight']);
+
+            return [
+                'label' => $label,
+                'score' => $score,
+                'max' => $max,
+                'percentage' => $max > 0 ? round($score / $max * 100, 1) : 0,
+            ];
+        })->values();
     }
 
     public function passedCount(): int
     {
-        return count(array_filter($this->computedAnswers(), fn ($a) => $a['passed']));
+        return $this->questionResults()->where('passed', true)->count();
     }
 
     public function failedCount(): int
@@ -107,14 +145,14 @@ class KpiChatEvaluation extends Model
     }
 
     /**
-     * Count of consecutive "Excellent" reports for this coordinator, ending
-     * at (and including) this report, walking backward through history.
+     * Count of consecutive "Excellent" reports for this agent, ending at
+     * (and including) this report, walking backward through history.
      */
     public function consecutiveExcellent(): int
     {
-        $history = self::where('coordinator_name', $this->coordinator_name)
-            ->where('eval_date', '<=', $this->eval_date)
-            ->orderByDesc('eval_date')
+        $history = self::where('agent_id', $this->agent_id)
+            ->where('evaluation_date', '<=', $this->evaluation_date)
+            ->orderByDesc('evaluation_date')
             ->orderByDesc('id')
             ->get();
 
@@ -128,22 +166,5 @@ class KpiChatEvaluation extends Model
         }
 
         return $count;
-    }
-
-    /**
-     * This coordinator's score history for the performance journey trend.
-     */
-    public function history(int $limit = 10)
-    {
-        return self::where('coordinator_name', $this->coordinator_name)
-            ->orderBy('eval_date')
-            ->orderBy('id')
-            ->get()
-            ->map(fn ($r) => [
-                'date' => $r->eval_date->format('d M'),
-                'pct' => $r->percentage(),
-            ])
-            ->take(-$limit)
-            ->values();
     }
 }

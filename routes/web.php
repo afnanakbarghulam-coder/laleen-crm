@@ -221,6 +221,8 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->get('/chat-eval/create', [ChatEvaluationController::class, 'create'])->name('chat-eval.create');
         Route::middleware('module:kpis,edit')->post('/chat-eval', [ChatEvaluationController::class, 'store'])->name('chat-eval.store');
         Route::middleware('module:kpis')->get('/chat-eval/{report}', [ChatEvaluationController::class, 'show'])->name('chat-eval.show');
+        Route::middleware('module:kpis,edit')->get('/chat-eval/{report}/edit', [ChatEvaluationController::class, 'edit'])->name('chat-eval.edit');
+        Route::middleware('module:kpis,edit')->put('/chat-eval/{report}', [ChatEvaluationController::class, 'update'])->name('chat-eval.update');
         Route::middleware('module:kpis,edit')->delete('/chat-eval/{report}', [ChatEvaluationController::class, 'destroy'])->name('chat-eval.destroy');
 
         Route::middleware('module:kpis')->get('/content', [ContentKpiController::class, 'index'])->name('content.index');

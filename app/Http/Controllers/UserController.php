@@ -69,8 +69,8 @@ class UserController extends Controller
 
             $staffSalesComparison = (new StaffSalesAnalytics($dashFrom, $dashTo))->branchComparison();
 
-            $chatEvals = KpiChatEvaluation::whereBetween('eval_date', [$dashFrom, $dashTo])->get();
-            $chatAvg = $chatEvals->count() ? round($chatEvals->avg(fn ($r) => $r->percentage()), 1) : null;
+            $chatEvals = KpiChatEvaluation::whereBetween('evaluation_date', [$dashFrom, $dashTo])->get();
+            $chatAvg = $chatEvals->count() ? round($chatEvals->avg(fn ($r) => (float) $r->percentage), 1) : null;
             $chatQuality = [
                 'avg' => $chatAvg,
                 'grade' => $chatAvg !== null ? KpiChatEvaluation::gradeFor($chatAvg) : null,
