@@ -23,7 +23,7 @@
             <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label">Branch</label>
-                    <select name="branch" class="form-select" required>
+                    <select name="branch" id="branch_select" class="form-select" required>
                         <option value="">Select branch&hellip;</option>
                         @foreach ($branches as $key => $label)
                             <option value="{{ $key }}" @selected(old('branch') === $key)>{{ $label }}</option>
@@ -32,12 +32,7 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Manager</label>
-                    <select name="manager" class="form-select" required>
-                        <option value="">Select manager&hellip;</option>
-                        @foreach ($managers as $name)
-                            <option value="{{ $name }}" @selected(old('manager') === $name)>{{ $name }}</option>
-                        @endforeach
-                    </select>
+                    <input type="text" name="manager" id="manager_input" class="form-control" value="{{ old('manager') }}" placeholder="Auto-filled from Branch" readonly required>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Evaluation Date</label>
@@ -186,4 +181,24 @@
             color: #9fc19a;
         }
     </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var branchSelect = document.getElementById('branch_select');
+            var managerInput = document.getElementById('manager_input');
+
+            function syncManagerFromBranch() {
+                if (branchSelect.value === 'wakrah') {
+                    managerInput.value = 'Rhea';
+                } else if (branchSelect.value === 'old_airport') {
+                    managerInput.value = 'Ahana';
+                } else {
+                    managerInput.value = '';
+                }
+            }
+
+            branchSelect.addEventListener('change', syncManagerFromBranch);
+            syncManagerFromBranch();
+        });
+    </script>
 @endsection

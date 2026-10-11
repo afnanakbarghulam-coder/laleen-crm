@@ -60,7 +60,12 @@
                             <td class="text-end">{{ rtrim(rtrim(number_format((float) $evaluation->percentage, 2), '0'), '.') }}%</td>
                             <td><span class="kpi-badge {{ $gradeBadge }}">{{ $evaluation->grade }}</span></td>
                             <td class="text-end">
-                                <a href="{{ route('kpi.branch-evaluation.show', $evaluation) }}" class="btn btn-sm btn-outline-secondary">View Report</a>
+                                <div class="d-flex gap-1 justify-content-end">
+                                    <a href="{{ route('kpi.branch-evaluation.show', $evaluation) }}" class="btn btn-sm btn-outline-secondary">View Report</a>
+                                    @moduleEdit('kpis')
+                                        <a href="{{ route('kpi.branch-evaluation.edit', $evaluation) }}" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="bx bx-pencil"></i></a>
+                                    @endmoduleEdit
+                                </div>
                             </td>
                         </tr>
                     @empty

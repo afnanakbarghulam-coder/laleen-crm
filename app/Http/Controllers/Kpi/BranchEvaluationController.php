@@ -39,6 +39,40 @@ class BranchEvaluationController extends Controller
 
     public function store(Request $request)
     {
+        $validated = $request->validate($this->validationRules());
+
+        $evaluation = BranchEvaluation::create($this->scoredAttributes($validated));
+
+        return redirect()->route('kpi.branch-evaluation.show', $evaluation)->with('success', 'Branch evaluation saved.');
+    }
+
+    public function show(BranchEvaluation $branchEvaluation)
+    {
+        return view('kpi.branch-evaluations.show', ['evaluation' => $branchEvaluation]);
+    }
+
+    public function edit(BranchEvaluation $branchEvaluation)
+    {
+        return view('kpi.branch-evaluations.edit', [
+            'evaluation' => $branchEvaluation,
+            'branches' => BranchEvaluation::BRANCHES,
+            'managers' => BranchEvaluation::MANAGERS,
+            'sections' => BranchEvaluation::SECTIONS,
+        ]);
+    }
+
+    public function update(Request $request, BranchEvaluation $branchEvaluation)
+    {
+        $validated = $request->validate($this->validationRules());
+
+        $branchEvaluation->update($this->scoredAttributes($validated));
+
+        return redirect()->route('kpi.branch-evaluation.show', $branchEvaluation)->with('success', 'Branch evaluation updated.');
+    }
+
+    /** Shared by store() and update() so both validate the 27 binary answers identically. */
+    private function validationRules(): array
+    {
         $fields = BranchEvaluation::questionFields();
 
         $rules = [
@@ -53,12 +87,16 @@ class BranchEvaluationController extends Controller
             $rules["answers.{$field}"] = 'required|in:1,5';
         }
 
-        $validated = $request->validate($rules);
+        return $rules;
+    }
 
+    /** Validated input -> model attributes, with total_score/percentage/grade recalculated from the answers. */
+    private function scoredAttributes(array $validated): array
+    {
         $totalScore = array_sum($validated['answers']);
         $percentage = round($totalScore / BranchEvaluation::maxScore() * 100, 2);
 
-        $evaluation = BranchEvaluation::create([
+        return [
             'branch' => $validated['branch'],
             'manager' => $validated['manager'],
             'evaluation_date' => $validated['evaluation_date'],
@@ -67,13 +105,6 @@ class BranchEvaluationController extends Controller
             'percentage' => $percentage,
             'grade' => BranchEvaluation::gradeFor($percentage),
             'action_plan' => $validated['action_plan'] ?? null,
-        ]);
-
-        return redirect()->route('kpi.branch-evaluation.show', $evaluation)->with('success', 'Branch evaluation saved.');
-    }
-
-    public function show(BranchEvaluation $branchEvaluation)
-    {
-        return view('kpi.branch-evaluations.show', ['evaluation' => $branchEvaluation]);
+        ];
     }
 }

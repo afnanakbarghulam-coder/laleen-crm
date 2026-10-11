@@ -213,4 +213,142 @@ class BranchEvaluationTest extends TestCase
             ->assertSee('Rhea')
             ->assertDontSee('Ahana');
     }
+
+    public function test_create_and_edit_pages_use_a_readonly_manager_input_driven_by_branch_select(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+
+        $createResponse = $this->actingAs($user)->get(route('kpi.branch-evaluation.create'));
+        $createResponse->assertOk();
+        $createResponse->assertSee('id="branch_select"', false);
+        $createResponse->assertSee('id="manager_input"', false);
+        $createResponse->assertSee('readonly', false);
+
+        $evaluation = BranchEvaluation::create([
+            'branch' => 'wakrah', 'manager' => 'Rhea', 'evaluation_date' => '2026-06-16',
+            'answers' => $this->answersWithFails(), 'total_score' => 135, 'percentage' => 100, 'grade' => 'Excellent',
+        ]);
+
+        $editResponse = $this->actingAs($user)->get(route('kpi.branch-evaluation.edit', $evaluation));
+        $editResponse->assertOk();
+        $editResponse->assertSee('id="branch_select"', false);
+        $editResponse->assertSee('id="manager_input"', false);
+        $editResponse->assertSee('Edit Branch Evaluation');
+    }
+
+    public function test_edit_page_prefills_branch_manager_date_action_plan_and_checks_saved_answers(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+
+        $failFields = ['q4', 'q5'];
+        $answers = $this->answersWithFails($failFields);
+
+        $evaluation = BranchEvaluation::create([
+            'branch' => 'wakrah',
+            'manager' => 'Rhea',
+            'evaluation_date' => '2026-06-16',
+            'answers' => $answers,
+            'total_score' => 127,
+            'percentage' => round(127 / 135 * 100, 2),
+            'grade' => BranchEvaluation::gradeFor(round(127 / 135 * 100, 2)),
+            'action_plan' => 'Existing coaching notes.',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('kpi.branch-evaluation.edit', $evaluation));
+
+        $response->assertOk();
+        $response->assertSee('Existing coaching notes.');
+
+        $html = $response->getContent();
+
+        // q1 is a pass (5) in the fixture — its "5" radio must be checked, its "1" radio must not be.
+        $this->assertMatchesRegularExpression('/name="answers\[q1\]" value="5"[^>]*checked/', $html);
+        $this->assertDoesNotMatchRegularExpression('/name="answers\[q1\]" value="1"[^>]*checked/', $html);
+
+        // q4 is a fail (1) in the fixture — its "1" radio must be checked, its "5" radio must not be.
+        $this->assertMatchesRegularExpression('/name="answers\[q4\]" value="1"[^>]*checked/', $html);
+        $this->assertDoesNotMatchRegularExpression('/name="answers\[q4\]" value="5"[^>]*checked/', $html);
+    }
+
+    public function test_update_recalculates_total_score_percentage_and_grade(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+
+        $evaluation = BranchEvaluation::create([
+            'branch' => 'old_airport', 'manager' => 'Ahana', 'evaluation_date' => '2026-06-16',
+            'answers' => $this->answersWithFails(['q4', 'q5', 'q8', 'q10', 'q11', 'q19', 'q20', 'q22']),
+            'total_score' => 103, 'percentage' => 76.30, 'grade' => 'Pass',
+        ]);
+
+        // Flip to a perfect score on update.
+        $payload = [
+            'branch' => 'old_airport',
+            'manager' => 'Ahana',
+            'evaluation_date' => '2026-07-01',
+            'answers' => $this->answersWithFails(),
+            'action_plan' => 'Updated after re-visit.',
+        ];
+
+        $response = $this->actingAs($user)->put(route('kpi.branch-evaluation.update', $evaluation), $payload);
+
+        $response->assertRedirect(route('kpi.branch-evaluation.show', $evaluation));
+
+        $evaluation->refresh();
+
+        $this->assertSame(135, $evaluation->total_score);
+        $this->assertEquals(100.0, (float) $evaluation->percentage);
+        $this->assertSame('Excellent', $evaluation->grade);
+        $this->assertSame('Updated after re-visit.', $evaluation->action_plan);
+        $this->assertSame('2026-07-01', $evaluation->evaluation_date->toDateString());
+        $this->assertDatabaseCount('branch_evaluations', 1);
+    }
+
+    public function test_update_rejects_non_binary_scores_and_leaves_record_unchanged(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+
+        $evaluation = BranchEvaluation::create([
+            'branch' => 'wakrah', 'manager' => 'Rhea', 'evaluation_date' => '2026-06-16',
+            'answers' => $this->answersWithFails(), 'total_score' => 135, 'percentage' => 100, 'grade' => 'Excellent',
+        ]);
+
+        $answers = $this->answersWithFails();
+        $answers['q1'] = '3';
+
+        $payload = [
+            'branch' => 'wakrah',
+            'manager' => 'Rhea',
+            'evaluation_date' => '2026-06-16',
+            'answers' => $answers,
+        ];
+
+        $this->actingAs($user)
+            ->put(route('kpi.branch-evaluation.update', $evaluation), $payload)
+            ->assertSessionHasErrors('answers.q1');
+
+        $evaluation->refresh();
+        $this->assertSame(135, $evaluation->total_score);
+        $this->assertSame('Excellent', $evaluation->grade);
+    }
+
+    public function test_index_and_show_pages_expose_edit_entry_points(): void
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+
+        $evaluation = BranchEvaluation::create([
+            'branch' => 'wakrah', 'manager' => 'Rhea', 'evaluation_date' => '2026-06-16',
+            'answers' => $this->answersWithFails(), 'total_score' => 135, 'percentage' => 100, 'grade' => 'Excellent',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('kpi.branch-evaluation.index'))
+            ->assertOk()
+            ->assertSee(route('kpi.branch-evaluation.edit', $evaluation), false);
+
+        $this->actingAs($user)
+            ->get(route('kpi.branch-evaluation.show', $evaluation))
+            ->assertOk()
+            ->assertSee('Edit Report')
+            ->assertSee(route('kpi.branch-evaluation.edit', $evaluation), false);
+    }
 }

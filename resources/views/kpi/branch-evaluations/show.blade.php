@@ -39,9 +39,11 @@
         default => $evaluation->grade . ' — ' . $pctDisplay . '% · Formal coaching required within 48 hours',
     };
 
-    $bannerSub = $criticalSections->isNotEmpty()
-        ? 'Driven primarily by shortfalls in: ' . $criticalSections->pluck('title')->implode(', ') . '.'
-        : 'No sections scored below 50% this visit.';
+    $bannerSub = match (true) {
+        $criticalSections->isEmpty() => 'No sections scored below 50% this visit.',
+        $bannerTier === 'amber' => 'Driven primarily by shortfalls in: ' . $criticalSections->pluck('title')->implode(', ') . '.',
+        default => 'Still worth watching despite the overall grade: ' . $criticalSections->pluck('title')->implode(', ') . '.',
+    };
 
     $gradeColor = $evaluation->grade === 'Warning' ? 'var(--luxe-warning)' : '#b7cdb3';
 @endphp
@@ -52,7 +54,12 @@
             <h4>Branch Evaluation Report — {{ $branchLabel }}</h4>
             <p>Mystery Shopper Assessment &middot; Manager: {{ $evaluation->manager }} &middot; {{ $evaluation->evaluation_date->format('d F Y') }}</p>
         </div>
-        <a href="{{ route('kpi.branch-evaluation.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Branch Evaluations</a>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{{ route('kpi.branch-evaluation.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Branch Evaluations</a>
+            @moduleEdit('kpis')
+                <a href="{{ route('kpi.branch-evaluation.edit', $evaluation) }}" class="btn btn-sm btn-primary"><i class="bx bx-pencil me-1"></i>Edit Report</a>
+            @endmoduleEdit
+        </div>
     </div>
 
     <div class="be-pill-row">
