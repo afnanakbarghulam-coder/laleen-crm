@@ -5,7 +5,7 @@
     <div class="kpi-header">
         <div>
             <h4>Salon Staff Evaluation</h4>
-            <p>Monthly ROI-focused performance scoring by branch leaders.</p>
+            <p>Weekly ROI-focused performance scoring — Wakrah (Rhea) &amp; Old Airport (Ahana).</p>
         </div>
         <div class="d-flex gap-2">
             <a href="{{ route('kpi.hub') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to KPIs</a>
@@ -21,6 +21,43 @@
         <div class="alert alert-success">{{ session('success') }}</div>
     @endif
 
+    <div class="row g-3 mb-4">
+        @foreach ($weeklyStatus as $status)
+            <div class="col-md-4">
+                <div class="kpi-stat-card">
+                    <div class="kpi-stat-label">{{ $status['label'] }} ({{ $status['evaluator_name'] }})</div>
+                    <div class="kpi-stat-value">{{ $status['evaluated'] }} / {{ $status['total'] }}</div>
+                    <div class="kpi-stat-sub d-flex align-items-center gap-2">
+                        Evaluated This Week
+                        @if ($status['total'] > 0)
+                            <span class="kpi-badge {{ $status['complete'] ? 'kpi-badge-green' : 'kpi-badge-amber' }}">
+                                {{ $status['complete'] ? 'Fully Evaluated' : ($status['total'] - $status['evaluated']) . ' Remaining' }}
+                            </span>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        @endforeach
+
+        <div class="col-md-4">
+            <div class="kpi-stat-card">
+                <div class="kpi-stat-label">Salon Weakest Metric</div>
+                @if ($weakestMetric)
+                    <div class="kpi-stat-value" style="font-size:19px;">{{ $weakestMetric['title'] }}</div>
+                    <div class="kpi-stat-sub">{{ $weakestMetric['count'] }} of {{ $weakestMetric['total_evaluations'] }} evaluations scored a 1 here this week</div>
+                @else
+                    <div class="kpi-stat-value" style="font-size:19px;">&mdash;</div>
+                    <div class="kpi-stat-sub">No evaluations logged yet this week</div>
+                @endif
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mb-3">
+        <a href="{{ route('kpi.evaluations.index', ['period' => 'current']) }}" class="btn btn-sm {{ $period === 'current' ? 'btn-dark' : 'btn-outline-secondary' }}">This Week</a>
+        <a href="{{ route('kpi.evaluations.index', ['period' => 'previous']) }}" class="btn btn-sm {{ $period === 'previous' ? 'btn-dark' : 'btn-outline-secondary' }}">Previous Weeks</a>
+    </div>
+
     <div class="kpi-panel p-0" style="overflow:hidden;">
         <div class="table-responsive">
             <table class="table kpi-table mb-0">
@@ -28,9 +65,11 @@
                     <tr>
                         <th>Date</th>
                         <th>Staff Member</th>
+                        <th>Branch</th>
                         <th>Evaluated By</th>
                         <th class="text-end">Overall Score</th>
                         <th>Leader Notes</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -38,16 +77,34 @@
                         @php
                             $avg = (float) $evaluation->overall_average;
                             $badge = $avg >= 4 ? 'kpi-badge-green' : ($avg >= 3 ? 'kpi-badge-amber' : 'kpi-badge-red');
+                            $branchLabel = $branches[$evaluation->branch] ?? $evaluation->branch;
+                            $viewData = [
+                                'staff' => $evaluation->staff->name ?? '—',
+                                'branch' => $branchLabel,
+                                'evaluator' => $evaluation->evaluator->name ?? '—',
+                                'date' => $evaluation->evaluation_date->format('d M Y'),
+                                'average' => number_format($avg, 2),
+                                'notes' => $evaluation->leader_notes,
+                                'scores' => collect(\App\Models\KpiStaffEvaluation::SCORE_FIELDS)->mapWithKeys(
+                                    fn ($field) => [$field => (int) $evaluation->$field]
+                                ),
+                            ];
                         @endphp
                         <tr>
                             <td>{{ $evaluation->evaluation_date->format('d M Y') }}</td>
                             <td>{{ $evaluation->staff->name ?? '—' }}</td>
+                            <td><span class="kpi-badge kpi-badge-gray">{{ $branchLabel }}</span></td>
                             <td>{{ $evaluation->evaluator->name ?? '—' }}</td>
                             <td class="text-end"><span class="kpi-badge {{ $badge }}">{{ number_format($avg, 2) }} / 5</span></td>
-                            <td class="text-muted small">{{ $evaluation->leader_notes ?? '—' }}</td>
+                            <td class="text-muted small">{{ \Illuminate\Support\Str::limit($evaluation->leader_notes, 40) ?: '—' }}</td>
+                            <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-secondary se-view-btn" data-evaluation='@json($viewData)'>
+                                    👁️ View Details
+                                </button>
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="text-center text-muted py-4">No evaluations saved yet.</td></tr>
+                        <tr><td colspan="7" class="text-center text-muted py-4">No evaluations {{ $period === 'current' ? 'logged this week' : 'found for previous weeks' }} yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -67,7 +124,7 @@
                     </div>
                     <div class="modal-body">
                         <div class="row g-3 mb-4">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label class="form-label">Staff Member</label>
                                 <select name="staff_id" class="form-select" required>
                                     <option value="">Select staff member&hellip;</option>
@@ -76,7 +133,16 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
+                                <label class="form-label">Branch</label>
+                                <select name="branch" class="form-select" required>
+                                    <option value="">Select branch&hellip;</option>
+                                    @foreach ($branches as $key => $label)
+                                        <option value="{{ $key }}" @selected(old('branch', $defaultBranch) === $key)>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-4">
                                 <label class="form-label">Evaluation Date</label>
                                 <input type="date" name="evaluation_date" class="form-control" value="{{ old('evaluation_date', now()->format('Y-m-d')) }}" required>
                             </div>
@@ -111,6 +177,56 @@
                         <button type="submit" class="btn btn-primary">Save Evaluation</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="viewEvaluationModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Evaluation Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3 col-6">
+                            <div class="kpi-stat-card">
+                                <div class="kpi-stat-label">Staff</div>
+                                <div class="kpi-stat-value" style="font-size:16px;" id="viewEvalStaff"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="kpi-stat-card">
+                                <div class="kpi-stat-label">Branch</div>
+                                <div class="kpi-stat-value" style="font-size:16px;" id="viewEvalBranch"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="kpi-stat-card">
+                                <div class="kpi-stat-label">Date</div>
+                                <div class="kpi-stat-value" style="font-size:16px;" id="viewEvalDate"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="kpi-stat-card">
+                                <div class="kpi-stat-label">Overall</div>
+                                <div class="kpi-stat-value" style="font-size:16px;" id="viewEvalAverage"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="kpi-stat-label mb-2">Score Breakdown</div>
+                    <div id="viewEvalScores"></div>
+
+                    <div class="mt-4">
+                        <div class="kpi-stat-label mb-2">Leader Notes</div>
+                        <p class="se-view-notes" id="viewEvalNotes"></p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
             </div>
         </div>
     </div>
@@ -204,6 +320,41 @@
             line-height: 1.45;
             color: var(--luxe-muted);
         }
+
+        .se-view-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            border-radius: var(--luxe-radius-sm);
+            border: 1px solid var(--luxe-border);
+            margin-bottom: 8px;
+            font-size: 13.5px;
+            color: var(--luxe-body);
+        }
+
+        .se-view-row.is-pass {
+            border-color: rgba(142, 168, 138, .4);
+            background: rgba(142, 168, 138, .08);
+        }
+
+        .se-view-row.is-fail {
+            border-color: rgba(168, 82, 74, .4);
+            background: rgba(168, 82, 74, .08);
+        }
+
+        .se-view-icon {
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        .se-view-notes {
+            font-size: 13.5px;
+            line-height: 1.5;
+            color: var(--luxe-muted);
+            white-space: pre-wrap;
+            margin: 0;
+        }
     </style>
 
     <script>
@@ -212,6 +363,38 @@
             if (modalEl.dataset.autoshow === '1') {
                 new bootstrap.Modal(modalEl).show();
             }
+        });
+
+        var STAFF_EVAL_RUBRIC_TITLES = @json(collect($rubric)->map(fn ($block) => $block['title']));
+
+        document.querySelectorAll('.se-view-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var data = JSON.parse(this.dataset.evaluation);
+
+                document.getElementById('viewEvalStaff').textContent = data.staff;
+                document.getElementById('viewEvalBranch').textContent = data.branch;
+                document.getElementById('viewEvalDate').textContent = data.date;
+                document.getElementById('viewEvalAverage').textContent = data.average + ' / 5';
+                document.getElementById('viewEvalNotes').textContent = data.notes || 'No notes left for this evaluation.';
+
+                var scoresEl = document.getElementById('viewEvalScores');
+                scoresEl.innerHTML = '';
+
+                Object.keys(STAFF_EVAL_RUBRIC_TITLES).forEach(function (field) {
+                    var score = data.scores[field];
+                    var isPass = score === 5;
+
+                    var row = document.createElement('div');
+                    row.className = 'se-view-row ' + (isPass ? 'is-pass' : 'is-fail');
+                    row.innerHTML =
+                        '<span class="se-view-icon">' + (isPass ? '✅' : '❌') + '</span>' +
+                        '<span>' + STAFF_EVAL_RUBRIC_TITLES[field] + '</span>';
+
+                    scoresEl.appendChild(row);
+                });
+
+                new bootstrap.Modal(document.getElementById('viewEvaluationModal')).show();
+            });
         });
     </script>
 @endsection

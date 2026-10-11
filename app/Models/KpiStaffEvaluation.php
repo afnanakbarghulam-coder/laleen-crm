@@ -6,6 +6,27 @@ use Illuminate\Database\Eloquent\Model;
 
 class KpiStaffEvaluation extends Model
 {
+    const BRANCHES = [
+        'old_airport' => 'Old Airport',
+        'wakrah' => 'Wakrah',
+    ];
+
+    /** Display name of the branch leader who owns each branch's evaluations. */
+    const BRANCH_EVALUATOR_NAMES = [
+        'wakrah' => 'Rhea',
+        'old_airport' => 'Ahana',
+    ];
+
+    /**
+     * Each branch has one dedicated evaluator. Used to default the "Branch"
+     * dropdown on the New Evaluation form to whichever branch the logged-in
+     * leader runs, by a case-insensitive match against their name.
+     */
+    const EVALUATOR_BRANCH_DEFAULTS = [
+        'rhea' => 'wakrah',
+        'ahana' => 'old_airport',
+    ];
+
     const SCORE_FIELDS = [
         'score_cleanliness',
         'score_dress_code',
@@ -58,6 +79,7 @@ class KpiStaffEvaluation extends Model
     protected $fillable = [
         'staff_id',
         'evaluator_id',
+        'branch',
         'evaluation_date',
         'score_cleanliness',
         'score_dress_code',
@@ -87,5 +109,27 @@ class KpiStaffEvaluation extends Model
     public static function averageOf(array $scores): float
     {
         return round(array_sum($scores) / count($scores), 2);
+    }
+
+    /**
+     * The branch key this evaluator's name maps to (e.g. "Rhea Jacob" ->
+     * 'wakrah'), or null if they're not a recognized branch leader — the
+     * form falls back to no pre-selection in that case.
+     */
+    public static function defaultBranchFor(?User $user): ?string
+    {
+        if (!$user || !$user->name) {
+            return null;
+        }
+
+        $name = strtolower($user->name);
+
+        foreach (self::EVALUATOR_BRANCH_DEFAULTS as $needle => $branch) {
+            if (str_contains($name, $needle)) {
+                return $branch;
+            }
+        }
+
+        return null;
     }
 }
