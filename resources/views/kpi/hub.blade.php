@@ -11,21 +11,21 @@
 
     <div class="row g-4">
         <div class="col-md-4">
-            <a href="{{ route('kpi.marketing') }}" class="kpi-hub-card kpi-master-card">
+            <a href="{{ route('kpi.marketing.index') }}" class="kpi-hub-card kpi-master-card">
                 <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-line-chart"></i></div>
                 <h5 class="mb-1">Marketing</h5>
                 <p class="text-muted mb-0">Manage ad conversions and weekly content schedules.</p>
             </a>
         </div>
         <div class="col-md-4">
-            <a href="{{ route('kpi.customer-service') }}" class="kpi-hub-card kpi-master-card">
+            <a href="{{ route('kpi.customer-service.index') }}" class="kpi-hub-card kpi-master-card">
                 <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-support"></i></div>
                 <h5 class="mb-1">Customer Service</h5>
                 <p class="text-muted mb-0">Track agent targets and evaluate chat quality.</p>
             </a>
         </div>
         <div class="col-md-4">
-            <a href="{{ route('kpi.salon-staff') }}" class="kpi-hub-card kpi-master-card">
+            <a href="{{ route('kpi.salon-staff.index') }}" class="kpi-hub-card kpi-master-card">
                 <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-cut"></i></div>
                 <h5 class="mb-1">Salon Staff</h5>
                 <p class="text-muted mb-0">Monitor staff sales performance and weekly evaluations.</p>

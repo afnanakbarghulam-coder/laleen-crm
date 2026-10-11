@@ -192,9 +192,9 @@ Route::middleware(['auth'])->group(function () {
     // '{report}' wildcard (show), same reasoning as the Leads section above.
     Route::prefix('kpis')->name('kpi.')->group(function () {
         Route::middleware('module:kpis')->get('/', [KpiHubController::class, 'index'])->name('hub');
-        Route::middleware('module:kpis')->get('/marketing', [KpiHubController::class, 'marketing'])->name('marketing');
-        Route::middleware('module:kpis')->get('/customer-service', [KpiHubController::class, 'customerService'])->name('customer-service');
-        Route::middleware('module:kpis')->get('/salon-staff', [KpiHubController::class, 'salonStaff'])->name('salon-staff');
+        Route::middleware('module:kpis')->get('/marketing', [KpiHubController::class, 'marketing'])->name('marketing.index');
+        Route::middleware('module:kpis')->get('/customer-service', [KpiHubController::class, 'customerService'])->name('customer-service.index');
+        Route::middleware('module:kpis')->get('/salon-staff', [KpiHubController::class, 'salonStaff'])->name('salon-staff.index');
 
         Route::middleware('module:kpis')->get('/ads', [AdsConversionController::class, 'index'])->name('ads.index');
         Route::middleware('module:kpis,edit')->post('/ads', [AdsConversionController::class, 'store'])->name('ads.store');

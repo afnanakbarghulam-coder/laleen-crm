@@ -8,7 +8,7 @@
             <p>Weekly ROI-focused performance scoring — Wakrah (Rhea) &amp; Old Airport (Ahana).</p>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <a href="{{ route('kpi.salon-staff') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Salon Staff</a>
+            <a href="{{ route('kpi.salon-staff.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Salon Staff</a>
             @moduleEdit('kpis')
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newEvaluationModal">
                     <i class="bx bx-plus me-1"></i> New Evaluation
