@@ -373,6 +373,66 @@
         font-size: 12.5px;
     }
 
+    .fb-country-dropdown {
+        flex: 0 0 108px;
+        max-width: 108px;
+        position: relative;
+    }
+
+    .fb-country-toggle {
+        width: 100%;
+        height: 100%;
+        text-align: left;
+        border-top-right-radius: 0 !important;
+        border-bottom-right-radius: 0 !important;
+    }
+
+    .fb-country-menu {
+        width: 240px;
+        max-height: 280px;
+        overflow-y: auto;
+        padding: 0;
+        background: #241e1c;
+        border: 1px solid rgba(217, 143, 131, 0.25);
+    }
+
+    .fb-country-search-wrap {
+        position: sticky;
+        top: 0;
+        padding: 8px;
+        background: #241e1c;
+        border-bottom: 1px solid rgba(217, 143, 131, 0.16);
+        z-index: 1;
+    }
+
+    .fb-country-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        font-size: 13px;
+        color: #e9d9d4;
+    }
+
+    .fb-country-option:hover,
+    .fb-country-option:focus {
+        background: rgba(217, 143, 131, 0.1);
+        color: #e79a91;
+    }
+
+    .fb-country-option .fb-country-dial {
+        margin-left: auto;
+        color: #c9a39a;
+        font-size: 12px;
+    }
+
+    .fb-country-empty {
+        padding: 10px;
+        font-size: 12.5px;
+        color: #c9a39a;
+        text-align: center;
+    }
+
     .fb-phone-group:focus-within .form-select,
     .fb-phone-group:focus-within .form-control {
         border-color: var(--luxe-accent, #e79a91) !important;
@@ -641,20 +701,30 @@
                     <div id="fbAddClientForm" class="d-none border rounded p-3 my-2">
                         <input type="text" id="fbNewClientName" class="form-control form-control-sm mb-2" placeholder="Client name">
                         <div class="input-group input-group-sm mb-1 fb-phone-group">
-                            <select id="fbNewClientCountryCode" class="form-select fb-country-select">
-                                <option value="+974" selected>🇶🇦 +974</option>
-                                <option value="+971">🇦🇪 +971</option>
-                                <option value="+966">🇸🇦 +966</option>
-                                <option value="+973">🇧🇭 +973</option>
-                                <option value="+965">🇰🇼 +965</option>
-                                <option value="+968">🇴🇲 +968</option>
-                                <option value="+20">🇪🇬 +20</option>
-                                <option value="+91">🇮🇳 +91</option>
-                                <option value="+92">🇵🇰 +92</option>
-                                <option value="+63">🇵🇭 +63</option>
-                                <option value="+44">🇬🇧 +44</option>
-                                <option value="+1">🇺🇸 +1</option>
-                            </select>
+                            <div class="dropdown fb-country-dropdown">
+                                <button type="button" id="fbNewClientCountryToggle" class="form-select fb-country-select fb-country-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                                    <span id="fbNewClientCountryDisplay">🇶🇦 +974</span>
+                                </button>
+                                <ul class="dropdown-menu fb-country-menu" aria-labelledby="fbNewClientCountryToggle">
+                                    <li class="fb-country-search-wrap">
+                                        <input type="text" id="countrySearch" placeholder="Search code or country..." class="form-control form-control-sm" autocomplete="off">
+                                    </li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="QA" data-code="+974" data-country="Qatar" onclick="fbSelectCountry(this); return false;">🇶🇦 Qatar <span class="fb-country-dial">+974</span></a></li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="AE" data-code="+971" data-country="United Arab Emirates" onclick="fbSelectCountry(this); return false;">🇦🇪 United Arab Emirates <span class="fb-country-dial">+971</span></a></li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="SA" data-code="+966" data-country="Saudi Arabia" onclick="fbSelectCountry(this); return false;">🇸🇦 Saudi Arabia <span class="fb-country-dial">+966</span></a></li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="BH" data-code="+973" data-country="Bahrain" onclick="fbSelectCountry(this); return false;">🇧🇭 Bahrain <span class="fb-country-dial">+973</span></a></li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="KW" data-code="+965" data-country="Kuwait" onclick="fbSelectCountry(this); return false;">🇰🇼 Kuwait <span class="fb-country-dial">+965</span></a></li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="OM" data-code="+968" data-country="Oman" onclick="fbSelectCountry(this); return false;">🇴🇲 Oman <span class="fb-country-dial">+968</span></a></li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="EG" data-code="+20" data-country="Egypt" onclick="fbSelectCountry(this); return false;">🇪🇬 Egypt <span class="fb-country-dial">+20</span></a></li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="IN" data-code="+91" data-country="India" onclick="fbSelectCountry(this); return false;">🇮🇳 India <span class="fb-country-dial">+91</span></a></li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="PK" data-code="+92" data-country="Pakistan" onclick="fbSelectCountry(this); return false;">🇵🇰 Pakistan <span class="fb-country-dial">+92</span></a></li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="PH" data-code="+63" data-country="Philippines" onclick="fbSelectCountry(this); return false;">🇵🇭 Philippines <span class="fb-country-dial">+63</span></a></li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="GB" data-code="+44" data-country="United Kingdom" onclick="fbSelectCountry(this); return false;">🇬🇧 United Kingdom <span class="fb-country-dial">+44</span></a></li>
+                                    <li><a href="#" class="dropdown-item fb-country-option" data-iso="US" data-code="+1" data-country="United States" onclick="fbSelectCountry(this); return false;">🇺🇸 United States <span class="fb-country-dial">+1</span></a></li>
+                                    <li class="fb-country-empty d-none" id="fbCountryNoResults">No matches found</li>
+                                </ul>
+                            </div>
+                            <input type="hidden" id="fbNewClientCountryCode" value="+974">
                             <input type="tel" id="fbNewClientPhone" class="form-control" placeholder="Phone number" inputmode="tel" autocomplete="tel-national">
                         </div>
                         <small id="fbNewClientPhoneError" class="text-danger d-none mb-2 d-block">Enter a valid phone number.</small>
@@ -758,6 +828,8 @@
             document.getElementById('fbNewClientName').value = '';
             document.getElementById('fbNewClientPhone').value = '';
             document.getElementById('fbNewClientCountryCode').value = '+974';
+            document.getElementById('fbNewClientCountryDisplay').textContent = '🇶🇦 +974';
+            fbResetCountrySearch();
             document.getElementById('fbNewClientPhoneError').classList.add('d-none');
 
             if (prefill.datetime) {
@@ -848,6 +920,53 @@
         window.fbShowAddClientForm = function() {
             document.getElementById('fbAddClientForm').classList.remove('d-none');
         };
+
+        window.fbSelectCountry = function(el) {
+            document.getElementById('fbNewClientCountryCode').value = el.dataset.code;
+            document.getElementById('fbNewClientCountryDisplay').textContent = el.textContent.trim().split(/\s+/)[0] + ' ' + el.dataset.code;
+            fbResetCountrySearch();
+            bootstrap.Dropdown.getOrCreateInstance(document.getElementById('fbNewClientCountryToggle')).hide();
+        };
+
+        function fbResetCountrySearch() {
+            const search = document.getElementById('countrySearch');
+            search.value = '';
+            fbFilterCountries('');
+        }
+
+        function fbFilterCountries(term) {
+            const needle = term.trim().toLowerCase();
+            const options = document.querySelectorAll('.fb-country-option');
+            let anyVisible = false;
+
+            options.forEach(function(option) {
+                const iso = (option.dataset.iso || '').toLowerCase();
+                const code = (option.dataset.code || '').toLowerCase();
+                const country = (option.dataset.country || '').toLowerCase();
+                const matches = !needle
+                    || iso.includes(needle)
+                    || code.includes(needle)
+                    || code.replace('+', '').includes(needle.replace('+', ''))
+                    || country.includes(needle);
+
+                option.closest('li').style.display = matches ? '' : 'none';
+                if (matches) anyVisible = true;
+            });
+
+            document.getElementById('fbCountryNoResults').classList.toggle('d-none', anyVisible);
+        }
+
+        (function() {
+            const search = document.getElementById('countrySearch');
+            search.addEventListener('click', (e) => e.stopPropagation());
+            search.addEventListener('keydown', (e) => e.stopPropagation());
+            search.addEventListener('keyup', () => fbFilterCountries(search.value));
+            search.addEventListener('input', () => fbFilterCountries(search.value));
+
+            document.getElementById('fbNewClientCountryToggle').addEventListener('shown.bs.dropdown', () => {
+                search.focus();
+            });
+        })();
 
         window.fbConfirmNewClient = function() {
             const name = document.getElementById('fbNewClientName').value.trim();
