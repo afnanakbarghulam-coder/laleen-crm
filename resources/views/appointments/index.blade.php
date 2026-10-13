@@ -595,9 +595,12 @@
 
                             <div class="col-12">
                                 <label class="form-label">Services</label>
+                                <div class="mb-2">
+                                    <input type="text" id="editServiceSearch" class="form-control form-control-sm" placeholder="Search services..." autocomplete="off">
+                                </div>
                                 <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
                                     @foreach ($services as $s)
-                                        <div class="form-check">
+                                        <div class="form-check edit-service-row">
                                             <input class="form-check-input edit-service-checkbox" type="checkbox"
                                                 name="service_name[]" value="{{ $s->name }}"
                                                 id="editSvc{{ $s->id }}"
@@ -608,6 +611,7 @@
                                             </label>
                                         </div>
                                     @endforeach
+                                    <div class="text-muted small d-none" id="editServiceNoResults">No services match your search.</div>
                                 </div>
                                 <small class="text-muted" id="editServiceTotals">0 services selected</small>
                             </div>
@@ -734,6 +738,9 @@
                 cb.checked = appt.service_names.includes(cb.value);
             });
             updateEditServiceTotals(false);
+            document.getElementById('editServiceSearch').value = '';
+            document.querySelectorAll('.edit-service-row').forEach(row => row.style.display = '');
+            document.getElementById('editServiceNoResults').classList.add('d-none');
 
             const staffSelect = document.getElementById('editStaffSelect');
             staffSelect.innerHTML = appt.staff_id
@@ -761,6 +768,20 @@
                 updateEditServiceTotals(true);
                 loadEditAvailableStaff();
             });
+        });
+
+        document.getElementById('editServiceSearch').addEventListener('input', function() {
+            const needle = this.value.trim().toLowerCase();
+            let anyVisible = false;
+
+            document.querySelectorAll('.edit-service-row').forEach(row => {
+                const name = row.querySelector('.form-check-label span').textContent.toLowerCase();
+                const matches = !needle || name.includes(needle);
+                row.style.display = matches ? '' : 'none';
+                if (matches) anyVisible = true;
+            });
+
+            document.getElementById('editServiceNoResults').classList.toggle('d-none', anyVisible);
         });
 
         function loadEditAvailableStaff() {
