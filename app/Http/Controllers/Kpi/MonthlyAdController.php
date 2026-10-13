@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Kpi;
 
 use App\Http\Controllers\Controller;
 use App\Models\KpiMonthlyAd;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -11,12 +12,14 @@ class MonthlyAdController extends Controller
 {
     public function index()
     {
-        $ads = KpiMonthlyAd::orderByDesc('shoot_date')->orderByDesc('id')->get();
+        $ads = KpiMonthlyAd::orderByDesc('id')->get();
 
         $adsByPhase = collect(KpiMonthlyAd::BOARD_PHASES)
             ->mapWithKeys(fn ($phase) => [$phase => $ads->where('phase', $phase)->values()]);
 
-        return view('kpi.ads-plan.index', compact('adsByPhase'));
+        $staff = User::orderBy('name')->get(['id', 'name']);
+
+        return view('kpi.ads-plan.index', compact('adsByPhase', 'staff'));
     }
 
     public function store(Request $request)
@@ -58,10 +61,8 @@ class MonthlyAdController extends Controller
             'ad_name' => 'required|string|max:255',
             'person_responsible' => 'required|string|max:255',
             'pre_filled_message' => 'nullable|string',
-            'performance_target' => 'nullable|string|max:255',
-            'shoot_date' => 'nullable|date',
-            'team' => 'nullable|string|max:255',
-            'raw_clips_date' => 'nullable|date',
+            'offer' => 'nullable|string',
+            'production_person_responsible' => 'nullable|string|max:255',
             'editing_deadline' => 'nullable|date',
             'approved_by' => 'nullable|string|max:255',
             'live_date' => 'nullable|date',

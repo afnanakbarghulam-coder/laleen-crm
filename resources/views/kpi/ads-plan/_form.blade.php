@@ -23,32 +23,42 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Person Responsible</label>
-                            <input type="text" name="person_responsible" id="maPersonResponsible" class="form-control" required>
+                            <select name="person_responsible" id="maPersonResponsible" class="form-select" required>
+                                <option value="">— Select —</option>
+                                @foreach ($staff as $member)
+                                    <option value="{{ $member->name }}">{{ $member->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Offer</label>
+                            <textarea name="offer" id="maOffer" class="form-control" rows="2" placeholder="What's the offer this ad promotes?"></textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Total Budget (QAR)</label>
+                            <input type="number" step="0.01" min="0" name="total_budget" id="maTotalBudget" class="form-control">
                         </div>
                         <div class="col-md-8">
                             <label class="form-label">Pre-filled Message</label>
                             <textarea name="pre_filled_message" id="maPreFilledMessage" class="form-control" rows="2" placeholder="Caption / copy ready to paste when the ad goes live"></textarea>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Performance Target</label>
-                            <input type="text" name="performance_target" id="maPerformanceTarget" class="form-control" placeholder="e.g. 50 leads at QAR 15 CPL">
+                            <label class="form-label">Live Date</label>
+                            <input type="date" name="live_date" id="maLiveDate" class="form-control">
                         </div>
                     </div>
 
                     <h6 class="fw-bold">Phase 2: Production</h6>
                     <hr class="mt-1">
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Shoot Date</label>
-                            <input type="date" name="shoot_date" id="maShootDate" class="form-control">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Team</label>
-                            <input type="text" name="team" id="maTeam" class="form-control">
-                        </div>
+                    <div class="row g-3">
                         <div class="col-md-4">
-                            <label class="form-label">Raw Clips Date</label>
-                            <input type="date" name="raw_clips_date" id="maRawClipsDate" class="form-control">
+                            <label class="form-label">Person Responsible</label>
+                            <select name="production_person_responsible" id="maProductionPersonResponsible" class="form-select">
+                                <option value="">— Select —</option>
+                                @foreach ($staff as $member)
+                                    <option value="{{ $member->name }}">{{ $member->name }}</option>
+                                @endforeach
+                            </select>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Editing Deadline</label>
@@ -57,19 +67,6 @@
                         <div class="col-md-4">
                             <label class="form-label">Approved By</label>
                             <input type="text" name="approved_by" id="maApprovedBy" class="form-control">
-                        </div>
-                    </div>
-
-                    <h6 class="fw-bold">Phase 3: Live Math</h6>
-                    <hr class="mt-1">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Live Date</label>
-                            <input type="date" name="live_date" id="maLiveDate" class="form-control">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Total Budget (QAR)</label>
-                            <input type="number" step="0.01" min="0" name="total_budget" id="maTotalBudget" class="form-control">
                         </div>
                     </div>
                 </div>
@@ -99,15 +96,13 @@
 
         document.getElementById('maAdName').value = ad.ad_name || '';
         document.getElementById('maPersonResponsible').value = ad.person_responsible || '';
+        document.getElementById('maOffer').value = ad.offer || '';
+        document.getElementById('maTotalBudget').value = ad.total_budget || '';
         document.getElementById('maPreFilledMessage').value = ad.pre_filled_message || '';
-        document.getElementById('maPerformanceTarget').value = ad.performance_target || '';
-        document.getElementById('maShootDate').value = ad.shoot_date ? ad.shoot_date.slice(0, 10) : '';
-        document.getElementById('maTeam').value = ad.team || '';
-        document.getElementById('maRawClipsDate').value = ad.raw_clips_date ? ad.raw_clips_date.slice(0, 10) : '';
+        document.getElementById('maLiveDate').value = ad.live_date ? ad.live_date.slice(0, 10) : '';
+        document.getElementById('maProductionPersonResponsible').value = ad.production_person_responsible || '';
         document.getElementById('maEditingDeadline').value = ad.editing_deadline ? ad.editing_deadline.slice(0, 10) : '';
         document.getElementById('maApprovedBy').value = ad.approved_by || '';
-        document.getElementById('maLiveDate').value = ad.live_date ? ad.live_date.slice(0, 10) : '';
-        document.getElementById('maTotalBudget').value = ad.total_budget || '';
 
         new bootstrap.Modal(document.getElementById('monthlyAdModal')).show();
     };
