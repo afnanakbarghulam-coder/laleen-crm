@@ -55,6 +55,23 @@ class MonthlyAdController extends Controller
         return redirect()->route('kpi.ads-plan.index')->with('success', 'Ad moved to ' . $validated['phase'] . '.');
     }
 
+    /**
+     * Mark Phase 1 ("Planning") complete and advance to Production. Only the
+     * staff member named in person_responsible may do this — that column
+     * stores the assignee's name (selected from the staff dropdown), not a
+     * user id, since person_responsible isn't a foreign key.
+     */
+    public function completePlanning(Request $request, KpiMonthlyAd $monthlyAd)
+    {
+        if ($monthlyAd->person_responsible !== $request->user()->name) {
+            abort(403, 'Only the assigned person can complete this phase.');
+        }
+
+        $monthlyAd->update(['phase' => 'Production']);
+
+        return redirect()->route('kpi.ads-plan.index')->with('success', 'Phase 1 completed — moved to Production.');
+    }
+
     private function validated(Request $request): array
     {
         return $request->validate([

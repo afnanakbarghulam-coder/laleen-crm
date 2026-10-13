@@ -59,16 +59,27 @@
                                             @endif
                                         </div>
 
-                                        @moduleEdit('kpis')
-                                            <form action="{{ route('kpi.ads-plan.update-phase', $ad) }}" method="POST" class="mt-2">
-                                                @csrf @method('PATCH')
-                                                <select name="phase" class="form-select form-select-sm" onchange="this.form.submit()">
-                                                    @foreach (\App\Models\KpiMonthlyAd::PHASES as $option)
-                                                        <option value="{{ $option }}" @selected($ad->phase === $option)>{{ $option }}</option>
-                                                    @endforeach
-                                                </select>
-                                            </form>
-                                        @endmoduleEdit
+                                        @if ($phase === 'Planning')
+                                            @if (auth()->user()->name === $ad->person_responsible)
+                                                <form action="{{ route('kpi.ads-plan.complete-planning', $ad) }}" method="POST">
+                                                    @csrf @method('PATCH')
+                                                    <button type="submit" class="btn btn-sm w-100 mt-2" style="background-color: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2);">✔ Mark Phase 1 Completed</button>
+                                                </form>
+                                            @else
+                                                <div class="text-muted text-center small mt-2 py-1 border rounded" style="border-color: #374151 !important;">Waiting for completion by assigned staff</div>
+                                            @endif
+                                        @else
+                                            @moduleEdit('kpis')
+                                                <form action="{{ route('kpi.ads-plan.update-phase', $ad) }}" method="POST" class="mt-2">
+                                                    @csrf @method('PATCH')
+                                                    <select name="phase" class="form-select form-select-sm" onchange="this.form.submit()">
+                                                        @foreach (\App\Models\KpiMonthlyAd::PHASES as $option)
+                                                            <option value="{{ $option }}" @selected($ad->phase === $option)>{{ $option }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </form>
+                                            @endmoduleEdit
+                                        @endif
                                     </div>
                                 </div>
                             @empty
