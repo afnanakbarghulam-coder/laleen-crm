@@ -80,7 +80,11 @@ class MonthlyAdController extends Controller
             'pre_filled_message' => 'nullable|string',
             'offer' => 'nullable|string',
             'live_date' => 'nullable|date',
+            'raw_data_deadline' => 'nullable|date',
+            'final_creative_deadline' => 'nullable|date|before_or_equal:live_date',
             'total_budget' => 'nullable|numeric|min:0',
+        ], [
+            'final_creative_deadline.before_or_equal' => 'The final creative deadline cannot be after the Ad Live Date.',
         ]);
     }
 }

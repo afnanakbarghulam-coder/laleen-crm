@@ -19,12 +19,16 @@ class KpiMonthlyAd extends Model
         'pre_filled_message',
         'offer',
         'live_date',
+        'raw_data_deadline',
+        'final_creative_deadline',
         'total_budget',
         'phase',
     ];
 
     protected $casts = [
         'live_date' => 'date',
+        'raw_data_deadline' => 'date',
+        'final_creative_deadline' => 'date',
         'total_budget' => 'decimal:2',
     ];
 
@@ -37,6 +41,8 @@ class KpiMonthlyAd extends Model
             'pre_filled_message',
             'offer',
             'live_date',
+            'raw_data_deadline',
+            'final_creative_deadline',
             'total_budget',
             'phase',
         ]);

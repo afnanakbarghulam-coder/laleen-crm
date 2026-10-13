@@ -27,6 +27,7 @@
                                     <option value="{{ $member->name }}">{{ $member->name }}</option>
                                 @endforeach
                             </select>
+                            <input type="hidden" id="maPersonResponsibleHidden" value="">
                         </div>
                         <div class="col-md-8">
                             <label class="form-label">Offer</label>
@@ -45,6 +46,20 @@
                             <input type="date" name="live_date" id="maLiveDate" class="form-control">
                         </div>
                     </div>
+
+                    <div class="mt-4 pt-3 border-top d-none" id="maProductionSection">
+                        <h6 class="fw-bold">Production Deadlines</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Raw Data Deadline</label>
+                                <input type="date" name="raw_data_deadline" id="maRawDataDeadline" class="form-control">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Final Creative Deadline</label>
+                                <input type="date" name="final_creative_deadline" id="maFinalCreativeDeadline" class="form-control">
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -56,11 +71,34 @@
 </div>
 
 <script>
+    /** Brief fields read-only'd and Person Responsible locked once an ad has left Planning. */
+    const BRIEF_LOCK_FIELD_IDS = ['maAdName', 'maOffer', 'maPreFilledMessage', 'maTotalBudget', 'maLiveDate'];
+
+    function setBriefLocked(locked) {
+        BRIEF_LOCK_FIELD_IDS.forEach(id => {
+            document.getElementById(id).readOnly = locked;
+        });
+
+        const select = document.getElementById('maPersonResponsible');
+        const hidden = document.getElementById('maPersonResponsibleHidden');
+        select.disabled = locked;
+        if (locked) {
+            select.removeAttribute('name');
+            hidden.setAttribute('name', 'person_responsible');
+        } else {
+            select.setAttribute('name', 'person_responsible');
+            hidden.removeAttribute('name');
+        }
+
+        document.getElementById('maProductionSection').classList.toggle('d-none', !locked);
+    }
+
     window.resetMonthlyAdForm = function () {
         document.getElementById('monthlyAdModalTitle').innerText = 'Add Ad';
         document.getElementById('monthlyAdForm').action = '{{ route('kpi.ads-plan.store') }}';
         document.getElementById('monthlyAdFormMethod').value = '';
         document.getElementById('monthlyAdForm').reset();
+        setBriefLocked(false);
     };
 
     window.editMonthlyAd = function (ad) {
@@ -72,10 +110,15 @@
 
         document.getElementById('maAdName').value = ad.ad_name || '';
         document.getElementById('maPersonResponsible').value = ad.person_responsible || '';
+        document.getElementById('maPersonResponsibleHidden').value = ad.person_responsible || '';
         document.getElementById('maOffer').value = ad.offer || '';
         document.getElementById('maTotalBudget').value = ad.total_budget || '';
         document.getElementById('maPreFilledMessage').value = ad.pre_filled_message || '';
         document.getElementById('maLiveDate').value = ad.live_date ? ad.live_date.slice(0, 10) : '';
+        document.getElementById('maRawDataDeadline').value = ad.raw_data_deadline ? ad.raw_data_deadline.slice(0, 10) : '';
+        document.getElementById('maFinalCreativeDeadline').value = ad.final_creative_deadline ? ad.final_creative_deadline.slice(0, 10) : '';
+
+        setBriefLocked(ad.phase !== 'Planning');
 
         new bootstrap.Modal(document.getElementById('monthlyAdModal')).show();
     };
