@@ -62,9 +62,6 @@ class MonthlyAdController extends Controller
             'person_responsible' => 'required|string|max:255',
             'pre_filled_message' => 'nullable|string',
             'offer' => 'nullable|string',
-            'production_person_responsible' => 'nullable|string|max:255',
-            'editing_deadline' => 'nullable|date',
-            'approved_by' => 'nullable|string|max:255',
             'live_date' => 'nullable|date',
             'total_budget' => 'nullable|numeric|min:0',
         ]);

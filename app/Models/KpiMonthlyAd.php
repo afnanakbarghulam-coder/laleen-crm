@@ -18,16 +18,12 @@ class KpiMonthlyAd extends Model
         'person_responsible',
         'pre_filled_message',
         'offer',
-        'production_person_responsible',
-        'editing_deadline',
-        'approved_by',
         'live_date',
         'total_budget',
         'phase',
     ];
 
     protected $casts = [
-        'editing_deadline' => 'date',
         'live_date' => 'date',
         'total_budget' => 'decimal:2',
     ];
@@ -40,29 +36,19 @@ class KpiMonthlyAd extends Model
             'person_responsible',
             'pre_filled_message',
             'offer',
-            'production_person_responsible',
-            'editing_deadline',
-            'approved_by',
             'live_date',
             'total_budget',
             'phase',
         ]);
     }
 
-    /** The nearer of editing_deadline / live_date that's still upcoming (or the nearer of the two if both are past). Null if neither is set. */
+    /** The upcoming (or, if already past, the most recent) live date. Null if none is set. */
     public function nextDeadline(): ?array
     {
-        $candidates = collect([
-            $this->editing_deadline ? ['label' => 'Editing', 'date' => $this->editing_deadline] : null,
-            $this->live_date ? ['label' => 'Live', 'date' => $this->live_date] : null,
-        ])->filter();
-
-        if ($candidates->isEmpty()) {
+        if (!$this->live_date) {
             return null;
         }
 
-        $upcoming = $candidates->filter(fn ($c) => $c['date']->isFuture());
-
-        return ($upcoming->isNotEmpty() ? $upcoming : $candidates)->sortBy('date')->first();
+        return ['label' => 'Live', 'date' => $this->live_date];
     }
 }

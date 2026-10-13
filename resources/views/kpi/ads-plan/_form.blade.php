@@ -14,9 +14,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <h6 class="fw-bold">Phase 1: The Brief</h6>
-                    <hr class="mt-1">
-                    <div class="row g-3 mb-3">
+                    <div class="row g-3">
                         <div class="col-md-8">
                             <label class="form-label">Ad Name</label>
                             <input type="text" name="ad_name" id="maAdName" class="form-control" required>
@@ -45,28 +43,6 @@
                         <div class="col-md-4">
                             <label class="form-label">Live Date</label>
                             <input type="date" name="live_date" id="maLiveDate" class="form-control">
-                        </div>
-                    </div>
-
-                    <h6 class="fw-bold">Phase 2: Production</h6>
-                    <hr class="mt-1">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label">Person Responsible</label>
-                            <select name="production_person_responsible" id="maProductionPersonResponsible" class="form-select">
-                                <option value="">— Select —</option>
-                                @foreach ($staff as $member)
-                                    <option value="{{ $member->name }}">{{ $member->name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Editing Deadline</label>
-                            <input type="date" name="editing_deadline" id="maEditingDeadline" class="form-control">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Approved By</label>
-                            <input type="text" name="approved_by" id="maApprovedBy" class="form-control">
                         </div>
                     </div>
                 </div>
@@ -100,9 +76,6 @@
         document.getElementById('maTotalBudget').value = ad.total_budget || '';
         document.getElementById('maPreFilledMessage').value = ad.pre_filled_message || '';
         document.getElementById('maLiveDate').value = ad.live_date ? ad.live_date.slice(0, 10) : '';
-        document.getElementById('maProductionPersonResponsible').value = ad.production_person_responsible || '';
-        document.getElementById('maEditingDeadline').value = ad.editing_deadline ? ad.editing_deadline.slice(0, 10) : '';
-        document.getElementById('maApprovedBy').value = ad.approved_by || '';
 
         new bootstrap.Modal(document.getElementById('monthlyAdModal')).show();
     };
