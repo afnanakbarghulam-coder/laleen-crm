@@ -23,6 +23,7 @@ use App\Http\Controllers\Kpi\ContentCalendarController;
 use App\Http\Controllers\Kpi\ContentEntryController;
 use App\Http\Controllers\Kpi\ContentKpiController;
 use App\Http\Controllers\Kpi\KpiHubController;
+use App\Http\Controllers\Kpi\MonthlyAdController;
 use App\Http\Controllers\Kpi\StaffEvaluationController;
 use App\Http\Controllers\Kpi\StaffSalesController;
 use App\Http\Controllers\LeadController;
@@ -201,6 +202,12 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->post('/ads', [AdsConversionController::class, 'store'])->name('ads.store');
         Route::middleware('module:kpis')->get('/ads/{report}', [AdsConversionController::class, 'show'])->name('ads.show');
         Route::middleware('module:kpis,edit')->delete('/ads/{report}', [AdsConversionController::class, 'destroy'])->name('ads.destroy');
+
+        Route::middleware('module:kpis')->get('/ads-plan', [MonthlyAdController::class, 'index'])->name('ads-plan.index');
+        Route::middleware('module:kpis,edit')->post('/ads-plan', [MonthlyAdController::class, 'store'])->name('ads-plan.store');
+        Route::middleware('module:kpis,edit')->put('/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'update'])->name('ads-plan.update');
+        Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/phase', [MonthlyAdController::class, 'updatePhase'])->name('ads-plan.update-phase');
+        Route::middleware('module:kpis,edit')->delete('/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'destroy'])->name('ads-plan.destroy');
 
         Route::middleware('module:kpis,edit')->post('/ad-leads', [AdLeadEntryController::class, 'store'])->name('ad-leads.store');
         Route::middleware('module:kpis,edit')->put('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'update'])->name('ad-leads.update');

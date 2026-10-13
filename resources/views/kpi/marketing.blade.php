@@ -25,5 +25,12 @@
                 <p class="text-muted small mb-0">Plan daily reels and stories schedules.</p>
             </a>
         </div>
+        <div class="col-md-6 col-xl-4">
+            <a href="{{ route('kpi.ads-plan.index') }}" class="kpi-hub-card">
+                <div class="kpi-hub-icon"><i class="bx bx-rocket"></i></div>
+                <h6 class="mb-1">Monthly Ads Plan</h6>
+                <p class="text-muted small mb-0">Kanban board tracking every ad through Planning, Production, Testing, and Scaling.</p>
+            </a>
+        </div>
     </div>
 @endsection
