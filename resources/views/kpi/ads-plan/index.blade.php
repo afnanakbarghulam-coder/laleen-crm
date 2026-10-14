@@ -68,6 +68,14 @@
                                             @else
                                                 <div class="text-muted text-center small mt-2 py-1 border rounded" style="border-color: #374151 !important;">Waiting for completion by assigned staff</div>
                                             @endif
+                                        @elseif ($phase === 'Production')
+                                            <div class="small text-muted mt-2">Checklist: {{ $ad->chk_hook + $ad->chk_value + $ad->chk_risk + $ad->chk_cta }}/4</div>
+                                            @moduleEdit('kpis')
+                                                <form action="{{ route('kpi.ads-plan.complete-production', $ad) }}" method="POST">
+                                                    @csrf @method('PATCH')
+                                                    <button type="submit" class="btn btn-sm w-100 mt-2" style="background-color: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2);">🚀 Push to Testing</button>
+                                                </form>
+                                            @endmoduleEdit
                                         @else
                                             @moduleEdit('kpis')
                                                 <form action="{{ route('kpi.ads-plan.update-phase', $ad) }}" method="POST" class="mt-2">

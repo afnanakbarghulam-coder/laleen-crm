@@ -59,6 +59,38 @@
                                 <input type="date" name="final_creative_deadline" id="maFinalCreativeDeadline" class="form-control">
                             </div>
                         </div>
+
+                        <h6 class="fw-bold mt-4">Quality Control — required before Testing</h6>
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <label class="form-label">Creative Asset Link</label>
+                                <input type="text" name="creative_asset_link" id="maCreativeAssetLink" class="form-control" placeholder="Link to the final creative asset (Drive, Frame.io, etc.)">
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input type="checkbox" name="chk_hook" id="maChkHook" class="form-check-input" value="1">
+                                    <label class="form-check-label" for="maChkHook">Hook</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input type="checkbox" name="chk_value" id="maChkValue" class="form-check-input" value="1">
+                                    <label class="form-check-label" for="maChkValue">Value</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input type="checkbox" name="chk_risk" id="maChkRisk" class="form-check-input" value="1">
+                                    <label class="form-check-label" for="maChkRisk">Risk</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input type="checkbox" name="chk_cta" id="maChkCta" class="form-check-input" value="1">
+                                    <label class="form-check-label" for="maChkCta">CTA</label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -117,6 +149,11 @@
         document.getElementById('maLiveDate').value = ad.live_date ? ad.live_date.slice(0, 10) : '';
         document.getElementById('maRawDataDeadline').value = ad.raw_data_deadline ? ad.raw_data_deadline.slice(0, 10) : '';
         document.getElementById('maFinalCreativeDeadline').value = ad.final_creative_deadline ? ad.final_creative_deadline.slice(0, 10) : '';
+        document.getElementById('maCreativeAssetLink').value = ad.creative_asset_link || '';
+        document.getElementById('maChkHook').checked = !!ad.chk_hook;
+        document.getElementById('maChkValue').checked = !!ad.chk_value;
+        document.getElementById('maChkRisk').checked = !!ad.chk_risk;
+        document.getElementById('maChkCta').checked = !!ad.chk_cta;
 
         setBriefLocked(ad.phase !== 'Planning');
 

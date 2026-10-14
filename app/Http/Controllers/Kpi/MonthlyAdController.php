@@ -72,9 +72,25 @@ class MonthlyAdController extends Controller
         return redirect()->route('kpi.ads-plan.index')->with('success', 'Phase 1 completed — moved to Production.');
     }
 
+    /**
+     * Mark Phase 2 ("Production") complete and advance to Testing. Blocked
+     * until the asset link is filled in and all 4 creative-guideline
+     * checkboxes (Hook, Value, Risk, CTA) are ticked.
+     */
+    public function completeProduction(Request $request, KpiMonthlyAd $monthlyAd)
+    {
+        if (empty($monthlyAd->creative_asset_link) || !$monthlyAd->chk_hook || !$monthlyAd->chk_value || !$monthlyAd->chk_risk || !$monthlyAd->chk_cta) {
+            return redirect()->back()->with('error', 'Quality Control Failed: The Asset Link and all 4 Creative Guidelines (Hook, Value, Risk, CTA) must be completed before moving to Testing.');
+        }
+
+        $monthlyAd->update(['phase' => 'Testing']);
+
+        return redirect()->route('kpi.ads-plan.index')->with('success', 'Phase 2 completed — moved to Testing.');
+    }
+
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $validated = $request->validate([
             'ad_name' => 'required|string|max:255',
             'person_responsible' => 'required|string|max:255',
             'pre_filled_message' => 'nullable|string',
@@ -83,8 +99,18 @@ class MonthlyAdController extends Controller
             'raw_data_deadline' => 'nullable|date',
             'final_creative_deadline' => 'nullable|date|before_or_equal:live_date',
             'total_budget' => 'nullable|numeric|min:0',
+            'creative_asset_link' => 'nullable|string|max:2048',
         ], [
             'final_creative_deadline.before_or_equal' => 'The final creative deadline cannot be after the Ad Live Date.',
         ]);
+
+        // Unchecked checkboxes are omitted from the request entirely, so read
+        // them explicitly rather than relying on validate() to default them.
+        $validated['chk_hook'] = $request->boolean('chk_hook');
+        $validated['chk_value'] = $request->boolean('chk_value');
+        $validated['chk_risk'] = $request->boolean('chk_risk');
+        $validated['chk_cta'] = $request->boolean('chk_cta');
+
+        return $validated;
     }
 }

@@ -23,6 +23,11 @@ class KpiMonthlyAd extends Model
         'final_creative_deadline',
         'total_budget',
         'phase',
+        'creative_asset_link',
+        'chk_hook',
+        'chk_value',
+        'chk_risk',
+        'chk_cta',
     ];
 
     protected $casts = [
@@ -30,6 +35,10 @@ class KpiMonthlyAd extends Model
         'raw_data_deadline' => 'date',
         'final_creative_deadline' => 'date',
         'total_budget' => 'decimal:2',
+        'chk_hook' => 'boolean',
+        'chk_value' => 'boolean',
+        'chk_risk' => 'boolean',
+        'chk_cta' => 'boolean',
     ];
 
     public function toEditPayload(): array
@@ -45,6 +54,11 @@ class KpiMonthlyAd extends Model
             'final_creative_deadline',
             'total_budget',
             'phase',
+            'creative_asset_link',
+            'chk_hook',
+            'chk_value',
+            'chk_risk',
+            'chk_cta',
         ]);
     }
 
