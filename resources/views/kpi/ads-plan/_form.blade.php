@@ -62,46 +62,42 @@
 
                         <h6 class="fw-bold mt-4">Quality Control — required before Testing</h6>
                         <div class="row g-3">
-                            <div class="col-md-12">
+                            <div class="col-md-12 mb-4">
                                 <label class="form-label">Creative Asset Link</label>
                                 <input type="text" name="creative_asset_link" id="maCreativeAssetLink" class="form-control" placeholder="Link to the final creative asset (Drive, Frame.io, etc.)">
                             </div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <div class="form-check mb-1">
+                        <div class="p-3 rounded mb-3" style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05);">
+                            <div class="row mb-4">
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
                                         <input type="checkbox" name="chk_hook" id="maChkHook" class="form-check-input" value="1">
                                         <label for="maChkHook" class="form-check-label">1. Hook</label>
                                     </div>
-                                    <input type="text" name="txt_hook" id="maTxtHook" class="form-control form-control-sm bg-gray-900 border-gray-700 text-gray-300 focus:border-rose-400" placeholder="Describe the hook...">
+                                    <input type="text" name="txt_hook" id="maTxtHook" class="form-control form-control-sm" style="border-color: rgba(255, 255, 255, 0.1);" placeholder="Describe the hook...">
                                 </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <div class="form-check mb-1">
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
                                         <input type="checkbox" name="chk_value" id="maChkValue" class="form-check-input" value="1">
                                         <label for="maChkValue" class="form-check-label">2. Value</label>
                                     </div>
-                                    <input type="text" name="txt_value" id="maTxtValue" class="form-control form-control-sm bg-gray-900 border-gray-700 text-gray-300 focus:border-rose-400" placeholder="Describe the value...">
+                                    <input type="text" name="txt_value" id="maTxtValue" class="form-control form-control-sm" style="border-color: rgba(255, 255, 255, 0.1);" placeholder="Describe the value...">
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <div class="form-check mb-1">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
                                         <input type="checkbox" name="chk_risk" id="maChkRisk" class="form-check-input" value="1">
                                         <label for="maChkRisk" class="form-check-label">3. Risk</label>
                                     </div>
-                                    <input type="text" name="txt_risk" id="maTxtRisk" class="form-control form-control-sm bg-gray-900 border-gray-700 text-gray-300 focus:border-rose-400" placeholder="Describe the risk reversal...">
+                                    <input type="text" name="txt_risk" id="maTxtRisk" class="form-control form-control-sm" style="border-color: rgba(255, 255, 255, 0.1);" placeholder="Describe the risk reversal...">
                                 </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <div class="form-check mb-1">
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
                                         <input type="checkbox" name="chk_cta" id="maChkCta" class="form-check-input" value="1">
                                         <label for="maChkCta" class="form-check-label">4. CTA</label>
                                     </div>
-                                    <input type="text" name="txt_cta" id="maTxtCta" class="form-control form-control-sm bg-gray-900 border-gray-700 text-gray-300 focus:border-rose-400" placeholder="Describe the call to action...">
+                                    <input type="text" name="txt_cta" id="maTxtCta" class="form-control form-control-sm" style="border-color: rgba(255, 255, 255, 0.1);" placeholder="Describe the call to action...">
                                 </div>
                             </div>
                         </div>
