@@ -74,13 +74,20 @@ class MonthlyAdController extends Controller
 
     /**
      * Mark Phase 2 ("Production") complete and advance to Testing. Blocked
-     * until the asset link is filled in and all 4 creative-guideline
-     * checkboxes (Hook, Value, Risk, CTA) are ticked.
+     * until the asset link is filled in and all 4 creative guidelines
+     * (Hook, Value, Risk, CTA) are both ticked AND have a text description —
+     * the checkbox alone is too easy to rubber-stamp.
      */
     public function completeProduction(Request $request, KpiMonthlyAd $monthlyAd)
     {
-        if (empty($monthlyAd->creative_asset_link) || !$monthlyAd->chk_hook || !$monthlyAd->chk_value || !$monthlyAd->chk_risk || !$monthlyAd->chk_cta) {
-            return redirect()->back()->with('error', 'Quality Control Failed: The Asset Link and all 4 Creative Guidelines (Hook, Value, Risk, CTA) must be completed before moving to Testing.');
+        if (
+            empty($monthlyAd->creative_asset_link)
+            || !$monthlyAd->chk_hook || empty($monthlyAd->txt_hook)
+            || !$monthlyAd->chk_value || empty($monthlyAd->txt_value)
+            || !$monthlyAd->chk_risk || empty($monthlyAd->txt_risk)
+            || !$monthlyAd->chk_cta || empty($monthlyAd->txt_cta)
+        ) {
+            return redirect()->back()->with('error', 'Quality Control Failed: All 4 Creative Guidelines must be checked AND their text descriptions must be filled out before moving to Testing.');
         }
 
         $monthlyAd->update(['phase' => 'Testing']);
@@ -100,6 +107,10 @@ class MonthlyAdController extends Controller
             'final_creative_deadline' => 'nullable|date|before_or_equal:live_date',
             'total_budget' => 'nullable|numeric|min:0',
             'creative_asset_link' => 'nullable|string|max:2048',
+            'txt_hook' => 'nullable|string',
+            'txt_value' => 'nullable|string',
+            'txt_risk' => 'nullable|string',
+            'txt_cta' => 'nullable|string',
         ], [
             'final_creative_deadline.before_or_equal' => 'The final creative deadline cannot be after the Ad Live Date.',
         ]);

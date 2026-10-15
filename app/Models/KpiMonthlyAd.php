@@ -28,6 +28,10 @@ class KpiMonthlyAd extends Model
         'chk_value',
         'chk_risk',
         'chk_cta',
+        'txt_hook',
+        'txt_value',
+        'txt_risk',
+        'txt_cta',
     ];
 
     protected $casts = [
@@ -59,6 +63,10 @@ class KpiMonthlyAd extends Model
             'chk_value',
             'chk_risk',
             'chk_cta',
+            'txt_hook',
+            'txt_value',
+            'txt_risk',
+            'txt_cta',
         ]);
     }
 

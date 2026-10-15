@@ -66,28 +66,42 @@
                                 <label class="form-label">Creative Asset Link</label>
                                 <input type="text" name="creative_asset_link" id="maCreativeAssetLink" class="form-control" placeholder="Link to the final creative asset (Drive, Frame.io, etc.)">
                             </div>
-                            <div class="col-md-3">
-                                <div class="form-check">
-                                    <input type="checkbox" name="chk_hook" id="maChkHook" class="form-check-input" value="1">
-                                    <label class="form-check-label" for="maChkHook">Hook</label>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="form-check mb-1">
+                                        <input type="checkbox" name="chk_hook" id="maChkHook" class="form-check-input" value="1">
+                                        <label for="maChkHook" class="form-check-label">1. Hook</label>
+                                    </div>
+                                    <input type="text" name="txt_hook" id="maTxtHook" class="form-control form-control-sm bg-gray-900 border-gray-700 text-gray-300 focus:border-rose-400" placeholder="Describe the hook...">
                                 </div>
                             </div>
-                            <div class="col-md-3">
-                                <div class="form-check">
-                                    <input type="checkbox" name="chk_value" id="maChkValue" class="form-check-input" value="1">
-                                    <label class="form-check-label" for="maChkValue">Value</label>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="form-check mb-1">
+                                        <input type="checkbox" name="chk_value" id="maChkValue" class="form-check-input" value="1">
+                                        <label for="maChkValue" class="form-check-label">2. Value</label>
+                                    </div>
+                                    <input type="text" name="txt_value" id="maTxtValue" class="form-control form-control-sm bg-gray-900 border-gray-700 text-gray-300 focus:border-rose-400" placeholder="Describe the value...">
                                 </div>
                             </div>
-                            <div class="col-md-3">
-                                <div class="form-check">
-                                    <input type="checkbox" name="chk_risk" id="maChkRisk" class="form-check-input" value="1">
-                                    <label class="form-check-label" for="maChkRisk">Risk</label>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="form-check mb-1">
+                                        <input type="checkbox" name="chk_risk" id="maChkRisk" class="form-check-input" value="1">
+                                        <label for="maChkRisk" class="form-check-label">3. Risk</label>
+                                    </div>
+                                    <input type="text" name="txt_risk" id="maTxtRisk" class="form-control form-control-sm bg-gray-900 border-gray-700 text-gray-300 focus:border-rose-400" placeholder="Describe the risk reversal...">
                                 </div>
                             </div>
-                            <div class="col-md-3">
-                                <div class="form-check">
-                                    <input type="checkbox" name="chk_cta" id="maChkCta" class="form-check-input" value="1">
-                                    <label class="form-check-label" for="maChkCta">CTA</label>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="form-check mb-1">
+                                        <input type="checkbox" name="chk_cta" id="maChkCta" class="form-check-input" value="1">
+                                        <label for="maChkCta" class="form-check-label">4. CTA</label>
+                                    </div>
+                                    <input type="text" name="txt_cta" id="maTxtCta" class="form-control form-control-sm bg-gray-900 border-gray-700 text-gray-300 focus:border-rose-400" placeholder="Describe the call to action...">
                                 </div>
                             </div>
                         </div>
@@ -154,6 +168,10 @@
         document.getElementById('maChkValue').checked = !!ad.chk_value;
         document.getElementById('maChkRisk').checked = !!ad.chk_risk;
         document.getElementById('maChkCta').checked = !!ad.chk_cta;
+        document.getElementById('maTxtHook').value = ad.txt_hook || '';
+        document.getElementById('maTxtValue').value = ad.txt_value || '';
+        document.getElementById('maTxtRisk').value = ad.txt_risk || '';
+        document.getElementById('maTxtCta').value = ad.txt_cta || '';
 
         setBriefLocked(ad.phase !== 'Planning');
 
