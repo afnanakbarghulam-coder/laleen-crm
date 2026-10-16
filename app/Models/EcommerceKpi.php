@@ -47,7 +47,7 @@ class EcommerceKpi extends Model
      * is zero, rather than 0 — "no data" and "zero performance" are different
      * things and must not look identical on a dashboard.
      */
-    public static function summarize(Collection $rows): array
+    public static function summarize(Collection $rows, ?Collection $newCustomerSales = null): array
     {
         $revenue = (float) $rows->sum('total_revenue');
         $adSpend = (float) $rows->sum('total_ad_spend');
@@ -59,6 +59,41 @@ class EcommerceKpi extends Model
         $cac = $newCustomers > 0 ? $adSpend / $newCustomers : null;
         $aov = $orders > 0 ? $revenue / $orders : null;
         $repeatRate = $orders > 0 ? ($repeatCustomers / $orders) * 100 : null;
+
+        // Day-0 Net Contribution (New Customers):
+        // Total Revenue (New Customers) - (Total COGS for those sales + Total Shipping for those sales + Total Ad Spend),
+        // divided by new_customers to get the Per-Order Day-0 Cash Margin.
+        $salesCollection = $newCustomerSales ?? collect();
+        if ($salesCollection->isNotEmpty()) {
+            $newCustomerRevenue = (float) $salesCollection->sum('total_price');
+            $newCustomerCogs = (float) $salesCollection->sum(
+                fn ($sale) => (float) $sale->quantity * (float) $sale->unit_cogs
+            );
+            $newCustomerShipping = (float) $salesCollection->sum('shipping_cost');
+        } else {
+            // Fallback when KPI snapshots are logged without individual EcommerceSale rows in range:
+            // attribute revenue proportionally to the new-customer share of orders.
+            $newCustomerShare = $orders > 0
+                ? min(1.0, $newCustomers / $orders)
+                : ($newCustomers > 0 ? 1.0 : 0.0);
+            $newCustomerRevenue = $revenue * $newCustomerShare;
+            $newCustomerCogs = 0.0;
+            $newCustomerShipping = 0.0;
+        }
+
+        $day0NetTotal = null;
+        $day0PerOrderMargin = null;
+        $day0Healthy = null;
+
+        if ($newCustomers > 0) {
+            $day0NetTotal = $newCustomerRevenue - ($newCustomerCogs + $newCustomerShipping + $adSpend);
+            $day0PerOrderMargin = $day0NetTotal / $newCustomers;
+            if ($day0PerOrderMargin > 0) {
+                $day0Healthy = true;
+            } elseif ($day0PerOrderMargin < 0) {
+                $day0Healthy = false;
+            }
+        }
 
         return [
             'has_data' => $rows->isNotEmpty(),
@@ -73,6 +108,13 @@ class EcommerceKpi extends Model
             'cac' => $cac,
             'aov' => $aov,
             'repeat_rate' => $repeatRate,
+
+            'new_customer_revenue' => $newCustomerRevenue,
+            'new_customer_cogs' => $newCustomerCogs,
+            'new_customer_shipping' => $newCustomerShipping,
+            'day0_net_total' => $day0NetTotal,
+            'day0_net_contribution' => $day0PerOrderMargin,
+            'day0_healthy' => $day0Healthy,
 
             // Health flags drive the card border colour in the Blade view.
             'mer_healthy' => $mer === null ? null : $mer >= self::MER_TARGET,

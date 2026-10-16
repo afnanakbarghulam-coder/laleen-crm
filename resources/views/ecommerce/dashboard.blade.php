@@ -47,6 +47,64 @@
         </div>
     @endunless
 
+    {{-- ============ Day-0 Net Contribution (New Customers) — Paid Ad Reality Check ============ --}}
+    <div class="row g-3 mb-3">
+        <div class="col-12">
+            @php
+                $day0Val = $metrics['day0_net_contribution'];
+                $day0Healthy = $metrics['day0_healthy'];
+            @endphp
+            <div class="ec-card ec-kpi-card {{ $borderClass($day0Healthy) }}">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div>
+                        <h6>Day-0 Net Contribution (New Customers) &mdash; Per-Order Cash Margin</h6>
+                        <div class="ec-kpi-value {{ $day0Healthy === null ? '' : ($day0Healthy ? 'ec-positive' : 'ec-negative') }}">
+                            {{ $day0Val === null ? '—' : ($day0Val < 0 ? '-PKR ' . number_format(abs($day0Val), 2) : 'PKR ' . number_format($day0Val, 2)) }}
+                        </div>
+                        <div class="ec-sub">
+                            [New Customer Revenue &minus; (COGS + Shipping + Ad Spend)] &divide; New Customers
+                        </div>
+                    </div>
+                    @if ($day0Val !== null)
+                        <div>
+                            @if ($day0Val > 0)
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-6">
+                                    ✓ Infinite Scale
+                                </span>
+                            @elseif ($day0Val < 0)
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6">
+                                    ⚠ Bleeding Cash
+                                </span>
+                            @else
+                                <span class="badge bg-secondary-subtle text-secondary px-3 py-2 fs-6">
+                                    Break-Even (PKR 0.00)
+                                </span>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+                @if ($day0Val !== null)
+                    <div class="ec-kpi-flag {{ $day0Healthy === null ? 'ec-sub' : ($day0Healthy ? 'ec-positive' : 'ec-negative') }} mt-2">
+                        @if ($day0Val > 0)
+                            ✓ Infinite Scale &mdash; Each new customer generates +PKR {{ number_format($day0Val, 2) }} net cash on Day 0 after COGS, Shipping &amp; Meta Ads (Total Pool: +PKR {{ number_format($metrics['day0_net_total'], 2) }}).
+                        @elseif ($day0Val < 0)
+                            ⚠ Bleeding Cash &mdash; Losing PKR {{ number_format(abs($day0Val), 2) }} per new customer on Day 0 after COGS, Shipping &amp; Meta Ads (Total Deficit: -PKR {{ number_format(abs($metrics['day0_net_total']), 2) }}).
+                        @else
+                            Exact Day-0 break-even across {{ number_format($metrics['new_customers']) }} new customer(s).
+                        @endif
+                    </div>
+                    <div class="d-flex flex-wrap gap-4 mt-2 pt-2" style="border-top: 1px solid var(--ec-border, rgba(255,255,255,0.08)); font-size: 12px;">
+                        <span class="ec-sub">New Cust. Revenue: <strong>PKR {{ number_format($metrics['new_customer_revenue'], 2) }}</strong></span>
+                        <span class="ec-sub">New Cust. COGS: <strong>PKR {{ number_format($metrics['new_customer_cogs'], 2) }}</strong></span>
+                        <span class="ec-sub">New Cust. Shipping: <strong>PKR {{ number_format($metrics['new_customer_shipping'], 2) }}</strong></span>
+                        <span class="ec-sub">Total Ad Spend: <strong>PKR {{ number_format($metrics['total_ad_spend'], 2) }}</strong></span>
+                        <span class="ec-sub">New Customers: <strong>{{ number_format($metrics['new_customers']) }}</strong></span>
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+
     {{-- ============ Ecommerce KPIs ============ --}}
     <div class="row g-3">
         <div class="col-md-3">

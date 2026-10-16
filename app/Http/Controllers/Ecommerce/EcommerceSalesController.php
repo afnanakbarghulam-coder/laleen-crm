@@ -39,9 +39,13 @@ class EcommerceSalesController extends Controller
     /** Front-desk retail sold inside a salon — the revenue side of that funnel. */
     public const SALON_RETAIL_CHANNELS = ['Salon (Old Airport)', 'Salon (Wakrah)'];
 
-    /** A refill nudge is due once a customer is this far past their purchase. */
-    private const REFILL_WINDOW_START_DAYS = 25;
-    private const REFILL_WINDOW_END_DAYS = 35;
+    /** Customer Lifecycle Pipeline stage windows (days since purchase). */
+    public const CROSS_SELL_START_DAYS = 6;
+    public const CROSS_SELL_END_DAYS = 8;
+    public const REFILL_WINDOW_START_DAYS = 25;
+    public const REFILL_WINDOW_END_DAYS = 35;
+    public const WIN_BACK_START_DAYS = 60;
+    public const WIN_BACK_END_DAYS = 70;
 
     public function index(Request $request)
     {
@@ -129,6 +133,7 @@ class EcommerceSalesController extends Controller
         }
 
         $bundles = EcommerceBundle::with(['items.product.pricingModel'])->orderBy('name')->get();
+        $lifecyclePipeline = $this->lifecyclePipeline();
 
         return view('ecommerce.sales', [
             'sales' => $sales,
@@ -144,7 +149,8 @@ class EcommerceSalesController extends Controller
             'chartUnits' => $chartUnits,
             'bundles' => $bundles,
             'bundlesForJs' => $this->bundlesForJs($bundles),
-            'refillQueue' => $this->refillQueue(),
+            'lifecyclePipeline' => $lifecyclePipeline,
+            'refillQueue' => $lifecyclePipeline['day30']['items'],
             'refillWindowStartDays' => self::REFILL_WINDOW_START_DAYS,
             'refillWindowEndDays' => self::REFILL_WINDOW_END_DAYS,
             'backbarConversion' => $this->backbarConversion(),
@@ -167,18 +173,74 @@ class EcommerceSalesController extends Controller
     }
 
     /**
-     * Customers whose last purchase landed 25-35 days ago and who have not
-     * bought since — i.e. they are about to run out. Grouped by phone number
-     * so one customer appears once no matter how many lines they bought.
+     * 3-Stage Automated Customer Lifecycle Pipeline (LTV Expansion):
+     * - Day 7 (Cross-Sell): 6-8 days ago, 20% bundle-completion hook.
+     * - Day 30 (Refill): 25-35 days ago, refill reminder hook.
+     * - Day 60 (Win-Back): 60-70 days ago with no subsequent orders, high-urgency risk-free Grand Slam kit hook.
      */
-    private function refillQueue()
+    private function lifecyclePipeline(): array
     {
-        $windowStart = now()->subDays(self::REFILL_WINDOW_END_DAYS)->startOfDay();
-        $windowEnd = now()->subDays(self::REFILL_WINDOW_START_DAYS)->endOfDay();
+        return [
+            'day7' => [
+                'key' => 'day7',
+                'title' => 'Day 7 · Cross-Sell',
+                'window_label' => 'Day ' . self::CROSS_SELL_START_DAYS . '–' . self::CROSS_SELL_END_DAYS,
+                'subtitle' => 'Revenue channel sales 6–8 days ago. Hook with a 20% bundle-completion cross-sell.',
+                'cta_label' => 'Send 20% Cross-Sell',
+                'badge_class' => 'ec-badge-bundle',
+                'items' => $this->buildLifecycleStage(
+                    self::CROSS_SELL_START_DAYS,
+                    self::CROSS_SELL_END_DAYS,
+                    false,
+                    'cross_sell'
+                ),
+            ],
+            'day30' => [
+                'key' => 'day30',
+                'title' => 'Day 30 · Refill',
+                'window_label' => 'Day ' . self::REFILL_WINDOW_START_DAYS . '–' . self::REFILL_WINDOW_END_DAYS,
+                'subtitle' => 'Revenue channel sales 25–35 days ago. Remind customers right before their bottle runs dry.',
+                'cta_label' => 'Send Refill Nudge',
+                'badge_class' => 'ec-badge-injection',
+                'items' => $this->buildLifecycleStage(
+                    self::REFILL_WINDOW_START_DAYS,
+                    self::REFILL_WINDOW_END_DAYS,
+                    true,
+                    'refill'
+                ),
+            ],
+            'day60' => [
+                'key' => 'day60',
+                'title' => 'Day 60 · Win-Back',
+                'window_label' => 'Day ' . self::WIN_BACK_START_DAYS . '–' . self::WIN_BACK_END_DAYS,
+                'subtitle' => 'Revenue channel sales 60–70 days ago with no subsequent orders. High-urgency, risk-free Grand Slam kit offer.',
+                'cta_label' => 'Send Grand Slam Offer',
+                'badge_class' => 'ec-badge-expense-paid',
+                'items' => $this->buildLifecycleStage(
+                    self::WIN_BACK_START_DAYS,
+                    self::WIN_BACK_END_DAYS,
+                    true,
+                    'win_back'
+                ),
+            ],
+        ];
+    }
+
+    /**
+     * Queries revenue-channel sales in a specific [startDaysAgo, endDaysAgo] window,
+     * optionally excluding customers with subsequent orders after the window closed,
+     * and builds a stage-specific WhatsApp deep link for each customer.
+     */
+    private function buildLifecycleStage(
+        int $startDaysAgo,
+        int $endDaysAgo,
+        bool $excludeSubsequentOrders,
+        string $stageType
+    ) {
+        $windowStart = now()->subDays($endDaysAgo)->startOfDay();
+        $windowEnd = now()->subDays($startDaysAgo)->endOfDay();
 
         $dueSales = EcommerceSale::with('product')
-            ->whereNotNull('customer_phone')
-            ->where('customer_phone', '!=', '')
             ->whereNotIn('channel', self::NON_REVENUE_CHANNELS)
             ->whereBetween('created_at', [$windowStart, $windowEnd])
             ->orderByDesc('created_at')
@@ -188,37 +250,87 @@ class EcommerceSalesController extends Controller
             return collect();
         }
 
-        $normalize = fn ($phone) => preg_replace('/\D+/', '', (string) $phone);
+        $normalizePhone = fn ($phone) => preg_replace('/\D+/', '', (string) $phone);
+        $normalizeName = fn ($name) => mb_strtolower(trim((string) $name));
 
-        // Anyone who has already re-ordered since the window closed is not due
-        // a nudge — they're still stocked.
-        $repurchasedPhones = EcommerceSale::whereNotNull('customer_phone')
-            ->where('customer_phone', '!=', '')
-            ->whereNotIn('channel', self::NON_REVENUE_CHANNELS)
-            ->where('created_at', '>', $windowEnd)
-            ->pluck('customer_phone')
-            ->map($normalize)
-            ->filter()
-            ->unique()
-            ->flip();
+        $repurchasedPhones = collect();
+        $repurchasedNames = collect();
+
+        if ($excludeSubsequentOrders) {
+            $subsequentSales = EcommerceSale::whereNotIn('channel', self::NON_REVENUE_CHANNELS)
+                ->where('created_at', '>', $windowEnd)
+                ->get(['customer_phone', 'customer_name']);
+
+            $repurchasedPhones = $subsequentSales->pluck('customer_phone')
+                ->map($normalizePhone)
+                ->filter()
+                ->unique()
+                ->flip();
+
+            $repurchasedNames = $subsequentSales->pluck('customer_name')
+                ->map($normalizeName)
+                ->filter()
+                ->unique()
+                ->flip();
+        }
 
         return $dueSales
-            ->groupBy(fn (EcommerceSale $sale) => $normalize($sale->customer_phone))
-            ->reject(fn ($group, $phone) => $phone === '' || $repurchasedPhones->has($phone))
-            ->map(function ($group, $phone) {
+            ->groupBy(function (EcommerceSale $sale) use ($normalizePhone, $normalizeName) {
+                $phone = $normalizePhone($sale->customer_phone);
+                if ($phone !== '') {
+                    return 'phone:' . $phone;
+                }
+                $name = $normalizeName($sale->customer_name);
+                if ($name !== '') {
+                    return 'name:' . $name;
+                }
+                return 'sale:' . ($sale->reference_id ?: $sale->id);
+            })
+            ->reject(function ($group) use ($excludeSubsequentOrders, $normalizePhone, $normalizeName, $repurchasedPhones, $repurchasedNames) {
+                if (!$excludeSubsequentOrders) {
+                    return false;
+                }
                 $latest = $group->first();
+                $phone = $normalizePhone($latest->customer_phone);
+                if ($phone !== '' && $repurchasedPhones->has($phone)) {
+                    return true;
+                }
+                $name = $normalizeName($latest->customer_name);
+                if ($phone === '' && $name !== '' && $repurchasedNames->has($name)) {
+                    return true;
+                }
+                return false;
+            })
+            ->map(function ($group) use ($normalizePhone, $stageType) {
+                $latest = $group->first();
+                $phone = $normalizePhone($latest->customer_phone);
+                $customerName = trim((string) $latest->customer_name) !== '' ? trim((string) $latest->customer_name) : 'there';
+                $daysSince = (int) $latest->created_at->startOfDay()->diffInDays(now()->startOfDay());
                 $products = $group->map(fn (EcommerceSale $s) => $s->product->name ?? 'product')
                     ->unique()->values();
+                $productsList = $products->implode(', ');
+
+                $waText = match ($stageType) {
+                    'cross_sell' => "Hi {$customerName}! How is your {$productsList} treating you so far? Since you grabbed it {$daysSince} days ago, here is an exclusive 20% OFF bundle-completion offer (code: COMPLETE20) to pair it with the rest of the Laleen routine. Want us to dispatch your companion kit today?",
+                    'win_back' => "Hi {$customerName}! It has been {$daysSince} days since your last Laleen order ({$productsList}) and we want to win you back! For the next 24 hours, claim our full Grand Slam Hair Transformation Kit at an exclusive VIP price — 100% risk-free with our money-back guarantee. Reply YES to lock in your kit before this window closes!",
+                    default => "Hi {$customerName}! It has been {$daysSince} days since your {$productsList} from Laleen. Most customers run out right about now — want us to send your fresh refill out today?",
+                };
+
+                $waLink = ($phone !== '' ? 'https://wa.me/' . $phone : 'https://wa.me/')
+                    . '?text=' . rawurlencode($waText);
 
                 return [
                     'phone' => $phone,
-                    'display_phone' => $latest->customer_phone,
-                    'customer_name' => $latest->customer_name ?: 'there',
+                    'display_phone' => $latest->customer_phone ?: 'No phone logged',
+                    'customer_name' => $customerName,
                     'last_purchase_at' => $latest->created_at,
-                    'days_since' => (int) $latest->created_at->startOfDay()->diffInDays(now()->startOfDay()),
+                    'days_since' => $daysSince,
                     'products' => $products,
+                    'channel' => $latest->channel,
                     'order_count' => $group->count(),
                     'total_spent' => (float) $group->sum('total_price'),
+                    'wa_text' => $waText,
+                    'wa_link' => $waLink,
                 ];
             })
             ->sortByDesc('days_since')

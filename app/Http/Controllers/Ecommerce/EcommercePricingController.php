@@ -46,6 +46,84 @@ class EcommercePricingController extends Controller
         $componentTypeNames = EcommerceComponentType::pluck('name', 'id');
         $productLineNames = EcommerceProductLine::pluck('name', 'id');
 
+        $visibleComponentsByLine = [
+            'Hair Oil' => ['Bottle/Jar', 'Label', 'Outer Box'],
+            'Shampoo' => ['Bottle/Jar', 'Label', 'Pump/Cap', 'Outer Box'],
+        ];
+
+        $pricingModelsByProduct = EcommercePricingModel::all()->keyBy('ecommerce_product_id');
+
+        // Exact BOM COGS catalogue for the Offer Builder / Tier Stacker:
+        // uses the saved EcommercePricingModel::bomUnitCost() when available,
+        // and falls back to live Tier-1 raw material BOM costs otherwise.
+        $stackerProducts = $products->mapWithKeys(function ($product) use (
+            $pricingModelsByProduct,
+            $rawMaterials,
+            $componentTypeNames,
+            $productLineNames,
+            $visibleComponentsByLine
+        ) {
+            $savedModel = $pricingModelsByProduct->get($product->id);
+
+            if ($savedModel) {
+                $liquidCost = (float) $savedModel->liquid_cost;
+                $bottleCost = (float) $savedModel->bottle_cost;
+                $labelCost = (float) $savedModel->label_cost;
+                $pumpCost = (float) $savedModel->pump_cost;
+                $boxCost = (float) $savedModel->box_cost;
+                $bomCogs = $savedModel->bomUnitCost();
+                $standalonePrice = (float) $savedModel->selling_price;
+                $cogsSource = 'Saved BOM';
+            } else {
+                $lineName = $productLineNames[$product->product_line_id] ?? null;
+                $visibleComponents = $visibleComponentsByLine[$lineName] ?? [];
+                $unitSizeValue = (float) ($product->unit_size ?? 0);
+
+                $liquidCost = 0.0;
+                $bottleCost = 0.0;
+                $labelCost = 0.0;
+                $pumpCost = 0.0;
+                $boxCost = 0.0;
+
+                foreach ($rawMaterials->where('product_line_id', $product->product_line_id) as $material) {
+                    $compName = $componentTypeNames[$material->component_type_id] ?? null;
+                    $unitCost = (float) $material->last_purchased_unit_cost;
+
+                    if ($compName === 'Liquid Base') {
+                        $liquidCost = round($unitCost * $unitSizeValue, 2);
+                    } elseif (in_array($compName, $visibleComponents, true)) {
+                        if ($compName === 'Bottle/Jar') {
+                            $bottleCost = $unitCost;
+                        } elseif ($compName === 'Label') {
+                            $labelCost = $unitCost;
+                        } elseif ($compName === 'Pump/Cap') {
+                            $pumpCost = $unitCost;
+                        } elseif ($compName === 'Outer Box') {
+                            $boxCost = $unitCost;
+                        }
+                    }
+                }
+
+                $bomCogs = $liquidCost + $bottleCost + $labelCost + $pumpCost + $boxCost;
+                $standalonePrice = (float) ($product->selling_price ?? 0);
+                $cogsSource = $bomCogs > 0 ? 'Auto-BOM (Raw Materials)' : 'No BOM Set';
+            }
+
+            return [$product->id => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'sku' => $product->sku,
+                'bom_cogs' => round((float) $bomCogs, 2),
+                'liquid_cost' => round($liquidCost, 2),
+                'bottle_cost' => round($bottleCost, 2),
+                'label_cost' => round($labelCost, 2),
+                'pump_cost' => round($pumpCost, 2),
+                'box_cost' => round($boxCost, 2),
+                'standalone_price' => round($standalonePrice, 2),
+                'cogs_source' => $cogsSource,
+            ]];
+        });
+
         $savedPricingModels = EcommercePricingModel::with('product')
             ->get()
             ->sortBy(fn ($model) => $model->product->name ?? '')
@@ -60,6 +138,7 @@ class EcommercePricingController extends Controller
             'rawMaterialsForPricing' => $rawMaterialsForPricing,
             'componentTypeNames' => $componentTypeNames,
             'productLineNames' => $productLineNames,
+            'stackerProducts' => $stackerProducts,
             'selectedProductId' => $request->query('product'),
         ]);
     }

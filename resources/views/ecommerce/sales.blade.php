@@ -163,60 +163,131 @@
         </div>
     </div>
 
-    {{-- ============ 30-Day WhatsApp Refill Queue ============ --}}
+    {{-- ============ Automated Customer Lifecycle Pipeline (LTV Expansion) ============ --}}
     <div id="refill-queue"></div>
+    <div id="lifecycle-pipeline"></div>
+    @php
+        $totalPipelineCount = collect($lifecyclePipeline)->sum(fn ($stage) => $stage['items']->count());
+        $defaultActiveStage = 'day7';
+        foreach (['day7', 'day30', 'day60'] as $candidateKey) {
+            if (($lifecyclePipeline[$candidateKey]['items'] ?? collect())->isNotEmpty()) {
+                $defaultActiveStage = $candidateKey;
+                break;
+            }
+        }
+    @endphp
     <div class="ec-card mt-3">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-1">
-            <h6 class="mb-0">Refill Due (Day {{ $refillWindowStartDays }}&ndash;{{ $refillWindowEndDays }})</h6>
-            <span class="ec-badge ec-badge-injection">{{ $refillQueue->count() }} customer(s) due</span>
-        </div>
-        <p class="ec-sub mb-3">
-            Customers whose last order landed {{ $refillWindowStartDays }}&ndash;{{ $refillWindowEndDays }} days ago and who haven't re-ordered since.
-            Log a phone number on a sale to surface it here.
-        </p>
-        @if ($refillQueue->isEmpty())
-            <div class="ec-chart-empty">Nobody is due a refill nudge right now.</div>
-        @else
-            <div class="table-responsive">
-                <table class="table ec-table align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Customer</th>
-                            <th>Phone</th>
-                            <th>Last Bought</th>
-                            <th class="text-end">Days Ago</th>
-                            <th>Products</th>
-                            <th class="text-end">Spent</th>
-                            <th class="text-end">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($refillQueue as $row)
-                            @php
-                                $waText = 'Hi ' . $row['customer_name'] . '! It has been ' . $row['days_since']
-                                    . ' days since your ' . $row['products']->implode(', ')
-                                    . ' from Laleen. Most customers run out right about now — want us to send your refill out today?';
-                                $waLink = 'https://wa.me/' . $row['phone'] . '?text=' . rawurlencode($waText);
-                            @endphp
-                            <tr>
-                                <td>{{ $row['customer_name'] === 'there' ? '—' : $row['customer_name'] }}</td>
-                                <td>{{ $row['display_phone'] }}</td>
-                                <td>{{ $row['last_purchase_at']->format('d M Y') }}</td>
-                                <td class="text-end">{{ $row['days_since'] }}</td>
-                                <td>{{ $row['products']->implode(', ') }}</td>
-                                <td class="text-end">PKR {{ number_format($row['total_spent'], 2) }}</td>
-                                <td class="text-end">
-                                    <a href="{{ $waLink }}" target="_blank" rel="noopener" class="ec-wa-btn">
-                                        <i class="bi bi-whatsapp"></i> Send Refill
-                                    </a>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <div>
+                <h6 class="mb-0">Automated Customer Lifecycle Pipeline (LTV Expansion)</h6>
+                <p class="ec-sub mb-0 mt-1">
+                    3-stage WhatsApp retention &amp; expansion engine across revenue channels. Log a customer phone number on sales to trigger one-click deep links.
+                </p>
             </div>
-        @endif
+            <span class="ec-badge ec-badge-injection">{{ $totalPipelineCount }} customer(s) in pipeline</span>
+        </div>
+
+        {{-- 3-Stage Pipeline Tabs --}}
+        <div class="row g-2 mt-2 mb-3" role="tablist">
+            @foreach ($lifecyclePipeline as $stageKey => $stage)
+                @php
+                    $isActiveStage = $stageKey === $defaultActiveStage;
+                    $stageCount = $stage['items']->count();
+                @endphp
+                <div class="col-md-4">
+                    <button
+                        type="button"
+                        class="w-100 text-start p-3 rounded-3 lifecycle-stage-tab {{ $isActiveStage ? 'active' : '' }}"
+                        data-lifecycle-target="lifecycle-pane-{{ $stageKey }}"
+                        style="background: {{ $isActiveStage ? 'rgba(201, 166, 107, 0.14)' : 'rgba(255, 255, 255, 0.02)' }}; border: 1px solid {{ $isActiveStage ? 'var(--ec-gold, #c9a66b)' : 'var(--ec-border, rgba(255,255,255,0.08))' }}; color: inherit; transition: all 0.15s ease;"
+                    >
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-semibold" style="font-size: 14px;">{{ $stage['title'] }}</span>
+                            <span class="ec-badge {{ $stage['badge_class'] }}">{{ $stageCount }} due</span>
+                        </div>
+                        <div class="ec-sub" style="font-size: 12px;">{{ $stage['window_label'] }} &middot; {{ $stage['subtitle'] }}</div>
+                    </button>
+                </div>
+            @endforeach
+        </div>
+
+        {{-- Stage Panes --}}
+        @foreach ($lifecyclePipeline as $stageKey => $stage)
+            @php $isActiveStage = $stageKey === $defaultActiveStage; @endphp
+            <div
+                id="lifecycle-pane-{{ $stageKey }}"
+                class="lifecycle-stage-pane"
+                style="{{ $isActiveStage ? '' : 'display: none;' }}"
+            >
+                @if ($stage['items']->isEmpty())
+                    <div class="ec-chart-empty">
+                        No customers currently in <strong>{{ $stage['title'] }}</strong> ({{ $stage['window_label'] }}).
+                    </div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table ec-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Phone</th>
+                                    <th>Channel</th>
+                                    <th>Last Bought</th>
+                                    <th class="text-end">Days Ago</th>
+                                    <th>Products</th>
+                                    <th class="text-end">Spent</th>
+                                    <th class="text-end">WhatsApp Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($stage['items'] as $row)
+                                    <tr>
+                                        <td>{{ $row['customer_name'] === 'there' ? '—' : $row['customer_name'] }}</td>
+                                        <td>{{ $row['display_phone'] }}</td>
+                                        <td>
+                                            <span class="ec-channel-badge {{ $channelBadgeClasses[$row['channel']] ?? 'ec-channel-shopify' }}">
+                                                {{ $row['channel'] }}
+                                            </span>
+                                        </td>
+                                        <td>{{ $row['last_purchase_at']->format('d M Y') }}</td>
+                                        <td class="text-end">{{ $row['days_since'] }}d</td>
+                                        <td>{{ $row['products']->implode(', ') }}</td>
+                                        <td class="text-end">PKR {{ number_format($row['total_spent'], 2) }}</td>
+                                        <td class="text-end">
+                                            <a href="{{ $row['wa_link'] }}" target="_blank" rel="noopener" class="ec-wa-btn" title="{{ $row['wa_text'] }}">
+                                                <i class="bi bi-whatsapp"></i> {{ $stage['cta_label'] }}
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+            </div>
+        @endforeach
     </div>
+
+    <script>
+        document.querySelectorAll('.lifecycle-stage-tab').forEach(function (tabBtn) {
+            tabBtn.addEventListener('click', function () {
+                const targetId = this.getAttribute('data-lifecycle-target');
+
+                document.querySelectorAll('.lifecycle-stage-tab').forEach(function (btn) {
+                    btn.classList.remove('active');
+                    btn.style.background = 'rgba(255, 255, 255, 0.02)';
+                    btn.style.borderColor = 'var(--ec-border, rgba(255,255,255,0.08))';
+                });
+
+                this.classList.add('active');
+                this.style.background = 'rgba(201, 166, 107, 0.14)';
+                this.style.borderColor = 'var(--ec-gold, #c9a66b)';
+
+                document.querySelectorAll('.lifecycle-stage-pane').forEach(function (pane) {
+                    pane.style.display = pane.id === targetId ? '' : 'none';
+                });
+            });
+        });
+    </script>
 
     {{-- ============ Bundles & Kits ============ --}}
     <div id="bundles"></div>

@@ -7,6 +7,7 @@ use App\Models\EcommerceContentCalendar;
 use App\Models\EcommerceExpense;
 use App\Models\EcommerceKpi;
 use App\Models\EcommerceMonthlyAd;
+use App\Models\EcommerceSale;
 use App\Models\PartnerTransaction;
 use App\Models\User;
 use Carbon\Carbon;
@@ -68,18 +69,44 @@ class EcommerceController extends Controller
             : now()->startOfDay();
 
         if ($from->gt($to)) {
-            [$from, $to] = [$to->copy(), $from->copy()];
+            [$from, $to] = [$to->copy(), $chartTo = $from->copy()];
         }
+
+        $rangeStart = $from->copy()->startOfDay();
+        $rangeEnd = $to->copy()->endOfDay();
 
         // Carbon day boundaries, not 'Y-m-d' strings: stored dates carry a
         // 00:00:00 time component, so a bare end-date string would compare
         // lexically BELOW the final day's value and silently drop it.
-        $kpiRows = EcommerceKpi::whereBetween('date', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
+        $kpiRows = EcommerceKpi::whereBetween('date', [$rangeStart, $rangeEnd])
             ->orderByDesc('date')
             ->get();
 
+        // Query revenue-channel sales in the date range belonging to New Customers
+        // (excluding returning buyers who had a revenue-channel purchase prior to $rangeStart).
+        $normalizePhone = fn ($phone) => preg_replace('/\D+/', '', (string) $phone);
+
+        $priorCustomerPhones = EcommerceSale::whereNotNull('customer_phone')
+            ->where('customer_phone', '!=', '')
+            ->whereNotIn('channel', EcommerceSalesController::NON_REVENUE_CHANNELS)
+            ->where('created_at', '<', $rangeStart)
+            ->pluck('customer_phone')
+            ->map($normalizePhone)
+            ->filter()
+            ->unique()
+            ->flip();
+
+        $newCustomerSales = EcommerceSale::whereNotIn('channel', EcommerceSalesController::NON_REVENUE_CHANNELS)
+            ->whereBetween('created_at', [$rangeStart, $rangeEnd])
+            ->get()
+            ->reject(function (EcommerceSale $sale) use ($normalizePhone, $priorCustomerPhones) {
+                $phone = $normalizePhone($sale->customer_phone);
+                return $phone !== '' && $priorCustomerPhones->has($phone);
+            })
+            ->values();
+
         return view('ecommerce.dashboard', [
-            'metrics' => EcommerceKpi::summarize($kpiRows),
+            'metrics' => EcommerceKpi::summarize($kpiRows, $newCustomerSales),
             'kpiRows' => $kpiRows,
             'merTarget' => EcommerceKpi::MER_TARGET,
             'repeatRateTarget' => EcommerceKpi::REPEAT_RATE_TARGET,

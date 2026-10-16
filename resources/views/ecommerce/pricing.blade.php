@@ -111,7 +111,101 @@
         @endmoduleEdit
     </form>
 
-    <div class="ec-card">
+    {{-- ============ Offer Builder / Tier Stacker (Pricing Sandbox) ============ --}}
+    <div id="tier-stacker"></div>
+    <div class="ec-card mt-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <div>
+                <h6 class="mb-0" style="text-transform: none; font-size: 16px; letter-spacing: 0;">Bundle / Tier Stacker (Offer Builder Sandbox)</h6>
+                <p class="ec-sub mb-0 mt-1">
+                    Select 2 to 4 existing products to aggregate their exact BOM COGS, test a Blended 3x Tier Price, and validate Bundle Gross Margin % &amp; Total Gross Profit before pushing high-AOV offers to Meta Ads.
+                </p>
+            </div>
+            <span class="ec-badge ec-badge-bundle" id="stackerStatusBadge">Select 2&ndash;4 products</span>
+        </div>
+
+        <div class="row g-3 mt-1">
+            @for ($slot = 1; $slot <= 4; $slot++)
+                <div class="col-md-3">
+                    <label class="form-label" for="stackerProductSlot{{ $slot }}">
+                        Product Slot {{ $slot }}
+                        <span class="ec-sub">{{ $slot <= 2 ? '(Required)' : '(Optional)' }}</span>
+                    </label>
+                    <select id="stackerProductSlot{{ $slot }}" class="form-select stacker-product-select" data-slot="{{ $slot }}">
+                        <option value="">{{ $slot <= 2 ? 'Select product #' . $slot : '— None (Optional) —' }}</option>
+                        @foreach ($products as $product)
+                            @php
+                                $sp = $stackerProducts[$product->id] ?? null;
+                                $spCogs = $sp ? number_format($sp['bom_cogs'], 2) : '0.00';
+                            @endphp
+                            <option value="{{ $product->id }}">
+                                {{ $product->name }}{{ $product->sku ? ' (' . $product->sku . ')' : '' }} — COGS PKR {{ $spCogs }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <div class="ec-sub mt-1" id="stackerSlotMeta{{ $slot }}">No item selected</div>
+                </div>
+            @endfor
+        </div>
+
+        <div class="row g-3 align-items-end mt-2">
+            <div class="col-md-5">
+                <label class="form-label" for="stackerTierPriceInput">Blended 3x Tier Price (PKR)</label>
+                <div class="d-flex gap-2">
+                    <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        id="stackerTierPriceInput"
+                        class="form-control"
+                        placeholder="e.g. 4500.00"
+                        value="0"
+                    >
+                    <button type="button" class="btn btn-outline-primary text-nowrap" id="stackerSnap3xBtn" title="Set price to 3x Aggregated BOM COGS">
+                        Use 3x COGS
+                    </button>
+                </div>
+                <div class="ec-sub mt-1" id="stackerPriceHint">
+                    3x BOM Floor: <strong id="stacker3xFloorValue">PKR 0.00</strong> &middot;
+                    Standalone Retail Value: <strong id="stackerStandaloneValue">PKR 0.00</strong>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="ec-accounting-note mb-0" id="stackerBreakdownBox">
+                    <span>📦</span>
+                    <div id="stackerBreakdownText">
+                        Pick at least <strong>2 products</strong> above to aggregate their exact BOM COGS and unlock tier margin validation.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-3">
+            <div class="col-md-4">
+                <div class="ec-card mb-0">
+                    <h6>Aggregated BOM COGS</h6>
+                    <div class="ec-value" id="stackerTotalCogs">PKR 0.00</div>
+                    <div class="ec-sub" id="stackerCogsSub">Exact sum of BOM COGS (2&ndash;4 items)</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="ec-card mb-0">
+                    <h6>Total Gross Profit (PKR)</h6>
+                    <div class="ec-value" id="stackerGrossProfit">PKR 0.00</div>
+                    <div class="ec-sub">Blended 3x Tier Price &minus; Aggregated BOM COGS</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="ec-card mb-0">
+                    <h6>Bundle Gross Margin (%)</h6>
+                    <div class="ec-value" id="stackerGrossMargin">0.00%</div>
+                    <div class="ec-sub" id="stackerMarginSub">Total Gross Profit &divide; Blended Tier Price</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ec-card mt-4">
         <h6 class="mb-3" style="text-transform: none; font-size: 14px; letter-spacing: 0;">Saved Pricing Models</h6>
         <div class="table-responsive">
             <table class="table ec-table align-middle">
@@ -164,6 +258,7 @@
         const rawMaterialsForPricing = @json($rawMaterialsForPricing);
         const componentTypeNames = @json($componentTypeNames);
         const productLineNames = @json($productLineNames);
+        const stackerProducts = @json($stackerProducts);
 
         // Which packaging component fields are relevant to each Product Line,
         // matching the strict BOM enforced server-side for production runs.
@@ -333,5 +428,138 @@
         // ?product=<id> (e.g. redirected back here right after saving)
         // shows its data immediately instead of resetting to blank.
         applyPricingForSelectedProduct();
+
+        // ---- Offer Builder / Tier Stacker (2 to 4 products) ----------------
+        const stackerSelects = Array.from(document.querySelectorAll('.stacker-product-select'));
+        const stackerTierPriceInput = document.getElementById('stackerTierPriceInput');
+        const stackerSnap3xBtn = document.getElementById('stackerSnap3xBtn');
+        const stackerStatusBadge = document.getElementById('stackerStatusBadge');
+        const stacker3xFloorValue = document.getElementById('stacker3xFloorValue');
+        const stackerStandaloneValue = document.getElementById('stackerStandaloneValue');
+        const stackerBreakdownText = document.getElementById('stackerBreakdownText');
+        const stackerTotalCogsEl = document.getElementById('stackerTotalCogs');
+        const stackerCogsSubEl = document.getElementById('stackerCogsSub');
+        const stackerGrossProfitEl = document.getElementById('stackerGrossProfit');
+        const stackerGrossMarginEl = document.getElementById('stackerGrossMargin');
+        const stackerMarginSubEl = document.getElementById('stackerMarginSub');
+        let stackerPriceManuallyEdited = false;
+
+        function getSelectedStackerItems() {
+            const selected = [];
+            stackerSelects.forEach(function (selectEl) {
+                const slot = selectEl.getAttribute('data-slot');
+                const metaEl = document.getElementById('stackerSlotMeta' + slot);
+                const prodId = selectEl.value;
+                const item = prodId && stackerProducts[prodId] ? stackerProducts[prodId] : null;
+
+                if (item) {
+                    selected.push(item);
+                    if (metaEl) {
+                        metaEl.innerHTML =
+                            'BOM COGS: <strong>PKR ' + Number(item.bom_cogs).toFixed(2) + '</strong>' +
+                            ' · Retail: PKR ' + Number(item.standalone_price).toFixed(2) +
+                            ' <span class="opacity-75">(' + item.cogs_source + ')</span>';
+                    }
+                } else if (metaEl) {
+                    metaEl.textContent = 'No item selected';
+                }
+            });
+            return selected;
+        }
+
+        function recalculateStacker(autoSet3xPrice) {
+            const selected = getSelectedStackerItems();
+            const count = selected.length;
+
+            const aggregatedCogs = selected.reduce((sum, item) => sum + (Number(item.bom_cogs) || 0), 0);
+            const standaloneTotal = selected.reduce((sum, item) => sum + (Number(item.standalone_price) || 0), 0);
+            const floor3x = aggregatedCogs * 3;
+
+            stacker3xFloorValue.textContent = 'PKR ' + floor3x.toFixed(2);
+            stackerStandaloneValue.textContent = 'PKR ' + standaloneTotal.toFixed(2);
+
+            if (count < 2) {
+                stackerStatusBadge.textContent = count === 0
+                    ? 'Select 2–4 products'
+                    : 'Select 1 more product (min 2)';
+                stackerStatusBadge.className = 'ec-badge ec-badge-bundle';
+
+                stackerTotalCogsEl.textContent = 'PKR ' + aggregatedCogs.toFixed(2);
+                stackerCogsSubEl.textContent = count === 1
+                    ? '1 item selected — pick at least 2 for a valid bundle'
+                    : 'Exact sum of BOM COGS (2–4 items)';
+                stackerGrossProfitEl.textContent = 'PKR 0.00';
+                stackerGrossMarginEl.textContent = '0.00%';
+                stackerGrossProfitEl.classList.remove('ec-positive', 'ec-negative');
+                stackerGrossMarginEl.classList.remove('ec-positive', 'ec-negative');
+                stackerMarginSubEl.textContent = 'Requires 2–4 selected products';
+
+                stackerBreakdownText.innerHTML =
+                    'Pick at least <strong>2 products</strong> (up to 4) above to aggregate their exact BOM COGS and validate your Blended 3x Tier Price.';
+                return;
+            }
+
+            if (autoSet3xPrice && !stackerPriceManuallyEdited) {
+                stackerTierPriceInput.value = floor3x.toFixed(2);
+            }
+
+            const tierPrice = parseFloat(stackerTierPriceInput.value) || 0;
+            const grossProfit = tierPrice - aggregatedCogs;
+            const grossMargin = tierPrice > 0 ? (grossProfit / tierPrice) * 100 : 0;
+            const customerSavings = standaloneTotal - tierPrice;
+
+            stackerStatusBadge.textContent = count + '-Item Tier Stack Active';
+            stackerStatusBadge.className = 'ec-badge ' + (grossMargin >= 66.6 ? 'ec-badge-injection' : 'ec-badge-bundle');
+
+            stackerTotalCogsEl.textContent = 'PKR ' + aggregatedCogs.toFixed(2);
+            stackerCogsSubEl.textContent = count + ' items aggregated · 3x Floor = PKR ' + floor3x.toFixed(2);
+
+            stackerGrossProfitEl.textContent = 'PKR ' + grossProfit.toFixed(2);
+            stackerGrossMarginEl.textContent = grossMargin.toFixed(2) + '%';
+
+            stackerGrossProfitEl.classList.toggle('ec-positive', grossProfit > 0);
+            stackerGrossProfitEl.classList.toggle('ec-negative', grossProfit < 0);
+            stackerGrossMarginEl.classList.toggle('ec-positive', grossMargin >= 66.6);
+            stackerGrossMarginEl.classList.toggle('ec-negative', grossMargin < 50 || grossProfit < 0);
+
+            stackerMarginSubEl.textContent = grossMargin >= 66.6
+                ? '✓ Clears 3x BOM COGS benchmark — ready for Meta Ads'
+                : (grossProfit > 0 ? '⚠ Below 3x BOM floor (66.7% margin target)' : '⚠ Selling below aggregated BOM COGS');
+
+            const itemBreakdown = selected
+                .map((item) => item.name + ' (COGS PKR ' + Number(item.bom_cogs).toFixed(2) + ')')
+                .join(' + ');
+
+            const savingsNote = standaloneTotal > 0
+                ? (customerSavings > 0
+                    ? ' · Customer saves <strong>PKR ' + customerSavings.toFixed(2) + '</strong> vs standalone'
+                    : ' · Priced PKR ' + Math.abs(customerSavings).toFixed(2) + ' above standalone retail')
+                : '';
+
+            stackerBreakdownText.innerHTML =
+                '<strong>' + count + '-Item BOM Stack:</strong> ' + itemBreakdown +
+                ' = <strong>PKR ' + aggregatedCogs.toFixed(2) + '</strong>' + savingsNote;
+        }
+
+        stackerSelects.forEach(function (selectEl) {
+            selectEl.addEventListener('change', function () {
+                recalculateStacker(true);
+            });
+        });
+
+        stackerTierPriceInput.addEventListener('input', function () {
+            stackerPriceManuallyEdited = true;
+            recalculateStacker(false);
+        });
+
+        stackerSnap3xBtn.addEventListener('click', function () {
+            const selected = getSelectedStackerItems();
+            const aggregatedCogs = selected.reduce((sum, item) => sum + (Number(item.bom_cogs) || 0), 0);
+            stackerPriceManuallyEdited = false;
+            stackerTierPriceInput.value = (aggregatedCogs * 3).toFixed(2);
+            recalculateStacker(false);
+        });
+
+        recalculateStacker(false);
     </script>
 @endsection
