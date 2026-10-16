@@ -2,7 +2,7 @@
      menu is the card hub at ecommerce.index — this bar exists so you can hop
      between the six financial reports without going back up to the hub. --}}
 <div class="ec-subnav">
-    <a href="{{ route('ecommerce.financials') }}" class="ec-subnav-back" title="Back to Financials">
+    <a href="{{ route('ecommerce.index') }}" class="ec-subnav-back" title="Back to Ecommerce">
         <i class="bx bx-chevron-left"></i>
     </a>
     <div class="ec-tabs">

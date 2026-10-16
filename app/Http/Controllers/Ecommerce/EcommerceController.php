@@ -44,10 +44,15 @@ class EcommerceController extends Controller
         ]);
     }
 
-    /** Sub-hub: the six financial / inventory reports. */
+    /**
+     * Financials & Inventory has no landing menu of its own — the section IS
+     * the tabbed report set, so this drops straight into Partner Ledger.
+     * Kept as a redirect rather than deleted so existing /ecommerce/financials
+     * links and bookmarks keep resolving.
+     */
     public function financials()
     {
-        return view('ecommerce.financials');
+        return redirect()->route('ecommerce.partners.index');
     }
 
     /** Sub-hub: bundles, refill queue and velocity alerts. */

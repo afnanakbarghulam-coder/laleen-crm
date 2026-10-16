@@ -11,7 +11,7 @@
 
     <div class="row g-4">
         <div class="col-md-4">
-            <a href="{{ route('ecommerce.financials') }}" class="kpi-hub-card kpi-master-card">
+            <a href="{{ route('ecommerce.partners.index') }}" class="kpi-hub-card kpi-master-card">
                 <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-wallet"></i></div>
                 <h5 class="mb-1">Financials &amp; Inventory</h5>
                 <p class="text-muted mb-2">Partner ledger, expenses, pricing, stock, sales and net profit.</p>
