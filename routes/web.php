@@ -206,9 +206,10 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis')->get('/ads-plan', [MonthlyAdController::class, 'index'])->name('ads-plan.index');
         Route::middleware('module:kpis,edit')->post('/ads-plan', [MonthlyAdController::class, 'store'])->name('ads-plan.store');
         Route::middleware('module:kpis,edit')->put('/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'update'])->name('ads-plan.update');
-        Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/phase', [MonthlyAdController::class, 'updatePhase'])->name('ads-plan.update-phase');
         Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/complete-planning', [MonthlyAdController::class, 'completePlanning'])->name('ads-plan.complete-planning');
         Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/complete-production', [MonthlyAdController::class, 'completeProduction'])->name('ads-plan.complete-production');
+        Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/scale', [MonthlyAdController::class, 'scaleAd'])->name('ads-plan.scale');
+        Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/kill', [MonthlyAdController::class, 'killAd'])->name('ads-plan.kill');
         Route::middleware('module:kpis,edit')->delete('/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'destroy'])->name('ads-plan.destroy');
 
         Route::middleware('module:kpis,edit')->post('/ad-leads', [AdLeadEntryController::class, 'store'])->name('ad-leads.store');
