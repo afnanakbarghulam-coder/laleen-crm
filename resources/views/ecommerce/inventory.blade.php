@@ -322,6 +322,29 @@
                                     <span class="position-absolute text-muted" style="right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none;">ml</span>
                                 </div>
                             </div>
+
+                            <div class="col-12">
+                                <div class="ec-accounting-note mb-0">
+                                    <span>🛡️</span>
+                                    <div>
+                                        <strong>Financial baseline (required):</strong>
+                                        These seed the product's pricing model. A product without them snapshots
+                                        <code>unit_cogs = 0</code> on every sale and reports a fake 100% margin.
+                                        Itemize the cost across bottle/label/pump/box later on Pricing &amp; Profit.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">Base Price (PKR) <span class="ec-negative">*</span></label>
+                                <input type="number" step="0.01" min="0.01" name="base_price" id="f_base_price" class="form-control" placeholder="e.g. 1500" required>
+                                <div class="ec-sub" style="margin-top: 4px;">What this sells for. Must be &gt; 0.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Default COGS (PKR) <span class="ec-negative">*</span></label>
+                                <input type="number" step="0.01" min="0.01" name="default_cogs" id="f_default_cogs" class="form-control" placeholder="e.g. 320" required>
+                                <div class="ec-sub" id="f_margin_preview" style="margin-top: 4px;">Total unit cost to make one. Must be &gt; 0.</div>
+                            </div>
                         </div>
                         <div class="modal-footer">
                             <button type="submit" class="btn btn-primary">Save</button>
@@ -332,8 +355,37 @@
         </div>
 
         <script>
+            // Live margin preview so the financial consequence of the baseline
+            // is visible before the product is ever created.
+            const basePriceInput = document.getElementById('f_base_price');
+            const defaultCogsInput = document.getElementById('f_default_cogs');
+            const marginPreview = document.getElementById('f_margin_preview');
+            const MARGIN_PREVIEW_DEFAULT = 'Total unit cost to make one. Must be > 0.';
+
+            function refreshMarginPreview() {
+                const price = parseFloat(basePriceInput.value) || 0;
+                const cogs = parseFloat(defaultCogsInput.value) || 0;
+
+                if (price <= 0 || cogs <= 0) {
+                    marginPreview.textContent = MARGIN_PREVIEW_DEFAULT;
+                    marginPreview.classList.remove('ec-positive', 'ec-negative');
+                    return;
+                }
+
+                const profit = price - cogs;
+                const margin = (profit / price) * 100;
+                marginPreview.textContent = 'Gross profit PKR ' + profit.toFixed(2) + ' · ' + margin.toFixed(1) + '% margin';
+                marginPreview.classList.toggle('ec-positive', profit > 0);
+                marginPreview.classList.toggle('ec-negative', profit <= 0);
+            }
+
+            basePriceInput.addEventListener('input', refreshMarginPreview);
+            defaultCogsInput.addEventListener('input', refreshMarginPreview);
+
             document.getElementById('addProductModal').addEventListener('hidden.bs.modal', function () {
                 document.getElementById('productForm').reset();
+                marginPreview.textContent = MARGIN_PREVIEW_DEFAULT;
+                marginPreview.classList.remove('ec-positive', 'ec-negative');
             });
         </script>
     @endmoduleEdit

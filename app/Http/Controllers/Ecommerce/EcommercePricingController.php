@@ -68,13 +68,32 @@ class EcommercePricingController extends Controller
     {
         $validated = $request->validate([
             'ecommerce_product_id' => 'required|exists:ecommerce_products,id',
+            // Individual components stay optional-and-zeroable on purpose: a
+            // Hair Oil legitimately has no Pump/Cap. What must never be zero
+            // is the TOTAL — that total is what gets snapshotted onto every
+            // sale as unit_cogs, and a zero there silently inflates margin.
             'liquid_cost' => 'nullable|numeric|min:0',
             'bottle_cost' => 'nullable|numeric|min:0',
             'label_cost' => 'nullable|numeric|min:0',
             'pump_cost' => 'nullable|numeric|min:0',
             'box_cost' => 'nullable|numeric|min:0',
-            'selling_price' => 'nullable|numeric|min:0',
+            'selling_price' => 'required|numeric|min:0.01',
+        ], [
+            'selling_price.required' => 'A selling price is required — a zero-price product corrupts Net Profit.',
+            'selling_price.min' => 'Selling price must be greater than zero.',
         ]);
+
+        $componentTotal = (float) ($validated['liquid_cost'] ?? 0)
+            + (float) ($validated['bottle_cost'] ?? 0)
+            + (float) ($validated['label_cost'] ?? 0)
+            + (float) ($validated['pump_cost'] ?? 0)
+            + (float) ($validated['box_cost'] ?? 0);
+
+        if ($componentTotal < 0.01) {
+            return back()
+                ->withInput()
+                ->withErrors(['error' => 'Total unit COGS must be greater than zero. Enter at least one real component cost — a zero-cost product reports a fake 100% margin on every sale.']);
+        }
 
         EcommercePricingModel::updateOrCreate(
             ['ecommerce_product_id' => $validated['ecommerce_product_id']],
