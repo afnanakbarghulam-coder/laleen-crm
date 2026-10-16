@@ -271,7 +271,6 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/marketing', [EcommerceController::class, 'marketing'])->name('marketing');
             Route::get('/marketing/ads-plan', [EcommerceMonthlyAdsController::class, 'index'])->name('marketing.ads-plan.index');
             Route::get('/marketing/content-calendar', [EcommerceContentCalendarController::class, 'index'])->name('marketing.content.index');
-            Route::get('/operations', [EcommerceController::class, 'operations'])->name('operations');
 
             Route::get('/partners', [EcommercePartnerController::class, 'index'])->name('partners.index');
             Route::get('/products', [EcommerceProductController::class, 'index'])->name('products.index');

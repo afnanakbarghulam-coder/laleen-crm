@@ -3,12 +3,9 @@
 namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
-use App\Models\EcommerceBundle;
 use App\Models\EcommerceContentCalendar;
 use App\Models\EcommerceExpense;
 use App\Models\EcommerceKpi;
-use App\Models\EcommerceProduct;
-use App\Models\EcommerceSale;
 use App\Models\EcommerceMonthlyAd;
 use App\Models\PartnerTransaction;
 use App\Models\User;
@@ -18,10 +15,6 @@ use Illuminate\Validation\Rule;
 
 class EcommerceController extends Controller
 {
-    /** Trailing window and threshold mirrored from EcommerceStockController. */
-    private const VELOCITY_WINDOW_DAYS = 30;
-    private const REORDER_THRESHOLD_DAYS = 21;
-
     /**
      * Top-level card menu. Each card carries one live headline figure so the
      * hub reports state rather than just being a link list.
@@ -39,8 +32,6 @@ class EcommerceController extends Controller
             'contentSlots' => $contentSlots,
             'contentLive' => $contentLive,
             'adsInFlight' => EcommerceMonthlyAd::whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count(),
-            'bundleCount' => EcommerceBundle::count(),
-            'reorderCount' => $this->reorderCount(),
         ]);
     }
 
@@ -53,16 +44,6 @@ class EcommerceController extends Controller
     public function financials()
     {
         return redirect()->route('ecommerce.partners.index');
-    }
-
-    /** Sub-hub: bundles, refill queue and velocity alerts. */
-    public function operations()
-    {
-        return view('ecommerce.operations', [
-            'bundleCount' => EcommerceBundle::count(),
-            'reorderCount' => $this->reorderCount(),
-            'refillDueCount' => $this->refillDueCount(),
-        ]);
     }
 
     /** Marketing hub — two cards: the ads plan and the content calendar. */
@@ -110,57 +91,6 @@ class EcommerceController extends Controller
         ]);
     }
 
-    /** SKUs whose cover drops to the reorder threshold at current velocity. */
-    private function reorderCount(): int
-    {
-        $unitsByProduct = EcommerceSale::where('created_at', '>=', now()->subDays(self::VELOCITY_WINDOW_DAYS))
-            ->groupBy('ecommerce_product_id')
-            ->selectRaw('ecommerce_product_id, SUM(quantity) as units')
-            ->pluck('units', 'ecommerce_product_id');
-
-        return EcommerceProduct::all()->filter(function (EcommerceProduct $product) use ($unitsByProduct) {
-            $velocity = (float) ($unitsByProduct[$product->id] ?? 0) / self::VELOCITY_WINDOW_DAYS;
-
-            if ($velocity <= 0) {
-                return false;
-            }
-
-            $stock = (float) $product->stock_pakistan + (float) $product->stock_qatar;
-
-            return ($stock / $velocity) <= self::REORDER_THRESHOLD_DAYS;
-        })->count();
-    }
-
-    /** Distinct customers sitting in the 25-35 day refill window. */
-    private function refillDueCount(): int
-    {
-        $windowStart = now()->subDays(35)->startOfDay();
-        $windowEnd = now()->subDays(25)->endOfDay();
-        $normalize = fn ($phone) => preg_replace('/\D+/', '', (string) $phone);
-
-        $due = EcommerceSale::whereNotNull('customer_phone')
-            ->where('customer_phone', '!=', '')
-            ->whereNotIn('channel', EcommerceSalesController::NON_REVENUE_CHANNELS)
-            ->whereBetween('created_at', [$windowStart, $windowEnd])
-            ->pluck('customer_phone')
-            ->map($normalize)
-            ->filter()
-            ->unique();
-
-        if ($due->isEmpty()) {
-            return 0;
-        }
-
-        $repurchased = EcommerceSale::whereNotNull('customer_phone')
-            ->whereNotIn('channel', EcommerceSalesController::NON_REVENUE_CHANNELS)
-            ->where('created_at', '>', $windowEnd)
-            ->pluck('customer_phone')
-            ->map($normalize)
-            ->filter()
-            ->unique();
-
-        return $due->diff($repurchased)->count();
-    }
 
     // ---- Daily KPI snapshots -------------------------------------------------
 

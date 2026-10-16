@@ -10,7 +10,7 @@
     </div>
 
     <div class="row g-4">
-        <div class="col-md-4">
+        <div class="col-md-6">
             <a href="{{ route('ecommerce.partners.index') }}" class="kpi-hub-card kpi-master-card">
                 <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-wallet"></i></div>
                 <h5 class="mb-1">Financials &amp; Inventory</h5>
@@ -21,24 +21,13 @@
             </a>
         </div>
 
-        <div class="col-md-4">
+        <div class="col-md-6">
             <a href="{{ route('ecommerce.marketing') }}" class="kpi-hub-card kpi-master-card">
                 <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-rocket"></i></div>
-                <h5 class="mb-1">Marketing &amp; Ads</h5>
-                <p class="text-muted mb-2">Weekly content factory and the monthly ads plan.</p>
+                <h5 class="mb-1">Marketing</h5>
+                <p class="text-muted mb-2">Weekly content calendar and the monthly ads plan.</p>
                 <span class="ec-hub-stat">
                     {{ $contentLive }}/{{ $contentSlots }} slots live &middot; {{ $adsInFlight }} ad(s) in flight
-                </span>
-            </a>
-        </div>
-
-        <div class="col-md-4">
-            <a href="{{ route('ecommerce.operations') }}" class="kpi-hub-card kpi-master-card">
-                <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-trending-up"></i></div>
-                <h5 class="mb-1">Operations &amp; Growth</h5>
-                <p class="text-muted mb-2">Bundles, the refill queue and velocity stock alerts.</p>
-                <span class="ec-hub-stat {{ $reorderCount > 0 ? 'ec-negative' : 'ec-positive' }}">
-                    {{ $bundleCount }} bundle(s) &middot; {{ $reorderCount }} SKU(s) need reorder
                 </span>
             </a>
         </div>
