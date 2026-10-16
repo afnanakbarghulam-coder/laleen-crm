@@ -12,11 +12,21 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('monthly_ads', function (Blueprint $table) {
-            $table->string('creative_asset_link')->nullable()->after('production_person_responsible');
-            $table->boolean('chk_hook')->default(false)->after('creative_asset_link');
-            $table->boolean('chk_value')->default(false)->after('chk_hook');
-            $table->boolean('chk_risk')->default(false)->after('chk_value');
-            $table->boolean('chk_cta')->default(false)->after('chk_risk');
+            if (!Schema::hasColumn('monthly_ads', 'creative_asset_link')) {
+                $table->string('creative_asset_link')->nullable();
+            }
+            if (!Schema::hasColumn('monthly_ads', 'chk_hook')) {
+                $table->boolean('chk_hook')->default(false);
+            }
+            if (!Schema::hasColumn('monthly_ads', 'chk_value')) {
+                $table->boolean('chk_value')->default(false);
+            }
+            if (!Schema::hasColumn('monthly_ads', 'chk_risk')) {
+                $table->boolean('chk_risk')->default(false);
+            }
+            if (!Schema::hasColumn('monthly_ads', 'chk_cta')) {
+                $table->boolean('chk_cta')->default(false);
+            }
         });
     }
 

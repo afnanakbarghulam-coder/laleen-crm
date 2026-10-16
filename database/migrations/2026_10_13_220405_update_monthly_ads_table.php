@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('monthly_ads', function (Blueprint $table) {
-            $table->text('offer')->nullable()->after('pre_filled_message');
-            $table->string('production_person_responsible')->nullable()->after('editing_deadline');
+            $table->text('offer')->nullable();
+            $table->string('production_person_responsible')->nullable();
             $table->dropColumn(['performance_target', 'shoot_date', 'team', 'raw_clips_date']);
         });
     }

@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('monthly_ads', function (Blueprint $table) {
-            $table->date('raw_data_deadline')->nullable()->after('live_date');
-            $table->date('final_creative_deadline')->nullable()->after('raw_data_deadline');
+            $table->date('raw_data_deadline')->nullable();
+            $table->date('final_creative_deadline')->nullable();
         });
     }
 
