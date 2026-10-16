@@ -26,10 +26,12 @@
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <p class="ec-sub mb-0">{{ $filterText }} &middot; {{ $metrics['day_count'] }} day(s) of data</p>
         <form method="GET" action="{{ route('ecommerce.index') }}" class="d-flex align-items-center flex-wrap gap-2">
-            <label for="startDateFilter" class="ec-sub mb-0">From</label>
-            <input type="date" name="start_date" id="startDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ $startDate }}">
-            <label for="endDateFilter" class="ec-sub mb-0">To</label>
-            <input type="date" name="end_date" id="endDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ $endDate }}">
+            <div class="d-flex align-items-center gap-2">
+                <label for="startDateFilter" class="ec-sub mb-0">From</label>
+                <input type="date" name="start_date" id="startDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ $startDate }}">
+                <label for="endDateFilter" class="ec-sub mb-0">To</label>
+                <input type="date" name="end_date" id="endDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ $endDate }}">
+            </div>
             <button type="submit" class="btn btn-primary btn-sm">Apply Filter</button>
         </form>
     </div>
@@ -123,7 +125,7 @@
             <h6 class="mb-0">The Weekly Content Factory</h6>
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 @foreach ($statuses as $status)
-                    <span class="ec-badge ec-status-{{ Str::slug($status) }}">{{ $status }}: {{ $statusCounts[$status] }}</span>
+                    <span class="ec-badge {{ \App\Models\EcommerceContentCalendar::statusClass($status) }}">{{ $status }}: {{ $statusCounts[$status] }}</span>
                 @endforeach
                 @moduleEdit('ecommerce')
                     @if ($calendar->isEmpty())
@@ -190,7 +192,7 @@
                                             </form>
                                         @else
                                             <div class="ec-slot-controls">
-                                                <span class="ec-badge ec-status-{{ Str::slug($slot->status) }}">{{ $slot->status }}</span>
+                                                <span class="ec-badge {{ \App\Models\EcommerceContentCalendar::statusClass($slot->status) }}">{{ $slot->status }}</span>
                                                 <span class="ec-sub">{{ $slot->person_responsible ?: 'Unassigned' }}</span>
                                             </div>
                                         @endmoduleEdit

@@ -34,6 +34,24 @@ class EcommerceContentCalendar extends Model
         'Live on Shopify/Meta',
     ];
 
+    /**
+     * Explicit status -> CSS modifier map.
+     *
+     * Deliberately not derived with Str::slug(): it strips the slash in
+     * "Live on Shopify/Meta" to "live-on-shopifymeta", which silently stopped
+     * matching the stylesheet and rendered that badge unstyled.
+     */
+    public const STATUS_CLASSES = [
+        'Scripted' => 'ec-status-scripted',
+        'Filmed' => 'ec-status-filmed',
+        'Live on Shopify/Meta' => 'ec-status-live',
+    ];
+
+    public static function statusClass(?string $status): string
+    {
+        return self::STATUS_CLASSES[$status] ?? 'ec-status-scripted';
+    }
+
     /** Suggested default pillar per day, used to seed an empty week. */
     public const DEFAULT_PILLAR_BY_DAY = [
         'Monday' => 'Transformation',

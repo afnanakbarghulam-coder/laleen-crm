@@ -221,9 +221,10 @@
         gap: 6px;
     }
 
-    .ec-status-scripted            { background: rgba(154, 144, 136, 0.18); color: var(--ec-neutral); }
-    .ec-status-filmed              { background: rgba(201, 166, 107, 0.18); color: var(--ec-gold); }
-    .ec-status-live-on-shopify-meta{ background: rgba(142, 168, 138, 0.18); color: var(--ec-success); }
+    /* Class names come from EcommerceContentCalendar::STATUS_CLASSES. */
+    .ec-status-scripted { background: rgba(154, 144, 136, 0.18); color: var(--ec-neutral); }
+    .ec-status-filmed   { background: rgba(201, 166, 107, 0.18); color: var(--ec-gold); }
+    .ec-status-live     { background: rgba(142, 168, 138, 0.18); color: var(--ec-success); }
 
     /* Bundles, refill queue & backbar conversion */
     .ec-bundle-card {
