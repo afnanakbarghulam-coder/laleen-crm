@@ -312,11 +312,8 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/kpis', [EcommerceController::class, 'storeKpi'])->name('kpis.store');
             Route::delete('/kpis/{kpi}', [EcommerceController::class, 'destroyKpi'])->name('kpis.destroy');
 
-            Route::post('/marketing/content-calendar', [EcommerceContentCalendarController::class, 'store'])->name('marketing.content.store');
-            Route::post('/marketing/content-calendar/seed', [EcommerceContentCalendarController::class, 'seedWeek'])->name('marketing.content.seed');
-            Route::put('/marketing/content-calendar/{content}', [EcommerceContentCalendarController::class, 'update'])->name('marketing.content.update');
-            Route::patch('/marketing/content-calendar/{content}/status', [EcommerceContentCalendarController::class, 'updateStatus'])->name('marketing.content.update-status');
-            Route::delete('/marketing/content-calendar/{content}', [EcommerceContentCalendarController::class, 'destroy'])->name('marketing.content.destroy');
+            Route::post('/marketing/content-calendar', [EcommerceContentCalendarController::class, 'updateWeek'])->name('marketing.content.update-week');
+            Route::patch('/marketing/content-calendar/{content}/toggle-status', [EcommerceContentCalendarController::class, 'toggleStatus'])->name('marketing.content.toggle-status');
 
             Route::post('/marketing/ads-plan', [EcommerceMonthlyAdsController::class, 'store'])->name('marketing.ads-plan.store');
             Route::put('/marketing/ads-plan/{ad}', [EcommerceMonthlyAdsController::class, 'update'])->name('marketing.ads-plan.update');
