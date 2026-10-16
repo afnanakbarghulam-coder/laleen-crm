@@ -8,8 +8,10 @@ class EcommerceSale extends Model
 {
     protected $fillable = [
         'ecommerce_product_id',
+        'ecommerce_bundle_id',
         'reference_id',
         'customer_name',
+        'customer_phone',
         'quantity',
         'channel',
         'reason',
@@ -44,5 +46,18 @@ class EcommerceSale extends Model
     public function product()
     {
         return $this->belongsTo(EcommerceProduct::class, 'ecommerce_product_id');
+    }
+
+    public function bundle()
+    {
+        return $this->belongsTo(EcommerceBundle::class, 'ecommerce_bundle_id');
+    }
+
+    /** Digits only, for building a wa.me deep link. */
+    public function whatsappNumber(): ?string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $this->customer_phone);
+
+        return $digits !== '' ? $digits : null;
     }
 }

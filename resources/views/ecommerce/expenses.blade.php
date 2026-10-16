@@ -35,9 +35,14 @@
             <div class="ec-card">
                 <h6>Available Balance (Runway)</h6>
                 <div class="ec-value {{ $remainingBalance >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($remainingBalance, 2) }}</div>
-                <div class="ec-sub">Capital Pool &minus; Total Ecommerce Expenses</div>
+                <div class="ec-sub">Capital Pool &minus; Partner-Funded Expenses</div>
             </div>
         </div>
+    </div>
+
+    <div class="ec-accounting-note">
+        <span>💡</span>
+        <div><strong>How inventory is accounted for:</strong> {{ \App\Models\EcommerceExpense::BOM_ACCOUNTING_NOTE }}</div>
     </div>
 
     <div class="ec-card">

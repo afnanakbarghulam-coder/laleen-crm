@@ -58,6 +58,21 @@ class EcommerceProduct extends Model
         return $this->hasMany(ProductionRun::class, 'ecommerce_product_id');
     }
 
+    public function sales()
+    {
+        return $this->hasMany(EcommerceSale::class, 'ecommerce_product_id');
+    }
+
+    public function pricingModel()
+    {
+        return $this->hasOne(EcommercePricingModel::class, 'ecommerce_product_id');
+    }
+
+    public function bundleItems()
+    {
+        return $this->hasMany(EcommerceBundleItem::class, 'ecommerce_product_id');
+    }
+
     public function productLine()
     {
         return $this->belongsTo(EcommerceProductLine::class, 'product_line_id');

@@ -20,7 +20,7 @@
     <div class="ec-header">
         <div>
             <h4>Net Profit</h4>
-            <p>True bottom line after stickers, bottles, labels, courier, packaging, taxes, and ad spend are deducted from sales revenue.</p>
+            <p>True bottom line: sales revenue less unit COGS, per-sale shipping/tax/ad spend, and operating expenses.</p>
         </div>
     </div>
 
@@ -67,7 +67,10 @@
             <div class="ec-card">
                 <h6>Operating Expenses</h6>
                 <div class="ec-value ec-negative">PKR {{ number_format($totalDeductions, 2) }}</div>
-                <div class="ec-sub">Stickers, bottles, labels, courier, packaging, taxes &amp; Meta ads</div>
+                <div class="ec-sub">
+                    Operating costs PKR {{ number_format($expenseDeductions, 2) }}
+                    &middot; Per-sale shipping/tax/ads PKR {{ number_format($saleLevelDeductions, 2) }}
+                </div>
             </div>
         </div>
         <div class="col-md-6">
@@ -77,6 +80,11 @@
                 <div class="ec-sub">Gross Profit &minus; Operating Expenses &middot; {{ number_format($trueNetMargin, 1) }}% margin</div>
             </div>
         </div>
+    </div>
+
+    <div class="ec-accounting-note mt-3">
+        <span>💡</span>
+        <div><strong>Why bottles &amp; labels aren't in Operating Expenses:</strong> {{ $bomAccountingNote }}</div>
     </div>
 
     <div class="ec-card ec-chart-card mt-3 mb-3">
@@ -107,6 +115,39 @@
                     <div class="ec-breakdown-pct">{{ number_format($pct, 1) }}%</div>
                 </div>
             @endforeach
+        @endif
+    </div>
+
+    <div class="ec-card mt-3">
+        <h6 style="margin-bottom: 4px;">Partner Profit Share</h6>
+        <p class="ec-sub mb-3">{{ $filterText }} &middot; Each partner's equity slice of True Net Profit (PKR {{ number_format($trueNetProfit, 2) }}).</p>
+        @if ($partnerProfitShare->isEmpty())
+            <div class="ec-chart-empty">No partners yet &mdash; add them on the Partner Ledger tab.</div>
+        @else
+            @php
+                $totalEquity = (float) $partnerProfitShare->sum('equity_percentage');
+                $totalAllocated = (float) $partnerProfitShare->sum('share');
+            @endphp
+            @foreach ($partnerProfitShare as $row)
+                <div class="ec-partner-share-row">
+                    <div class="ec-partner-share-name">{{ $row['partner']->name }}</div>
+                    <div class="ec-partner-share-equity">{{ number_format($row['equity_percentage'], 4) }}% equity</div>
+                    <div class="ec-partner-share-amount {{ $row['share'] >= 0 ? 'ec-positive' : 'ec-negative' }}">
+                        PKR {{ number_format($row['share'], 2) }}
+                    </div>
+                </div>
+            @endforeach
+            <div class="ec-partner-share-total">
+                <div style="flex: 1; min-width: 0;">Total allocated</div>
+                <div>{{ number_format($totalEquity, 4) }}%</div>
+                <div style="min-width: 150px; text-align: right; font-weight: 700;">PKR {{ number_format($totalAllocated, 2) }}</div>
+            </div>
+            @if (abs($totalEquity - 100) > 0.01)
+                <div class="ec-sub ec-negative mt-2">
+                    ⚠ Equity across all partners totals {{ number_format($totalEquity, 4) }}%, not 100% &mdash;
+                    PKR {{ number_format($trueNetProfit - $totalAllocated, 2) }} of True Net Profit is unallocated.
+                </div>
+            @endif
         @endif
     </div>
 

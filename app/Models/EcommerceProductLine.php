@@ -15,9 +15,14 @@ class EcommerceProductLine extends Model
      * types may be logged against a product line (expense restock dropdown)
      * and which components a production run must have in stock (BOM lock).
      */
+    public const SERUM = 'Serum';
+    public const HAIR_MASK = 'Hair Mask';
+
     public const COMPONENT_TYPES_BY_PRODUCT_LINE = [
         self::SHAMPOO => ['Bottle/Jar', 'Pump/Cap', 'Label', 'Liquid Base', 'Outer Box'],
         self::HAIR_OIL => ['Bottle/Jar', 'Label', 'Liquid Base', 'Outer Box'],
+        self::SERUM => ['Bottle/Jar', 'Pump/Cap', 'Label', 'Liquid Base', 'Outer Box'],
+        self::HAIR_MASK => ['Bottle/Jar', 'Label', 'Liquid Base', 'Outer Box'],
     ];
 
     protected $fillable = [

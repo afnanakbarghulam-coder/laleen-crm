@@ -3,6 +3,10 @@
 
 @include('ecommerce._styles')
 
+@php
+    $canEdit = auth()->check() && auth()->user()->canEdit('ecommerce');
+@endphp
+
 @section('content')
     <div class="ec-header">
         <div>
@@ -25,7 +29,7 @@
                 </select>
             </div>
             <div class="col-md-4">
-                <button type="button" class="btn btn-outline-primary w-100" id="pricingAutoFillBtn">Auto-Fill Costs from Inventory</button>
+                <button type="button" class="btn btn-outline-primary w-100" id="pricingAutoFillBtn" {{ $canEdit ? '' : 'disabled' }}>Auto-Fill Costs from Inventory</button>
             </div>
         </div>
         @if ($products->isEmpty())
@@ -33,6 +37,9 @@
         @elseif ($rawMaterials->isEmpty())
             <p class="ec-sub mb-0 mt-2">No raw materials yet &mdash; add some via a restock expense first.</p>
         @endif
+        @unless ($canEdit)
+            <p class="ec-sub mb-0 mt-2">View-only access &mdash; select a product to review its saved costs and margin. Editing is disabled.</p>
+        @endunless
     </div>
 
     <form id="pricingForm" action="{{ route('ecommerce.pricing.store') }}" method="POST">
@@ -44,23 +51,23 @@
             <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label">Liquid Base Cost</label>
-                    <input type="number" step="0.01" min="0" name="liquid_cost" id="pricingLiquidCost" class="form-control pricing-input" value="0">
+                    <input type="number" step="0.01" min="0" name="liquid_cost" id="pricingLiquidCost" class="form-control pricing-input" value="0" {{ $canEdit ? '' : 'readonly' }}>
                 </div>
                 <div class="col-md-4" id="pricingBottleWrapper">
                     <label class="form-label">Bottle/Jar Cost</label>
-                    <input type="number" step="0.01" min="0" name="bottle_cost" id="pricingBottleCost" class="form-control pricing-input" value="0">
+                    <input type="number" step="0.01" min="0" name="bottle_cost" id="pricingBottleCost" class="form-control pricing-input" value="0" {{ $canEdit ? '' : 'readonly' }}>
                 </div>
                 <div class="col-md-4" id="pricingLabelWrapper">
                     <label class="form-label">Label Cost</label>
-                    <input type="number" step="0.01" min="0" name="label_cost" id="pricingLabelCost" class="form-control pricing-input" value="0">
+                    <input type="number" step="0.01" min="0" name="label_cost" id="pricingLabelCost" class="form-control pricing-input" value="0" {{ $canEdit ? '' : 'readonly' }}>
                 </div>
                 <div class="col-md-4" id="pricingPumpWrapper">
                     <label class="form-label">Pump/Cap Cost</label>
-                    <input type="number" step="0.01" min="0" name="pump_cost" id="pricingPumpCost" class="form-control pricing-input" value="0">
+                    <input type="number" step="0.01" min="0" name="pump_cost" id="pricingPumpCost" class="form-control pricing-input" value="0" {{ $canEdit ? '' : 'readonly' }}>
                 </div>
                 <div class="col-md-4" id="pricingBoxWrapper">
                     <label class="form-label">Outer Box Cost</label>
-                    <input type="number" step="0.01" min="0" name="box_cost" id="pricingBoxCost" class="form-control pricing-input" value="0">
+                    <input type="number" step="0.01" min="0" name="box_cost" id="pricingBoxCost" class="form-control pricing-input" value="0" {{ $canEdit ? '' : 'readonly' }}>
                 </div>
             </div>
         </div>
@@ -70,7 +77,7 @@
             <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label">Proposed Selling Price (PKR)</label>
-                    <input type="number" step="0.01" min="0" name="selling_price" id="pricingSellingPrice" class="form-control pricing-input" value="0">
+                    <input type="number" step="0.01" min="0" name="selling_price" id="pricingSellingPrice" class="form-control pricing-input" value="0" {{ $canEdit ? '' : 'readonly' }}>
                 </div>
             </div>
         </div>
@@ -151,6 +158,7 @@
     </div>
 
     <script>
+        const CAN_EDIT = @json($canEdit);
         const pricingData = @json($pricingModels);
         const productsForPricing = @json($productsForPricing);
         const rawMaterialsForPricing = @json($rawMaterialsForPricing);
@@ -312,8 +320,9 @@
             recalculate();
 
             // No saved pricing model yet for this product — auto-fill from
-            // Tier 1 inventory instead of leaving costs at 0.
-            if (!saved && productId !== '') {
+            // Tier 1 inventory instead of leaving costs at 0. Skipped for
+            // view-only users so they only ever see persisted figures.
+            if (CAN_EDIT && !saved && productId !== '') {
                 autoFillCostsFromInventory();
             }
         }

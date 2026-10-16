@@ -28,7 +28,7 @@
             <div class="ec-card">
                 <h6>Available Balance (Runway)</h6>
                 <div class="ec-value {{ $remainingBalance >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($remainingBalance, 2) }}</div>
-                <div class="ec-sub">Capital Pool &minus; Total Ecommerce Expenses</div>
+                <div class="ec-sub">Capital Pool &minus; Partner-Funded Expenses</div>
             </div>
         </div>
     </div>
@@ -40,6 +40,9 @@
                     <h6>{{ $row['partner']->name }}</h6>
                     <div class="ec-value">PKR {{ number_format($row['contributed'], 2) }}</div>
                     <div class="ec-sub">{{ number_format($row['percent'], 1) }}% of total pool</div>
+                    <div class="mt-2">
+                        <span class="ec-badge ec-badge-distribution">Distributed: PKR {{ number_format($row['distributed'], 2) }}</span>
+                    </div>
                     <hr style="border-color: var(--ec-border); margin: 10px 0;">
                     @if ($row['balance'] <= 0.01)
                         <div class="ec-sub ec-positive">Fully Matched</div>
@@ -78,7 +81,9 @@
                             <td>{{ $transaction->partner->name }}</td>
                             <td><span class="ec-badge ec-badge-{{ $transaction->type }}">{{ ucfirst($transaction->type) }}</span></td>
                             <td>{{ $transaction->category ?? '—' }}</td>
-                            <td>PKR {{ number_format($transaction->amount, 2) }}</td>
+                            <td class="{{ $transaction->type === 'distribution' ? 'ec-negative' : '' }}">
+                                {{ $transaction->type === 'distribution' ? '−' : '+' }} PKR {{ number_format($transaction->amount, 2) }}
+                            </td>
                             <td>{{ $transaction->reference_note ?? '—' }}</td>
                             @moduleEdit('ecommerce')
                                 <td>
@@ -152,8 +157,10 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Type</label>
-                                <input type="text" class="form-control" value="Injection (money in)" disabled>
-                                <input type="hidden" name="type" value="injection">
+                                <select name="type" id="transactionTypeSelect" class="form-select" required>
+                                    <option value="injection" selected>Capital Injection (Money In)</option>
+                                    <option value="distribution">Profit Distribution / Withdrawal (Money Out)</option>
+                                </select>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Amount (PKR)</label>

@@ -34,12 +34,31 @@
         <span class="ec-badge ec-badge-live">Live (Unfiltered)</span>
     </div>
 
+    @php
+        $reorderCount = collect($velocity)->where('needs_reorder', true)->count();
+        $stalledCount = collect($velocity)->where('is_stalled', true)->count();
+    @endphp
+
     <div class="row mb-3">
         <div class="col-md-4">
             <div class="ec-card ec-card-highlight">
                 <h6>Total Capital in Inventory</h6>
                 <div class="ec-value">PKR {{ number_format($totalCapitalInInventory, 2) }}</div>
                 <div class="ec-sub">Unsold stock (Pakistan + Qatar) &times; BOM cost per unit</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="ec-card">
+                <h6>Needs Reorder</h6>
+                <div class="ec-value {{ $reorderCount > 0 ? 'ec-negative' : 'ec-positive' }}">{{ $reorderCount }}</div>
+                <div class="ec-sub">SKUs with &le; {{ $reorderThresholdDays }} days of cover at current velocity</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="ec-card">
+                <h6>Stalled SKUs</h6>
+                <div class="ec-value">{{ $stalledCount }}</div>
+                <div class="ec-sub">No units moved in the last {{ $velocityWindowDays }} days</div>
             </div>
         </div>
     </div>
@@ -55,6 +74,7 @@
                         <th rowspan="2" style="vertical-align: middle;">Total Value</th>
                         <th colspan="3" class="ec-table-group-header">Pakistan (Warehouse)</th>
                         <th colspan="3" class="ec-table-group-header">Qatar (Retail)</th>
+                        <th colspan="2" class="ec-table-group-header">Velocity &amp; Cover</th>
                     </tr>
                     <tr>
                         <th>Total Produced</th>
@@ -63,13 +83,19 @@
                         <th>Transferred In</th>
                         <th>Sold (Salon)</th>
                         <th>Remaining</th>
+                        <th class="ec-col-divider">Sales Velocity</th>
+                        <th>Stock Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($products as $product)
                         @php
-                            $totalProduced = (float) $product->stock_pakistan + (float) $product->sold_pakistan;
+                            // Transfers move units out of stock_pakistan without ever
+                            // touching sold_pakistan, so Qatar's balances have to be
+                            // added back in or every transferred unit silently
+                            // disappears from lifetime production.
                             $transferredIn = (float) $product->stock_qatar + (float) $product->sold_qatar;
+                            $totalProduced = (float) $product->stock_pakistan + (float) $product->sold_pakistan + $transferredIn;
                             // "Last Produced" always reflects the true most recent run,
                             // regardless of the date filter — it's a live fact, not a
                             // historical report. Only the Batch History modal's list
@@ -90,6 +116,7 @@
                                 : 0.0;
                             $totalStockBothLocations = (float) $product->stock_pakistan + (float) $product->stock_qatar;
                             $totalValue = $totalStockBothLocations * $unitCost;
+                            $v = $velocity[$product->id] ?? null;
                         @endphp
                         <tr>
                             <td>{{ $product->name }}</td>
@@ -119,21 +146,32 @@
                             <td>{{ number_format($product->sold_pakistan, 0) }}</td>
                             <td class="ec-col-divider ec-stock-emphasis {{ $product->stock_pakistan < 0 ? 'ec-negative' : '' }}">
                                 {{ number_format($product->stock_pakistan, 0) }}
-                                @if ($product->stock_pakistan < 10)
-                                    <span class="badge bg-danger">Low Stock</span>
-                                @endif
                             </td>
                             <td>{{ number_format($transferredIn, 0) }}</td>
                             <td>{{ number_format($product->sold_qatar, 0) }}</td>
                             <td class="ec-stock-emphasis {{ $product->stock_qatar < 0 ? 'ec-negative' : '' }}">
                                 {{ number_format($product->stock_qatar, 0) }}
-                                @if ($product->stock_qatar < 10)
-                                    <span class="badge bg-danger">Low Stock</span>
+                            </td>
+                            <td class="ec-col-divider">
+                                @if ($v)
+                                    <div class="ec-velocity-rate">{{ number_format($v['daily_velocity'], 2) }} /day</div>
+                                    <div class="ec-sub" style="margin-top: 2px;">{{ number_format($v['units_sold'], 0) }} units in {{ $velocityWindowDays }}d</div>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if (!$v || $v['is_stalled'])
+                                    <span class="ec-badge ec-badge-stalled">No movement ({{ $velocityWindowDays }}d)</span>
+                                @elseif ($v['needs_reorder'])
+                                    <span class="ec-badge ec-badge-reorder">⚠️ Reorder ({{ round($v['days_remaining']) }} days left)</span>
+                                @else
+                                    <span class="ec-badge ec-badge-healthy">✓ {{ round($v['days_remaining']) }} days cover</span>
                                 @endif
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="10" class="text-center text-muted">No finished goods yet &mdash; add some in Inventory &amp; Production first.</td></tr>
+                        <tr><td colspan="12" class="text-center text-muted">No finished goods yet &mdash; add some in Inventory &amp; Production first.</td></tr>
                     @endforelse
                 </tbody>
             </table>
