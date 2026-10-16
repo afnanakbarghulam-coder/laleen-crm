@@ -15,7 +15,7 @@
             <a href="{{ route('ecommerce.marketing.ads-plan.index') }}" class="kpi-hub-card kpi-master-card">
                 <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-rocket"></i></div>
                 <h5 class="mb-1">Monthly Ads Plan</h5>
-                <p class="text-muted mb-2">Kanban board gating every ad through Planning, Production, Testing and Scaling on real CPL.</p>
+                <p class="text-muted mb-2">Kanban board tracking every ad through Planning, Production, Testing, and Scaling.</p>
                 <span class="ec-hub-stat">
                     {{ $adsInFlight }} in flight &middot; {{ $adsScaling }} scaling
                 </span>
