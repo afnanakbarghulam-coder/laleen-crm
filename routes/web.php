@@ -263,7 +263,12 @@ Route::middleware(['auth'])->group(function () {
     // ---- Ecommerce ----
     Route::prefix('ecommerce')->name('ecommerce.')->group(function () {
         Route::middleware('module:ecommerce')->group(function () {
-            Route::get('/', [EcommerceController::class, 'index'])->name('index');
+            Route::get('/', [EcommerceController::class, 'hub'])->name('index');
+            Route::get('/dashboard', [EcommerceController::class, 'dashboard'])->name('dashboard');
+            Route::get('/financials', [EcommerceController::class, 'financials'])->name('financials');
+            Route::get('/marketing', [EcommerceController::class, 'marketing'])->name('marketing');
+            Route::get('/operations', [EcommerceController::class, 'operations'])->name('operations');
+
             Route::get('/partners', [EcommercePartnerController::class, 'index'])->name('partners.index');
             Route::get('/products', [EcommerceProductController::class, 'index'])->name('products.index');
             Route::get('/expenses', [EcommerceExpenseController::class, 'index'])->name('expenses.index');

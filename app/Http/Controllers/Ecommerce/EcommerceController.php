@@ -3,8 +3,14 @@
 namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
+use App\Models\EcommerceBundle;
 use App\Models\EcommerceContentCalendar;
+use App\Models\EcommerceExpense;
 use App\Models\EcommerceKpi;
+use App\Models\EcommerceProduct;
+use App\Models\EcommerceSale;
+use App\Models\KpiMonthlyAd;
+use App\Models\PartnerTransaction;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -12,7 +18,84 @@ use Illuminate\Validation\Rule;
 
 class EcommerceController extends Controller
 {
-    public function index(Request $request)
+    /** Trailing window and threshold mirrored from EcommerceStockController. */
+    private const VELOCITY_WINDOW_DAYS = 30;
+    private const REORDER_THRESHOLD_DAYS = 21;
+
+    /**
+     * Top-level card menu. Each card carries one live headline figure so the
+     * hub reports state rather than just being a link list.
+     */
+    public function hub()
+    {
+        $capitalPool = (float) PartnerTransaction::where('type', 'injection')->sum('amount');
+        $partnerFundedExpenses = (float) EcommerceExpense::where('funding_source', 'partner_ledger')->sum('amount');
+
+        $contentSlots = EcommerceContentCalendar::count();
+        $contentLive = EcommerceContentCalendar::where('status', 'Live on Shopify/Meta')->count();
+
+        return view('ecommerce.hub', [
+            'runway' => $capitalPool - $partnerFundedExpenses,
+            'contentSlots' => $contentSlots,
+            'contentLive' => $contentLive,
+            'adsInFlight' => KpiMonthlyAd::whereIn('phase', ['Planning', 'Production', 'Testing', 'Scaling'])->count(),
+            'bundleCount' => EcommerceBundle::count(),
+            'reorderCount' => $this->reorderCount(),
+        ]);
+    }
+
+    /** Sub-hub: the six financial / inventory reports. */
+    public function financials()
+    {
+        return view('ecommerce.financials');
+    }
+
+    /** Sub-hub: bundles, refill queue and velocity alerts. */
+    public function operations()
+    {
+        return view('ecommerce.operations', [
+            'bundleCount' => EcommerceBundle::count(),
+            'reorderCount' => $this->reorderCount(),
+            'refillDueCount' => $this->refillDueCount(),
+        ]);
+    }
+
+    /**
+     * Marketing hub — hosts the Weekly Content Factory and links out to the
+     * Monthly Ads Plan Kanban board.
+     */
+    public function marketing()
+    {
+        $calendar = EcommerceContentCalendar::all()
+            ->sortBy([
+                fn ($a, $b) => $a->dayIndex() <=> $b->dayIndex(),
+                fn ($a, $b) => $a->id <=> $b->id,
+            ])
+            ->values();
+
+        $calendarByDay = collect(EcommerceContentCalendar::DAYS_OF_WEEK)
+            ->mapWithKeys(fn ($day) => [$day => $calendar->where('day_of_week', $day)->values()]);
+
+        $statusCounts = collect(EcommerceContentCalendar::STATUSES)
+            ->mapWithKeys(fn ($status) => [$status => $calendar->where('status', $status)->count()]);
+
+        $adsByPhase = collect(KpiMonthlyAd::BOARD_PHASES)
+            ->mapWithKeys(fn ($phase) => [$phase => KpiMonthlyAd::where('phase', $phase)->count()]);
+
+        return view('ecommerce.marketing.index', [
+            'calendar' => $calendar,
+            'calendarByDay' => $calendarByDay,
+            'statusCounts' => $statusCounts,
+            'adsByPhase' => $adsByPhase,
+            'staff' => User::orderBy('name')->get(['id', 'name']),
+            'days' => EcommerceContentCalendar::DAYS_OF_WEEK,
+            'contentTypes' => EcommerceContentCalendar::CONTENT_TYPES,
+            'statuses' => EcommerceContentCalendar::STATUSES,
+        ]);
+    }
+
+    /** The Dashboard of Truth — blended acquisition economics. */
+    public function dashboard(Request $request)
     {
         $from = $request->filled('start_date')
             ? Carbon::parse($request->start_date)->startOfDay()
@@ -32,32 +115,9 @@ class EcommerceController extends Controller
             ->orderByDesc('date')
             ->get();
 
-        $metrics = EcommerceKpi::summarize($kpiRows);
-
-        $calendar = EcommerceContentCalendar::all()
-            ->sortBy([
-                fn ($a, $b) => $a->dayIndex() <=> $b->dayIndex(),
-                fn ($a, $b) => $a->id <=> $b->id,
-            ])
-            ->values();
-
-        $calendarByDay = collect(EcommerceContentCalendar::DAYS_OF_WEEK)
-            ->mapWithKeys(fn ($day) => [$day => $calendar->where('day_of_week', $day)->values()]);
-
-        $statusCounts = collect(EcommerceContentCalendar::STATUSES)
-            ->mapWithKeys(fn ($status) => [$status => $calendar->where('status', $status)->count()]);
-
-        return view('ecommerce.index', [
-            'metrics' => $metrics,
+        return view('ecommerce.dashboard', [
+            'metrics' => EcommerceKpi::summarize($kpiRows),
             'kpiRows' => $kpiRows,
-            'calendar' => $calendar,
-            'calendarByDay' => $calendarByDay,
-            'statusCounts' => $statusCounts,
-            'staff' => User::orderBy('name')->get(['id', 'name']),
-            'days' => EcommerceContentCalendar::DAYS_OF_WEEK,
-            'contentTypes' => EcommerceContentCalendar::CONTENT_TYPES,
-            'statuses' => EcommerceContentCalendar::STATUSES,
-            'defaultPillarByDay' => EcommerceContentCalendar::DEFAULT_PILLAR_BY_DAY,
             'merTarget' => EcommerceKpi::MER_TARGET,
             'repeatRateTarget' => EcommerceKpi::REPEAT_RATE_TARGET,
             'startDate' => $request->input('start_date'),
@@ -66,6 +126,58 @@ class EcommerceController extends Controller
                 ? 'From ' . $from->format('M d, Y') . ' to ' . $to->format('M d, Y')
                 : 'This month to date',
         ]);
+    }
+
+    /** SKUs whose cover drops to the reorder threshold at current velocity. */
+    private function reorderCount(): int
+    {
+        $unitsByProduct = EcommerceSale::where('created_at', '>=', now()->subDays(self::VELOCITY_WINDOW_DAYS))
+            ->groupBy('ecommerce_product_id')
+            ->selectRaw('ecommerce_product_id, SUM(quantity) as units')
+            ->pluck('units', 'ecommerce_product_id');
+
+        return EcommerceProduct::all()->filter(function (EcommerceProduct $product) use ($unitsByProduct) {
+            $velocity = (float) ($unitsByProduct[$product->id] ?? 0) / self::VELOCITY_WINDOW_DAYS;
+
+            if ($velocity <= 0) {
+                return false;
+            }
+
+            $stock = (float) $product->stock_pakistan + (float) $product->stock_qatar;
+
+            return ($stock / $velocity) <= self::REORDER_THRESHOLD_DAYS;
+        })->count();
+    }
+
+    /** Distinct customers sitting in the 25-35 day refill window. */
+    private function refillDueCount(): int
+    {
+        $windowStart = now()->subDays(35)->startOfDay();
+        $windowEnd = now()->subDays(25)->endOfDay();
+        $normalize = fn ($phone) => preg_replace('/\D+/', '', (string) $phone);
+
+        $due = EcommerceSale::whereNotNull('customer_phone')
+            ->where('customer_phone', '!=', '')
+            ->whereNotIn('channel', EcommerceSalesController::NON_REVENUE_CHANNELS)
+            ->whereBetween('created_at', [$windowStart, $windowEnd])
+            ->pluck('customer_phone')
+            ->map($normalize)
+            ->filter()
+            ->unique();
+
+        if ($due->isEmpty()) {
+            return 0;
+        }
+
+        $repurchased = EcommerceSale::whereNotNull('customer_phone')
+            ->whereNotIn('channel', EcommerceSalesController::NON_REVENUE_CHANNELS)
+            ->where('created_at', '>', $windowEnd)
+            ->pluck('customer_phone')
+            ->map($normalize)
+            ->filter()
+            ->unique();
+
+        return $due->diff($repurchased)->count();
     }
 
     // ---- Daily KPI snapshots -------------------------------------------------

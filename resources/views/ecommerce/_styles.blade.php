@@ -115,6 +115,35 @@
         white-space: nowrap;
     }
 
+    /* ---- Financials secondary nav ---- */
+    .ec-subnav {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+    }
+
+    .ec-subnav-back {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        flex-shrink: 0;
+        border-radius: 9px;
+        border: 1px solid var(--ec-border-strong);
+        color: var(--ec-ink);
+        font-size: 20px;
+        text-decoration: none;
+        transition: background .15s ease;
+    }
+
+    .ec-subnav-back:hover {
+        background: rgba(217, 143, 131, 0.1);
+        color: var(--ec-accent-hover, #e6a99d);
+    }
+
     /* ---- Dashboard of Truth: KPI cards ---- */
     .ec-kpi-card {
         border: 1px solid var(--ec-border);

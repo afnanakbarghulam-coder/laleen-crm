@@ -97,6 +97,173 @@
         </div>
     </div>
 
+    {{-- ============ Salon Backbar-to-Retail Conversion ============ --}}
+    <div id="backbar-conversion"></div>
+    @php
+        $bbEfficiency = $backbarConversion['efficiency'];
+        $bbMeterWidth = $bbEfficiency === null ? 0 : min(100, max(0, $bbEfficiency));
+    @endphp
+    <div class="row g-3 mt-1">
+        <div class="col-md-4">
+            <div class="ec-card ec-card-highlight">
+                <h6>Salon Backbar Conversion Efficiency</h6>
+                <div class="ec-value {{ $bbEfficiency === null ? '' : ($bbEfficiency >= 100 ? 'ec-positive' : 'ec-negative') }}">
+                    {{ $bbEfficiency === null ? '—' : number_format($bbEfficiency, 0) . '%' }}
+                </div>
+                <div class="ec-sub">
+                    {{ number_format($backbarConversion['total_retail_units'], 0) }} retail units sold per
+                    {{ number_format($backbarConversion['total_backbar_units'], 0) }} backbar units used
+                </div>
+                <div class="ec-conversion-meter">
+                    <div class="ec-conversion-fill" style="width: {{ $bbMeterWidth }}%;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="ec-card">
+                <h6 style="margin-bottom: 4px;">Are stylists converting wash-basin treatments into retail?</h6>
+                <p class="ec-sub mb-3">
+                    Backbar consumption is logged salon-wide (no branch), so the ratio is per product; branch columns split the retail side only.
+                </p>
+                @if ($backbarConversion['by_product']->isEmpty())
+                    <div class="ec-chart-empty">No backbar or salon retail activity logged yet.</div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table ec-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th class="text-end">Backbar Used</th>
+                                    <th class="text-end">Retail Sold</th>
+                                    <th class="text-end">Old Airport</th>
+                                    <th class="text-end">Wakrah</th>
+                                    <th class="text-end">Retail Revenue</th>
+                                    <th class="text-end">Conversion</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($backbarConversion['by_product'] as $row)
+                                    <tr>
+                                        <td>{{ $row['product']->name ?? 'Deleted product' }}</td>
+                                        <td class="text-end">{{ number_format($row['backbar_units'], 0) }}</td>
+                                        <td class="text-end">{{ number_format($row['retail_units'], 0) }}</td>
+                                        <td class="text-end">{{ number_format($row['old_airport_units'], 0) }}</td>
+                                        <td class="text-end">{{ number_format($row['wakrah_units'], 0) }}</td>
+                                        <td class="text-end">PKR {{ number_format($row['retail_revenue'], 2) }}</td>
+                                        <td class="text-end {{ $row['ratio'] === null ? '' : ($row['ratio'] >= 100 ? 'ec-positive' : 'ec-negative') }}">
+                                            {{ $row['ratio'] === null ? '—' : number_format($row['ratio'], 0) . '%' }}
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+
+    {{-- ============ 30-Day WhatsApp Refill Queue ============ --}}
+    <div id="refill-queue"></div>
+    <div class="ec-card mt-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-1">
+            <h6 class="mb-0">Refill Due (Day {{ $refillWindowStartDays }}&ndash;{{ $refillWindowEndDays }})</h6>
+            <span class="ec-badge ec-badge-injection">{{ $refillQueue->count() }} customer(s) due</span>
+        </div>
+        <p class="ec-sub mb-3">
+            Customers whose last order landed {{ $refillWindowStartDays }}&ndash;{{ $refillWindowEndDays }} days ago and who haven't re-ordered since.
+            Log a phone number on a sale to surface it here.
+        </p>
+        @if ($refillQueue->isEmpty())
+            <div class="ec-chart-empty">Nobody is due a refill nudge right now.</div>
+        @else
+            <div class="table-responsive">
+                <table class="table ec-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Customer</th>
+                            <th>Phone</th>
+                            <th>Last Bought</th>
+                            <th class="text-end">Days Ago</th>
+                            <th>Products</th>
+                            <th class="text-end">Spent</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($refillQueue as $row)
+                            @php
+                                $waText = 'Hi ' . $row['customer_name'] . '! It has been ' . $row['days_since']
+                                    . ' days since your ' . $row['products']->implode(', ')
+                                    . ' from Laleen. Most customers run out right about now — want us to send your refill out today?';
+                                $waLink = 'https://wa.me/' . $row['phone'] . '?text=' . rawurlencode($waText);
+                            @endphp
+                            <tr>
+                                <td>{{ $row['customer_name'] === 'there' ? '—' : $row['customer_name'] }}</td>
+                                <td>{{ $row['display_phone'] }}</td>
+                                <td>{{ $row['last_purchase_at']->format('d M Y') }}</td>
+                                <td class="text-end">{{ $row['days_since'] }}</td>
+                                <td>{{ $row['products']->implode(', ') }}</td>
+                                <td class="text-end">PKR {{ number_format($row['total_spent'], 2) }}</td>
+                                <td class="text-end">
+                                    <a href="{{ $waLink }}" target="_blank" rel="noopener" class="ec-wa-btn">
+                                        <i class="bi bi-whatsapp"></i> Send Refill
+                                    </a>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+    </div>
+
+    {{-- ============ Bundles & Kits ============ --}}
+    <div id="bundles"></div>
+    <div class="ec-card mt-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-1">
+            <h6 class="mb-0">Bundles &amp; Kits</h6>
+            @moduleEdit('ecommerce')
+                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#bundleModal">+ Create Bundle</button>
+            @endmoduleEdit
+        </div>
+        <p class="ec-sub mb-3">Multi-item kits sold at a single price. Selling one decrements every component's stock and splits the revenue across them.</p>
+        @if ($bundles->isEmpty())
+            <div class="ec-chart-empty">No bundles yet &mdash; create one to start selling kits.</div>
+        @else
+            <div class="row g-3">
+                @foreach ($bundles as $bundle)
+                    <div class="col-md-4">
+                        <div class="ec-bundle-card">
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <div class="ec-bundle-name">{{ $bundle->name }}</div>
+                                @moduleEdit('ecommerce')
+                                    <form action="{{ route('ecommerce.bundles.destroy', $bundle->id) }}" method="POST" onsubmit="return confirm('Delete this bundle?')">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                @endmoduleEdit
+                            </div>
+                            <div class="ec-value" style="font-size: 20px; margin-top: 6px;">PKR {{ number_format($bundle->bundle_price, 2) }}</div>
+                            @if ($bundle->savingsVersusStandalone() > 0)
+                                <span class="ec-badge ec-badge-bundle">Saves PKR {{ number_format($bundle->savingsVersusStandalone(), 2) }}</span>
+                            @endif
+                            <ul class="ec-bundle-items">
+                                @foreach ($bundle->items as $item)
+                                    <li>&bull; {{ $item->quantity }}&times; {{ $item->product->name ?? 'Deleted product' }}</li>
+                                @endforeach
+                            </ul>
+                            <div class="ec-sub" style="margin-top: 8px;">
+                                COGS PKR {{ number_format($bundle->bundleUnitCogs(), 2) }} &middot;
+                                Margin {{ number_format($bundle->grossMarginPercent(), 1) }}%
+                            </div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        @endif
+    </div>
+
     <div class="ec-card ec-chart-card mt-3 mb-3">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h6 class="mb-0">Sales Trend</h6>
@@ -171,8 +338,18 @@
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">What are you selling?</label>
+                                <select name="sale_mode" id="salesModeSelect" class="form-select">
+                                    <option value="product" selected>Single Product</option>
+                                    <option value="bundle" {{ $bundles->isEmpty() ? 'disabled' : '' }}>
+                                        Bundle / Kit{{ $bundles->isEmpty() ? ' (none created yet)' : '' }}
+                                    </option>
+                                </select>
+                            </div>
+
                             <div class="ec-form-grid mb-3">
-                                <div>
+                                <div id="salesProductWrapper">
                                     <label class="form-label">Finished Product</label>
                                     <select name="ecommerce_product_id" id="salesProductSelect" class="form-select" required>
                                         <option value="" disabled selected>Select product</option>
@@ -181,10 +358,24 @@
                                         @endforeach
                                     </select>
                                 </div>
+                                <div id="salesBundleWrapper" style="display: none;">
+                                    <label class="form-label">Bundle / Kit</label>
+                                    <select name="ecommerce_bundle_id" id="salesBundleSelect" class="form-select" disabled>
+                                        <option value="" disabled selected>Select bundle</option>
+                                        @foreach ($bundles as $bundle)
+                                            <option value="{{ $bundle->id }}">{{ $bundle->name }} — PKR {{ number_format($bundle->bundle_price, 2) }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
                                 <div>
-                                    <label class="form-label">Quantity Sold</label>
+                                    <label class="form-label" id="salesQuantityLabel">Quantity Sold</label>
                                     <input type="number" step="1" min="1" name="quantity" id="salesQuantityInput" class="form-control" placeholder="e.g. 5" required>
                                 </div>
+                            </div>
+
+                            <div id="salesBundleContents" class="ec-accounting-note mb-3" style="display: none;">
+                                <span>📦</span>
+                                <div id="salesBundleContentsText"></div>
                             </div>
 
                             <div class="ec-form-grid mb-3">
@@ -206,8 +397,8 @@
                                         </optgroup>
                                     </select>
                                 </div>
-                                <div>
-                                    <label class="form-label">Unit Price</label>
+                                <div id="salesUnitPriceWrapper">
+                                    <label class="form-label" id="salesUnitPriceLabel">Unit Price</label>
                                     <input type="number" step="0.01" min="0" name="unit_price" id="salesUnitPriceInput" class="form-control" placeholder="e.g. 1500">
                                 </div>
                             </div>
@@ -218,9 +409,14 @@
                                     <input type="text" name="customer_name" class="form-control" placeholder="Optional">
                                 </div>
                                 <div>
-                                    <label class="form-label">Reason/Notes <span class="ec-sub">(optional)</span></label>
-                                    <input type="text" name="reason" class="form-control" placeholder="e.g. Backbar restock, damaged in transit">
+                                    <label class="form-label">Customer WhatsApp <span class="ec-sub">(powers refill queue)</span></label>
+                                    <input type="text" name="customer_phone" class="form-control" placeholder="e.g. +974 5512 3456">
                                 </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Reason/Notes <span class="ec-sub">(optional)</span></label>
+                                <input type="text" name="reason" class="form-control" placeholder="e.g. Backbar restock, damaged in transit">
                             </div>
 
                             <div class="mb-3">
@@ -257,6 +453,17 @@
         </div>
 
         <script>
+            const BUNDLES = @json($bundlesForJs);
+
+            const salesModeSelect = document.getElementById('salesModeSelect');
+            const salesProductWrapper = document.getElementById('salesProductWrapper');
+            const salesBundleWrapper = document.getElementById('salesBundleWrapper');
+            const salesBundleSelect = document.getElementById('salesBundleSelect');
+            const salesBundleContents = document.getElementById('salesBundleContents');
+            const salesBundleContentsText = document.getElementById('salesBundleContentsText');
+            const salesUnitPriceWrapper = document.getElementById('salesUnitPriceWrapper');
+            const salesUnitPriceLabel = document.getElementById('salesUnitPriceLabel');
+            const salesQuantityLabel = document.getElementById('salesQuantityLabel');
             const salesProductSelect = document.getElementById('salesProductSelect');
             const salesQuantityInput = document.getElementById('salesQuantityInput');
             const salesUnitPriceInput = document.getElementById('salesUnitPriceInput');
@@ -264,10 +471,20 @@
             const salesGrandTotalValue = document.getElementById('salesGrandTotalValue');
             const nonRevenueChannels = ['Backbar Use (Qatar)', 'Damage/Expiry (Pakistan)', 'Damage/Expiry (Qatar)'];
 
+            const isBundleMode = () => salesModeSelect.value === 'bundle';
+
             function updateGrandTotal() {
                 const quantity = parseFloat(salesQuantityInput.value) || 0;
-                const unitPrice = parseFloat(salesUnitPriceInput.value) || 0;
-                const total = quantity * unitPrice;
+                let total;
+
+                if (isBundleMode()) {
+                    const bundle = BUNDLES[salesBundleSelect.value];
+                    const bundlePrice = bundle ? bundle.bundle_price : 0;
+                    total = nonRevenueChannels.includes(salesChannelSelect.value) ? 0 : quantity * bundlePrice;
+                } else {
+                    total = quantity * (parseFloat(salesUnitPriceInput.value) || 0);
+                }
+
                 salesGrandTotalValue.textContent = 'PKR ' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
 
@@ -277,15 +494,68 @@
                 salesUnitPriceInput.value = price ? parseFloat(price).toFixed(2) : '';
             }
 
-            salesProductSelect.addEventListener('change', function () {
-                if (!nonRevenueChannels.includes(salesChannelSelect.value)) {
-                    restoreDefaultPrice();
-                }
-                updateGrandTotal();
-            });
+            // Bundles price themselves from the saved bundle record, so the
+            // manual Unit Price field is swapped out for a read-only mirror of
+            // the bundle price and excluded from the POST.
+            function applySaleMode() {
+                const bundleMode = isBundleMode();
 
-            salesChannelSelect.addEventListener('change', function () {
-                if (nonRevenueChannels.includes(this.value)) {
+                salesProductWrapper.style.display = bundleMode ? 'none' : '';
+                salesBundleWrapper.style.display = bundleMode ? '' : 'none';
+                salesUnitPriceWrapper.style.display = bundleMode ? 'none' : '';
+
+                salesProductSelect.disabled = bundleMode;
+                salesProductSelect.required = !bundleMode;
+                salesBundleSelect.disabled = !bundleMode;
+                salesBundleSelect.required = bundleMode;
+
+                salesQuantityLabel.textContent = bundleMode ? 'Bundles Sold' : 'Quantity Sold';
+                salesUnitPriceLabel.textContent = 'Unit Price';
+
+                if (!bundleMode) {
+                    salesBundleContents.style.display = 'none';
+                }
+
+                applyChannelPricingRules();
+                renderBundleContents();
+                updateGrandTotal();
+            }
+
+            function renderBundleContents() {
+                if (!isBundleMode()) {
+                    salesBundleContents.style.display = 'none';
+                    return;
+                }
+
+                const bundle = BUNDLES[salesBundleSelect.value];
+                if (!bundle) {
+                    salesBundleContents.style.display = 'none';
+                    return;
+                }
+
+                const qty = parseInt(salesQuantityInput.value, 10) || 1;
+                const lines = bundle.items
+                    .map((i) => (i.quantity * qty) + ' × ' + i.product_name)
+                    .join(', ');
+                const savings = bundle.savings > 0
+                    ? ' · Saves the customer PKR ' + bundle.savings.toFixed(2) + ' vs buying separately'
+                    : '';
+
+                salesBundleContentsText.innerHTML =
+                    '<strong>This will deduct:</strong> ' + lines + savings;
+                salesBundleContents.style.display = '';
+            }
+
+            function applyChannelPricingRules() {
+                const nonRevenue = nonRevenueChannels.includes(salesChannelSelect.value);
+
+                if (isBundleMode()) {
+                    // Never submitted in bundle mode — the server prices it.
+                    salesUnitPriceInput.required = false;
+                    return;
+                }
+
+                if (nonRevenue) {
                     salesUnitPriceInput.value = 0;
                     salesUnitPriceInput.readOnly = true;
                     salesUnitPriceInput.required = false;
@@ -294,17 +564,163 @@
                     salesUnitPriceInput.required = true;
                     restoreDefaultPrice();
                 }
+            }
+
+            salesModeSelect.addEventListener('change', applySaleMode);
+
+            salesBundleSelect.addEventListener('change', function () {
+                renderBundleContents();
                 updateGrandTotal();
             });
 
-            salesQuantityInput.addEventListener('input', updateGrandTotal);
+            salesProductSelect.addEventListener('change', function () {
+                if (!nonRevenueChannels.includes(salesChannelSelect.value)) {
+                    restoreDefaultPrice();
+                }
+                updateGrandTotal();
+            });
+
+            salesChannelSelect.addEventListener('change', function () {
+                applyChannelPricingRules();
+                updateGrandTotal();
+            });
+
+            salesQuantityInput.addEventListener('input', function () {
+                renderBundleContents();
+                updateGrandTotal();
+            });
+
+            applySaleMode();
             salesUnitPriceInput.addEventListener('input', updateGrandTotal);
 
             document.getElementById('salesModal').addEventListener('hidden.bs.modal', function () {
                 this.querySelector('form').reset();
-                salesUnitPriceInput.required = true;
                 salesUnitPriceInput.readOnly = false;
-                updateGrandTotal();
+                applySaleMode();
+            });
+        </script>
+
+        {{-- Create Bundle Modal --}}
+        <div class="modal fade" id="bundleModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <form action="{{ route('ecommerce.bundles.store') }}" method="POST" id="bundleForm">
+                        @csrf
+                        <div class="modal-header">
+                            <h5 class="modal-title">Create Bundle / Kit</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="ec-form-grid mb-3">
+                                <div>
+                                    <label class="form-label">Bundle Name</label>
+                                    <input type="text" name="name" id="bundleNameInput" class="form-control" placeholder="e.g. Hair Repair Kit" required>
+                                </div>
+                                <div>
+                                    <label class="form-label">Bundle Price (PKR)</label>
+                                    <input type="number" step="0.01" min="0" name="bundle_price" id="bundlePriceInput" class="form-control" placeholder="e.g. 3500" required>
+                                </div>
+                            </div>
+
+                            <label class="form-label">Products in this bundle</label>
+                            <div id="bundleItemsRows"></div>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="bundleAddItemBtn">+ Add Product</button>
+
+                            <div class="ec-accounting-note mt-3" id="bundleSummary" style="display: none;">
+                                <span>💰</span>
+                                <div id="bundleSummaryText"></div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="submit" class="btn btn-primary">Save Bundle</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            // Standalone prices so the modal can show live bundle savings.
+            const BUNDLE_PRODUCT_PRICES = @json($products->mapWithKeys(fn ($p) => [$p->id => (float) ($salePricesByProduct[$p->id] ?? $p->selling_price ?? 0)]));
+            const bundleProductOptionsHtml = `@foreach ($products as $product)<option value="{{ $product->id }}">{{ $product->name }}{{ $product->sku ? ' (' . $product->sku . ')' : '' }}</option>@endforeach`;
+
+            const bundleItemsRows = document.getElementById('bundleItemsRows');
+            const bundlePriceInput = document.getElementById('bundlePriceInput');
+            const bundleSummary = document.getElementById('bundleSummary');
+            const bundleSummaryText = document.getElementById('bundleSummaryText');
+            let bundleItemIndex = 0;
+
+            function refreshBundleSummary() {
+                let standalone = 0;
+                let lines = 0;
+
+                bundleItemsRows.querySelectorAll('.bundle-item-row').forEach(function (row) {
+                    const productId = row.querySelector('.bundle-product-select').value;
+                    const qty = parseInt(row.querySelector('.bundle-qty-input').value, 10) || 0;
+                    if (productId && qty > 0) {
+                        standalone += (BUNDLE_PRODUCT_PRICES[productId] || 0) * qty;
+                        lines++;
+                    }
+                });
+
+                if (lines === 0) {
+                    bundleSummary.style.display = 'none';
+                    return;
+                }
+
+                const price = parseFloat(bundlePriceInput.value) || 0;
+                const savings = standalone - price;
+                bundleSummaryText.innerHTML =
+                    '<strong>Standalone value:</strong> PKR ' + standalone.toFixed(2) +
+                    ' · <strong>Bundle price:</strong> PKR ' + price.toFixed(2) +
+                    (savings > 0
+                        ? ' · Customer saves PKR ' + savings.toFixed(2)
+                        : (savings < 0 ? ' · ⚠ Priced ABOVE standalone by PKR ' + Math.abs(savings).toFixed(2) : ''));
+                bundleSummary.style.display = '';
+            }
+
+            function addBundleItemRow() {
+                const index = bundleItemIndex++;
+                const row = document.createElement('div');
+                row.className = 'row g-2 align-items-end mb-2 bundle-item-row';
+                row.innerHTML =
+                    '<div class="col-7">' +
+                        '<select name="items[' + index + '][ecommerce_product_id]" class="form-select bundle-product-select" required>' +
+                            '<option value="" disabled selected>Select product</option>' + bundleProductOptionsHtml +
+                        '</select>' +
+                    '</div>' +
+                    '<div class="col-3">' +
+                        '<input type="number" step="1" min="1" value="1" name="items[' + index + '][quantity]" class="form-control bundle-qty-input" required>' +
+                    '</div>' +
+                    '<div class="col-2">' +
+                        '<button type="button" class="btn btn-sm btn-outline-danger w-100 bundle-remove-btn"><i class="bi bi-trash"></i></button>' +
+                    '</div>';
+
+                bundleItemsRows.appendChild(row);
+                row.querySelector('.bundle-product-select').addEventListener('change', refreshBundleSummary);
+                row.querySelector('.bundle-qty-input').addEventListener('input', refreshBundleSummary);
+                row.querySelector('.bundle-remove-btn').addEventListener('click', function () {
+                    row.remove();
+                    refreshBundleSummary();
+                });
+            }
+
+            document.getElementById('bundleAddItemBtn').addEventListener('click', function () {
+                addBundleItemRow();
+                refreshBundleSummary();
+            });
+            bundlePriceInput.addEventListener('input', refreshBundleSummary);
+
+            document.getElementById('bundleModal').addEventListener('shown.bs.modal', function () {
+                if (bundleItemsRows.children.length === 0) {
+                    addBundleItemRow();
+                }
+            });
+
+            document.getElementById('bundleModal').addEventListener('hidden.bs.modal', function () {
+                document.getElementById('bundleForm').reset();
+                bundleItemsRows.innerHTML = '';
+                bundleSummary.style.display = 'none';
             });
         </script>
     @endmoduleEdit
