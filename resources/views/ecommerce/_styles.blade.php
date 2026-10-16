@@ -99,8 +99,252 @@
     }
 
     .ec-badge-injection { background: rgba(142, 168, 138, 0.18); color: var(--ec-success); }
-    .ec-badge-distribution { background: rgba(168, 82, 74, 0.18); color: var(--ec-danger); }
+    .ec-badge-distribution { background: rgba(201, 166, 107, 0.18); color: var(--ec-gold); }
     .ec-badge-live { background: rgba(142, 168, 138, 0.18); color: var(--ec-success); }
+
+    /* Smart velocity stock alerts */
+    .ec-badge-reorder { background: rgba(168, 82, 74, 0.2); color: #e0938a; white-space: nowrap; }
+    .ec-badge-healthy { background: rgba(142, 168, 138, 0.16); color: var(--ec-success); white-space: nowrap; }
+    .ec-badge-stalled { background: rgba(154, 144, 136, 0.16); color: var(--ec-neutral); white-space: nowrap; }
+    .ec-badge-bundle  { background: rgba(201, 166, 107, 0.18); color: var(--ec-gold); }
+
+    .ec-velocity-rate {
+        font-weight: 700;
+        font-size: 13.5px;
+        color: var(--ec-ink);
+        white-space: nowrap;
+    }
+
+    /* ---- Dashboard of Truth: KPI cards ---- */
+    .ec-kpi-card {
+        border: 1px solid var(--ec-border);
+        border-left: 3px solid var(--ec-border-strong);
+        height: 100%;
+        transition: border-color .15s ease;
+    }
+
+    .ec-kpi-card.ec-kpi-good { border-left-color: var(--ec-success); }
+    .ec-kpi-card.ec-kpi-bad  { border-left-color: #c96a60; box-shadow: 0 0 0 1px rgba(201, 106, 96, 0.25); }
+
+    .ec-kpi-value {
+        font-size: 30px;
+        font-weight: 800;
+        line-height: 1.15;
+        color: var(--ec-ink);
+        margin: 6px 0 2px;
+        letter-spacing: -0.01em;
+    }
+
+    .ec-kpi-flag {
+        margin-top: 8px;
+        font-size: 11.5px;
+        font-weight: 600;
+    }
+
+    /* ---- Weekly Content Factory board ---- */
+    .ec-content-board { min-width: 1250px; }
+
+    .ec-day-column {
+        background: rgba(255, 255, 255, 0.015);
+        border: 1px solid var(--ec-border);
+        border-radius: 10px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .ec-day-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--ec-border);
+        font-size: 11.5px;
+        font-weight: 700;
+        letter-spacing: .05em;
+        color: var(--ec-ink);
+    }
+
+    .ec-day-body {
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .ec-content-slot {
+        background: rgba(217, 143, 131, 0.05);
+        border: 1px solid var(--ec-border);
+        border-radius: 9px;
+        padding: 10px;
+    }
+
+    .ec-content-slot.is-live {
+        background: rgba(142, 168, 138, 0.08);
+        border-color: rgba(142, 168, 138, 0.35);
+    }
+
+    .ec-pillar-badge {
+        display: inline-block;
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: .03em;
+        color: var(--ec-ink);
+        background: var(--ec-accent-soft, rgba(217, 143, 131, 0.14));
+        border-radius: 20px;
+        padding: 3px 9px;
+    }
+
+    .ec-slot-objective {
+        margin-top: 8px;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--ec-body, #f2e6e2);
+    }
+
+    .ec-slot-script {
+        margin-top: 4px;
+        font-size: 11.5px;
+        line-height: 1.45;
+        color: var(--ec-muted);
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .ec-slot-controls {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .ec-status-scripted            { background: rgba(154, 144, 136, 0.18); color: var(--ec-neutral); }
+    .ec-status-filmed              { background: rgba(201, 166, 107, 0.18); color: var(--ec-gold); }
+    .ec-status-live-on-shopify-meta{ background: rgba(142, 168, 138, 0.18); color: var(--ec-success); }
+
+    /* Bundles, refill queue & backbar conversion */
+    .ec-bundle-card {
+        background: rgba(217, 143, 131, 0.05);
+        border: 1px solid var(--ec-border);
+        border-radius: 10px;
+        padding: 14px 16px;
+        height: 100%;
+    }
+
+    .ec-bundle-name {
+        font-weight: 700;
+        color: var(--ec-ink);
+        font-size: 14px;
+    }
+
+    .ec-bundle-items {
+        list-style: none;
+        padding: 0;
+        margin: 8px 0 0 0;
+        font-size: 12.5px;
+        color: var(--ec-muted);
+    }
+
+    .ec-bundle-items li { padding: 2px 0; }
+
+    .ec-wa-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(37, 211, 102, 0.14);
+        border: 1px solid rgba(37, 211, 102, 0.4);
+        color: #4ddb84;
+        border-radius: 20px;
+        padding: 5px 14px;
+        font-size: 12.5px;
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: background .15s ease;
+    }
+
+    .ec-wa-btn:hover { background: rgba(37, 211, 102, 0.24); color: #6ce79c; }
+
+    .ec-conversion-meter {
+        height: 8px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        margin-top: 10px;
+    }
+
+    .ec-conversion-fill {
+        height: 100%;
+        border-radius: 20px;
+        background: linear-gradient(90deg, var(--ec-primary), var(--ec-success));
+    }
+
+    /* Explains why BOM/inventory purchases are absent from Operating Expenses. */
+    .ec-accounting-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        background: rgba(217, 143, 131, 0.06);
+        border: 1px solid var(--ec-border);
+        border-left: 3px solid var(--ec-primary);
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin-bottom: 18px;
+        font-size: 12.5px;
+        line-height: 1.55;
+        color: var(--ec-muted);
+    }
+
+    .ec-accounting-note strong { color: var(--ec-ink); }
+
+    .ec-partner-share-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--ec-border);
+    }
+
+    .ec-partner-share-row:last-child { border-bottom: none; }
+
+    .ec-partner-share-name {
+        flex: 1;
+        min-width: 0;
+        font-weight: 600;
+        color: var(--ec-ink);
+        font-size: 13.5px;
+    }
+
+    .ec-partner-share-equity {
+        flex-shrink: 0;
+        font-size: 12px;
+        color: var(--ec-muted);
+        background: rgba(217, 143, 131, 0.1);
+        border-radius: 20px;
+        padding: 3px 12px;
+    }
+
+    .ec-partner-share-amount {
+        flex-shrink: 0;
+        min-width: 150px;
+        text-align: right;
+        font-weight: 700;
+        font-size: 14.5px;
+    }
+
+    .ec-partner-share-total {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding-top: 14px;
+        margin-top: 4px;
+        border-top: 1px solid var(--ec-border-strong);
+        font-size: 12.5px;
+        color: var(--ec-muted);
+    }
 
     .ec-form-control, .ec-form-select {
         background-color: #241e1c;

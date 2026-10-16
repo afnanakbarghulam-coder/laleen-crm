@@ -3,6 +3,7 @@
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\Ecommerce\EcommerceController;
 use App\Http\Controllers\Ecommerce\EcommerceExpenseController;
 use App\Http\Controllers\Ecommerce\EcommerceInventoryController;
 use App\Http\Controllers\Ecommerce\EcommerceNetProfitController;
@@ -246,6 +247,7 @@ Route::middleware(['auth'])->group(function () {
 
         Route::middleware('module:kpis')->get('/content-calendar', [ContentCalendarController::class, 'index'])->name('content-calendar.index');
         Route::middleware('module:kpis,edit')->post('/content-calendar', [ContentCalendarController::class, 'updateWeek'])->name('content-calendar.update');
+        Route::middleware('module:kpis,edit')->patch('/content-calendar/{plan}/toggle-status', [ContentCalendarController::class, 'toggleStatus'])->name('content-calendar.toggle-status');
 
         Route::middleware('module:kpis')->get('/evaluations', [StaffEvaluationController::class, 'index'])->name('evaluations.index');
         Route::middleware('module:kpis,edit')->post('/evaluations', [StaffEvaluationController::class, 'store'])->name('evaluations.store');
@@ -261,6 +263,7 @@ Route::middleware(['auth'])->group(function () {
     // ---- Ecommerce ----
     Route::prefix('ecommerce')->name('ecommerce.')->group(function () {
         Route::middleware('module:ecommerce')->group(function () {
+            Route::get('/', [EcommerceController::class, 'index'])->name('index');
             Route::get('/partners', [EcommercePartnerController::class, 'index'])->name('partners.index');
             Route::get('/products', [EcommerceProductController::class, 'index'])->name('products.index');
             Route::get('/expenses', [EcommerceExpenseController::class, 'index'])->name('expenses.index');
@@ -294,6 +297,18 @@ Route::middleware(['auth'])->group(function () {
 
             Route::post('/sales', [EcommerceSalesController::class, 'store'])->name('sales.store');
             Route::delete('/sales/{sale}', [EcommerceSalesController::class, 'destroy'])->name('sales.destroy');
+
+            Route::post('/bundles', [EcommerceSalesController::class, 'storeBundle'])->name('bundles.store');
+            Route::delete('/bundles/{bundle}', [EcommerceSalesController::class, 'destroyBundle'])->name('bundles.destroy');
+
+            Route::post('/kpis', [EcommerceController::class, 'storeKpi'])->name('kpis.store');
+            Route::delete('/kpis/{kpi}', [EcommerceController::class, 'destroyKpi'])->name('kpis.destroy');
+
+            Route::post('/content-calendar', [EcommerceController::class, 'storeContent'])->name('content.store');
+            Route::post('/content-calendar/seed', [EcommerceController::class, 'seedContentWeek'])->name('content.seed');
+            Route::put('/content-calendar/{content}', [EcommerceController::class, 'updateContent'])->name('content.update');
+            Route::patch('/content-calendar/{content}/status', [EcommerceController::class, 'updateContentStatus'])->name('content.update-status');
+            Route::delete('/content-calendar/{content}', [EcommerceController::class, 'destroyContent'])->name('content.destroy');
         });
     });
 });
