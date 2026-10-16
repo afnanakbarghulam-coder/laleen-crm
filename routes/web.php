@@ -3,9 +3,11 @@
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\Ecommerce\EcommerceContentCalendarController;
 use App\Http\Controllers\Ecommerce\EcommerceController;
 use App\Http\Controllers\Ecommerce\EcommerceExpenseController;
 use App\Http\Controllers\Ecommerce\EcommerceInventoryController;
+use App\Http\Controllers\Ecommerce\EcommerceMonthlyAdsController;
 use App\Http\Controllers\Ecommerce\EcommerceNetProfitController;
 use App\Http\Controllers\Ecommerce\EcommercePartnerController;
 use App\Http\Controllers\Ecommerce\EcommercePricingController;
@@ -267,6 +269,8 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/dashboard', [EcommerceController::class, 'dashboard'])->name('dashboard');
             Route::get('/financials', [EcommerceController::class, 'financials'])->name('financials');
             Route::get('/marketing', [EcommerceController::class, 'marketing'])->name('marketing');
+            Route::get('/marketing/ads-plan', [EcommerceMonthlyAdsController::class, 'index'])->name('marketing.ads-plan.index');
+            Route::get('/marketing/content-calendar', [EcommerceContentCalendarController::class, 'index'])->name('marketing.content.index');
             Route::get('/operations', [EcommerceController::class, 'operations'])->name('operations');
 
             Route::get('/partners', [EcommercePartnerController::class, 'index'])->name('partners.index');
@@ -309,11 +313,19 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/kpis', [EcommerceController::class, 'storeKpi'])->name('kpis.store');
             Route::delete('/kpis/{kpi}', [EcommerceController::class, 'destroyKpi'])->name('kpis.destroy');
 
-            Route::post('/content-calendar', [EcommerceController::class, 'storeContent'])->name('content.store');
-            Route::post('/content-calendar/seed', [EcommerceController::class, 'seedContentWeek'])->name('content.seed');
-            Route::put('/content-calendar/{content}', [EcommerceController::class, 'updateContent'])->name('content.update');
-            Route::patch('/content-calendar/{content}/status', [EcommerceController::class, 'updateContentStatus'])->name('content.update-status');
-            Route::delete('/content-calendar/{content}', [EcommerceController::class, 'destroyContent'])->name('content.destroy');
+            Route::post('/marketing/content-calendar', [EcommerceContentCalendarController::class, 'store'])->name('marketing.content.store');
+            Route::post('/marketing/content-calendar/seed', [EcommerceContentCalendarController::class, 'seedWeek'])->name('marketing.content.seed');
+            Route::put('/marketing/content-calendar/{content}', [EcommerceContentCalendarController::class, 'update'])->name('marketing.content.update');
+            Route::patch('/marketing/content-calendar/{content}/status', [EcommerceContentCalendarController::class, 'updateStatus'])->name('marketing.content.update-status');
+            Route::delete('/marketing/content-calendar/{content}', [EcommerceContentCalendarController::class, 'destroy'])->name('marketing.content.destroy');
+
+            Route::post('/marketing/ads-plan', [EcommerceMonthlyAdsController::class, 'store'])->name('marketing.ads-plan.store');
+            Route::put('/marketing/ads-plan/{ad}', [EcommerceMonthlyAdsController::class, 'update'])->name('marketing.ads-plan.update');
+            Route::delete('/marketing/ads-plan/{ad}', [EcommerceMonthlyAdsController::class, 'destroy'])->name('marketing.ads-plan.destroy');
+            Route::patch('/marketing/ads-plan/{ad}/complete-planning', [EcommerceMonthlyAdsController::class, 'completePlanning'])->name('marketing.ads-plan.complete-planning');
+            Route::patch('/marketing/ads-plan/{ad}/complete-production', [EcommerceMonthlyAdsController::class, 'completeProduction'])->name('marketing.ads-plan.complete-production');
+            Route::patch('/marketing/ads-plan/{ad}/scale', [EcommerceMonthlyAdsController::class, 'scale'])->name('marketing.ads-plan.scale');
+            Route::patch('/marketing/ads-plan/{ad}/kill', [EcommerceMonthlyAdsController::class, 'kill'])->name('marketing.ads-plan.kill');
         });
     });
 });

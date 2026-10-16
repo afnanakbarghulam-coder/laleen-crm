@@ -9,7 +9,7 @@ use App\Models\EcommerceExpense;
 use App\Models\EcommerceKpi;
 use App\Models\EcommerceProduct;
 use App\Models\EcommerceSale;
-use App\Models\KpiMonthlyAd;
+use App\Models\EcommerceMonthlyAd;
 use App\Models\PartnerTransaction;
 use App\Models\User;
 use Carbon\Carbon;
@@ -38,7 +38,7 @@ class EcommerceController extends Controller
             'runway' => $capitalPool - $partnerFundedExpenses,
             'contentSlots' => $contentSlots,
             'contentLive' => $contentLive,
-            'adsInFlight' => KpiMonthlyAd::whereIn('phase', ['Planning', 'Production', 'Testing', 'Scaling'])->count(),
+            'adsInFlight' => EcommerceMonthlyAd::whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count(),
             'bundleCount' => EcommerceBundle::count(),
             'reorderCount' => $this->reorderCount(),
         ]);
@@ -65,37 +65,14 @@ class EcommerceController extends Controller
         ]);
     }
 
-    /**
-     * Marketing hub — hosts the Weekly Content Factory and links out to the
-     * Monthly Ads Plan Kanban board.
-     */
+    /** Marketing hub — two cards: the ads plan and the content calendar. */
     public function marketing()
     {
-        $calendar = EcommerceContentCalendar::all()
-            ->sortBy([
-                fn ($a, $b) => $a->dayIndex() <=> $b->dayIndex(),
-                fn ($a, $b) => $a->id <=> $b->id,
-            ])
-            ->values();
-
-        $calendarByDay = collect(EcommerceContentCalendar::DAYS_OF_WEEK)
-            ->mapWithKeys(fn ($day) => [$day => $calendar->where('day_of_week', $day)->values()]);
-
-        $statusCounts = collect(EcommerceContentCalendar::STATUSES)
-            ->mapWithKeys(fn ($status) => [$status => $calendar->where('status', $status)->count()]);
-
-        $adsByPhase = collect(KpiMonthlyAd::BOARD_PHASES)
-            ->mapWithKeys(fn ($phase) => [$phase => KpiMonthlyAd::where('phase', $phase)->count()]);
-
-        return view('ecommerce.marketing.index', [
-            'calendar' => $calendar,
-            'calendarByDay' => $calendarByDay,
-            'statusCounts' => $statusCounts,
-            'adsByPhase' => $adsByPhase,
-            'staff' => User::orderBy('name')->get(['id', 'name']),
-            'days' => EcommerceContentCalendar::DAYS_OF_WEEK,
-            'contentTypes' => EcommerceContentCalendar::CONTENT_TYPES,
-            'statuses' => EcommerceContentCalendar::STATUSES,
+        return view('ecommerce.marketing.hub', [
+            'adsInFlight' => EcommerceMonthlyAd::whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count(),
+            'adsScaling' => EcommerceMonthlyAd::where('phase', 'Scaling')->count(),
+            'contentSlots' => EcommerceContentCalendar::count(),
+            'contentLive' => EcommerceContentCalendar::where('status', 'Live on Shopify/Meta')->count(),
         ]);
     }
 
@@ -221,80 +198,6 @@ class EcommerceController extends Controller
             'total_orders' => 'required|integer|min:0',
             'new_customers' => 'required|integer|min:0',
             'repeat_customers' => 'required|integer|min:0',
-        ]);
-    }
-
-    // ---- Weekly content calendar --------------------------------------------
-
-    public function storeContent(Request $request)
-    {
-        EcommerceContentCalendar::create($this->validatedContent($request));
-
-        return back()->with('success', 'Content slot added.');
-    }
-
-    public function updateContent(Request $request, EcommerceContentCalendar $content)
-    {
-        $content->update($this->validatedContent($request));
-
-        return back()->with('success', 'Content slot updated.');
-    }
-
-    /**
-     * Inline status / assignee change from the board — only ever touches the
-     * two fields the dropdowns own, so a quick status flip can never blank
-     * out the script concept.
-     */
-    public function updateContentStatus(Request $request, EcommerceContentCalendar $content)
-    {
-        $validated = $request->validate([
-            'status' => ['nullable', Rule::in(EcommerceContentCalendar::STATUSES)],
-            'person_responsible' => 'nullable|string|max:255',
-        ]);
-
-        $content->update(array_filter(
-            $validated,
-            fn ($value, $key) => $request->has($key),
-            ARRAY_FILTER_USE_BOTH
-        ));
-
-        return back()->with('success', 'Content slot updated.');
-    }
-
-    public function destroyContent(EcommerceContentCalendar $content)
-    {
-        $content->delete();
-
-        return back()->with('success', 'Content slot removed.');
-    }
-
-    /** Seeds an empty week with one slot per day on its default pillar. */
-    public function seedContentWeek()
-    {
-        if (EcommerceContentCalendar::exists()) {
-            return back()->withErrors(['error' => 'The content calendar already has rows — seeding is only for an empty board.']);
-        }
-
-        foreach (EcommerceContentCalendar::DAYS_OF_WEEK as $day) {
-            EcommerceContentCalendar::create([
-                'day_of_week' => $day,
-                'content_type' => EcommerceContentCalendar::DEFAULT_PILLAR_BY_DAY[$day] ?? null,
-                'status' => 'Scripted',
-            ]);
-        }
-
-        return back()->with('success', 'Seeded a full Monday–Sunday content week.');
-    }
-
-    private function validatedContent(Request $request): array
-    {
-        return $request->validate([
-            'day_of_week' => ['required', Rule::in(EcommerceContentCalendar::DAYS_OF_WEEK)],
-            'content_type' => ['nullable', Rule::in(EcommerceContentCalendar::CONTENT_TYPES)],
-            'objective' => 'nullable|string|max:255',
-            'script_concept' => 'nullable|string|max:5000',
-            'person_responsible' => 'nullable|string|max:255',
-            'status' => ['required', Rule::in(EcommerceContentCalendar::STATUSES)],
         ]);
     }
 }

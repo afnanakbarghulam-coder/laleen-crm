@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Ecommerce;
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceExpense;
 use App\Models\EcommerceSale;
+use App\Models\Partner;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -40,10 +41,24 @@ class EcommerceNetProfitController extends Controller
         $grossMargin = $totalRevenue > 0 ? ($grossProfit / $totalRevenue) * 100 : 0;
 
         $amountsByCategory = $deductionExpenses->groupBy('category')->map->sum('amount');
-        $deductionBreakdown = collect($deductionCategories)->map(fn ($category) => [
+        $expenseBreakdown = collect($deductionCategories)->map(fn ($category) => [
             'category' => $category,
             'amount' => (float) ($amountsByCategory[$category] ?? 0),
         ]);
+
+        // Order-level costs captured on the sale itself. These were previously
+        // shown only in the per-transaction table, so the headline KPI ignored
+        // them entirely — they now roll up alongside the operating expenses.
+        $perSaleShipping = (float) $sales->sum(fn (EcommerceSale $sale) => (float) ($sale->shipping_cost ?? 0));
+        $perSaleTax = (float) $sales->sum(fn (EcommerceSale $sale) => (float) ($sale->tax_amount ?? 0));
+        $perSaleMetaAds = (float) $sales->sum(fn (EcommerceSale $sale) => (float) ($sale->meta_ad_allocation ?? 0));
+        $saleLevelDeductions = $perSaleShipping + $perSaleTax + $perSaleMetaAds;
+
+        $deductionBreakdown = $expenseBreakdown->concat([
+            ['category' => 'Per-Sale Shipping', 'amount' => $perSaleShipping],
+            ['category' => 'Per-Sale Tax', 'amount' => $perSaleTax],
+            ['category' => 'Per-Sale Meta Ads', 'amount' => $perSaleMetaAds],
+        ])->values();
 
         $totalDeductions = (float) $deductionBreakdown->sum('amount');
         $trueNetProfit = $grossProfit - $totalDeductions;
@@ -55,9 +70,14 @@ class EcommerceNetProfitController extends Controller
         $bucketKey = fn ($date) => $weekly ? $date->format('o-W') : $date->format('Y-m-d');
         $bucketLabel = fn ($date) => $weekly ? 'Wk ' . $date->format('W M') : $date->format('d M');
 
-        $revenueByBucket = $sales->groupBy(fn ($sale) => $bucketKey($sale->created_at));
+        $salesByBucket = $sales->groupBy(fn ($sale) => $bucketKey($sale->created_at));
         $deductionsByBucket = $deductionExpenses->groupBy(fn ($expense) => $bucketKey($expense->expense_date));
 
+        // Each bucket mirrors the headline formula exactly —
+        // Revenue - COGS - Per-Sale Deductions - Operating Expenses — so the
+        // trend line, the per-transaction table and the True Net Profit KPI
+        // all reconcile to the rupee instead of the chart silently omitting
+        // COGS and reading high.
         $chartLabels = [];
         $chartNetProfit = [];
         $seenBuckets = [];
@@ -66,10 +86,17 @@ class EcommerceNetProfitController extends Controller
             $key = $bucketKey($cursor);
             if (!in_array($key, $seenBuckets, true)) {
                 $seenBuckets[] = $key;
-                $dailyRevenue = (float) $revenueByBucket->get($key, collect())->sum('total_price');
-                $dailyDeductions = (float) $deductionsByBucket->get($key, collect())->sum('amount');
+                $bucketSales = $salesByBucket->get($key, collect());
+
+                $dailyRevenue = (float) $bucketSales->sum('total_price');
+                $dailyCogs = (float) $bucketSales->sum(fn (EcommerceSale $sale) => (float) $sale->quantity * (float) ($sale->unit_cogs ?? 0));
+                $dailySaleDeductions = (float) $bucketSales->sum(fn (EcommerceSale $sale) => (float) ($sale->shipping_cost ?? 0)
+                    + (float) ($sale->tax_amount ?? 0)
+                    + (float) ($sale->meta_ad_allocation ?? 0));
+                $dailyExpenseDeductions = (float) $deductionsByBucket->get($key, collect())->sum('amount');
+
                 $chartLabels[] = $bucketLabel($cursor);
-                $chartNetProfit[] = round($dailyRevenue - $dailyDeductions, 2);
+                $chartNetProfit[] = round($dailyRevenue - $dailyCogs - $dailySaleDeductions - $dailyExpenseDeductions, 2);
             }
             $cursor->addDay();
         }
@@ -78,6 +105,13 @@ class EcommerceNetProfitController extends Controller
             ? 'From ' . $from->format('M d, Y') . ' to ' . $to->format('M d, Y')
             : 'This month to date';
 
+        $partners = Partner::orderBy('id')->get();
+        $partnerProfitShare = $partners->map(fn (Partner $partner) => [
+            'partner' => $partner,
+            'equity_percentage' => (float) $partner->equity_percentage,
+            'share' => $trueNetProfit * ((float) $partner->equity_percentage / 100),
+        ]);
+
         return view('ecommerce.net-profit', [
             'sales' => $sales,
             'totalRevenue' => $totalRevenue,
@@ -85,9 +119,14 @@ class EcommerceNetProfitController extends Controller
             'grossProfit' => $grossProfit,
             'grossMargin' => $grossMargin,
             'totalDeductions' => $totalDeductions,
+            'saleLevelDeductions' => $saleLevelDeductions,
+            'expenseDeductions' => (float) $expenseBreakdown->sum('amount'),
             'trueNetProfit' => $trueNetProfit,
             'trueNetMargin' => $trueNetMargin,
             'deductionBreakdown' => $deductionBreakdown,
+            'partners' => $partners,
+            'partnerProfitShare' => $partnerProfitShare,
+            'bomAccountingNote' => EcommerceExpense::BOM_ACCOUNTING_NOTE,
             'filterText' => $filterText,
             'startDate' => $request->input('start_date'),
             'endDate' => $request->input('end_date'),

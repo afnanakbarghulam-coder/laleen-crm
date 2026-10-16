@@ -12,11 +12,13 @@ class EcommercePartnerController extends Controller
 {
     public function index()
     {
-        $partners = Partner::with(['transactions' => function ($query) {
-            $query->orderByDesc('transaction_date');
-        }])->orderBy('name')->get();
+        // withTransactionTotals() resolves both per-partner SUMs as aggregates
+        // on this one query, so the total_injected / total_distributed
+        // accessors never fall back to a per-partner SUM (the old N+1).
+        $partners = Partner::withTransactionTotals()->orderBy('name')->get();
 
-        $equalization = Partner::equalizationSummary();
+        // Reuses the collection above rather than re-querying every partner.
+        $equalization = Partner::equalizationSummary($partners);
         $totalPool = (float) $partners->sum('total_injected');
         $remainingBalance = $totalPool - (float) EcommerceExpense::where('funding_source', 'partner_ledger')->sum('amount');
 
@@ -58,7 +60,7 @@ class EcommercePartnerController extends Controller
     public function storeTransaction(Request $request, Partner $partner)
     {
         $validated = $request->validate([
-            'type' => 'required|in:injection',
+            'type' => 'required|in:injection,distribution',
             'amount' => 'required|numeric|min:0.01',
             'category' => 'nullable|string|max:100',
             'reference_note' => 'nullable|string|max:255',
@@ -67,7 +69,9 @@ class EcommercePartnerController extends Controller
 
         $partner->transactions()->create($validated);
 
-        return back()->with('success', 'Transaction recorded.');
+        $label = $validated['type'] === 'distribution' ? 'Distribution' : 'Injection';
+
+        return back()->with('success', $label . ' recorded.');
     }
 
     public function destroyTransaction(PartnerTransaction $transaction)

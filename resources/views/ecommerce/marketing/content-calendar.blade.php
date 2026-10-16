@@ -1,36 +1,15 @@
 @extends('layouts.app')
-@section('title', 'Ecommerce Marketing')
+@section('title', 'Weekly Content Calendar')
 
 @include('ecommerce._styles')
 
 @section('content')
     <div class="kpi-header">
         <div>
-            <h4>Ecommerce Marketing</h4>
-            <p>The weekly content factory that feeds demand, and the monthly ads plan that scales it.</p>
+            <h4>Weekly Content Calendar</h4>
+            <p>Monday&ndash;Sunday pillar rotation &mdash; Transformation, Mechanism, Bundle, Behind-the-Scenes, Social Proof and Direct Response.</p>
         </div>
-        <a href="{{ route('ecommerce.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Ecommerce</a>
-    </div>
-
-    {{-- ============ Monthly Ads Plan entry ============ --}}
-    <div class="row g-3 mb-1">
-        <div class="col-12">
-            <a href="{{ route('kpi.ads-plan.index') }}" class="kpi-hub-card ec-hub-wide">
-                <div class="kpi-hub-icon"><i class="bx bx-rocket"></i></div>
-                <div>
-                    <h6 class="mb-1">Monthly Ads Plan</h6>
-                    <p class="text-muted small mb-2">
-                        3-Creative Batch &amp; 7-Day Funnel Test &mdash; every ad gated through Planning, Production, Testing and Scaling.
-                    </p>
-                    <div class="d-flex flex-wrap gap-2">
-                        @foreach ($adsByPhase as $phase => $count)
-                            <span class="ec-badge ec-phase-pill">{{ $phase }}: {{ $count }}</span>
-                        @endforeach
-                    </div>
-                </div>
-                <i class="bx bx-chevron-right ec-hub-chevron"></i>
-            </a>
-        </div>
+        <a href="{{ route('ecommerce.marketing') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Marketing</a>
     </div>
 
     {{-- ============ The Weekly Content Factory ============ --}}
@@ -43,7 +22,7 @@
                 @endforeach
                 @moduleEdit('ecommerce')
                     @if ($calendar->isEmpty())
-                        <form action="{{ route('ecommerce.content.seed') }}" method="POST" class="d-inline">
+                        <form action="{{ route('ecommerce.marketing.content.seed') }}" method="POST" class="d-inline">
                             @csrf
                             <button type="submit" class="btn btn-sm btn-outline-primary">Seed Mon–Sun</button>
                         </form>
@@ -74,7 +53,7 @@
                                                     <button type="button" class="btn btn-sm btn-outline-warning ec-content-edit-btn"
                                                         data-slot='@json($slot->toEditPayload())'
                                                         title="Edit"><i class="bi bi-pencil-square"></i></button>
-                                                    <form action="{{ route('ecommerce.content.destroy', $slot->id) }}" method="POST" onsubmit="return confirm('Remove this content slot?')">
+                                                    <form action="{{ route('ecommerce.marketing.content.destroy', $slot->id) }}" method="POST" onsubmit="return confirm('Remove this content slot?')">
                                                         @csrf @method('DELETE')
                                                         <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove"><i class="bi bi-trash"></i></button>
                                                     </form>
@@ -90,7 +69,7 @@
                                         @endif
 
                                         @moduleEdit('ecommerce')
-                                            <form action="{{ route('ecommerce.content.update-status', $slot->id) }}" method="POST" class="ec-slot-controls">
+                                            <form action="{{ route('ecommerce.marketing.content.update-status', $slot->id) }}" method="POST" class="ec-slot-controls">
                                                 @csrf @method('PATCH')
                                                 <select name="status" class="cc-mini-select" onchange="this.form.submit()">
                                                     @foreach ($statuses as $status)
@@ -127,7 +106,7 @@
         <div class="modal fade" id="contentModal" tabindex="-1">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
-                    <form id="contentForm" method="POST" action="{{ route('ecommerce.content.store') }}">
+                    <form id="contentForm" method="POST" action="{{ route('ecommerce.marketing.content.store') }}">
                         @csrf
                         <input type="hidden" name="_method" id="contentFormMethod">
                         <div class="modal-header">
@@ -189,7 +168,7 @@
         <script>
             window.resetContentForm = function () {
                 document.getElementById('contentModalTitle').innerText = 'Add Content Slot';
-                document.getElementById('contentForm').action = '{{ route('ecommerce.content.store') }}';
+                document.getElementById('contentForm').action = '{{ route('ecommerce.marketing.content.store') }}';
                 document.getElementById('contentFormMethod').value = '';
                 document.getElementById('contentForm').reset();
             };
@@ -200,7 +179,7 @@
                     resetContentForm();
 
                     document.getElementById('contentModalTitle').innerText = 'Edit Content Slot';
-                    document.getElementById('contentForm').action = '/ecommerce/content-calendar/' + slot.id;
+                    document.getElementById('contentForm').action = '/ecommerce/marketing/content-calendar/' + slot.id;
                     document.getElementById('contentFormMethod').value = 'PUT';
 
                     document.getElementById('c_day').value = slot.day_of_week || 'Monday';
