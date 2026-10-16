@@ -14,177 +14,230 @@ class EcommerceMonthlyAdsController extends Controller
     {
         $ads = EcommerceMonthlyAd::orderByDesc('id')->get();
 
-        return view('ecommerce.marketing.ads-plan', [
-            'adsByPhase' => collect(EcommerceMonthlyAd::BOARD_PHASES)
-                ->mapWithKeys(fn ($phase) => [$phase => $ads->where('phase', $phase)->values()]),
-            'killedAds' => $ads->where('phase', 'Killed')->values(),
-            'staff' => User::orderBy('name')->get(['id', 'name']),
-            'scalingStatuses' => EcommerceMonthlyAd::SCALING_STATUSES,
-        ]);
+        $adsByPhase = collect(EcommerceMonthlyAd::BOARD_PHASES)
+            ->mapWithKeys(fn ($phase) => [$phase => $ads->where('phase', $phase)->values()]);
+
+        $killedAds = $ads->where('phase', 'Killed')->values();
+
+        $totalPlannedBudget = $ads->sum('total_budget');
+
+        $staff = User::orderBy('name')->get(['id', 'name']);
+
+        $scalingStatuses = EcommerceMonthlyAd::SCALING_STATUSES;
+
+        return view('ecommerce.marketing.ads-plan', compact(
+            'adsByPhase',
+            'killedAds',
+            'staff',
+            'scalingStatuses',
+            'totalPlannedBudget'
+        ));
     }
 
     public function store(Request $request)
     {
         EcommerceMonthlyAd::create($this->validated($request));
 
-        return back()->with('success', 'Ad added to Planning.');
+        return redirect()->route('ecommerce.marketing.ads-plan.index')->with('success', 'Ad added.');
     }
 
     public function update(Request $request, EcommerceMonthlyAd $ad)
     {
-        $ad->update($this->validated($request));
+        $validated = $this->validated($request, $ad);
 
-        return back()->with('success', 'Ad updated.');
+        // Server-side phase locking: a card can only edit the fields that belong
+        // to its current (or an earlier) phase — later-phase fields are handled
+        // by their own gated actions (completePlanning, completeProduction, scale, kill).
+        if ($ad->phase !== 'Planning') {
+            $validated = collect($validated)->except([
+                'ad_name',
+                'person_responsible',
+                'offer',
+                'total_budget',
+                'pre_filled_message',
+                'live_date',
+            ])->all();
+        }
+
+        if (!in_array($ad->phase, ['Planning', 'Production'], true)) {
+            $validated = collect($validated)->except([
+                'raw_data_deadline',
+                'final_creative_deadline',
+                'creative_asset_link',
+                'chk_hook',
+                'chk_value',
+                'chk_risk',
+                'chk_cta',
+                'txt_hook',
+                'txt_value',
+                'txt_risk',
+                'txt_cta',
+            ])->all();
+        }
+
+        $ad->update($validated);
+
+        return redirect()->route('ecommerce.marketing.ads-plan.index')->with('success', 'Ad updated.');
     }
 
     public function destroy(EcommerceMonthlyAd $ad)
     {
         $ad->delete();
 
-        return back()->with('success', 'Ad deleted.');
+        return redirect()->route('ecommerce.marketing.ads-plan.index')->with('success', 'Ad deleted.');
     }
 
     /**
-     * Planning -> Production.
-     *
-     * The brief has to be complete before anyone starts making creative,
-     * otherwise production works against a moving target.
+     * Mark Phase 1 ("Planning") complete and advance to Production. Only the
+     * staff member named in person_responsible may do this, and all Phase 1
+     * brief fields must be filled in first.
      */
-    public function completePlanning(EcommerceMonthlyAd $ad)
+    public function completePlanning(Request $request, EcommerceMonthlyAd $ad)
     {
         if ($ad->phase !== 'Planning') {
-            return back()->withErrors(['error' => 'Only an ad in Planning can be moved to Production.']);
+            abort(403, 'Only an ad in Planning can be moved to Production.');
         }
 
-        $missing = [];
-        if (blank($ad->offer)) {
-            $missing[] = 'Offer';
-        }
-        if ($ad->total_budget === null || (float) $ad->total_budget <= 0) {
-            $missing[] = 'Total Budget';
-        }
-        if (blank($ad->pre_filled_message)) {
-            $missing[] = 'Pre-filled Message';
-        }
-        if (blank($ad->live_date)) {
-            $missing[] = 'Live Date';
+        if ($ad->person_responsible !== $request->user()->name) {
+            abort(403, 'Only the assigned person can complete this phase.');
         }
 
-        if (!empty($missing)) {
-            return back()->withErrors(['error' => 'Planning Gate Failed: ' . implode(', ', $missing) . ' must be filled before moving to Production.']);
+        if (
+            empty($ad->offer)
+            || $ad->total_budget === null
+            || (float) $ad->total_budget <= 0
+            || empty($ad->pre_filled_message)
+            || empty($ad->live_date)
+        ) {
+            return redirect()->back()->with('error', 'Planning Gate Failed: Offer, Total Budget, Pre-filled Message, and Live Date must all be filled before moving to Production.');
         }
 
         $ad->update(['phase' => 'Production']);
 
-        return back()->with('success', 'Phase 1 complete — moved to Production.');
+        return redirect()->route('ecommerce.marketing.ads-plan.index')->with('success', 'Phase 1 completed — moved to Production.');
     }
 
     /**
-     * Production -> Testing.
-     *
-     * Blocked until the creative actually exists AND all four QC points are
-     * both ticked and justified in writing.
+     * Mark Phase 2 ("Production") complete and advance to Testing. Blocked
+     * until both production deadlines are set, the creative asset link is
+     * provided, and all 4 QC checklist items (Hook, Value, Risk, CTA) are
+     * both ticked AND justified with text descriptions.
      */
-    public function completeProduction(EcommerceMonthlyAd $ad)
+    public function completeProduction(Request $request, EcommerceMonthlyAd $ad)
     {
         if ($ad->phase !== 'Production') {
-            return back()->withErrors(['error' => 'Only an ad in Production can be moved to Testing.']);
+            abort(403, 'Only an ad in Production can be moved to Testing.');
         }
 
-        $problems = [];
-        if (blank($ad->creative_asset_link)) {
-            $problems[] = 'a Creative Asset Link';
-        }
-
-        $missingPoints = $ad->missingChecklistPoints();
-        if (!empty($missingPoints)) {
-            $problems[] = 'all 4 QC points ticked AND described (missing: ' . implode(', ', $missingPoints) . ')';
-        }
-
-        if (!empty($problems)) {
-            return back()->withErrors(['error' => 'Production Gate Failed: This ad needs ' . implode(' and ', $problems) . ' before testing can start.']);
+        if (
+            empty($ad->raw_data_deadline)
+            || empty($ad->final_creative_deadline)
+            || empty($ad->creative_asset_link)
+            || !$ad->chk_hook || empty(trim((string) $ad->txt_hook))
+            || !$ad->chk_value || empty(trim((string) $ad->txt_value))
+            || !$ad->chk_risk || empty(trim((string) $ad->txt_risk))
+            || !$ad->chk_cta || empty(trim((string) $ad->txt_cta))
+        ) {
+            return redirect()->back()->with('error', 'Production Gate Failed: Raw Data Deadline, Final Creative Deadline, Creative Asset Link, and all 4 QC Checklist items (checked + described) must be completed before moving to Testing.');
         }
 
         $ad->update(['phase' => 'Testing']);
 
-        return back()->with('success', 'Phase 2 complete — moved to Testing.');
+        return redirect()->route('ecommerce.marketing.ads-plan.index')->with('success', 'Phase 2 completed — moved to Testing.');
     }
 
     /**
-     * Testing -> Scaling.
-     *
-     * Purely a CPL decision: real cost per lead must beat the target CPL.
-     * Spending money without leads can never pass, since actualCpl() is null.
+     * Mark Phase 3 ("Testing") a winner and advance to Scaling. Enforces the
+     * strict CPL gatekeeper rule: Test Spend, Leads Generated (> 0), and
+     * Target CPL must be recorded, and Actual CPL must be <= Target CPL.
      */
     public function scale(Request $request, EcommerceMonthlyAd $ad)
     {
         if ($ad->phase !== 'Testing') {
-            return back()->withErrors(['error' => 'Only an ad in Testing can be scaled.']);
+            abort(403, 'Only an ad in Testing can be scaled.');
         }
 
         $validated = $request->validate([
-            'scaling_status' => ['required', Rule::in(EcommerceMonthlyAd::SCALING_STATUSES)],
+            'scaling_status' => ['nullable', Rule::in(EcommerceMonthlyAd::SCALING_STATUSES)],
         ]);
 
-        if ($ad->test_spend === null || (float) $ad->test_spend <= 0) {
-            return back()->withErrors(['error' => 'Scaling Gate Failed: record the Test Spend before scaling.']);
-        }
-
-        if ((int) $ad->leads_generated <= 0) {
-            return back()->withErrors(['error' => 'Scaling Gate Failed: record Leads Generated before scaling — spend with no leads cannot be scaled.']);
-        }
-
-        if ($ad->target_cpl === null || (float) $ad->target_cpl <= 0) {
-            return back()->withErrors(['error' => 'Scaling Gate Failed: set a Target CPL so performance can be judged against it.']);
+        if (
+            $ad->test_spend === null || (float) $ad->test_spend <= 0
+            || (int) $ad->leads_generated <= 0
+            || $ad->target_cpl === null || (float) $ad->target_cpl <= 0
+        ) {
+            return redirect()->back()->with('error', 'Scaling Gate Failed: You must save Test Spend, Leads Generated (> 0), and Target CPL inside the ad modal before scaling.');
         }
 
         $actual = $ad->actualCpl();
-        if ($actual > (float) $ad->target_cpl) {
-            return back()->withErrors(['error' => sprintf(
-                'Scaling Gate Failed: actual CPL is PKR %s against a target of PKR %s. Scaling a loss just loses money faster — optimise or kill it.',
-                number_format($actual, 2),
+        if ($actual === null || $actual > (float) $ad->target_cpl) {
+            return redirect()->back()->with('error', sprintf(
+                'Scaling Gate Failed: Actual CPL (PKR %s) exceeds Target CPL (PKR %s). Scaling a loss just loses money faster — optimise or kill this test.',
+                $actual !== null ? number_format($actual, 2) : '—',
                 number_format((float) $ad->target_cpl, 2)
-            )]);
+            ));
         }
+
+        $scalingStatus = $validated['scaling_status'] ?? $ad->scaling_status ?? 'Scale Aggressively';
 
         $ad->update([
             'phase' => 'Scaling',
-            'scaling_status' => $validated['scaling_status'],
+            'scaling_status' => $scalingStatus,
         ]);
 
-        return back()->with('success', sprintf(
+        return redirect()->route('ecommerce.marketing.ads-plan.index')->with('success', sprintf(
             'Winner confirmed at PKR %s CPL — moved to Scaling.',
             number_format($actual, 2)
         ));
     }
 
-    /** Testing / Scaling -> Killed. */
-    public function kill(EcommerceMonthlyAd $ad)
+    /**
+     * Kill a test from Testing or Scaling. Requires Test Spend, Leads Generated,
+     * and Target CPL to be saved first so the Graveyard preserves why the ad
+     * was killed for future learning.
+     */
+    public function kill(Request $request, EcommerceMonthlyAd $ad)
     {
         if (!in_array($ad->phase, ['Testing', 'Scaling'], true)) {
-            return back()->withErrors(['error' => 'Only an ad in Testing or Scaling can be killed.']);
+            abort(403, 'Only an ad in Testing or Scaling can be killed.');
         }
 
-        if ($ad->test_spend === null) {
-            return back()->withErrors(['error' => 'Kill Gate Failed: record the Test Spend first so the graveyard preserves what the lesson cost.']);
+        if (
+            $ad->test_spend === null
+            || $ad->leads_generated === null
+            || $ad->target_cpl === null
+        ) {
+            return redirect()->back()->with('error', 'Kill Gate Failed: Test Spend, Leads Generated, and Target CPL must be saved inside the ad modal before killing this test.');
         }
 
         $ad->update(['phase' => 'Killed']);
 
-        return back()->with('success', 'Ad moved to the graveyard.');
+        return redirect()->route('ecommerce.marketing.ads-plan.index')->with('success', 'Ad moved to the Graveyard.');
     }
 
-    private function validated(Request $request): array
+    private function validated(Request $request, ?EcommerceMonthlyAd $ad = null): array
     {
+        $briefLocked = $ad !== null && $ad->phase !== 'Planning';
+
+        $rawDeadlineRules = ['nullable', 'date'];
+        if ($request->filled('final_creative_deadline')) {
+            $rawDeadlineRules[] = 'before_or_equal:final_creative_deadline';
+        }
+
+        $finalDeadlineRules = ['nullable', 'date'];
+        if ($request->filled('live_date')) {
+            $finalDeadlineRules[] = 'before_or_equal:live_date';
+        }
+
         $validated = $request->validate([
-            'ad_name' => 'required|string|max:255',
-            'person_responsible' => 'nullable|string|max:255',
+            'ad_name' => ($briefLocked ? 'sometimes|' : '') . 'required|string|max:255',
+            'person_responsible' => ($briefLocked ? 'sometimes|' : '') . 'required|string|max:255',
             'offer' => 'nullable|string|max:5000',
             'total_budget' => 'nullable|numeric|min:0',
             'pre_filled_message' => 'nullable|string|max:5000',
             'live_date' => 'nullable|date',
-            'raw_data_deadline' => 'nullable|date',
-            'final_creative_deadline' => 'nullable|date|before_or_equal:live_date',
+            'raw_data_deadline' => $rawDeadlineRules,
+            'final_creative_deadline' => $finalDeadlineRules,
             'creative_asset_link' => 'nullable|string|max:2048',
             'txt_hook' => 'nullable|string|max:2000',
             'txt_value' => 'nullable|string|max:2000',
@@ -195,15 +248,18 @@ class EcommerceMonthlyAdsController extends Controller
             'target_cpl' => 'nullable|numeric|min:0',
             'scaling_status' => ['nullable', Rule::in(EcommerceMonthlyAd::SCALING_STATUSES)],
         ], [
-            'final_creative_deadline.before_or_equal' => 'The final creative deadline cannot fall after the Live Date.',
+            'final_creative_deadline.before_or_equal' => 'The final creative deadline cannot be after the Ad Live Date.',
+            'raw_data_deadline.before_or_equal' => 'The raw data deadline cannot be after the Final Creative Deadline.',
         ]);
 
-        // Unchecked boxes are omitted from the request entirely, so read them
-        // explicitly rather than trusting validate() to default them.
-        foreach (['hook', 'value', 'risk', 'cta'] as $point) {
-            $validated["chk_{$point}"] = $request->boolean("chk_{$point}");
-        }
+        // Unchecked checkboxes are omitted from the request entirely, so read
+        // them explicitly rather than relying on validate() to default them.
+        $validated['chk_hook'] = $request->boolean('chk_hook');
+        $validated['chk_value'] = $request->boolean('chk_value');
+        $validated['chk_risk'] = $request->boolean('chk_risk');
+        $validated['chk_cta'] = $request->boolean('chk_cta');
 
         return $validated;
     }
 }
+
