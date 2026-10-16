@@ -144,7 +144,7 @@
         color: var(--ec-accent-hover, #e6a99d);
     }
 
-    /* ---- Dashboard of Truth: KPI cards ---- */
+    /* ---- Ecommerce KPIs: metric cards ---- */
     .ec-kpi-card {
         border: 1px solid var(--ec-border);
         border-left: 3px solid var(--ec-border-strong);

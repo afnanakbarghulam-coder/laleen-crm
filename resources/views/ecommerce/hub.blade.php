@@ -49,7 +49,7 @@
             <a href="{{ route('ecommerce.dashboard') }}" class="kpi-hub-card ec-hub-wide">
                 <div class="kpi-hub-icon"><i class="bx bx-bar-chart-alt-2"></i></div>
                 <div>
-                    <h6 class="mb-1">The Dashboard of Truth</h6>
+                    <h6 class="mb-1">Ecommerce KPIs</h6>
                     <p class="text-muted small mb-0">Blended MER, CAC, AOV and repeat purchase rate from your daily Shopify + Meta snapshots.</p>
                 </div>
                 <i class="bx bx-chevron-right ec-hub-chevron"></i>

@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Ecommerce Dashboard')
+@section('title', 'Ecommerce KPIs')
 
 @include('ecommerce._styles')
 
@@ -13,7 +13,7 @@
 @section('content')
     <div class="ec-header">
         <div>
-            <h4>The Dashboard of Truth</h4>
+            <h4>Ecommerce KPIs</h4>
             <p>Blended acquisition economics &mdash; MER, CAC, AOV and repeat rate from your daily Shopify + Meta snapshots.</p>
         </div>
         <div class="d-flex align-items-center gap-2">
@@ -47,7 +47,7 @@
         </div>
     @endunless
 
-    {{-- ============ The Dashboard of Truth ============ --}}
+    {{-- ============ Ecommerce KPIs ============ --}}
     <div class="row g-3">
         <div class="col-md-3">
             <div class="ec-card ec-kpi-card {{ $borderClass($metrics['mer_healthy']) }}">

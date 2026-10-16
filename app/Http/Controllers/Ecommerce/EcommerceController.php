@@ -99,7 +99,7 @@ class EcommerceController extends Controller
         ]);
     }
 
-    /** The Dashboard of Truth — blended acquisition economics. */
+    /** Ecommerce KPIs — blended acquisition economics. */
     public function dashboard(Request $request)
     {
         $from = $request->filled('start_date')
