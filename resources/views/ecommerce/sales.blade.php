@@ -4,26 +4,14 @@
 @include('ecommerce._styles')
 
 @php
-    $channelBadgeClasses = [
-        'Shopify (Pakistan)' => 'ec-channel-shopify',
-        'Organic (Pakistan)' => 'ec-channel-organic',
-        'Salon (Old Airport)' => 'ec-channel-salon',
-        'Salon (Wakrah)' => 'ec-channel-salon',
-        'Organic (Qatar)' => 'ec-channel-organic',
-        'Backbar Use (Qatar)' => 'ec-channel-backbar',
-        'Damage/Expiry (Pakistan)' => 'ec-channel-damage',
-        'Damage/Expiry (Qatar)' => 'ec-channel-damage',
-    ];
-
-    $channelGroups = [
-        'Pakistan' => ['Shopify (Pakistan)', 'Organic (Pakistan)', 'Damage/Expiry (Pakistan)'],
-        'Qatar' => ['Salon (Old Airport)', 'Salon (Wakrah)', 'Organic (Qatar)', 'Backbar Use (Qatar)', 'Damage/Expiry (Qatar)'],
-    ];
+    $channelBadgeClasses = \App\Models\EcommerceSale::CHANNEL_BADGE_CLASSES;
+    $channelGroups = \App\Models\EcommerceSale::CHANNEL_GROUPS;
 @endphp
 
 @section('content')
     <div class="ec-header">
         <div>
+            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Customers &amp; Sales</div>
             <h4>Sales &amp; Usage</h4>
             <p>Finished goods leaving inventory &mdash; retail sales, backbar use, promos, and damage/expiry, routed to the correct location automatically.</p>
         </div>
@@ -32,8 +20,9 @@
         @endmoduleEdit
     </div>
 
-    @include('ecommerce._nav')
+    @include('ecommerce.partials._hub_tabs')
 
+    {{-- Date & Channel Filters --}}
     <div class="d-flex justify-content-end align-items-center mb-4">
         <form method="GET" action="{{ route('ecommerce.sales.index') }}" class="d-flex align-items-center flex-wrap gap-2">
             <div class="d-flex align-items-center gap-2">
@@ -73,6 +62,7 @@
         </form>
     </div>
 
+    {{-- Top 3 Metric Cards --}}
     <div class="row">
         <div class="col-md-4">
             <div class="ec-card">
@@ -97,244 +87,7 @@
         </div>
     </div>
 
-    {{-- ============ Salon Backbar-to-Retail Conversion ============ --}}
-    <div id="backbar-conversion"></div>
-    @php
-        $bbEfficiency = $backbarConversion['efficiency'];
-        $bbMeterWidth = $bbEfficiency === null ? 0 : min(100, max(0, $bbEfficiency));
-    @endphp
-    <div class="row g-3 mt-1">
-        <div class="col-md-4">
-            <div class="ec-card ec-card-highlight">
-                <h6>Salon Backbar Conversion Efficiency</h6>
-                <div class="ec-value {{ $bbEfficiency === null ? '' : ($bbEfficiency >= 100 ? 'ec-positive' : 'ec-negative') }}">
-                    {{ $bbEfficiency === null ? '—' : number_format($bbEfficiency, 0) . '%' }}
-                </div>
-                <div class="ec-sub">
-                    {{ number_format($backbarConversion['total_retail_units'], 0) }} retail units sold per
-                    {{ number_format($backbarConversion['total_backbar_units'], 0) }} backbar units used
-                </div>
-                <div class="ec-conversion-meter">
-                    <div class="ec-conversion-fill" style="width: {{ $bbMeterWidth }}%;"></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-8">
-            <div class="ec-card">
-                <h6 style="margin-bottom: 4px;">Are stylists converting wash-basin treatments into retail?</h6>
-                <p class="ec-sub mb-3">
-                    Backbar consumption is logged salon-wide (no branch), so the ratio is per product; branch columns split the retail side only.
-                </p>
-                @if ($backbarConversion['by_product']->isEmpty())
-                    <div class="ec-chart-empty">No backbar or salon retail activity logged yet.</div>
-                @else
-                    <div class="table-responsive">
-                        <table class="table ec-table align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Product</th>
-                                    <th class="text-end">Backbar Used</th>
-                                    <th class="text-end">Retail Sold</th>
-                                    <th class="text-end">Old Airport</th>
-                                    <th class="text-end">Wakrah</th>
-                                    <th class="text-end">Retail Revenue</th>
-                                    <th class="text-end">Conversion</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($backbarConversion['by_product'] as $row)
-                                    <tr>
-                                        <td>{{ $row['product']->name ?? 'Deleted product' }}</td>
-                                        <td class="text-end">{{ number_format($row['backbar_units'], 0) }}</td>
-                                        <td class="text-end">{{ number_format($row['retail_units'], 0) }}</td>
-                                        <td class="text-end">{{ number_format($row['old_airport_units'], 0) }}</td>
-                                        <td class="text-end">{{ number_format($row['wakrah_units'], 0) }}</td>
-                                        <td class="text-end">PKR {{ number_format($row['retail_revenue'], 2) }}</td>
-                                        <td class="text-end {{ $row['ratio'] === null ? '' : ($row['ratio'] >= 100 ? 'ec-positive' : 'ec-negative') }}">
-                                            {{ $row['ratio'] === null ? '—' : number_format($row['ratio'], 0) . '%' }}
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                @endif
-            </div>
-        </div>
-    </div>
-
-    {{-- ============ Automated Customer Lifecycle Pipeline (LTV Expansion) ============ --}}
-    <div id="refill-queue"></div>
-    <div id="lifecycle-pipeline"></div>
-    @php
-        $totalPipelineCount = collect($lifecyclePipeline)->sum(fn ($stage) => $stage['items']->count());
-        $defaultActiveStage = 'day7';
-        foreach (['day7', 'day30', 'day60'] as $candidateKey) {
-            if (($lifecyclePipeline[$candidateKey]['items'] ?? collect())->isNotEmpty()) {
-                $defaultActiveStage = $candidateKey;
-                break;
-            }
-        }
-    @endphp
-    <div class="ec-card mt-3">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-            <div>
-                <h6 class="mb-0">Automated Customer Lifecycle Pipeline (LTV Expansion)</h6>
-                <p class="ec-sub mb-0 mt-1">
-                    3-stage WhatsApp retention &amp; expansion engine across revenue channels. Log a customer phone number on sales to trigger one-click deep links.
-                </p>
-            </div>
-            <span class="ec-badge ec-badge-injection">{{ $totalPipelineCount }} customer(s) in pipeline</span>
-        </div>
-
-        {{-- 3-Stage Pipeline Tabs --}}
-        <div class="row g-2 mt-2 mb-3" role="tablist">
-            @foreach ($lifecyclePipeline as $stageKey => $stage)
-                @php
-                    $isActiveStage = $stageKey === $defaultActiveStage;
-                    $stageCount = $stage['items']->count();
-                @endphp
-                <div class="col-md-4">
-                    <button
-                        type="button"
-                        class="w-100 text-start p-3 rounded-3 lifecycle-stage-tab {{ $isActiveStage ? 'active' : '' }}"
-                        data-lifecycle-target="lifecycle-pane-{{ $stageKey }}"
-                        style="background: {{ $isActiveStage ? 'rgba(201, 166, 107, 0.14)' : 'rgba(255, 255, 255, 0.02)' }}; border: 1px solid {{ $isActiveStage ? 'var(--ec-gold, #c9a66b)' : 'var(--ec-border, rgba(255,255,255,0.08))' }}; color: inherit; transition: all 0.15s ease;"
-                    >
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="fw-semibold" style="font-size: 14px;">{{ $stage['title'] }}</span>
-                            <span class="ec-badge {{ $stage['badge_class'] }}">{{ $stageCount }} due</span>
-                        </div>
-                        <div class="ec-sub" style="font-size: 12px;">{{ $stage['window_label'] }} &middot; {{ $stage['subtitle'] }}</div>
-                    </button>
-                </div>
-            @endforeach
-        </div>
-
-        {{-- Stage Panes --}}
-        @foreach ($lifecyclePipeline as $stageKey => $stage)
-            @php $isActiveStage = $stageKey === $defaultActiveStage; @endphp
-            <div
-                id="lifecycle-pane-{{ $stageKey }}"
-                class="lifecycle-stage-pane"
-                style="{{ $isActiveStage ? '' : 'display: none;' }}"
-            >
-                @if ($stage['items']->isEmpty())
-                    <div class="ec-chart-empty">
-                        No customers currently in <strong>{{ $stage['title'] }}</strong> ({{ $stage['window_label'] }}).
-                    </div>
-                @else
-                    <div class="table-responsive">
-                        <table class="table ec-table align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Customer</th>
-                                    <th>Phone</th>
-                                    <th>Channel</th>
-                                    <th>Last Bought</th>
-                                    <th class="text-end">Days Ago</th>
-                                    <th>Products</th>
-                                    <th class="text-end">Spent</th>
-                                    <th class="text-end">WhatsApp Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($stage['items'] as $row)
-                                    <tr>
-                                        <td>{{ $row['customer_name'] === 'there' ? '—' : $row['customer_name'] }}</td>
-                                        <td>{{ $row['display_phone'] }}</td>
-                                        <td>
-                                            <span class="ec-channel-badge {{ $channelBadgeClasses[$row['channel']] ?? 'ec-channel-shopify' }}">
-                                                {{ $row['channel'] }}
-                                            </span>
-                                        </td>
-                                        <td>{{ $row['last_purchase_at']->format('d M Y') }}</td>
-                                        <td class="text-end">{{ $row['days_since'] }}d</td>
-                                        <td>{{ $row['products']->implode(', ') }}</td>
-                                        <td class="text-end">PKR {{ number_format($row['total_spent'], 2) }}</td>
-                                        <td class="text-end">
-                                            <a href="{{ $row['wa_link'] }}" target="_blank" rel="noopener" class="ec-wa-btn" title="{{ $row['wa_text'] }}">
-                                                <i class="bi bi-whatsapp"></i> {{ $stage['cta_label'] }}
-                                            </a>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                @endif
-            </div>
-        @endforeach
-    </div>
-
-    <script>
-        document.querySelectorAll('.lifecycle-stage-tab').forEach(function (tabBtn) {
-            tabBtn.addEventListener('click', function () {
-                const targetId = this.getAttribute('data-lifecycle-target');
-
-                document.querySelectorAll('.lifecycle-stage-tab').forEach(function (btn) {
-                    btn.classList.remove('active');
-                    btn.style.background = 'rgba(255, 255, 255, 0.02)';
-                    btn.style.borderColor = 'var(--ec-border, rgba(255,255,255,0.08))';
-                });
-
-                this.classList.add('active');
-                this.style.background = 'rgba(201, 166, 107, 0.14)';
-                this.style.borderColor = 'var(--ec-gold, #c9a66b)';
-
-                document.querySelectorAll('.lifecycle-stage-pane').forEach(function (pane) {
-                    pane.style.display = pane.id === targetId ? '' : 'none';
-                });
-            });
-        });
-    </script>
-
-    {{-- ============ Bundles & Kits ============ --}}
-    <div id="bundles"></div>
-    <div class="ec-card mt-3">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-1">
-            <h6 class="mb-0">Bundles &amp; Kits</h6>
-            @moduleEdit('ecommerce')
-                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#bundleModal">+ Create Bundle</button>
-            @endmoduleEdit
-        </div>
-        <p class="ec-sub mb-3">Multi-item kits sold at a single price. Selling one decrements every component's stock and splits the revenue across them.</p>
-        @if ($bundles->isEmpty())
-            <div class="ec-chart-empty">No bundles yet &mdash; create one to start selling kits.</div>
-        @else
-            <div class="row g-3">
-                @foreach ($bundles as $bundle)
-                    <div class="col-md-4">
-                        <div class="ec-bundle-card">
-                            <div class="d-flex justify-content-between align-items-start gap-2">
-                                <div class="ec-bundle-name">{{ $bundle->name }}</div>
-                                @moduleEdit('ecommerce')
-                                    <form action="{{ route('ecommerce.bundles.destroy', $bundle->id) }}" method="POST" onsubmit="return confirm('Delete this bundle?')">
-                                        @csrf @method('DELETE')
-                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                    </form>
-                                @endmoduleEdit
-                            </div>
-                            <div class="ec-value" style="font-size: 20px; margin-top: 6px;">PKR {{ number_format($bundle->bundle_price, 2) }}</div>
-                            @if ($bundle->savingsVersusStandalone() > 0)
-                                <span class="ec-badge ec-badge-bundle">Saves PKR {{ number_format($bundle->savingsVersusStandalone(), 2) }}</span>
-                            @endif
-                            <ul class="ec-bundle-items">
-                                @foreach ($bundle->items as $item)
-                                    <li>&bull; {{ $item->quantity }}&times; {{ $item->product->name ?? 'Deleted product' }}</li>
-                                @endforeach
-                            </ul>
-                            <div class="ec-sub" style="margin-top: 8px;">
-                                COGS PKR {{ number_format($bundle->bundleUnitCogs(), 2) }} &middot;
-                                Margin {{ number_format($bundle->grossMarginPercent(), 1) }}%
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        @endif
-    </div>
-
+    {{-- Sales Trend Chart --}}
     <div class="ec-card ec-chart-card mt-3 mb-3">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h6 class="mb-0">Sales Trend</h6>
@@ -350,6 +103,7 @@
         @endif
     </div>
 
+    {{-- Recent Sales Table --}}
     <div class="ec-card">
         <h6 class="mb-3">Recent Sales</h6>
         <div class="table-responsive">
@@ -414,7 +168,7 @@
                                 <select name="sale_mode" id="salesModeSelect" class="form-select">
                                     <option value="product" selected>Single Product</option>
                                     <option value="bundle" {{ $bundles->isEmpty() ? 'disabled' : '' }}>
-                                        Bundle / Kit{{ $bundles->isEmpty() ? ' (none created yet)' : '' }}
+                                        Bundle / Kit{{ $bundles->isEmpty() ? ' (create bundles in Pricing & Profit)' : '' }}
                                     </option>
                                 </select>
                             </div>
@@ -455,16 +209,14 @@
                                     <select name="channel" id="salesChannelSelect" class="form-select" required>
                                         <option value="" disabled selected>Select channel</option>
                                         <optgroup label="Revenue">
-                                            <option value="Shopify (Pakistan)">Shopify (Pakistan)</option>
-                                            <option value="Organic (Pakistan)">Organic (Pakistan)</option>
-                                            <option value="Salon (Old Airport)">Salon (Old Airport)</option>
-                                            <option value="Salon (Wakrah)">Salon (Wakrah)</option>
-                                            <option value="Organic (Qatar)">Organic (Qatar)</option>
+                                            @foreach (\App\Models\EcommerceSale::REVENUE_CHANNELS as $revChannel)
+                                                <option value="{{ $revChannel }}">{{ $revChannel }}</option>
+                                            @endforeach
                                         </optgroup>
                                         <optgroup label="Non-Revenue">
-                                            <option value="Backbar Use (Qatar)">Backbar Use (Qatar)</option>
-                                            <option value="Damage/Expiry (Pakistan)">Damage/Expiry (Pakistan)</option>
-                                            <option value="Damage/Expiry (Qatar)">Damage/Expiry (Qatar)</option>
+                                            @foreach (\App\Models\EcommerceSale::NON_REVENUE_CHANNELS as $nonRevChannel)
+                                                <option value="{{ $nonRevChannel }}">{{ $nonRevChannel }}</option>
+                                            @endforeach
                                         </optgroup>
                                     </select>
                                 </div>
@@ -474,14 +226,140 @@
                                 </div>
                             </div>
 
-                            <div class="ec-form-grid mb-3">
-                                <div>
-                                    <label class="form-label">Customer Name <span class="ec-sub">(optional)</span></label>
-                                    <input type="text" name="customer_name" class="form-control" placeholder="Optional">
+                            <input type="hidden" name="ecommerce_customer_id" id="salesCustomerIdInput" value="">
+
+                            {{-- Dynamic Client Selector (4 States) --}}
+                            <div class="mb-3 p-3 rounded-3" style="background: #251d1c; border: 1px solid rgba(217, 143, 131, 0.22);">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="form-label mb-0" style="color: #d98f83; font-weight: 700; font-size: 13px; letter-spacing: .02em;">
+                                        Select a client <span class="ec-sub fw-normal">(optional)</span>
+                                    </label>
                                 </div>
-                                <div>
-                                    <label class="form-label">Customer WhatsApp <span class="ec-sub">(powers refill queue)</span></label>
-                                    <input type="text" name="customer_phone" class="form-control" placeholder="e.g. +974 5512 3456">
+
+                                {{-- STATE 1 & 2: Default "Search" State + Live Search Results State --}}
+                                <div id="clientSelectorSearchState">
+                                    <div class="position-relative mb-2">
+                                        <span class="position-absolute top-50 translate-middle-y" style="left: 13px; color: #8a7b78; pointer-events: none;">
+                                            <i class="bi bi-search"></i>
+                                        </span>
+                                        <input
+                                            type="text"
+                                            id="clientSelectorSearchInput"
+                                            class="form-control ec-form-control"
+                                            style="padding-left: 38px; background: #1c1615; border-color: rgba(217, 143, 131, 0.28);"
+                                            placeholder="Search by name or phone"
+                                            autocomplete="off"
+                                        >
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        id="clientSelectorAddNewBtn"
+                                        class="w-100 d-flex align-items-center gap-2 px-3 py-2 rounded-3 text-start"
+                                        style="background: rgba(217, 143, 131, 0.08); border: 1px dashed rgba(217, 143, 131, 0.35); color: #d98f83; font-weight: 600; font-size: 13px; transition: all 0.15s ease;"
+                                    >
+                                        <span class="d-inline-flex align-items-center justify-content-center rounded-circle" style="width: 24px; height: 24px; background: rgba(217, 143, 131, 0.2); color: #d98f83; font-size: 14px; line-height: 1;">+</span>
+                                        <span>+ Add new client</span>
+                                    </button>
+
+                                    {{-- Live Search Results List --}}
+                                    <div id="clientSelectorResultsWrapper" class="mt-2 rounded-3 overflow-hidden" style="display: none; background: #1c1615; border: 1px solid rgba(217, 143, 131, 0.22);">
+                                        <ul
+                                            id="clientSelectorResultsList"
+                                            class="list-unstyled mb-0"
+                                            style="max-height: 220px; overflow-y: auto;"
+                                        ></ul>
+                                    </div>
+                                </div>
+
+                                {{-- STATE 3: "Client Selected" State --}}
+                                <div id="clientSelectorSelectedState" style="display: none;">
+                                    <div
+                                        class="d-flex align-items-center justify-content-between gap-3 p-3 rounded-3"
+                                        style="background: #1c1615; border: 1px solid rgba(142, 168, 138, 0.4);"
+                                    >
+                                        <div class="d-flex align-items-center gap-3 min-w-0">
+                                            <div
+                                                id="selectedClientAvatar"
+                                                class="d-inline-flex align-items-center justify-content-center rounded-circle flex-shrink-0 fw-bold"
+                                                style="width: 42px; height: 42px; background: rgba(217, 143, 131, 0.18); border: 1px solid rgba(217, 143, 131, 0.4); color: #d98f83; font-size: 16px;"
+                                            >
+                                                A
+                                            </div>
+                                            <div class="min-w-0">
+                                                <div id="selectedClientName" class="fw-bold text-truncate" style="color: #f3e9e7; font-size: 14px;"></div>
+                                                <div id="selectedClientPhone" style="color: #8a7b78; font-size: 12.5px; font-family: monospace;"></div>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            id="clientSelectorClearBtn"
+                                            class="btn btn-sm d-inline-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
+                                            style="width: 30px; height: 30px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(217, 143, 131, 0.25); color: #c9a39a;"
+                                            title="Clear selected client"
+                                        >
+                                            <i class="bi bi-x-lg" style="font-size: 12px;"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {{-- STATE 4: "Add New Client" State --}}
+                                <div id="clientSelectorNewClientState" style="display: none;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2" style="border-bottom: 1px solid rgba(217, 143, 131, 0.14);">
+                                        <span class="fw-semibold" style="font-size: 12px; color: #c9a39a; text-transform: uppercase; letter-spacing: .04em;">New Client Details</span>
+                                        <button
+                                            type="button"
+                                            id="clientSelectorCancelNewBtn"
+                                            class="btn btn-sm py-0 px-2"
+                                            style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(217, 143, 131, 0.25); color: #c9a39a; font-size: 11.5px;"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                    <div class="ec-form-grid">
+                                        <div>
+                                            <label class="form-label">Full Name</label>
+                                            <input
+                                                type="text"
+                                                name="customer_name"
+                                                id="salesCustomerNameInput"
+                                                class="form-control ec-form-control"
+                                                style="background: #1c1615;"
+                                                placeholder="e.g. Ayesha Khan"
+                                                autocomplete="off"
+                                            >
+                                        </div>
+                                        <div>
+                                            <label class="form-label">Phone Number <span class="ec-sub">(WhatsApp)</span></label>
+                                            <div class="input-group">
+                                                <select
+                                                    name="customer_country_code"
+                                                    id="salesCustomerCountryCodeSelect"
+                                                    class="form-select ec-form-select"
+                                                    style="max-width: 122px; background: #1c1615; border-top-right-radius: 0; border-bottom-right-radius: 0;"
+                                                >
+                                                    <option value="+974" selected>+974 (QA)</option>
+                                                    <option value="+92">+92 (PK)</option>
+                                                    <option value="+971">+971 (UAE)</option>
+                                                    <option value="+966">+966 (KSA)</option>
+                                                    <option value="+965">+965 (KW)</option>
+                                                    <option value="+973">+973 (BH)</option>
+                                                    <option value="+968">+968 (OM)</option>
+                                                    <option value="+44">+44 (UK)</option>
+                                                    <option value="+1">+1 (US)</option>
+                                                </select>
+                                                <input
+                                                    type="text"
+                                                    name="customer_phone"
+                                                    id="salesCustomerPhoneInput"
+                                                    class="form-control ec-form-control"
+                                                    style="background: #1c1615;"
+                                                    placeholder="e.g. 5512 3456"
+                                                    autocomplete="off"
+                                                >
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -525,6 +403,8 @@
 
         <script>
             const BUNDLES = @json($bundlesForJs);
+            const CUSTOMER_SUGGESTIONS_URL = @json(route('ecommerce.customers.suggestions'));
+            const nonRevenueChannels = @json(\App\Models\EcommerceSale::NON_REVENUE_CHANNELS);
 
             const salesModeSelect = document.getElementById('salesModeSelect');
             const salesProductWrapper = document.getElementById('salesProductWrapper');
@@ -540,7 +420,205 @@
             const salesUnitPriceInput = document.getElementById('salesUnitPriceInput');
             const salesChannelSelect = document.getElementById('salesChannelSelect');
             const salesGrandTotalValue = document.getElementById('salesGrandTotalValue');
-            const nonRevenueChannels = ['Backbar Use (Qatar)', 'Damage/Expiry (Pakistan)', 'Damage/Expiry (Qatar)'];
+
+            // Dynamic Client Selector elements
+            const salesCustomerIdInput = document.getElementById('salesCustomerIdInput');
+            const clientSelectorSearchState = document.getElementById('clientSelectorSearchState');
+            const clientSelectorSearchInput = document.getElementById('clientSelectorSearchInput');
+            const clientSelectorAddNewBtn = document.getElementById('clientSelectorAddNewBtn');
+            const clientSelectorResultsWrapper = document.getElementById('clientSelectorResultsWrapper');
+            const clientSelectorResultsList = document.getElementById('clientSelectorResultsList');
+            const clientSelectorSelectedState = document.getElementById('clientSelectorSelectedState');
+            const selectedClientAvatar = document.getElementById('selectedClientAvatar');
+            const selectedClientName = document.getElementById('selectedClientName');
+            const selectedClientPhone = document.getElementById('selectedClientPhone');
+            const clientSelectorClearBtn = document.getElementById('clientSelectorClearBtn');
+            const clientSelectorNewClientState = document.getElementById('clientSelectorNewClientState');
+            const clientSelectorCancelNewBtn = document.getElementById('clientSelectorCancelNewBtn');
+            const salesCustomerNameInput = document.getElementById('salesCustomerNameInput');
+            const salesCustomerCountryCodeSelect = document.getElementById('salesCustomerCountryCodeSelect');
+            const salesCustomerPhoneInput = document.getElementById('salesCustomerPhoneInput');
+
+            let customerSuggestTimer = null;
+
+            function getCustomerInitial(name) {
+                const cleaned = String(name || '').trim();
+                return cleaned ? cleaned.charAt(0).toUpperCase() : '?';
+            }
+
+            function formatDisplayPhone(phone) {
+                const cleaned = String(phone || '').trim();
+                if (!cleaned) {
+                    return 'No phone on file';
+                }
+                return '+' + cleaned.replace(/^\+/, '');
+            }
+
+            function switchToSearchState() {
+                clearTimeout(customerSuggestTimer);
+                salesCustomerIdInput.value = '';
+                clientSelectorSearchInput.value = '';
+                clientSelectorResultsList.innerHTML = '';
+                clientSelectorResultsWrapper.style.display = 'none';
+
+                salesCustomerNameInput.value = '';
+                salesCustomerPhoneInput.value = '';
+                salesCustomerCountryCodeSelect.value = '+974';
+
+                clientSelectorSelectedState.style.display = 'none';
+                clientSelectorNewClientState.style.display = 'none';
+                clientSelectorSearchState.style.display = '';
+            }
+
+            function switchToSelectedClientState(customer) {
+                if (!customer) {
+                    return;
+                }
+
+                salesCustomerIdInput.value = customer.id || '';
+                salesCustomerNameInput.value = '';
+                salesCustomerPhoneInput.value = '';
+
+                selectedClientAvatar.textContent = getCustomerInitial(customer.name);
+                selectedClientName.textContent = customer.name || 'Unnamed Client';
+                selectedClientPhone.textContent = formatDisplayPhone(customer.phone);
+
+                clientSelectorSearchState.style.display = 'none';
+                clientSelectorNewClientState.style.display = 'none';
+                clientSelectorSelectedState.style.display = '';
+            }
+
+            function switchToNewClientState() {
+                clearTimeout(customerSuggestTimer);
+                salesCustomerIdInput.value = '';
+
+                const typedQuery = clientSelectorSearchInput.value.trim();
+                if (typedQuery) {
+                    const digitsOnly = typedQuery.replace(/\D+/g, '');
+                    if (digitsOnly.length >= 5 && digitsOnly.length === typedQuery.replace(/[\s+\-()]/g, '').length) {
+                        salesCustomerPhoneInput.value = digitsOnly;
+                        salesCustomerNameInput.value = '';
+                    } else {
+                        salesCustomerNameInput.value = typedQuery;
+                        salesCustomerPhoneInput.value = '';
+                    }
+                } else {
+                    salesCustomerNameInput.value = '';
+                    salesCustomerPhoneInput.value = '';
+                }
+
+                clientSelectorSearchState.style.display = 'none';
+                clientSelectorSelectedState.style.display = 'none';
+                clientSelectorNewClientState.style.display = '';
+                salesCustomerNameInput.focus();
+            }
+
+            function renderClientSearchResults(items) {
+                clientSelectorResultsList.innerHTML = '';
+
+                if (!Array.isArray(items) || items.length === 0) {
+                    const emptyLi = document.createElement('li');
+                    emptyLi.style.cssText = 'padding: 12px 14px; color: #8a7b78; font-size: 12.5px; text-align: center;';
+                    emptyLi.textContent = 'No matching clients found — click "+ Add new client" above.';
+                    clientSelectorResultsList.appendChild(emptyLi);
+                    clientSelectorResultsWrapper.style.display = 'block';
+                    return;
+                }
+
+                items.forEach(function (customer) {
+                    const li = document.createElement('li');
+                    li.className = 'd-flex align-items-center gap-3 px-3 py-2';
+                    li.style.cssText = 'cursor: pointer; border-bottom: 1px solid rgba(217, 143, 131, 0.12); transition: background 0.15s ease;';
+
+                    const avatar = document.createElement('div');
+                    avatar.className = 'd-inline-flex align-items-center justify-content-center rounded-circle flex-shrink-0 fw-bold';
+                    avatar.style.cssText = 'width: 36px; height: 36px; background: rgba(217, 143, 131, 0.16); border: 1px solid rgba(217, 143, 131, 0.35); color: #d98f83; font-size: 14px;';
+                    avatar.textContent = getCustomerInitial(customer.name);
+
+                    const details = document.createElement('div');
+                    details.className = 'min-w-0 flex-grow-1';
+
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'fw-semibold text-truncate';
+                    nameEl.style.cssText = 'color: #d98f83; font-size: 13.5px;';
+                    nameEl.textContent = customer.name || 'Unnamed Client';
+
+                    const phoneEl = document.createElement('div');
+                    phoneEl.style.cssText = 'color: #8a7b78; font-size: 12px; font-family: monospace;';
+                    phoneEl.textContent = formatDisplayPhone(customer.phone);
+
+                    details.appendChild(nameEl);
+                    details.appendChild(phoneEl);
+
+                    li.appendChild(avatar);
+                    li.appendChild(details);
+
+                    li.addEventListener('mouseenter', function () {
+                        li.style.background = 'rgba(217, 143, 131, 0.12)';
+                    });
+                    li.addEventListener('mouseleave', function () {
+                        li.style.background = 'transparent';
+                    });
+                    li.addEventListener('click', function () {
+                        switchToSelectedClientState(customer);
+                    });
+
+                    clientSelectorResultsList.appendChild(li);
+                });
+
+                clientSelectorResultsWrapper.style.display = 'block';
+            }
+
+            if (clientSelectorSearchInput) {
+                clientSelectorSearchInput.addEventListener('input', function () {
+                    clearTimeout(customerSuggestTimer);
+                    const query = this.value.trim();
+
+                    if (query.length < 1) {
+                        clientSelectorResultsList.innerHTML = '';
+                        clientSelectorResultsWrapper.style.display = 'none';
+                        return;
+                    }
+
+                    customerSuggestTimer = setTimeout(function () {
+                        fetch(CUSTOMER_SUGGESTIONS_URL + '?q=' + encodeURIComponent(query), {
+                            headers: { 'Accept': 'application/json' },
+                        })
+                            .then(function (res) { return res.ok ? res.json() : []; })
+                            .then(function (items) {
+                                renderClientSearchResults(items);
+                            })
+                            .catch(function () {
+                                clientSelectorResultsList.innerHTML = '';
+                                clientSelectorResultsWrapper.style.display = 'none';
+                            });
+                    }, 180);
+                });
+            }
+
+            if (clientSelectorAddNewBtn) {
+                clientSelectorAddNewBtn.addEventListener('mouseenter', function () {
+                    this.style.background = 'rgba(217, 143, 131, 0.16)';
+                });
+                clientSelectorAddNewBtn.addEventListener('mouseleave', function () {
+                    this.style.background = 'rgba(217, 143, 131, 0.08)';
+                });
+                clientSelectorAddNewBtn.addEventListener('click', switchToNewClientState);
+            }
+
+            if (clientSelectorClearBtn) {
+                clientSelectorClearBtn.addEventListener('click', function () {
+                    switchToSearchState();
+                    clientSelectorSearchInput.focus();
+                });
+            }
+
+            if (clientSelectorCancelNewBtn) {
+                clientSelectorCancelNewBtn.addEventListener('click', function () {
+                    switchToSearchState();
+                    clientSelectorSearchInput.focus();
+                });
+            }
 
             const isBundleMode = () => salesModeSelect.value === 'bundle';
 
@@ -565,9 +643,6 @@
                 salesUnitPriceInput.value = price ? parseFloat(price).toFixed(2) : '';
             }
 
-            // Bundles price themselves from the saved bundle record, so the
-            // manual Unit Price field is swapped out for a read-only mirror of
-            // the bundle price and excluded from the POST.
             function applySaleMode() {
                 const bundleMode = isBundleMode();
 
@@ -621,7 +696,6 @@
                 const nonRevenue = nonRevenueChannels.includes(salesChannelSelect.value);
 
                 if (isBundleMode()) {
-                    // Never submitted in bundle mode — the server prices it.
                     salesUnitPriceInput.required = false;
                     return;
                 }
@@ -666,132 +740,9 @@
 
             document.getElementById('salesModal').addEventListener('hidden.bs.modal', function () {
                 this.querySelector('form').reset();
+                switchToSearchState();
                 salesUnitPriceInput.readOnly = false;
                 applySaleMode();
-            });
-        </script>
-
-        {{-- Create Bundle Modal --}}
-        <div class="modal fade" id="bundleModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <form action="{{ route('ecommerce.bundles.store') }}" method="POST" id="bundleForm">
-                        @csrf
-                        <div class="modal-header">
-                            <h5 class="modal-title">Create Bundle / Kit</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="ec-form-grid mb-3">
-                                <div>
-                                    <label class="form-label">Bundle Name</label>
-                                    <input type="text" name="name" id="bundleNameInput" class="form-control" placeholder="e.g. Hair Repair Kit" required>
-                                </div>
-                                <div>
-                                    <label class="form-label">Bundle Price (PKR)</label>
-                                    <input type="number" step="0.01" min="0" name="bundle_price" id="bundlePriceInput" class="form-control" placeholder="e.g. 3500" required>
-                                </div>
-                            </div>
-
-                            <label class="form-label">Products in this bundle</label>
-                            <div id="bundleItemsRows"></div>
-                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="bundleAddItemBtn">+ Add Product</button>
-
-                            <div class="ec-accounting-note mt-3" id="bundleSummary" style="display: none;">
-                                <span>💰</span>
-                                <div id="bundleSummaryText"></div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="submit" class="btn btn-primary">Save Bundle</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <script>
-            // Standalone prices so the modal can show live bundle savings.
-            const BUNDLE_PRODUCT_PRICES = @json($products->mapWithKeys(fn ($p) => [$p->id => (float) ($salePricesByProduct[$p->id] ?? $p->selling_price ?? 0)]));
-            const bundleProductOptionsHtml = `@foreach ($products as $product)<option value="{{ $product->id }}">{{ $product->name }}{{ $product->sku ? ' (' . $product->sku . ')' : '' }}</option>@endforeach`;
-
-            const bundleItemsRows = document.getElementById('bundleItemsRows');
-            const bundlePriceInput = document.getElementById('bundlePriceInput');
-            const bundleSummary = document.getElementById('bundleSummary');
-            const bundleSummaryText = document.getElementById('bundleSummaryText');
-            let bundleItemIndex = 0;
-
-            function refreshBundleSummary() {
-                let standalone = 0;
-                let lines = 0;
-
-                bundleItemsRows.querySelectorAll('.bundle-item-row').forEach(function (row) {
-                    const productId = row.querySelector('.bundle-product-select').value;
-                    const qty = parseInt(row.querySelector('.bundle-qty-input').value, 10) || 0;
-                    if (productId && qty > 0) {
-                        standalone += (BUNDLE_PRODUCT_PRICES[productId] || 0) * qty;
-                        lines++;
-                    }
-                });
-
-                if (lines === 0) {
-                    bundleSummary.style.display = 'none';
-                    return;
-                }
-
-                const price = parseFloat(bundlePriceInput.value) || 0;
-                const savings = standalone - price;
-                bundleSummaryText.innerHTML =
-                    '<strong>Standalone value:</strong> PKR ' + standalone.toFixed(2) +
-                    ' · <strong>Bundle price:</strong> PKR ' + price.toFixed(2) +
-                    (savings > 0
-                        ? ' · Customer saves PKR ' + savings.toFixed(2)
-                        : (savings < 0 ? ' · ⚠ Priced ABOVE standalone by PKR ' + Math.abs(savings).toFixed(2) : ''));
-                bundleSummary.style.display = '';
-            }
-
-            function addBundleItemRow() {
-                const index = bundleItemIndex++;
-                const row = document.createElement('div');
-                row.className = 'row g-2 align-items-end mb-2 bundle-item-row';
-                row.innerHTML =
-                    '<div class="col-7">' +
-                        '<select name="items[' + index + '][ecommerce_product_id]" class="form-select bundle-product-select" required>' +
-                            '<option value="" disabled selected>Select product</option>' + bundleProductOptionsHtml +
-                        '</select>' +
-                    '</div>' +
-                    '<div class="col-3">' +
-                        '<input type="number" step="1" min="1" value="1" name="items[' + index + '][quantity]" class="form-control bundle-qty-input" required>' +
-                    '</div>' +
-                    '<div class="col-2">' +
-                        '<button type="button" class="btn btn-sm btn-outline-danger w-100 bundle-remove-btn"><i class="bi bi-trash"></i></button>' +
-                    '</div>';
-
-                bundleItemsRows.appendChild(row);
-                row.querySelector('.bundle-product-select').addEventListener('change', refreshBundleSummary);
-                row.querySelector('.bundle-qty-input').addEventListener('input', refreshBundleSummary);
-                row.querySelector('.bundle-remove-btn').addEventListener('click', function () {
-                    row.remove();
-                    refreshBundleSummary();
-                });
-            }
-
-            document.getElementById('bundleAddItemBtn').addEventListener('click', function () {
-                addBundleItemRow();
-                refreshBundleSummary();
-            });
-            bundlePriceInput.addEventListener('input', refreshBundleSummary);
-
-            document.getElementById('bundleModal').addEventListener('shown.bs.modal', function () {
-                if (bundleItemsRows.children.length === 0) {
-                    addBundleItemRow();
-                }
-            });
-
-            document.getElementById('bundleModal').addEventListener('hidden.bs.modal', function () {
-                document.getElementById('bundleForm').reset();
-                bundleItemsRows.innerHTML = '';
-                bundleSummary.style.display = 'none';
             });
         </script>
     @endmoduleEdit

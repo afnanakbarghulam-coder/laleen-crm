@@ -3,30 +3,29 @@
 
 @include('ecommerce._styles')
 
-@php
-    $channelBadgeClasses = [
-        'Shopify (Pakistan)' => 'ec-channel-shopify',
-        'Organic (Pakistan)' => 'ec-channel-organic',
-        'Salon (Old Airport)' => 'ec-channel-salon',
-        'Salon (Wakrah)' => 'ec-channel-salon',
-        'Organic (Qatar)' => 'ec-channel-organic',
-        'Backbar Use (Qatar)' => 'ec-channel-backbar',
-        'Damage/Expiry (Pakistan)' => 'ec-channel-damage',
-        'Damage/Expiry (Qatar)' => 'ec-channel-damage',
-    ];
-@endphp
-
 @section('content')
     <div class="ec-header">
         <div>
+            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Customers &amp; Sales</div>
             <h4>Net Profit</h4>
             <p>True bottom line: sales revenue less unit COGS, per-sale shipping/tax/ad spend, and operating expenses.</p>
         </div>
     </div>
 
-    @include('ecommerce._nav')
+    @include('ecommerce.partials._hub_tabs')
 
-    <div class="d-flex justify-content-end align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <a
+            href="{{ route('ecommerce.profit.transactions', array_filter(['start_date' => $startDate, 'end_date' => $endDate])) }}"
+            class="btn btn-sm d-inline-flex align-items-center gap-2 border border-[#d98f83] text-[#d98f83] hover:bg-[#d98f83]/10"
+            style="border: 1px solid #d98f83; color: #d98f83; background: transparent; font-weight: 600; border-radius: 8px; padding: 6px 14px; transition: background 0.15s ease;"
+            onmouseover="this.style.background='rgba(217, 143, 131, 0.12)'"
+            onmouseout="this.style.background='transparent'"
+        >
+            <i class="bi bi-table"></i>
+            <span>View All Transactions</span>
+        </a>
+
         <form method="GET" action="{{ route('ecommerce.net-profit.index') }}" class="d-flex align-items-center flex-wrap gap-2">
             <div class="d-flex align-items-center gap-2">
                 <label for="startDateFilter" class="ec-sub mb-0">From</label>
@@ -38,58 +37,48 @@
         </form>
     </div>
 
-    <div class="row g-3">
-        <div class="col-md-4">
-            <div class="ec-card">
-                <h6>Gross Revenue</h6>
-                <div class="ec-value">PKR {{ number_format($totalRevenue, 2) }}</div>
-                <div class="ec-sub">{{ $filterText }}</div>
+    {{-- Row 1: 5 Executive KPI Cards --}}
+    <div class="mb-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px;">
+        <div class="ec-card mb-0 h-100">
+            <h6>Gross Revenue</h6>
+            <div class="ec-value">PKR {{ number_format($totalRevenue, 2) }}</div>
+            <div class="ec-sub">{{ $filterText }}</div>
+        </div>
+
+        <div class="ec-card mb-0 h-100">
+            <h6>Total COGS</h6>
+            <div class="ec-value ec-negative">PKR {{ number_format($totalCogs, 2) }}</div>
+            <div class="ec-sub">Bill of Materials cost of goods sold</div>
+        </div>
+
+        <div class="ec-card mb-0 h-100">
+            <h6>Gross Profit</h6>
+            <div class="ec-value {{ $grossProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($grossProfit, 2) }}</div>
+            <div class="ec-sub">Revenue &minus; COGS &middot; {{ number_format($grossMargin, 1) }}% margin</div>
+        </div>
+
+        <div class="ec-card mb-0 h-100">
+            <h6>Operating Expenses</h6>
+            <div class="ec-value ec-negative">PKR {{ number_format($totalDeductions, 2) }}</div>
+            <div class="ec-sub">
+                Ops PKR {{ number_format($expenseDeductions, 2) }}
+                &middot; Order costs PKR {{ number_format($saleLevelDeductions, 2) }}
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="ec-card">
-                <h6>Total COGS</h6>
-                <div class="ec-value ec-negative">PKR {{ number_format($totalCogs, 2) }}</div>
-                <div class="ec-sub">Bill of Materials cost of goods sold</div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="ec-card">
-                <h6>Gross Profit</h6>
-                <div class="ec-value {{ $grossProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($grossProfit, 2) }}</div>
-                <div class="ec-sub">Revenue &minus; COGS &middot; {{ number_format($grossMargin, 1) }}% margin</div>
-            </div>
+
+        <div class="ec-card ec-card-highlight mb-0 h-100">
+            <h6>True Net Profit</h6>
+            <div class="ec-value {{ $trueNetProfit >= 0 ? 'ec-positive' : 'ec-negative' }}" style="font-size: 24px;">PKR {{ number_format($trueNetProfit, 2) }}</div>
+            <div class="ec-sub">Gross Profit &minus; Expenses &middot; {{ number_format($trueNetMargin, 1) }}% margin</div>
         </div>
     </div>
 
-    <div class="row g-3 mt-1">
-        <div class="col-md-6">
-            <div class="ec-card">
-                <h6>Operating Expenses</h6>
-                <div class="ec-value ec-negative">PKR {{ number_format($totalDeductions, 2) }}</div>
-                <div class="ec-sub">
-                    Operating costs PKR {{ number_format($expenseDeductions, 2) }}
-                    &middot; Per-sale shipping/tax/ads PKR {{ number_format($saleLevelDeductions, 2) }}
-                </div>
-            </div>
+    {{-- Row 2: Full-Width Net Profit Trend Chart --}}
+    <div class="ec-card ec-chart-card mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-1">
+            <h6 class="mb-0">Net Profit Trend</h6>
+            <span class="ec-sub mt-0">{{ $filterText }}</span>
         </div>
-        <div class="col-md-6">
-            <div class="ec-card ec-card-highlight">
-                <h6>True Net Profit</h6>
-                <div class="ec-value {{ $trueNetProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($trueNetProfit, 2) }}</div>
-                <div class="ec-sub">Gross Profit &minus; Operating Expenses &middot; {{ number_format($trueNetMargin, 1) }}% margin</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="ec-accounting-note mt-3">
-        <span>💡</span>
-        <div><strong>Why bottles &amp; labels aren't in Operating Expenses:</strong> {{ $bomAccountingNote }}</div>
-    </div>
-
-    <div class="ec-card ec-chart-card mt-3 mb-3">
-        <h6>Net Profit Trend</h6>
-        <div class="ec-sub" style="margin-bottom: 4px;">{{ $filterText }}</div>
         @if (count($chartLabels) > 0)
             <canvas id="netProfitTrendChart" height="90" class="mt-2"></canvas>
         @else
@@ -97,129 +86,72 @@
         @endif
     </div>
 
-    <div class="ec-card">
-        <h6 style="margin-bottom: 16px;">Deduction Breakdown</h6>
-        @if ($totalDeductions <= 0)
-            <div class="ec-chart-empty">No deductions logged yet for these categories.</div>
-        @else
-            @foreach ($deductionBreakdown as $row)
-                @php
-                    $pct = $totalDeductions > 0 ? ($row['amount'] / $totalDeductions) * 100 : 0;
-                @endphp
-                <div class="ec-breakdown-row">
-                    <div class="ec-breakdown-label">{{ $row['category'] }}</div>
-                    <div class="ec-breakdown-bar-track">
-                        <div class="ec-breakdown-bar-fill" style="width: {{ max($pct, $row['amount'] > 0 ? 1.5 : 0) }}%;"></div>
-                    </div>
-                    <div class="ec-breakdown-amount">PKR {{ number_format($row['amount'], 2) }}</div>
-                    <div class="ec-breakdown-pct">{{ number_format($pct, 1) }}%</div>
+    {{-- Row 3: 50/50 Split — Deduction Breakdown (Left) & Partner Profit Share (Right) --}}
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="ec-card h-100 mb-0">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">Deduction Breakdown</h6>
+                    <span class="ec-sub mt-0">Total: <strong style="color: #d98f83;">PKR {{ number_format($totalDeductions, 2) }}</strong></span>
                 </div>
-            @endforeach
-        @endif
-    </div>
-
-    <div class="ec-card mt-3">
-        <h6 style="margin-bottom: 4px;">Partner Profit Share</h6>
-        <p class="ec-sub mb-3">{{ $filterText }} &middot; Each partner's equity slice of True Net Profit (PKR {{ number_format($trueNetProfit, 2) }}).</p>
-        @if ($partnerProfitShare->isEmpty())
-            <div class="ec-chart-empty">No partners yet &mdash; add them on the Partner Ledger tab.</div>
-        @else
-            @php
-                $totalEquity = (float) $partnerProfitShare->sum('equity_percentage');
-                $totalAllocated = (float) $partnerProfitShare->sum('share');
-            @endphp
-            @foreach ($partnerProfitShare as $row)
-                <div class="ec-partner-share-row">
-                    <div class="ec-partner-share-name">{{ $row['partner']->name }}</div>
-                    <div class="ec-partner-share-equity">{{ number_format($row['equity_percentage'], 4) }}% equity</div>
-                    <div class="ec-partner-share-amount {{ $row['share'] >= 0 ? 'ec-positive' : 'ec-negative' }}">
-                        PKR {{ number_format($row['share'], 2) }}
+                @if ($totalDeductions <= 0)
+                    <div class="ec-chart-empty" style="height: 150px;">No active deductions in this period.</div>
+                @else
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                        @foreach ($deductionBreakdown as $row)
+                            @if ($row['amount'] > 0)
+                                @php
+                                    $pct = $totalDeductions > 0 ? ($row['amount'] / $totalDeductions) * 100 : 0;
+                                @endphp
+                                <div class="d-flex justify-content-between align-items-center px-3 py-2 rounded-3" style="background: #1c1615; border: 1px solid rgba(217, 143, 131, 0.18);">
+                                    <div class="me-2 min-w-0">
+                                        <div class="fw-semibold text-truncate" style="color: #f3e9e7; font-size: 12.5px;">{{ $row['category'] }}</div>
+                                        <div style="color: #8a7b78; font-size: 11px;">{{ number_format($pct, 1) }}% of deductions</div>
+                                    </div>
+                                    <div class="fw-bold text-end flex-shrink-0" style="color: #d98f83; font-size: 13px; font-variant-numeric: tabular-nums;">
+                                        PKR {{ number_format($row['amount'], 2) }}
+                                    </div>
+                                </div>
+                            @endif
+                        @endforeach
                     </div>
-                </div>
-            @endforeach
-            <div class="ec-partner-share-total">
-                <div style="flex: 1; min-width: 0;">Total allocated</div>
-                <div>{{ number_format($totalEquity, 4) }}%</div>
-                <div style="min-width: 150px; text-align: right; font-weight: 700;">PKR {{ number_format($totalAllocated, 2) }}</div>
+                @endif
             </div>
-            @if (abs($totalEquity - 100) > 0.01)
-                <div class="ec-sub ec-negative mt-2">
-                    ⚠ Equity across all partners totals {{ number_format($totalEquity, 4) }}%, not 100% &mdash;
-                    PKR {{ number_format($trueNetProfit - $totalAllocated, 2) }} of True Net Profit is unallocated.
-                </div>
-            @endif
-        @endif
-    </div>
+        </div>
 
-    <div class="ec-card mt-3">
-        <h6 class="mb-3">Per-Transaction Profitability</h6>
-        <p class="ec-sub mb-3">{{ $filterText }} &middot; Each cost column is a snapshot of the product's BOM at the time the sale was logged, not today's pricing.</p>
-        <div class="table-responsive">
-            <table class="table ec-table align-middle">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Product</th>
-                        <th>Channel</th>
-                        <th class="text-end">Quantity</th>
-                        <th class="text-end">Total Revenue</th>
-                        <th class="text-end">Liquid Cost</th>
-                        <th class="text-end">Bottle Cost</th>
-                        <th class="text-end">Label Cost</th>
-                        <th class="text-end">Pump Cost</th>
-                        <th class="text-end">Box Cost</th>
-                        <th class="text-end">Shipping</th>
-                        <th class="text-end">Taxes</th>
-                        <th class="text-end">Meta Ads</th>
-                        <th class="text-end">Gross Profit</th>
-                        <th class="text-end">Gross Margin %</th>
-                        <th class="text-end">True Net Profit</th>
-                        <th class="text-end">Net Margin %</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($sales as $sale)
-                        @php
-                            $saleRevenue = (float) $sale->total_price;
-                            $saleLiquidCost = (float) $sale->quantity * (float) ($sale->unit_liquid_cost ?? 0);
-                            $saleBottleCost = (float) $sale->quantity * (float) ($sale->unit_bottle_cost ?? 0);
-                            $saleLabelCost = (float) $sale->quantity * (float) ($sale->unit_label_cost ?? 0);
-                            $salePumpCost = (float) $sale->quantity * (float) ($sale->unit_pump_cost ?? 0);
-                            $saleBoxCost = (float) $sale->quantity * (float) ($sale->unit_outer_box_cost ?? 0);
-                            $saleCogs = $saleLiquidCost + $saleBottleCost + $saleLabelCost + $salePumpCost + $saleBoxCost;
-                            $saleGrossProfit = $saleRevenue - $saleCogs;
-                            $saleGrossMargin = $saleRevenue > 0 ? ($saleGrossProfit / $saleRevenue) * 100 : 0;
-
-                            $saleShipping = (float) ($sale->shipping_cost ?? 0);
-                            $saleTax = (float) ($sale->tax_amount ?? 0);
-                            $saleMetaAd = (float) ($sale->meta_ad_allocation ?? 0);
-                            $saleTrueNetProfit = $saleGrossProfit - $saleShipping - $saleTax - $saleMetaAd;
-                            $saleNetMargin = $saleRevenue > 0 ? ($saleTrueNetProfit / $saleRevenue) * 100 : 0;
-                        @endphp
-                        <tr>
-                            <td>{{ $sale->created_at->format('d M Y') }}</td>
-                            <td>{{ $sale->product->name ?? '—' }}</td>
-                            <td><span class="ec-channel-badge {{ $channelBadgeClasses[$sale->channel] ?? 'ec-channel-backbar' }}">{{ $sale->channel }}</span></td>
-                            <td class="text-end">{{ number_format($sale->quantity, 0) }}</td>
-                            <td class="text-end">PKR {{ number_format($saleRevenue, 2) }}</td>
-                            <td class="text-end">{{ $saleLiquidCost > 0 ? 'PKR ' . number_format($saleLiquidCost, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleBottleCost > 0 ? 'PKR ' . number_format($saleBottleCost, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleLabelCost > 0 ? 'PKR ' . number_format($saleLabelCost, 2) : '—' }}</td>
-                            <td class="text-end">{{ $salePumpCost > 0 ? 'PKR ' . number_format($salePumpCost, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleBoxCost > 0 ? 'PKR ' . number_format($saleBoxCost, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleShipping > 0 ? 'PKR ' . number_format($saleShipping, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleTax > 0 ? 'PKR ' . number_format($saleTax, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleMetaAd > 0 ? 'PKR ' . number_format($saleMetaAd, 2) : '—' }}</td>
-                            <td class="text-end {{ $saleGrossProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($saleGrossProfit, 2) }}</td>
-                            <td class="text-end {{ $saleGrossMargin >= 0 ? 'ec-positive' : 'ec-negative' }}">{{ number_format($saleGrossMargin, 1) }}%</td>
-                            <td class="text-end {{ $saleTrueNetProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($saleTrueNetProfit, 2) }}</td>
-                            <td class="text-end {{ $saleNetMargin >= 0 ? 'ec-positive' : 'ec-negative' }}">{{ number_format($saleNetMargin, 1) }}%</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="17" class="text-center text-muted">No sales in this date range</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
+        <div class="col-lg-6">
+            <div class="ec-card h-100 mb-0">
+                <h6 style="margin-bottom: 4px;">Partner Profit Share</h6>
+                <p class="ec-sub mb-3">{{ $filterText }} &middot; Each partner's equity slice of True Net Profit (PKR {{ number_format($trueNetProfit, 2) }}).</p>
+                @if ($partnerProfitShare->isEmpty())
+                    <div class="ec-chart-empty" style="height: 150px;">No partners yet &mdash; add them on the Partner Ledger tab.</div>
+                @else
+                    @php
+                        $totalEquity = (float) $partnerProfitShare->sum('equity_percentage');
+                        $totalAllocated = (float) $partnerProfitShare->sum('share');
+                    @endphp
+                    @foreach ($partnerProfitShare as $row)
+                        <div class="ec-partner-share-row">
+                            <div class="ec-partner-share-name">{{ $row['partner']->name }}</div>
+                            <div class="ec-partner-share-equity">{{ number_format($row['equity_percentage'], 4) }}% equity</div>
+                            <div class="ec-partner-share-amount {{ $row['share'] >= 0 ? 'ec-positive' : 'ec-negative' }}">
+                                PKR {{ number_format($row['share'], 2) }}
+                            </div>
+                        </div>
+                    @endforeach
+                    <div class="ec-partner-share-total">
+                        <div style="flex: 1; min-width: 0;">Total allocated</div>
+                        <div>{{ number_format($totalEquity, 4) }}%</div>
+                        <div style="min-width: 150px; text-align: right; font-weight: 700;">PKR {{ number_format($totalAllocated, 2) }}</div>
+                    </div>
+                    @if (abs($totalEquity - 100) > 0.01)
+                        <div class="ec-sub ec-negative mt-2">
+                            ⚠ Equity across all partners totals {{ number_format($totalEquity, 4) }}%, not 100% &mdash;
+                            PKR {{ number_format($trueNetProfit - $totalAllocated, 2) }} of True Net Profit is unallocated.
+                        </div>
+                    @endif
+                @endif
+            </div>
         </div>
     </div>
 

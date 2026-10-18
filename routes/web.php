@@ -5,6 +5,7 @@ use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\Ecommerce\EcommerceContentCalendarController;
 use App\Http\Controllers\Ecommerce\EcommerceController;
+use App\Http\Controllers\Ecommerce\EcommerceCustomerController;
 use App\Http\Controllers\Ecommerce\EcommerceExpenseController;
 use App\Http\Controllers\Ecommerce\EcommerceInventoryController;
 use App\Http\Controllers\Ecommerce\EcommerceMonthlyAdsController;
@@ -272,14 +273,24 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/marketing/ads-plan', [EcommerceMonthlyAdsController::class, 'index'])->name('marketing.ads-plan.index');
             Route::get('/marketing/content-calendar', [EcommerceContentCalendarController::class, 'index'])->name('marketing.content.index');
 
+            // Financials & Inventory group
             Route::get('/partners', [EcommercePartnerController::class, 'index'])->name('partners.index');
             Route::get('/products', [EcommerceProductController::class, 'index'])->name('products.index');
             Route::get('/expenses', [EcommerceExpenseController::class, 'index'])->name('expenses.index');
             Route::get('/inventory', [EcommerceInventoryController::class, 'index'])->name('inventory.index');
             Route::get('/pricing', [EcommercePricingController::class, 'index'])->name('pricing.index');
             Route::get('/stock', [EcommerceStockController::class, 'index'])->name('stock.index');
-            Route::get('/sales', [EcommerceSalesController::class, 'index'])->name('sales.index');
-            Route::get('/net-profit', [EcommerceNetProfitController::class, 'index'])->name('net-profit.index');
+
+            // Customers & Unified LTV Hub group (/ecommerce/hub/...)
+            Route::prefix('hub')->group(function () {
+                Route::get('/', fn () => redirect()->route('ecommerce.customers.index'))->name('hub.index');
+                Route::get('/customers/suggestions', [EcommerceCustomerController::class, 'searchSuggestions'])->name('customers.suggestions');
+                Route::get('/customers', [EcommerceCustomerController::class, 'index'])->name('customers.index');
+                Route::get('/customers/{customer}', [EcommerceCustomerController::class, 'show'])->name('customers.show');
+                Route::get('/sales', [EcommerceSalesController::class, 'index'])->name('sales.index');
+                Route::get('/profit', [EcommerceNetProfitController::class, 'index'])->name('net-profit.index');
+                Route::get('/profit/transactions', [EcommerceNetProfitController::class, 'transactions'])->name('profit.transactions');
+            });
         });
         Route::middleware('module:ecommerce,edit')->group(function () {
             Route::post('/partners', [EcommercePartnerController::class, 'storePartner'])->name('partners.store');
@@ -300,14 +311,16 @@ Route::middleware(['auth'])->group(function () {
 
             Route::post('/pricing', [EcommercePricingController::class, 'store'])->name('pricing.store');
             Route::delete('/pricing/{pricingModel}', [EcommercePricingController::class, 'destroy'])->name('pricing.destroy');
+            Route::post('/pricing/bundles', [EcommercePricingController::class, 'storeBundle'])->name('bundles.store');
+            Route::delete('/pricing/bundles/{bundle}', [EcommercePricingController::class, 'destroyBundle'])->name('bundles.destroy');
 
             Route::post('/stock/transfer', [EcommerceStockController::class, 'transfer'])->name('stock.transfer');
 
-            Route::post('/sales', [EcommerceSalesController::class, 'store'])->name('sales.store');
-            Route::delete('/sales/{sale}', [EcommerceSalesController::class, 'destroy'])->name('sales.destroy');
-
-            Route::post('/bundles', [EcommerceSalesController::class, 'storeBundle'])->name('bundles.store');
-            Route::delete('/bundles/{bundle}', [EcommerceSalesController::class, 'destroyBundle'])->name('bundles.destroy');
+            // Customers & Sales Hub write routes
+            Route::prefix('hub')->group(function () {
+                Route::post('/sales', [EcommerceSalesController::class, 'store'])->name('sales.store');
+                Route::delete('/sales/{sale}', [EcommerceSalesController::class, 'destroy'])->name('sales.destroy');
+            });
 
             Route::post('/kpis', [EcommerceController::class, 'storeKpi'])->name('kpis.store');
             Route::delete('/kpis/{kpi}', [EcommerceController::class, 'destroyKpi'])->name('kpis.destroy');

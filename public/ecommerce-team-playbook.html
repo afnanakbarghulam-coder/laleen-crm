@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laleen Ops — Easy Team Guide (E-Commerce & Growth)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #1c1615;
+            --bg-surface: #251e1c;
+            --bg-elevated: #2f2624;
+            --rose-gold: #d98f83;
+            --rose-gold-soft: rgba(217, 143, 131, 0.15);
+            --rose-gold-border: rgba(217, 143, 131, 0.38);
+            --champagne: #c9a66b;
+            --champagne-soft: rgba(201, 166, 107, 0.16);
+            --emerald: #8ea88a;
+            --emerald-soft: rgba(142, 168, 138, 0.18);
+            --emerald-border: rgba(142, 168, 138, 0.48);
+            --crimson: #d4726a;
+            --crimson-soft: rgba(212, 114, 106, 0.18);
+            --crimson-border: rgba(212, 114, 106, 0.48);
+            --text-primary: #f7efed;
+            --text-secondary: #d5c5c1;
+            --text-muted: #9e8c88;
+            --border-subtle: rgba(245, 236, 234, 0.1);
+            --border-strong: rgba(245, 236, 234, 0.2);
+            --shadow-lux: 0 20px 45px rgba(0, 0, 0, 0.42);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(circle at 12% 15%, rgba(217, 143, 131, 0.12), transparent 40%),
+                radial-gradient(circle at 88% 82%, rgba(142, 168, 138, 0.08), transparent 42%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        h1, h2, h3, h4, .font-display {
+            font-family: 'Space Grotesk', sans-serif;
+            letter-spacing: -0.02em;
+        }
+
+        /* Top bar */
+        .topbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 64px;
+            padding: 0 36px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-subtle);
+            background: rgba(28, 22, 21, 0.88);
+            backdrop-filter: blur(12px);
+            z-index: 20;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-mark {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--rose-gold), var(--champagne));
+            color: #1c1615;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 17px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .brand-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--text-primary);
+        }
+
+        .brand-sub {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-left: 8px;
+            padding-left: 10px;
+            border-left: 1px solid var(--border-strong);
+        }
+
+        .slide-dots {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .slide-dot {
+            width: 26px;
+            height: 7px;
+            border-radius: 999px;
+            background: rgba(245, 236, 234, 0.16);
+            border: none;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .slide-dot.active {
+            width: 46px;
+            background: var(--rose-gold);
+            box-shadow: 0 0 12px rgba(217, 143, 131, 0.55);
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .pill-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 13px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            background: var(--rose-gold-soft);
+            color: var(--rose-gold);
+            border: 1px solid var(--rose-gold-border);
+        }
+
+        .pill-tag.emerald {
+            background: var(--emerald-soft);
+            color: var(--emerald);
+            border-color: var(--emerald-border);
+        }
+
+        .pill-tag.crimson {
+            background: var(--crimson-soft);
+            color: var(--crimson);
+            border-color: var(--crimson-border);
+        }
+
+        .pill-tag.champagne {
+            background: var(--champagne-soft);
+            color: var(--champagne);
+            border-color: rgba(201, 166, 107, 0.45);
+        }
+
+        /* Slide stage */
+        .deck-viewport {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            padding: 82px 48px 82px;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide {
+            display: none;
+            width: 100%;
+            max-width: 1280px;
+            height: 100%;
+            max-height: 760px;
+            flex-direction: column;
+            justify-content: space-between;
+            animation: slideFadeIn 0.28s ease-out;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .slide.active {
+            display: flex;
+        }
+
+        @keyframes slideFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .slide-header {
+            margin-bottom: 14px;
+        }
+
+        .slide-eyebrow {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .slide-title {
+            font-size: clamp(28px, 3vw, 40px);
+            font-weight: 700;
+            line-height: 1.15;
+            color: var(--text-primary);
+        }
+
+        .slide-title span.accent { color: var(--rose-gold); }
+        .slide-title span.emerald { color: var(--emerald); }
+
+        .slide-subtitle {
+            margin-top: 8px;
+            font-size: 17px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+            max-width: 920px;
+        }
+
+        /* Grids & Cards */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 20px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 18px;
+            padding: 22px;
+            box-shadow: var(--shadow-lux);
+        }
+
+        .card.rose-border {
+            border-color: var(--rose-gold-border);
+            background: linear-gradient(165deg, rgba(217, 143, 131, 0.1), var(--bg-surface) 60%);
+        }
+
+        .card.emerald-border {
+            border-color: var(--emerald-border);
+            background: linear-gradient(165deg, rgba(142, 168, 138, 0.12), var(--bg-surface) 60%);
+        }
+
+        .card.crimson-border {
+            border-color: var(--crimson-border);
+            background: linear-gradient(165deg, rgba(212, 114, 106, 0.12), var(--bg-surface) 60%);
+        }
+
+        .card.champagne-border {
+            border-color: rgba(201, 166, 107, 0.45);
+            background: linear-gradient(165deg, rgba(201, 166, 107, 0.1), var(--bg-surface) 60%);
+        }
+
+        .step-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 9px;
+            background: var(--rose-gold);
+            color: #1c1615;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .step-badge.emerald { background: var(--emerald); }
+        .step-badge.champagne { background: var(--champagne); }
+
+        .card-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .card-body {
+            font-size: 15px;
+            line-height: 1.55;
+            color: var(--text-secondary);
+        }
+
+        .simple-rule {
+            background: rgba(18, 14, 13, 0.78);
+            border: 1px solid var(--border-strong);
+            border-left: 4px solid var(--rose-gold);
+            border-radius: 12px;
+            padding: 14px 16px;
+            font-size: 15px;
+            line-height: 1.5;
+            color: var(--text-primary);
+            margin: 12px 0;
+        }
+
+        .simple-rule.emerald {
+            border-left-color: var(--emerald);
+        }
+
+        .clean-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .clean-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 15px;
+            line-height: 1.45;
+            color: var(--text-secondary);
+        }
+
+        .clean-list li .check {
+            color: var(--rose-gold);
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .clean-list li .check.emerald { color: var(--emerald); }
+
+        .metric-big {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            margin: 4px 0;
+            color: var(--text-primary);
+        }
+
+        .metric-big.emerald { color: var(--emerald); }
+        .metric-big.crimson { color: var(--crimson); }
+        .metric-big.champagne { color: var(--champagne); }
+
+        .sim-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .sim-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .sim-input {
+            background: #161110;
+            border: 1px solid var(--border-strong);
+            color: var(--text-primary);
+            padding: 9px 12px;
+            border-radius: 9px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 15px;
+            outline: none;
+        }
+
+        .sim-input:focus {
+            border-color: var(--rose-gold);
+        }
+
+        .wa-preview {
+            background: rgba(37, 211, 102, 0.09);
+            border: 1px solid rgba(37, 211, 102, 0.32);
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-size: 13.5px;
+            line-height: 1.45;
+            color: #dff7e7;
+            margin-top: 12px;
+        }
+
+        .bottom-tip {
+            padding: 15px 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 15px;
+        }
+
+        /* Footer navigation */
+        .bottombar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 64px;
+            padding: 0 36px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-top: 1px solid var(--border-subtle);
+            background: rgba(28, 22, 21, 0.9);
+            backdrop-filter: blur(12px);
+            z-index: 20;
+        }
+
+        .kbd-hint {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .kbd {
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-strong);
+            font-family: 'Space Grotesk', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .nav-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .slide-counter {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            min-width: 72px;
+            text-align: center;
+        }
+
+        .btn-nav {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border: 1px solid var(--border-strong);
+            padding: 9px 18px;
+            border-radius: 10px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.18s ease;
+        }
+
+        .btn-nav:hover:not(:disabled) {
+            border-color: var(--rose-gold);
+            background: var(--rose-gold-soft);
+            color: var(--rose-gold);
+        }
+
+        .btn-nav.primary {
+            background: var(--rose-gold);
+            color: #1c1615;
+            border-color: var(--rose-gold);
+        }
+
+        .btn-nav:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-mark">L</div>
+            <span class="brand-title">LALEEN OPS</span>
+            <span class="brand-sub">Simple Team Training Guide</span>
+        </div>
+
+        <div class="slide-dots" id="slideDots"></div>
+
+        <div class="top-actions">
+            <span class="pill-tag emerald">Easy Playbook</span>
+            <button class="btn-nav" id="fullscreenBtn" title="Toggle Fullscreen (F)">⛶ Fullscreen</button>
+        </div>
+    </header>
+
+    <main class="deck-viewport">
+
+        <!-- ==================== SLIDE 1: THE BIG PICTURE ==================== -->
+        <section class="slide active" data-title="How Laleen E-Commerce Works">
+            <div class="slide-header">
+                <div class="slide-eyebrow">
+                    <span class="pill-tag">Slide 1 of 7 · The Big Picture</span>
+                </div>
+                <h1 class="slide-title">How Laleen E-Commerce Works in <span class="accent">3 Simple Steps</span></h1>
+                <p class="slide-subtitle">
+                    Think of this system as our complete product diary. It tracks how we <strong>make bottles</strong>, how we <strong>price &amp; sell them</strong> in Pakistan and Qatar, and how we <strong>bring customers back</strong> on WhatsApp.
+                </p>
+            </div>
+
+            <div class="grid-3">
+                <div class="card rose-border">
+                    <div class="step-badge">1</div>
+                    <div class="card-title">Make &amp; Price It</div>
+                    <div class="card-body">
+                        We buy raw materials (liquid, bottles, labels, boxes) and turn them into finished bottles. Then we check our exact cost per bottle so we never sell at a loss.
+                    </div>
+                    <ul class="clean-list">
+                        <li><span class="check">&rarr;</span><span>Track raw materials &amp; finished bottles</span></li>
+                        <li><span class="check">&rarr;</span><span>Separate stock for <strong>Pakistan</strong> &amp; <strong>Qatar</strong></span></li>
+                        <li><span class="check">&rarr;</span><span>Build profitable 2–4 item bundles</span></li>
+                    </ul>
+                </div>
+
+                <div class="card champagne-border">
+                    <div class="step-badge champagne">2</div>
+                    <div class="card-title">Promote &amp; Sell It</div>
+                    <div class="card-body">
+                        We plan social posts in the Content Calendar, run Meta Ads, and log every sale (Shopify, Organic, or Salon Reception) along with the customer's WhatsApp number.
+                    </div>
+                    <ul class="clean-list">
+                        <li><span class="check">&rarr;</span><span>Test video hooks &amp; scale winning ads</span></li>
+                        <li><span class="check">&rarr;</span><span>Log every sale or salon wash-basin use</span></li>
+                        <li><span class="check">&rarr;</span><span>Stock updates automatically on every sale</span></li>
+                    </ul>
+                </div>
+
+                <div class="card emerald-border">
+                    <div class="step-badge emerald">3</div>
+                    <div class="card-title">Bring Buyers Back</div>
+                    <div class="card-body">
+                        Once a customer buys, the system automatically reminds us when to message them on WhatsApp at <strong>Day 7</strong>, <strong>Day 30</strong>, and <strong>Day 60</strong>—turning 1 order into 3+ orders!
+                    </div>
+                    <ul class="clean-list">
+                        <li><span class="check emerald">&rarr;</span><span>1-click WhatsApp follow-up buttons</span></li>
+                        <li><span class="check emerald">&rarr;</span><span>Daily check if ads are making or losing cash</span></li>
+                        <li><span class="check emerald">&rarr;</span><span>Clear Partner &amp; Net Profit reports</span></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card bottom-tip">
+                <div>
+                    💡 <strong style="color: var(--rose-gold);">Good to know:</strong> Everything in E-Commerce is completely separate from Salon Bookings—you can test and work here safely without affecting salon appointments!
+                </div>
+                <span class="pill-tag emerald">Safe &amp; Separate</span>
+            </div>
+        </section>
+
+        <!-- ==================== SLIDE 2: INVENTORY & PRODUCTION ==================== -->
+        <section class="slide" data-title="Stock & Making Bottles">
+            <div class="slide-header">
+                <div class="slide-eyebrow">
+                    <span class="pill-tag">Slide 2 of 7 · Inventory &amp; Production</span>
+                </div>
+                <h1 class="slide-title">From Raw Parts to <span class="accent">Finished Bottles</span></h1>
+                <p class="slide-subtitle">
+                    Just like baking a cake, you can't make a finished bottle unless all the ingredients are in stock. Our system uses a simple <strong>2-Step Stock System</strong>.
+                </p>
+            </div>
+
+            <div class="grid-2">
+                <div class="card rose-border">
+                    <div class="card-title">🍲 The "Recipe" Rule (Bill of Materials)</div>
+                    <div class="card-body">
+                        When you click <strong>Run Production Batch</strong> to make finished bottles, the system checks if you have enough raw parts in stock:
+                    </div>
+
+                    <div class="simple-rule">
+                        <strong>To make 1 Hair Oil Bottle, you need:</strong><br>
+                        💧 Liquid Base + 🍾 Bottle + 🏷️ Label + 📦 Outer Box<br>
+                        <span style="color: var(--text-muted); font-size: 13px;">(No pump needed for Hair Oil!)</span>
+                    </div>
+
+                    <div class="simple-rule emerald">
+                        <strong>To make 1 Shampoo Bottle, you need:</strong><br>
+                        💧 Liquid Base + 🍾 Bottle + 🏷️ Label + 🧴 <strong>Pump/Cap</strong> + 📦 Outer Box
+                    </div>
+
+                    <p style="font-size: 14px; color: var(--text-secondary); margin-top: 8px;">
+                        ✅ If any part is missing (for example, 0 labels left), the system stops you and tells you what to restock first.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">🌍 Two Warehouses: Pakistan vs. Qatar</div>
+                    <div class="card-body">
+                        The system tracks where your bottles physically sit so you never accidentally sell a bottle in Qatar that is sitting in Pakistan:
+                    </div>
+
+                    <div class="grid-2" style="margin-top: 14px; gap: 12px;">
+                        <div class="card" style="padding: 16px; background: var(--bg-elevated);">
+                            <div class="pill-tag" style="margin-bottom: 8px;">🇵🇰 Pakistan Stock</div>
+                            <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.5;">
+                                Used when you log a sale under:<br>
+                                &bull; <strong>Shopify (Pakistan)</strong><br>
+                                &bull; <strong>Organic (Pakistan)</strong>
+                            </p>
+                        </div>
+                        <div class="card" style="padding: 16px; background: var(--bg-elevated);">
+                            <div class="pill-tag champagne" style="margin-bottom: 8px;">🇶🇦 Qatar Stock</div>
+                            <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.5;">
+                                Used when you log a sale under:<br>
+                                &bull; <strong>Salon (Old Airport / Wakrah)</strong><br>
+                                &bull; <strong>Organic (Qatar)</strong> &amp; <strong>Backbar</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="simple-rule" style="margin-top: 14px;">
+                        ✈️ <strong>Sending Stock to Qatar?</strong> Just click <em>"Transfer to Qatar"</em> in Inventory. It subtracts the bottles from Pakistan and adds them to Qatar in one click!
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== SLIDE 3: BUNDLE / TIER STACKER ==================== -->
+        <section class="slide" data-title="Pricing & Bundle Builder">
+            <div class="slide-header">
+                <div class="slide-eyebrow">
+                    <span class="pill-tag">Slide 3 of 7 · Pricing &amp; Profit Page</span>
+                    <span class="pill-tag champagne">New Feature: Bundle / Tier Stacker</span>
+                </div>
+                <h1 class="slide-title">How to Build <span class="accent">High-Profit Bundles</span></h1>
+                <p class="slide-subtitle">
+                    When someone buys only 1 bottle, courier delivery and Facebook ad costs eat most of our profit. Selling a <strong>2 to 4 item bundle</strong> gives us much more cash per order!
+                </p>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-title">How to Use the Bundle / Tier Stacker</div>
+                    <div class="card-body">
+                        Go to <strong>Pricing &amp; Profit</strong> and scroll down to the <strong>Bundle / Tier Stacker</strong> box before launching any new bundle offer:
+                    </div>
+                    <ul class="clean-list">
+                        <li>
+                            <span class="check">1.</span>
+                            <span><strong>Pick 2 to 4 Products:</strong> Choose the products you want to bundle together. The system adds up their exact manufacturing cost automatically.</span>
+                        </li>
+                        <li>
+                            <span class="check">2.</span>
+                            <span><strong>Click "Use 3x COGS":</strong> Our golden rule for paid ads is to price a bundle at least <strong>3 times its cost</strong> (which gives a healthy <strong>66.7% profit margin</strong>).</span>
+                        </li>
+                        <li>
+                            <span class="check emerald">3.</span>
+                            <span><strong>Check Your Profit in PKR:</strong> Make sure the Total Gross Profit is green and high enough to easily pay for shipping and ads!</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="card rose-border">
+                    <div class="card-title">🧮 Try It Here: Bundle Profit Calculator</div>
+                    <p style="font-size: 13.5px; color: var(--text-secondary); margin-bottom: 10px;">
+                        Change the numbers below to see how bundling 3 items creates strong profit:
+                    </p>
+                    <div class="grid-2" style="gap: 10px;">
+                        <div class="sim-input-group">
+                            <label class="sim-label">Item 1 Cost (e.g. Hair Oil)</label>
+                            <input type="number" class="sim-input" id="simCogs1" value="480" step="10">
+                        </div>
+                        <div class="sim-input-group">
+                            <label class="sim-label">Item 2 Cost (e.g. Shampoo)</label>
+                            <input type="number" class="sim-input" id="simCogs2" value="620" step="10">
+                        </div>
+                        <div class="sim-input-group">
+                            <label class="sim-label">Item 3 Cost (e.g. Hair Mask)</label>
+                            <input type="number" class="sim-input" id="simCogs3" value="550" step="10">
+                        </div>
+                        <div class="sim-input-group">
+                            <label class="sim-label">Bundle Selling Price (PKR)</label>
+                            <input type="number" class="sim-input" id="simTierPrice" value="4950" step="50">
+                        </div>
+                    </div>
+
+                    <div class="grid-3" style="margin-top: 14px; gap: 10px;">
+                        <div class="card" style="padding: 12px; background: var(--bg-elevated);">
+                            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Total Bundle Cost</div>
+                            <div class="metric-big" id="simOutCogs" style="font-size: 20px;">PKR 1,650</div>
+                            <div style="font-size: 11px; color: var(--text-muted);" id="simOutFloor">3x Target: PKR 4,950</div>
+                        </div>
+                        <div class="card" style="padding: 12px; background: var(--bg-elevated);">
+                            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Profit You Keep</div>
+                            <div class="metric-big emerald" id="simOutProfit" style="font-size: 20px;">PKR 3,300</div>
+                            <div style="font-size: 11px; color: var(--text-muted);">Before Ads &amp; Courier</div>
+                        </div>
+                        <div class="card" style="padding: 12px; background: var(--bg-elevated);">
+                            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Profit Margin %</div>
+                            <div class="metric-big emerald" id="simOutMargin" style="font-size: 20px;">66.7%</div>
+                            <div style="font-size: 11px; color: var(--text-muted);" id="simOutFlag">✓ Great for Ads!</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== SLIDE 4: WHATSAPP LIFECYCLE PIPELINE ==================== -->
+        <section class="slide" data-title="3-Step WhatsApp Follow-Up">
+            <div class="slide-header">
+                <div class="slide-eyebrow">
+                    <span class="pill-tag">Slide 4 of 7 · Sales &amp; Usage Page</span>
+                    <span class="pill-tag emerald">New Feature: Automated WhatsApp Pipeline</span>
+                </div>
+                <h1 class="slide-title">The 3-Step <span class="accent">WhatsApp Follow-Up Plan</span></h1>
+                <p class="slide-subtitle">
+                    Getting a new customer costs ad money. Getting them to buy a 2nd and 3rd time on WhatsApp is <strong>100% free</strong>! On the <strong>Sales &amp; Usage</strong> page, the system organizes past buyers into 3 tabs automatically:
+                </p>
+            </div>
+
+            <div class="grid-3">
+                <div class="card champagne-border">
+                    <div class="step-badge champagne">1</div>
+                    <div class="card-title">Day 7 · Cross-Sell</div>
+                    <div class="card-body">
+                        <strong>Who is here?</strong> Customers who bought <strong>6 to 8 days ago</strong>.<br><br>
+                        <strong>Why message them?</strong> Their package just arrived and they are excited! Offer them <strong>20% OFF (code: COMPLETE20)</strong> to buy the matching product in the routine.
+                    </div>
+                    <div class="wa-preview">
+                        📱 <strong>Click "Send 20% Cross-Sell"</strong> &rarr; Opens WhatsApp with the 20% bundle discount message already typed for you!
+                    </div>
+                </div>
+
+                <div class="card emerald-border">
+                    <div class="step-badge emerald">2</div>
+                    <div class="card-title">Day 30 · Refill Reminder</div>
+                    <div class="card-body">
+                        <strong>Who is here?</strong> Customers who bought <strong>25 to 35 days ago</strong> (and haven't re-ordered yet).<br><br>
+                        <strong>Why message them?</strong> Their bottle is almost empty right now. Remind them to refill before they run out!
+                    </div>
+                    <div class="wa-preview">
+                        📱 <strong>Click "Send Refill Nudge"</strong> &rarr; Opens WhatsApp asking if they want their fresh refill shipped today!
+                    </div>
+                </div>
+
+                <div class="card rose-border">
+                    <div class="step-badge">3</div>
+                    <div class="card-title">Day 60 · Win-Back Offer</div>
+                    <div class="card-body">
+                        <strong>Who is here?</strong> Customers who bought <strong>60 to 70 days ago</strong> and never ordered again.<br><br>
+                        <strong>Why message them?</strong> They forgot about us! Send them a 24-hour VIP offer on our <strong>Grand Slam Hair Kit</strong> with a risk-free guarantee.
+                    </div>
+                    <div class="wa-preview">
+                        📱 <strong>Click "Send Grand Slam Offer"</strong> &rarr; Opens WhatsApp with the VIP win-back offer ready to send!
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bottom-tip">
+                <div>
+                    📌 <strong style="color: var(--emerald);">Team Golden Rule:</strong> Always type the customer's <strong>Name</strong> and <strong>WhatsApp Phone Number</strong> when logging a sale so they show up in these 3 lists automatically!
+                </div>
+                <span class="pill-tag">1-Click WhatsApp</span>
+            </div>
+        </section>
+
+        <!-- ==================== SLIDE 5: DAY-0 NET CONTRIBUTION ==================== -->
+        <section class="slide" data-title="Are Ads Making Money Today?">
+            <div class="slide-header">
+                <div class="slide-eyebrow">
+                    <span class="pill-tag">Slide 5 of 7 · Ecommerce KPIs Page</span>
+                    <span class="pill-tag emerald">New Feature: Day-0 Cash Check</span>
+                </div>
+                <h1 class="slide-title">Are Our Ads Making Money <span class="emerald">on Day 1?</span></h1>
+                <p class="slide-subtitle">
+                    On the <strong>Ecommerce KPIs</strong> page, the top card is called <strong>Day-0 Net Contribution (New Customers)</strong>. In plain English, it answers one question: <em>"After paying for the product, courier delivery, and Facebook ads, how much cash is left from each new customer's first order?"</em>
+                </p>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-title">What the Green &amp; Red Flags Mean</div>
+                    <div class="simple-rule emerald">
+                        <strong>Simple Math:</strong><br>
+                        New Customer Sales &minus; (Product Cost + Shipping + Ad Spend) &divide; Number of New Customers
+                    </div>
+
+                    <div class="grid-2" style="margin-top: 14px; gap: 12px;">
+                        <div class="card emerald-border" style="padding: 16px;">
+                            <div class="pill-tag emerald" style="margin-bottom: 8px;">✓ Infinite Scale (Green)</div>
+                            <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.5;">
+                                <strong>Above PKR 0:</strong> Every new customer makes us instant profit on their very first order! We can safely spend more on ads to grow faster.
+                            </p>
+                        </div>
+                        <div class="card crimson-border" style="padding: 16px;">
+                            <div class="pill-tag crimson" style="margin-bottom: 8px;">⚠ Bleeding Cash (Red)</div>
+                            <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.5;">
+                                <strong>Below PKR 0:</strong> Ads or shipping are costing more than the first order makes. Pause bad ads and push higher-priced bundles!
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card rose-border">
+                    <div class="card-title">🧪 Test It: Green vs. Red Flag Simulator</div>
+                    <p style="font-size: 13.5px; color: var(--text-secondary); margin-bottom: 10px;">
+                        Try raising Ad Spend below to see when the card turns from Green to Red:
+                    </p>
+                    <div class="grid-2" style="gap: 10px;">
+                        <div class="sim-input-group">
+                            <label class="sim-label">Sales from New Buyers (PKR)</label>
+                            <input type="number" class="sim-input" id="d0Rev" value="180000" step="5000">
+                        </div>
+                        <div class="sim-input-group">
+                            <label class="sim-label">Product Cost / COGS (PKR)</label>
+                            <input type="number" class="sim-input" id="d0Cogs" value="54000" step="2000">
+                        </div>
+                        <div class="sim-input-group">
+                            <label class="sim-label">Courier Shipping Cost (PKR)</label>
+                            <input type="number" class="sim-input" id="d0Ship" value="15000" step="1000">
+                        </div>
+                        <div class="sim-input-group">
+                            <label class="sim-label">Total Ad Spend (PKR)</label>
+                            <input type="number" class="sim-input" id="d0Ads" value="75000" step="5000">
+                        </div>
+                    </div>
+                    <div class="sim-input-group" style="margin-top: 10px;">
+                        <label class="sim-label">Number of New Customers</label>
+                        <input type="number" class="sim-input" id="d0NewCust" value="60" min="1" step="1">
+                    </div>
+
+                    <div class="card emerald-border" id="d0ResultCard" style="margin-top: 14px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted);">Cash Left Per New Customer</div>
+                            <div class="metric-big emerald" id="d0OutPerOrder" style="font-size: 26px;">+PKR 600.00</div>
+                            <div style="font-size: 12px; color: var(--text-secondary);" id="d0OutTotal">Total Cash Left: +PKR 36,000.00</div>
+                        </div>
+                        <span class="pill-tag emerald" id="d0OutBadge">✓ Infinite Scale</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== SLIDE 6: SALON WASH BASIN & ADS BOARD ==================== -->
+        <section class="slide" data-title="Salon Retail & Ads Board">
+            <div class="slide-header">
+                <div class="slide-eyebrow">
+                    <span class="pill-tag">Slide 6 of 7 · Salon Conversion &amp; Marketing</span>
+                </div>
+                <h1 class="slide-title">Salon Wash-Basin Sales &amp; <span class="accent">Ad Testing</span></h1>
+                <p class="slide-subtitle">
+                    Two more tools the team uses every week: tracking how well Qatar salon stylists recommend products, and testing which ad videos perform best.
+                </p>
+            </div>
+
+            <div class="grid-2">
+                <div class="card champagne-border">
+                    <div class="card-title">💇‍♀️ Qatar Salon: Wash Basin &rarr; Reception</div>
+                    <div class="card-body">
+                        In Qatar, our stylists use Laleen shampoo and hair oil on clients at the wash basin. That is our best free advertisement!
+                    </div>
+                    <ul class="clean-list">
+                        <li>
+                            <span class="check">1.</span>
+                            <span><strong>When a bottle is opened for salon use:</strong> Log it in Sales &amp; Usage under channel <strong>"Backbar Use (Qatar)"</strong> (price is automatically PKR 0).</span>
+                        </li>
+                        <li>
+                            <span class="check">2.</span>
+                            <span><strong>When a client buys a bottle at the front desk:</strong> Log it under <strong>"Salon (Old Airport)"</strong> or <strong>"Salon (Wakrah)"</strong>.</span>
+                        </li>
+                        <li>
+                            <span class="check emerald">3.</span>
+                            <span><strong>Our Goal (100%+ Score):</strong> For every 1 bottle used at the wash basin, stylists should sell at least 1 bottle at the reception desk!</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="card rose-border">
+                    <div class="card-title">📣 Marketing Hub: Content &amp; Ads Board</div>
+                    <div class="card-body">
+                        Under <strong>Marketing &amp; Creative</strong>, we manage our social posts and paid ads in two simple screens:
+                    </div>
+                    <ul class="clean-list">
+                        <li>
+                            <span class="check">1.</span>
+                            <span><strong>Content Calendar:</strong> Plan each post or video hook, assign who is filming it, and upload the image/video preview.</span>
+                        </li>
+                        <li>
+                            <span class="check">2.</span>
+                            <span><strong>Meta Ads Board (3 Columns):</strong>
+                                <br>&bull; <strong>Testing:</strong> New ads we are trying out.
+                                <br>&bull; <strong>Scaling:</strong> Winning ads that bring cheap leads (Qatar) or high sales (Pakistan)—we click <em>Promote to Scaling</em>!
+                                <br>&bull; <strong>Killed:</strong> Ads that didn't work and were turned off.
+                            </span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== SLIDE 7: 5-MINUTE DAILY TEAM CHECKLIST ==================== -->
+        <section class="slide" data-title="Daily Team Checklist">
+            <div class="slide-header">
+                <div class="slide-eyebrow">
+                    <span class="pill-tag">Slide 7 of 7 · Daily Routine</span>
+                    <span class="pill-tag emerald">Click to Check Off</span>
+                </div>
+                <h1 class="slide-title">Your 5-Minute <span class="accent">Daily Team Checklist</span></h1>
+                <p class="slide-subtitle">
+                    Follow these 5 simple steps every day to keep stock accurate, customers happy, and profits growing. (You can click each box below to check it off!)
+                </p>
+            </div>
+
+            <div class="grid-2">
+                <div class="card rose-border" style="display: flex; flex-direction: column; justify-content: center; gap: 11px;">
+                    <label style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--bg-elevated); cursor: pointer; font-size: 15px;">
+                        <input type="checkbox" style="accent-color: var(--emerald); width: 18px; height: 18px;">
+                        <span><strong>Step 1 — Log Today's Orders:</strong> Enter all Shopify, Organic, and Salon sales (always include the customer's <strong>WhatsApp number</strong>!).</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--bg-elevated); cursor: pointer; font-size: 15px;">
+                        <input type="checkbox" style="accent-color: var(--emerald); width: 18px; height: 18px;">
+                        <span><strong>Step 2 — Send WhatsApp Follow-Ups:</strong> Open the <strong>Day 7</strong>, <strong>Day 30</strong>, and <strong>Day 60</strong> tabs on the Sales page and click the WhatsApp buttons for everyone due today.</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--bg-elevated); cursor: pointer; font-size: 15px;">
+                        <input type="checkbox" style="accent-color: var(--emerald); width: 18px; height: 18px;">
+                        <span><strong>Step 3 — Check Stock &amp; Expenses:</strong> Log any new raw material purchases or courier expenses so stock and costs stay up to date.</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--bg-elevated); cursor: pointer; font-size: 15px;">
+                        <input type="checkbox" style="accent-color: var(--emerald); width: 18px; height: 18px;">
+                        <span><strong>Step 4 — Test Bundles Before Running Ads:</strong> Use the <strong>Bundle / Tier Stacker</strong> on the Pricing page to make sure any new promo kit is priced at ~3x cost.</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--bg-elevated); cursor: pointer; font-size: 15px;">
+                        <input type="checkbox" style="accent-color: var(--emerald); width: 18px; height: 18px;">
+                        <span><strong>Step 5 — Log Daily KPIs &amp; Check the Green Flag:</strong> Enter the day's total sales, ad spend, and new buyers on the KPIs page and confirm <strong>Day-0 Cash</strong> is green!</span>
+                    </label>
+                </div>
+
+                <div class="card emerald-border" style="display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div class="pill-tag emerald" style="margin-bottom: 12px;">Quick Cheat Sheet · Where to Click</div>
+                        <div class="card-title">Which Page Do I Open?</div>
+                        <ul class="clean-list" style="margin-top: 14px; gap: 14px;">
+                            <li>
+                                <span class="check emerald">📦</span>
+                                <span><strong>Inventory &amp; Production:</strong> When raw materials arrive, when making a batch of bottles, or when sending stock to Qatar.</span>
+                            </li>
+                            <li>
+                                <span class="check emerald">🏷️</span>
+                                <span><strong>Pricing &amp; Profit:</strong> When checking how much 1 bottle costs to make, or testing a 2–4 item bundle in the <strong>Tier Stacker</strong>.</span>
+                            </li>
+                            <li>
+                                <span class="check emerald">🛒</span>
+                                <span><strong>Sales &amp; Usage:</strong> When logging customer orders, logging Qatar wash-basin use, or sending <strong>Day 7 / 30 / 60 WhatsApp messages</strong>.</span>
+                            </li>
+                            <li>
+                                <span class="check emerald">📣</span>
+                                <span><strong>Marketing &amp; Creative:</strong> When planning social videos or moving Meta Ads between <em>Testing</em>, <em>Scaling</em>, and <em>Killed</em>.</span>
+                            </li>
+                            <li>
+                                <span class="check emerald">📈</span>
+                                <span><strong>Ecommerce KPIs:</strong> At the end of the day to log Shopify + Meta totals and check if <strong>Day-0 Cash Margin</strong> is Green (<em>Infinite Scale</em>).</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="simple-rule emerald" style="margin-bottom: 0;">
+                        🎉 <strong>You're ready!</strong> Keep this guide bookmarked anytime a new team member joins Laleen.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bottombar">
+        <div class="kbd-hint">
+            <span>Use keyboard:</span>
+            <span class="kbd">&larr;</span>
+            <span class="kbd">&rarr;</span>
+            <span class="kbd">Space</span>
+            <span style="margin-left: 8px;">Fullscreen:</span>
+            <span class="kbd">F</span>
+        </div>
+
+        <div class="nav-controls">
+            <button class="btn-nav" id="prevBtn">&larr; Back</button>
+            <div class="slide-counter" id="slideCounter">1 / 7</div>
+            <button class="btn-nav primary" id="nextBtn">Next &rarr;</button>
+        </div>
+    </footer>
+
+    <script>
+        (function () {
+            const slides = Array.from(document.querySelectorAll('.slide'));
+            const dotsContainer = document.getElementById('slideDots');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const slideCounter = document.getElementById('slideCounter');
+            const fullscreenBtn = document.getElementById('fullscreenBtn');
+            let currentIndex = 0;
+
+            slides.forEach((slide, idx) => {
+                const dot = document.createElement('button');
+                dot.className = 'slide-dot' + (idx === 0 ? ' active' : '');
+                dot.title = (idx + 1) + '. ' + (slide.getAttribute('data-title') || 'Slide ' + (idx + 1));
+                dot.addEventListener('click', () => goToSlide(idx));
+                dotsContainer.appendChild(dot);
+            });
+
+            const dots = Array.from(dotsContainer.querySelectorAll('.slide-dot'));
+
+            function goToSlide(index) {
+                if (index < 0 || index >= slides.length) return;
+                currentIndex = index;
+                slides.forEach((s, i) => s.classList.toggle('active', i === currentIndex));
+                dots.forEach((d, i) => d.classList.toggle('active', i === currentIndex));
+                slideCounter.textContent = (currentIndex + 1) + ' / ' + slides.length;
+                prevBtn.disabled = currentIndex === 0;
+                nextBtn.disabled = currentIndex === slides.length - 1;
+            }
+
+            prevBtn.addEventListener('click', () => goToSlide(currentIndex - 1));
+            nextBtn.addEventListener('click', () => goToSlide(currentIndex + 1));
+
+            document.addEventListener('keydown', (e) => {
+                const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+                if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+
+                if (e.key === 'ArrowRight' || e.key === ' ') {
+                    e.preventDefault();
+                    goToSlide(currentIndex + 1);
+                } else if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    goToSlide(currentIndex - 1);
+                } else if (e.key === 'f' || e.key === 'F') {
+                    e.preventDefault();
+                    toggleFullscreen();
+                }
+            });
+
+            function toggleFullscreen() {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                } else {
+                    document.exitFullscreen().catch(() => {});
+                }
+            }
+
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+            // Slide 3: Bundle Profit Calculator
+            const simInputs = ['simCogs1', 'simCogs2', 'simCogs3', 'simTierPrice'].map(id => document.getElementById(id));
+            function updateTierSim() {
+                const c1 = parseFloat(simInputs[0].value) || 0;
+                const c2 = parseFloat(simInputs[1].value) || 0;
+                const c3 = parseFloat(simInputs[2].value) || 0;
+                const price = parseFloat(simInputs[3].value) || 0;
+
+                const totalCogs = c1 + c2 + c3;
+                const floor3x = totalCogs * 3;
+                const profit = price - totalCogs;
+                const margin = price > 0 ? (profit / price) * 100 : 0;
+
+                document.getElementById('simOutCogs').textContent = 'PKR ' + totalCogs.toLocaleString('en-US');
+                document.getElementById('simOutFloor').textContent = '3x Target: PKR ' + floor3x.toLocaleString('en-US');
+
+                const profitEl = document.getElementById('simOutProfit');
+                profitEl.textContent = (profit < 0 ? '-PKR ' : 'PKR ') + Math.abs(profit).toLocaleString('en-US');
+                profitEl.className = 'metric-big ' + (profit >= 0 ? 'emerald' : 'crimson');
+
+                const marginEl = document.getElementById('simOutMargin');
+                marginEl.textContent = margin.toFixed(1) + '%';
+                marginEl.className = 'metric-big ' + (margin >= 66.6 ? 'emerald' : (margin >= 50 ? 'champagne' : 'crimson'));
+
+                document.getElementById('simOutFlag').textContent = margin >= 66.6
+                    ? '✓ Great for Ads!'
+                    : (profit > 0 ? '⚠ Below 3x Target' : '⚠ Losing Money');
+            }
+            simInputs.forEach(el => el && el.addEventListener('input', updateTierSim));
+            updateTierSim();
+
+            // Slide 5: Day-0 Simulator
+            const d0Inputs = ['d0Rev', 'd0Cogs', 'd0Ship', 'd0Ads', 'd0NewCust'].map(id => document.getElementById(id));
+            function updateDay0Sim() {
+                const rev = parseFloat(d0Inputs[0].value) || 0;
+                const cogs = parseFloat(d0Inputs[1].value) || 0;
+                const ship = parseFloat(d0Inputs[2].value) || 0;
+                const ads = parseFloat(d0Inputs[3].value) || 0;
+                const newCust = Math.max(1, parseInt(d0Inputs[4].value, 10) || 1);
+
+                const netTotal = rev - (cogs + ship + ads);
+                const perOrder = netTotal / newCust;
+                const isPositive = perOrder > 0;
+
+                const card = document.getElementById('d0ResultCard');
+                const perOrderEl = document.getElementById('d0OutPerOrder');
+                const totalEl = document.getElementById('d0OutTotal');
+                const badgeEl = document.getElementById('d0OutBadge');
+
+                card.className = 'card ' + (isPositive ? 'emerald-border' : 'crimson-border');
+                perOrderEl.className = 'metric-big ' + (isPositive ? 'emerald' : 'crimson');
+                perOrderEl.textContent = (isPositive ? '+PKR ' : '-PKR ') + Math.abs(perOrder).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                totalEl.textContent = 'Total Cash Left: ' + (netTotal >= 0 ? '+PKR ' : '-PKR ') + Math.abs(netTotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                badgeEl.className = 'pill-tag ' + (isPositive ? 'emerald' : 'crimson');
+                badgeEl.textContent = isPositive ? '✓ Infinite Scale' : '⚠ Bleeding Cash';
+            }
+            d0Inputs.forEach(el => el && el.addEventListener('input', updateDay0Sim));
+            updateDay0Sim();
+
+            goToSlide(0);
+        })();
+    </script>
+</body>
+</html>

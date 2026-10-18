@@ -6,6 +6,7 @@
 @section('content')
     <div class="ec-header">
         <div>
+            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Financials &amp; Inventory</div>
             <h4>Two-Tier Inventory &amp; Production</h4>
             <p>Raw materials on hand, finished goods in stock, and the production runs that convert one into the other.</p>
         </div>
@@ -14,7 +15,7 @@
         @endmoduleEdit
     </div>
 
-    @include('ecommerce._nav')
+    @include('ecommerce.partials._financials_tabs')
 
     <div class="ec-card">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">

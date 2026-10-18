@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
+use App\Models\EcommerceBundle;
 use App\Models\EcommerceComponentType;
 use App\Models\EcommercePricingModel;
 use App\Models\EcommerceProduct;
 use App\Models\EcommerceProductLine;
 use App\Models\EcommerceRawMaterial;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class EcommercePricingController extends Controller
 {
@@ -16,6 +18,7 @@ class EcommercePricingController extends Controller
     {
         $products = EcommerceProduct::orderBy('name')->get();
         $rawMaterials = EcommerceRawMaterial::orderBy('name')->get();
+        $salePricesByProduct = EcommercePricingModel::pluck('selling_price', 'ecommerce_product_id');
 
         $pricingModels = EcommercePricingModel::all()->keyBy('ecommerce_product_id')->map(function ($model) {
             return [
@@ -53,27 +56,13 @@ class EcommercePricingController extends Controller
 
         $pricingModelsByProduct = EcommercePricingModel::all()->keyBy('ecommerce_product_id');
 
-        // Exact BOM COGS catalogue for the Offer Builder / Tier Stacker:
-        // uses the saved EcommercePricingModel::bomUnitCost() when available,
-        // and falls back to live Tier-1 raw material BOM costs otherwise.
-        $stackerProducts = $products->mapWithKeys(function ($product) use (
-            $pricingModelsByProduct,
-            $rawMaterials,
-            $componentTypeNames,
-            $productLineNames,
-            $visibleComponentsByLine
-        ) {
+        $resolvedCogsByProduct = [];
+
+        foreach ($products as $product) {
             $savedModel = $pricingModelsByProduct->get($product->id);
 
-            if ($savedModel) {
-                $liquidCost = (float) $savedModel->liquid_cost;
-                $bottleCost = (float) $savedModel->bottle_cost;
-                $labelCost = (float) $savedModel->label_cost;
-                $pumpCost = (float) $savedModel->pump_cost;
-                $boxCost = (float) $savedModel->box_cost;
-                $bomCogs = $savedModel->bomUnitCost();
-                $standalonePrice = (float) $savedModel->selling_price;
-                $cogsSource = 'Saved BOM';
+            if ($savedModel && $savedModel->bomUnitCost() > 0) {
+                $bomCogs = (float) $savedModel->bomUnitCost();
             } else {
                 $lineName = $productLineNames[$product->product_line_id] ?? null;
                 $visibleComponents = $visibleComponentsByLine[$lineName] ?? [];
@@ -105,32 +94,34 @@ class EcommercePricingController extends Controller
                 }
 
                 $bomCogs = $liquidCost + $bottleCost + $labelCost + $pumpCost + $boxCost;
-                $standalonePrice = (float) ($product->selling_price ?? 0);
-                $cogsSource = $bomCogs > 0 ? 'Auto-BOM (Raw Materials)' : 'No BOM Set';
+                if ($bomCogs <= 0) {
+                    $bomCogs = (float) $product->total_cogs;
+                }
             }
 
-            return [$product->id => [
-                'id' => $product->id,
-                'name' => $product->name,
-                'sku' => $product->sku,
-                'bom_cogs' => round((float) $bomCogs, 2),
-                'liquid_cost' => round($liquidCost, 2),
-                'bottle_cost' => round($bottleCost, 2),
-                'label_cost' => round($labelCost, 2),
-                'pump_cost' => round($pumpCost, 2),
-                'box_cost' => round($boxCost, 2),
-                'standalone_price' => round($standalonePrice, 2),
-                'cogs_source' => $cogsSource,
-            ]];
-        });
+            $resolvedCogs = round((float) $bomCogs, 2);
+            $product->setAttribute('unit_cogs', $resolvedCogs);
+            $resolvedCogsByProduct[$product->id] = $resolvedCogs;
+        }
 
         $savedPricingModels = EcommercePricingModel::with('product')
             ->get()
             ->sortBy(fn ($model) => $model->product->name ?? '')
             ->values();
 
-        return view('ecommerce.pricing', [
+        $bundles = EcommerceBundle::with(['items.product.pricingModel'])->orderBy('name')->get();
+        foreach ($bundles as $bundle) {
+            foreach ($bundle->items as $item) {
+                if ($item->product && isset($resolvedCogsByProduct[$item->product->id])) {
+                    $item->product->setAttribute('unit_cogs', $resolvedCogsByProduct[$item->product->id]);
+                }
+            }
+        }
+
+        return view('ecommerce.pricing.index', [
             'products' => $products,
+            'salePricesByProduct' => $salePricesByProduct,
+            'bundles' => $bundles,
             'pricingModels' => $pricingModels,
             'savedPricingModels' => $savedPricingModels,
             'rawMaterials' => $rawMaterials,
@@ -138,7 +129,6 @@ class EcommercePricingController extends Controller
             'rawMaterialsForPricing' => $rawMaterialsForPricing,
             'componentTypeNames' => $componentTypeNames,
             'productLineNames' => $productLineNames,
-            'stackerProducts' => $stackerProducts,
             'selectedProductId' => $request->query('product'),
         ]);
     }
@@ -147,10 +137,6 @@ class EcommercePricingController extends Controller
     {
         $validated = $request->validate([
             'ecommerce_product_id' => 'required|exists:ecommerce_products,id',
-            // Individual components stay optional-and-zeroable on purpose: a
-            // Hair Oil legitimately has no Pump/Cap. What must never be zero
-            // is the TOTAL — that total is what gets snapshotted onto every
-            // sale as unit_cogs, and a zero there silently inflates margin.
             'liquid_cost' => 'nullable|numeric|min:0',
             'bottle_cost' => 'nullable|numeric|min:0',
             'label_cost' => 'nullable|numeric|min:0',
@@ -196,5 +182,48 @@ class EcommercePricingController extends Controller
         $pricingModel->delete();
 
         return back()->with('success', 'Pricing model deleted successfully.');
+    }
+
+    public function storeBundle(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'bundle_price' => 'required|numeric|min:0',
+            'items' => 'required|array|min:1',
+            'items.*.ecommerce_product_id' => 'required|exists:ecommerce_products,id',
+            'items.*.quantity' => 'required|integer|min:1',
+        ]);
+
+        $productIds = collect($validated['items'])->pluck('ecommerce_product_id');
+        if ($productIds->count() !== $productIds->unique()->count()) {
+            return back()->withErrors(['error' => 'Each product can only appear once in a bundle — increase its quantity instead.']);
+        }
+
+        DB::transaction(function () use ($validated) {
+            $bundle = EcommerceBundle::create([
+                'name' => $validated['name'],
+                'bundle_price' => $validated['bundle_price'],
+            ]);
+
+            foreach ($validated['items'] as $item) {
+                $bundle->items()->create([
+                    'ecommerce_product_id' => $item['ecommerce_product_id'],
+                    'quantity' => $item['quantity'],
+                ]);
+            }
+        });
+
+        return back()->with('success', 'Bundle created.');
+    }
+
+    public function destroyBundle(EcommerceBundle $bundle)
+    {
+        if ($bundle->sales()->exists()) {
+            return back()->withErrors(['error' => "Cannot delete \"{$bundle->name}\" because it has recorded sales. Deleting it would orphan historical revenue."]);
+        }
+
+        $bundle->delete();
+
+        return back()->with('success', 'Bundle deleted.');
     }
 }

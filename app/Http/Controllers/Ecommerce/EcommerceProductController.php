@@ -79,11 +79,8 @@ class EcommerceProductController extends Controller
      */
     public function destroy(EcommerceProduct $ecommerceProduct)
     {
-        // ecommerce_sales.ecommerce_product_id is ON DELETE CASCADE, so
-        // removing a product that has sold would silently erase its entire
-        // revenue history and retroactively change Net Profit. Refuse.
-        if ($ecommerceProduct->sales()->exists()) {
-            return back()->withErrors(['error' => 'Cannot delete this product because it has recorded sales history. Deleting it would corrupt historical revenue and Net Profit.']);
+        if ($ecommerceProduct->sales()->exists() || $ecommerceProduct->bundleItems()->exists()) {
+            return back()->withErrors(['error' => 'Cannot delete this product because it has recorded sales history or belongs to an active Bundle/Kit. Deleting it would corrupt historical revenue, bundles, and Net Profit.']);
         }
 
         DB::transaction(function () use ($ecommerceProduct) {

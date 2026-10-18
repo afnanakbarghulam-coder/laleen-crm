@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Ecommerce;
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceBundle;
 use App\Models\EcommerceBundleItem;
+use App\Models\EcommerceCustomer;
 use App\Models\EcommercePricingModel;
 use App\Models\EcommerceProduct;
 use App\Models\EcommerceSale;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -16,42 +18,17 @@ use RuntimeException;
 
 class EcommerceSalesController extends Controller
 {
-    public const CHANNELS = [
-        'Shopify (Pakistan)',
-        'Organic (Pakistan)',
-        'Salon (Old Airport)',
-        'Salon (Wakrah)',
-        'Organic (Qatar)',
-        'Backbar Use (Qatar)',
-        'Damage/Expiry (Pakistan)',
-        'Damage/Expiry (Qatar)',
-    ];
-
-    public const NON_REVENUE_CHANNELS = [
-        'Backbar Use (Qatar)',
-        'Damage/Expiry (Pakistan)',
-        'Damage/Expiry (Qatar)',
-    ];
-
-    /** Product consumed at the wash basin — the cost side of the salon funnel. */
-    public const BACKBAR_CHANNELS = ['Backbar Use (Qatar)'];
-
-    /** Front-desk retail sold inside a salon — the revenue side of that funnel. */
-    public const SALON_RETAIL_CHANNELS = ['Salon (Old Airport)', 'Salon (Wakrah)'];
-
-    /** Customer Lifecycle Pipeline stage windows (days since purchase). */
-    public const CROSS_SELL_START_DAYS = 6;
-    public const CROSS_SELL_END_DAYS = 8;
-    public const REFILL_WINDOW_START_DAYS = 25;
-    public const REFILL_WINDOW_END_DAYS = 35;
-    public const WIN_BACK_START_DAYS = 60;
-    public const WIN_BACK_END_DAYS = 70;
+    public const CHANNELS = EcommerceSale::CHANNELS;
+    public const REVENUE_CHANNELS = EcommerceSale::REVENUE_CHANNELS;
+    public const NON_REVENUE_CHANNELS = EcommerceSale::NON_REVENUE_CHANNELS;
+    public const BACKBAR_CHANNELS = EcommerceSale::BACKBAR_CHANNELS;
+    public const SALON_RETAIL_CHANNELS = EcommerceSale::SALON_RETAIL_CHANNELS;
 
     public function index(Request $request)
     {
         $selectedChannels = [];
         if ($request->has('channels') && is_array($request->channels) && count($request->channels) > 0) {
-            $selectedChannels = array_values(array_intersect($request->channels, self::CHANNELS));
+            $selectedChannels = array_values(array_intersect($request->channels, EcommerceSale::CHANNELS));
         }
 
         $salesQuery = EcommerceSale::with('product')->orderByDesc('created_at');
@@ -73,8 +50,8 @@ class EcommerceSalesController extends Controller
         $salePricesByProduct = EcommercePricingModel::pluck('selling_price', 'ecommerce_product_id');
 
         $totalRevenue = $sales->sum('total_price');
-        $totalItemsSoldRevenue = $sales->whereNotIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
-        $totalItemsUsedDamaged = $sales->whereIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
+        $totalItemsSoldRevenue = $sales->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)->sum('quantity');
+        $totalItemsUsedDamaged = $sales->whereIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)->sum('quantity');
 
         $chartFrom = $request->filled('start_date') ? Carbon::parse($request->start_date)->startOfDay() : now()->startOfMonth();
         $chartTo = $request->filled('end_date') ? Carbon::parse($request->end_date)->startOfDay() : now()->startOfDay();
@@ -82,8 +59,6 @@ class EcommerceSalesController extends Controller
             [$chartFrom, $chartTo] = [$chartTo->copy(), $chartFrom->copy()];
         }
 
-        // Falls back to weekly buckets once the range is too wide for a legible daily x-axis,
-        // mirroring the Bookings Trend chart so both modules bucket consistently.
         $weekly = $chartFrom->diffInDays($chartTo) > 62;
         $bucketKey = fn ($date) => $weekly ? $date->format('o-W') : $date->format('Y-m-d');
         $bucketLabel = fn ($date) => $weekly ? 'Wk ' . $date->format('W M') : $date->format('d M');
@@ -102,12 +77,12 @@ class EcommerceSalesController extends Controller
                 $group = $grouped->get($key, collect());
                 $chartLabels[] = $bucketLabel($cursor);
                 $chartRevenue[] = round((float) $group->sum('total_price'), 2);
-                $chartUnits[] = (int) $group->whereNotIn('channel', self::NON_REVENUE_CHANNELS)->sum('quantity');
+                $chartUnits[] = (int) $group->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)->sum('quantity');
             }
             $cursor->addDay();
         }
 
-        $totalChannelsCount = count(self::CHANNELS);
+        $totalChannelsCount = count(EcommerceSale::CHANNELS);
         $selectedChannelsCount = count($selectedChannels);
 
         if ($selectedChannelsCount === 0 || $selectedChannelsCount === $totalChannelsCount) {
@@ -133,7 +108,6 @@ class EcommerceSalesController extends Controller
         }
 
         $bundles = EcommerceBundle::with(['items.product.pricingModel'])->orderBy('name')->get();
-        $lifecyclePipeline = $this->lifecyclePipeline();
 
         return view('ecommerce.sales', [
             'sales' => $sales,
@@ -149,11 +123,6 @@ class EcommerceSalesController extends Controller
             'chartUnits' => $chartUnits,
             'bundles' => $bundles,
             'bundlesForJs' => $this->bundlesForJs($bundles),
-            'lifecyclePipeline' => $lifecyclePipeline,
-            'refillQueue' => $lifecyclePipeline['day30']['items'],
-            'refillWindowStartDays' => self::REFILL_WINDOW_START_DAYS,
-            'refillWindowEndDays' => self::REFILL_WINDOW_END_DAYS,
-            'backbarConversion' => $this->backbarConversion(),
         ]);
     }
 
@@ -173,210 +142,108 @@ class EcommerceSalesController extends Controller
     }
 
     /**
-     * 3-Stage Automated Customer Lifecycle Pipeline (LTV Expansion):
-     * - Day 7 (Cross-Sell): 6-8 days ago, 20% bundle-completion hook.
-     * - Day 30 (Refill): 25-35 days ago, refill reminder hook.
-     * - Day 60 (Win-Back): 60-70 days ago with no subsequent orders, high-urgency risk-free Grand Slam kit hook.
+     * Lightweight Smart Search endpoint for the Front-Desk Sales Modal.
+     * GET /api/ecommerce/customers/search?phone=...
      */
-    private function lifecyclePipeline(): array
+    public function searchCustomer(Request $request): JsonResponse
     {
-        return [
-            'day7' => [
-                'key' => 'day7',
-                'title' => 'Day 7 · Cross-Sell',
-                'window_label' => 'Day ' . self::CROSS_SELL_START_DAYS . '–' . self::CROSS_SELL_END_DAYS,
-                'subtitle' => 'Revenue channel sales 6–8 days ago. Hook with a 20% bundle-completion cross-sell.',
-                'cta_label' => 'Send 20% Cross-Sell',
-                'badge_class' => 'ec-badge-bundle',
-                'items' => $this->buildLifecycleStage(
-                    self::CROSS_SELL_START_DAYS,
-                    self::CROSS_SELL_END_DAYS,
-                    false,
-                    'cross_sell'
-                ),
+        $normalizedPhone = EcommerceCustomer::normalizePhone($request->query('phone'));
+
+        if ($normalizedPhone === '' || strlen($normalizedPhone) < 5) {
+            return response()->json(['found' => false, 'customer' => null]);
+        }
+
+        $customer = EcommerceCustomer::where('phone', $normalizedPhone)->first();
+
+        if (!$customer) {
+            return response()->json(['found' => false, 'customer' => null]);
+        }
+
+        return response()->json([
+            'found' => true,
+            'customer' => [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'phone' => $customer->phone,
+                'email' => $customer->email,
+                'total_spend' => (float) $customer->total_spend,
+                'total_orders' => (int) $customer->total_orders,
+                'last_purchase_at' => $customer->last_purchase_at?->toIso8601String(),
             ],
-            'day30' => [
-                'key' => 'day30',
-                'title' => 'Day 30 · Refill',
-                'window_label' => 'Day ' . self::REFILL_WINDOW_START_DAYS . '–' . self::REFILL_WINDOW_END_DAYS,
-                'subtitle' => 'Revenue channel sales 25–35 days ago. Remind customers right before their bottle runs dry.',
-                'cta_label' => 'Send Refill Nudge',
-                'badge_class' => 'ec-badge-injection',
-                'items' => $this->buildLifecycleStage(
-                    self::REFILL_WINDOW_START_DAYS,
-                    self::REFILL_WINDOW_END_DAYS,
-                    true,
-                    'refill'
-                ),
-            ],
-            'day60' => [
-                'key' => 'day60',
-                'title' => 'Day 60 · Win-Back',
-                'window_label' => 'Day ' . self::WIN_BACK_START_DAYS . '–' . self::WIN_BACK_END_DAYS,
-                'subtitle' => 'Revenue channel sales 60–70 days ago with no subsequent orders. High-urgency, risk-free Grand Slam kit offer.',
-                'cta_label' => 'Send Grand Slam Offer',
-                'badge_class' => 'ec-badge-expense-paid',
-                'items' => $this->buildLifecycleStage(
-                    self::WIN_BACK_START_DAYS,
-                    self::WIN_BACK_END_DAYS,
-                    true,
-                    'win_back'
-                ),
-            ],
-        ];
+        ]);
     }
 
     /**
-     * Queries revenue-channel sales in a specific [startDaysAgo, endDaysAgo] window,
-     * optionally excluding customers with subsequent orders after the window closed,
-     * and builds a stage-specific WhatsApp deep link for each customer.
+     * Combine country code and raw phone digits into a single normalized phone string.
+     * Returns '' if no subscriber digits were provided.
      */
-    private function buildLifecycleStage(
-        int $startDaysAgo,
-        int $endDaysAgo,
-        bool $excludeSubsequentOrders,
-        string $stageType
-    ) {
-        $windowStart = now()->subDays($endDaysAgo)->startOfDay();
-        $windowEnd = now()->subDays($startDaysAgo)->endOfDay();
-
-        $dueSales = EcommerceSale::with('product')
-            ->whereNotIn('channel', self::NON_REVENUE_CHANNELS)
-            ->whereBetween('created_at', [$windowStart, $windowEnd])
-            ->orderByDesc('created_at')
-            ->get();
-
-        if ($dueSales->isEmpty()) {
-            return collect();
+    private function combineAndNormalizePhone(?string $countryCode, ?string $rawPhoneDigits): string
+    {
+        $digitsOnly = EcommerceCustomer::normalizePhone($rawPhoneDigits);
+        if ($digitsOnly === '') {
+            return '';
         }
 
-        $normalizePhone = fn ($phone) => preg_replace('/\D+/', '', (string) $phone);
-        $normalizeName = fn ($name) => mb_strtolower(trim((string) $name));
-
-        $repurchasedPhones = collect();
-        $repurchasedNames = collect();
-
-        if ($excludeSubsequentOrders) {
-            $subsequentSales = EcommerceSale::whereNotIn('channel', self::NON_REVENUE_CHANNELS)
-                ->where('created_at', '>', $windowEnd)
-                ->get(['customer_phone', 'customer_name']);
-
-            $repurchasedPhones = $subsequentSales->pluck('customer_phone')
-                ->map($normalizePhone)
-                ->filter()
-                ->unique()
-                ->flip();
-
-            $repurchasedNames = $subsequentSales->pluck('customer_name')
-                ->map($normalizeName)
-                ->filter()
-                ->unique()
-                ->flip();
+        $codeDigits = EcommerceCustomer::normalizePhone($countryCode);
+        if ($codeDigits !== '') {
+            if (str_starts_with($digitsOnly, '00' . $codeDigits)) {
+                $digitsOnly = substr($digitsOnly, 2);
+                return $digitsOnly;
+            }
+            if (str_starts_with($digitsOnly, $codeDigits) && strlen($digitsOnly) > strlen($codeDigits) + 6) {
+                return $digitsOnly;
+            }
+            $digitsOnly = ltrim($digitsOnly, '0');
+            return $codeDigits . $digitsOnly;
         }
 
-        return $dueSales
-            ->groupBy(function (EcommerceSale $sale) use ($normalizePhone, $normalizeName) {
-                $phone = $normalizePhone($sale->customer_phone);
-                if ($phone !== '') {
-                    return 'phone:' . $phone;
-                }
-                $name = $normalizeName($sale->customer_name);
-                if ($name !== '') {
-                    return 'name:' . $name;
-                }
-                return 'sale:' . ($sale->reference_id ?: $sale->id);
-            })
-            ->reject(function ($group) use ($excludeSubsequentOrders, $normalizePhone, $normalizeName, $repurchasedPhones, $repurchasedNames) {
-                if (!$excludeSubsequentOrders) {
-                    return false;
-                }
-                $latest = $group->first();
-                $phone = $normalizePhone($latest->customer_phone);
-                if ($phone !== '' && $repurchasedPhones->has($phone)) {
-                    return true;
-                }
-                $name = $normalizeName($latest->customer_name);
-                if ($phone === '' && $name !== '' && $repurchasedNames->has($name)) {
-                    return true;
-                }
-                return false;
-            })
-            ->map(function ($group) use ($normalizePhone, $stageType) {
-                $latest = $group->first();
-                $phone = $normalizePhone($latest->customer_phone);
-                $customerName = trim((string) $latest->customer_name) !== '' ? trim((string) $latest->customer_name) : 'there';
-                $daysSince = (int) $latest->created_at->startOfDay()->diffInDays(now()->startOfDay());
-                $products = $group->map(fn (EcommerceSale $s) => $s->product->name ?? 'product')
-                    ->unique()->values();
-                $productsList = $products->implode(', ');
-
-                $waText = match ($stageType) {
-                    'cross_sell' => "Hi {$customerName}! How is your {$productsList} treating you so far? Since you grabbed it {$daysSince} days ago, here is an exclusive 20% OFF bundle-completion offer (code: COMPLETE20) to pair it with the rest of the Laleen routine. Want us to dispatch your companion kit today?",
-                    'win_back' => "Hi {$customerName}! It has been {$daysSince} days since your last Laleen order ({$productsList}) and we want to win you back! For the next 24 hours, claim our full Grand Slam Hair Transformation Kit at an exclusive VIP price — 100% risk-free with our money-back guarantee. Reply YES to lock in your kit before this window closes!",
-                    default => "Hi {$customerName}! It has been {$daysSince} days since your {$productsList} from Laleen. Most customers run out right about now — want us to send your fresh refill out today?",
-                };
-
-                $waLink = ($phone !== '' ? 'https://wa.me/' . $phone : 'https://wa.me/')
-                    . '?text=' . rawurlencode($waText);
-
-                return [
-                    'phone' => $phone,
-                    'display_phone' => $latest->customer_phone ?: 'No phone logged',
-                    'customer_name' => $customerName,
-                    'last_purchase_at' => $latest->created_at,
-                    'days_since' => $daysSince,
-                    'products' => $products,
-                    'channel' => $latest->channel,
-                    'order_count' => $group->count(),
-                    'total_spent' => (float) $group->sum('total_price'),
-                    'wa_text' => $waText,
-                    'wa_link' => $waLink,
-                ];
-            })
-            ->sortByDesc('days_since')
-            ->values();
+        return $digitsOnly;
     }
 
     /**
-     * Salon Backbar-to-Retail conversion: for every unit a stylist consumes at
-     * the wash basin, how many units does the front desk actually sell?
-     *
-     * Note the data shape — backbar consumption is logged against a single
-     * 'Backbar Use (Qatar)' channel with no branch, while retail is split per
-     * branch. So the ratio is only meaningful per product (and salon-wide),
-     * and the branch columns are a retail-side split, not a per-branch ratio.
+     * Resolve customer by ecommerce_customer_id first; otherwise combine country code
+     * and digits, normalize phone, and firstOrCreate the EcommerceCustomer.
+     * Updates name if empty and increments LTV / order count. Must be called inside
+     * a DB transaction and ONLY for revenue channels.
      */
-    private function backbarConversion(): array
-    {
-        $rows = EcommerceSale::with('product')
-            ->whereIn('channel', array_merge(self::BACKBAR_CHANNELS, self::SALON_RETAIL_CHANNELS))
-            ->get();
+    private function resolveAndIncrementCustomer(
+        ?int $customerId,
+        ?string $normalizedPhone,
+        ?string $customerName,
+        float $orderRevenue
+    ): ?EcommerceCustomer {
+        $cleanName = trim((string) $customerName) !== '' ? trim((string) $customerName) : null;
+        $customer = null;
 
-        $byProduct = $rows->groupBy('ecommerce_product_id')->map(function ($group) {
-            $backbar = (int) $group->whereIn('channel', self::BACKBAR_CHANNELS)->sum('quantity');
-            $retail = (int) $group->whereIn('channel', self::SALON_RETAIL_CHANNELS)->sum('quantity');
+        if ($customerId) {
+            $customer = EcommerceCustomer::lockForUpdate()->find($customerId);
+        }
 
-            return [
-                'product' => $group->first()->product,
-                'backbar_units' => $backbar,
-                'retail_units' => $retail,
-                'old_airport_units' => (int) $group->where('channel', 'Salon (Old Airport)')->sum('quantity'),
-                'wakrah_units' => (int) $group->where('channel', 'Salon (Wakrah)')->sum('quantity'),
-                'retail_revenue' => (float) $group->whereIn('channel', self::SALON_RETAIL_CHANNELS)->sum('total_price'),
-                'ratio' => $backbar > 0 ? ($retail / $backbar) * 100 : null,
-            ];
-        })->sortByDesc('backbar_units')->values();
+        if (!$customer) {
+            if ($normalizedPhone === null || $normalizedPhone === '') {
+                return null;
+            }
 
-        $totalBackbar = (int) $rows->whereIn('channel', self::BACKBAR_CHANNELS)->sum('quantity');
-        $totalRetail = (int) $rows->whereIn('channel', self::SALON_RETAIL_CHANNELS)->sum('quantity');
+            $customer = EcommerceCustomer::lockForUpdate()->firstOrCreate(
+                ['phone' => $normalizedPhone],
+                [
+                    'name' => $cleanName,
+                    'total_spend' => 0,
+                    'total_orders' => 0,
+                ]
+            );
+        }
 
-        return [
-            'by_product' => $byProduct,
-            'total_backbar_units' => $totalBackbar,
-            'total_retail_units' => $totalRetail,
-            'total_retail_revenue' => (float) $rows->whereIn('channel', self::SALON_RETAIL_CHANNELS)->sum('total_price'),
-            'efficiency' => $totalBackbar > 0 ? ($totalRetail / $totalBackbar) * 100 : null,
-        ];
+        if (empty($customer->name) && $cleanName !== null) {
+            $customer->name = $cleanName;
+        }
+
+        $customer->total_spend = round((float) $customer->total_spend + $orderRevenue, 2);
+        $customer->total_orders = (int) $customer->total_orders + 1;
+        $customer->last_purchase_at = now();
+        $customer->save();
+
+        return $customer;
     }
 
     public function store(Request $request)
@@ -395,18 +262,16 @@ class EcommerceSalesController extends Controller
                 'nullable',
                 'exists:ecommerce_bundles,id',
             ],
+            'ecommerce_customer_id' => 'nullable|integer|exists:ecommerce_customers,id',
             'reference_id' => 'nullable|string|max:255',
             'customer_name' => 'nullable|string|max:255',
+            'customer_country_code' => 'nullable|string|max:10',
             'customer_phone' => 'nullable|string|max:40',
             'quantity' => 'required|integer|min:1',
-            'channel' => 'required|in:' . implode(',', self::CHANNELS),
+            'channel' => 'required|in:' . implode(',', EcommerceSale::CHANNELS),
             'reason' => 'nullable|string|max:255',
-            // Revenue channels must carry a price. This was previously enforced
-            // only by client-side JS, so a direct POST without it blew up on an
-            // undefined array key instead of returning a validation error.
-            // Bundle sales price themselves from the bundle record.
             'unit_price' => [
-                Rule::requiredIf(fn () => !$isBundleSale && !in_array($request->input('channel'), self::NON_REVENUE_CHANNELS, true)),
+                Rule::requiredIf(fn () => !$isBundleSale && !in_array($request->input('channel'), EcommerceSale::NON_REVENUE_CHANNELS, true)),
                 'nullable',
                 'numeric',
                 'min:0',
@@ -424,9 +289,7 @@ class EcommerceSalesController extends Controller
         $shippingCost = (float) ($validated['shipping_cost'] ?? 0);
         $taxAmount = (float) ($validated['tax_amount'] ?? 0);
         $metaAdAllocation = (float) ($validated['meta_ad_allocation'] ?? 0);
-        $isNonRevenue = in_array($validated['channel'], self::NON_REVENUE_CHANNELS, true);
-        // Non-revenue channels are always free; revenue channels are guaranteed
-        // a price by the rule above, but still default defensively.
+        $isNonRevenue = in_array($validated['channel'], EcommerceSale::NON_REVENUE_CHANNELS, true);
         $unitPrice = $isNonRevenue ? 0.0 : (float) ($validated['unit_price'] ?? 0);
         $totalPrice = $quantity * $unitPrice;
 
@@ -438,12 +301,6 @@ class EcommerceSalesController extends Controller
 
         $product = EcommerceProduct::findOrFail($validated['ecommerce_product_id']);
 
-        // Snapshot the product's current BOM cost per unit — both the total
-        // (Liquid + Bottle + Label + Box + Pump) and each component — onto
-        // the sale itself, so Net Profit's itemized COGS breakdown and
-        // margin figures for this transaction stay accurate even if the
-        // Pricing & Profit model is edited later. No saved pricing model yet
-        // means every component snapshots as PKR 0.
         $pricingModel = EcommercePricingModel::where('ecommerce_product_id', $product->id)->first();
         $unitCogs = $pricingModel?->bomUnitCost() ?? 0.0;
         $unitLiquidCost = (float) ($pricingModel->liquid_cost ?? 0);
@@ -452,9 +309,18 @@ class EcommerceSalesController extends Controller
         $unitPumpCost = (float) ($pricingModel->pump_cost ?? 0);
         $unitOuterBoxCost = (float) ($pricingModel->box_cost ?? 0);
 
+        $customerId = !empty($validated['ecommerce_customer_id']) ? (int) $validated['ecommerce_customer_id'] : null;
+        $normalizedPhone = $this->combineAndNormalizePhone(
+            $validated['customer_country_code'] ?? '+974',
+            $validated['customer_phone'] ?? null
+        );
+
         try {
             DB::transaction(function () use (
                 $validated,
+                $isNonRevenue,
+                $customerId,
+                $normalizedPhone,
                 $quantity,
                 $unitPrice,
                 $totalPrice,
@@ -471,20 +337,40 @@ class EcommerceSalesController extends Controller
                 $soldField,
                 $locationName
             ) {
-                // Lock the product first, then check stock against the locked
-                // row. Checking before the lock let two concurrent sales both
-                // clear the same balance and oversell into negative stock.
                 $product = EcommerceProduct::lockForUpdate()->findOrFail($validated['ecommerce_product_id']);
 
                 if ((float) $product->{$stockField} < $quantity) {
                     throw new RuntimeException("Insufficient stock in {$locationName} for this sale. Requested: " . number_format($quantity, 2) . ', Available: ' . number_format((float) $product->{$stockField}, 2) . '.');
                 }
 
+                // Fix LTV Corruption Bug: Non-revenue events (Damage, Backbar) must NEVER
+                // touch the EcommerceCustomer table, even if a phone number is present.
+                $customer = null;
+                if (!in_array($validated['channel'], self::NON_REVENUE_CHANNELS, true)) {
+                    $customer = $this->resolveAndIncrementCustomer(
+                        $customerId,
+                        $normalizedPhone,
+                        $validated['customer_name'] ?? null,
+                        $totalPrice
+                    );
+                }
+
+                $finalCustomerName = $validated['customer_name'] ?? null;
+                if ((empty($finalCustomerName) || trim((string) $finalCustomerName) === '') && $customer?->name) {
+                    $finalCustomerName = $customer->name;
+                }
+
+                $finalCustomerPhone = null;
+                if (!$isNonRevenue) {
+                    $finalCustomerPhone = $normalizedPhone !== '' ? $normalizedPhone : $customer?->phone;
+                }
+
                 EcommerceSale::create([
                     'ecommerce_product_id' => $validated['ecommerce_product_id'],
+                    'ecommerce_customer_id' => $customer?->id,
                     'reference_id' => $validated['reference_id'] ?? null,
-                    'customer_name' => $validated['customer_name'] ?? null,
-                    'customer_phone' => $validated['customer_phone'] ?? null,
+                    'customer_name' => $finalCustomerName,
+                    'customer_phone' => $finalCustomerPhone,
                     'quantity' => $quantity,
                     'channel' => $validated['channel'],
                     'reason' => $validated['reason'] ?? null,
@@ -512,23 +398,11 @@ class EcommerceSalesController extends Controller
         return back()->with('success', 'Sale logged and stock updated.');
     }
 
-    /**
-     * A bundle sale is written as one EcommerceSale row PER CHILD PRODUCT.
-     *
-     * That keeps every downstream calculation — stock decrements, the
-     * itemized COGS snapshot, Net Profit's rollup, channel filters — working
-     * exactly as it does for a single-product sale, with no special-casing
-     * anywhere else in the module. The rows are tagged with
-     * ecommerce_bundle_id so the UI can group them back into one order.
-     *
-     * Revenue is the bundle price split across the children in proportion to
-     * their standalone value; COGS is each child's own real BOM cost.
-     */
     private function storeBundleSale(array $validated)
     {
         $bundleQuantity = (int) $validated['quantity'];
         $channel = $validated['channel'];
-        $isNonRevenue = in_array($channel, self::NON_REVENUE_CHANNELS, true);
+        $isNonRevenue = in_array($channel, EcommerceSale::NON_REVENUE_CHANNELS, true);
 
         $isPakistan = str_contains($channel, 'Pakistan');
         $stockField = $isPakistan ? 'stock_pakistan' : 'stock_qatar';
@@ -541,20 +415,28 @@ class EcommerceSalesController extends Controller
             return back()->withErrors(['error' => "Bundle \"{$bundle->name}\" has no products in it yet, so it cannot be sold."]);
         }
 
-        // Non-revenue channels (backbar/damage) give the bundle away at zero.
         $allocation = $isNonRevenue
             ? $bundle->items->mapWithKeys(fn ($item) => [$item->id => 0.0])->all()
             : $bundle->allocateRevenue($bundleQuantity);
 
-        // Order-level costs belong to the order, not each line — park them all
-        // on the first row so Net Profit never counts them more than once.
         $shippingCost = (float) ($validated['shipping_cost'] ?? 0);
         $taxAmount = (float) ($validated['tax_amount'] ?? 0);
         $metaAdAllocation = (float) ($validated['meta_ad_allocation'] ?? 0);
 
+        $customerId = !empty($validated['ecommerce_customer_id']) ? (int) $validated['ecommerce_customer_id'] : null;
+        $normalizedPhone = $this->combineAndNormalizePhone(
+            $validated['customer_country_code'] ?? '+974',
+            $validated['customer_phone'] ?? null
+        );
+        $totalBundleRevenue = (float) array_sum($allocation);
+
         try {
             DB::transaction(function () use (
                 $validated,
+                $isNonRevenue,
+                $customerId,
+                $normalizedPhone,
+                $totalBundleRevenue,
                 $bundle,
                 $bundleQuantity,
                 $allocation,
@@ -567,9 +449,6 @@ class EcommerceSalesController extends Controller
             ) {
                 $productIds = $bundle->items->pluck('ecommerce_product_id')->all();
 
-                // Lock every component up front (ordered by id to keep a
-                // consistent lock sequence between concurrent bundle sales),
-                // then validate the whole basket before writing anything.
                 $lockedProducts = EcommerceProduct::whereIn('id', $productIds)
                     ->orderBy('id')
                     ->lockForUpdate()
@@ -589,23 +468,42 @@ class EcommerceSalesController extends Controller
                     }
                 }
 
+                // Fix LTV Corruption Bug: Only resolve/increment customer for revenue channels
+                $customer = null;
+                if (!in_array($validated['channel'], self::NON_REVENUE_CHANNELS, true)) {
+                    $customer = $this->resolveAndIncrementCustomer(
+                        $customerId,
+                        $normalizedPhone,
+                        $validated['customer_name'] ?? null,
+                        $totalBundleRevenue
+                    );
+                }
+
+                $finalCustomerName = $validated['customer_name'] ?? null;
+                if ((empty($finalCustomerName) || trim((string) $finalCustomerName) === '') && $customer?->name) {
+                    $finalCustomerName = $customer->name;
+                }
+
+                $finalCustomerPhone = null;
+                if (!$isNonRevenue) {
+                    $finalCustomerPhone = $normalizedPhone !== '' ? $normalizedPhone : $customer?->phone;
+                }
+
                 $isFirstLine = true;
 
                 foreach ($bundle->items as $item) {
                     $product = $lockedProducts->get($item->ecommerce_product_id);
                     $unitsSold = (int) $item->quantity * $bundleQuantity;
                     $lineRevenue = (float) ($allocation[$item->id] ?? 0);
-
-                    // Each child keeps its OWN real BOM snapshot — only the
-                    // revenue is apportioned, never the cost.
                     $pricingModel = $product->pricingModel;
 
                     EcommerceSale::create([
                         'ecommerce_product_id' => $product->id,
                         'ecommerce_bundle_id' => $bundle->id,
+                        'ecommerce_customer_id' => $customer?->id,
                         'reference_id' => $validated['reference_id'] ?? null,
-                        'customer_name' => $validated['customer_name'] ?? null,
-                        'customer_phone' => $validated['customer_phone'] ?? null,
+                        'customer_name' => $finalCustomerName,
+                        'customer_phone' => $finalCustomerPhone,
                         'quantity' => $unitsSold,
                         'channel' => $validated['channel'],
                         'reason' => trim(($validated['reason'] ?? '') . ' [Bundle: ' . $bundle->name . ']'),
@@ -636,51 +534,6 @@ class EcommerceSalesController extends Controller
         return back()->with('success', 'Bundle sale logged — ' . $bundle->items->count() . ' component line(s) recorded and stock updated.');
     }
 
-    public function storeBundle(Request $request)
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'bundle_price' => 'required|numeric|min:0',
-            'items' => 'required|array|min:1',
-            'items.*.ecommerce_product_id' => 'required|exists:ecommerce_products,id',
-            'items.*.quantity' => 'required|integer|min:1',
-        ]);
-
-        // The unique(bundle_id, product_id) index would otherwise throw a raw
-        // SQL error if the same product is picked on two rows.
-        $productIds = collect($validated['items'])->pluck('ecommerce_product_id');
-        if ($productIds->count() !== $productIds->unique()->count()) {
-            return back()->withErrors(['error' => 'Each product can only appear once in a bundle — increase its quantity instead.']);
-        }
-
-        DB::transaction(function () use ($validated) {
-            $bundle = EcommerceBundle::create([
-                'name' => $validated['name'],
-                'bundle_price' => $validated['bundle_price'],
-            ]);
-
-            foreach ($validated['items'] as $item) {
-                $bundle->items()->create([
-                    'ecommerce_product_id' => $item['ecommerce_product_id'],
-                    'quantity' => $item['quantity'],
-                ]);
-            }
-        });
-
-        return back()->with('success', 'Bundle created.');
-    }
-
-    public function destroyBundle(EcommerceBundle $bundle)
-    {
-        if ($bundle->sales()->exists()) {
-            return back()->withErrors(['error' => "Cannot delete \"{$bundle->name}\" because it has recorded sales. Deleting it would orphan historical revenue."]);
-        }
-
-        $bundle->delete();
-
-        return back()->with('success', 'Bundle deleted.');
-    }
-
     public function destroy(EcommerceSale $sale)
     {
         DB::transaction(function () use ($sale) {
@@ -694,9 +547,40 @@ class EcommerceSalesController extends Controller
             $product->{$soldField} -= $sale->quantity;
             $product->save();
 
+            $customerId = $sale->ecommerce_customer_id;
+
             $sale->delete();
+
+            // Patch 3: Recalculate the customer's exact LTV from their remaining revenue sales,
+            // grouping by reference_id (Shopify) or ecommerce_bundle_id (kits) so deleting
+            // a single bundle component row never over-decrements total_orders.
+            if ($customerId) {
+                $customer = EcommerceCustomer::lockForUpdate()->find($customerId);
+                if ($customer) {
+                    $remainingRevenueSales = EcommerceSale::where('ecommerce_customer_id', $customer->id)
+                        ->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+                        ->get(['id', 'reference_id', 'ecommerce_bundle_id', 'created_at', 'total_price']);
+
+                    $customer->total_spend = round((float) $remainingRevenueSales->sum('total_price'), 2);
+                    $customer->total_orders = $remainingRevenueSales
+                        ->groupBy(function ($s) {
+                            if (!empty($s->reference_id)) {
+                                return 'ref:' . $s->reference_id;
+                            }
+                            if (!empty($s->ecommerce_bundle_id)) {
+                                return 'bundle:' . $s->ecommerce_bundle_id . ':' . $s->created_at;
+                            }
+                            return 'sale:' . $s->id;
+                        })
+                        ->count();
+
+                    $latestRemainingSaleAt = $remainingRevenueSales->max('created_at');
+                    $customer->last_purchase_at = $latestRemainingSaleAt ? Carbon::parse($latestRemainingSaleAt) : null;
+                    $customer->save();
+                }
+            }
         });
 
-        return back()->with('success', 'Sale deleted and inventory restored.');
+        return back()->with('success', 'Sale deleted, inventory restored, and customer LTV updated.');
     }
 }

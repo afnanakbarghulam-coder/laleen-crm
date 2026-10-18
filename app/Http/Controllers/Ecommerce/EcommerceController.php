@@ -4,50 +4,74 @@ namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceContentCalendar;
+use App\Models\EcommerceCustomer;
 use App\Models\EcommerceExpense;
 use App\Models\EcommerceKpi;
 use App\Models\EcommerceMonthlyAd;
 use App\Models\EcommerceSale;
 use App\Models\PartnerTransaction;
-use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class EcommerceController extends Controller
 {
     /**
-     * Top-level card menu. Each card carries one live headline figure so the
-     * hub reports state rather than just being a link list.
+     * Top-level 2x2 workstation card menu. Each card carries a live headline
+     * figure so the hub reports operational state at a glance.
      */
     public function hub()
     {
         $capitalPool = (float) PartnerTransaction::where('type', 'injection')->sum('amount');
         $partnerFundedExpenses = (float) EcommerceExpense::where('funding_source', 'partner_ledger')->sum('amount');
 
-        $contentSlots = EcommerceContentCalendar::count();
+        $contentSlots = EcommerceContentCalendar::count() ?: 7;
         $contentLive = EcommerceContentCalendar::where('status', 'Live on Shopify/Meta')->count();
+        $inFlightAdsCount = EcommerceMonthlyAd::whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count();
+
+        $totalCustomersCount = EcommerceCustomer::count();
+
+        $revenueSales = EcommerceSale::whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+            ->get(['id', 'reference_id', 'ecommerce_bundle_id', 'created_at', 'total_price']);
+
+        $totalSalesCount = $revenueSales
+            ->groupBy(function ($s) {
+                if (!empty($s->reference_id)) {
+                    return 'ref:' . $s->reference_id;
+                }
+                if (!empty($s->ecommerce_bundle_id)) {
+                    return 'bundle:' . $s->ecommerce_bundle_id . ':' . $s->created_at;
+                }
+                return 'sale:' . $s->id;
+            })
+            ->count();
+
+        $totalSalesRevenue = (float) $revenueSales->sum('total_price');
+        $aov = $totalSalesCount > 0 ? ($totalSalesRevenue / $totalSalesCount) : 0.0;
+
+        if ($aov <= 0) {
+            $kpiRevenue = (float) EcommerceKpi::sum('total_revenue');
+            $kpiOrders = (int) EcommerceKpi::sum('total_orders');
+            $aov = $kpiOrders > 0 ? ($kpiRevenue / $kpiOrders) : 0.0;
+        }
 
         return view('ecommerce.hub', [
             'runway' => $capitalPool - $partnerFundedExpenses,
+            'totalCustomersCount' => $totalCustomersCount,
+            'totalSalesCount' => $totalSalesCount,
             'contentSlots' => $contentSlots,
             'contentLive' => $contentLive,
-            'adsInFlight' => EcommerceMonthlyAd::whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count(),
+            'liveSlotsCount' => $contentLive,
+            'adsInFlight' => $inFlightAdsCount,
+            'inFlightAdsCount' => $inFlightAdsCount,
+            'aov' => $aov,
         ]);
     }
 
-    /**
-     * Financials & Inventory has no landing menu of its own — the section IS
-     * the tabbed report set, so this drops straight into Partner Ledger.
-     * Kept as a redirect rather than deleted so existing /ecommerce/financials
-     * links and bookmarks keep resolving.
-     */
     public function financials()
     {
         return redirect()->route('ecommerce.partners.index');
     }
 
-    /** Marketing hub — two cards: the ads plan and the content calendar. */
     public function marketing()
     {
         return view('ecommerce.marketing.hub', [
@@ -58,7 +82,7 @@ class EcommerceController extends Controller
         ]);
     }
 
-    /** Ecommerce KPIs — blended acquisition economics. */
+    /** Performance & KPIs — blended acquisition economics + Salon Backbar Conversion. */
     public function dashboard(Request $request)
     {
         $from = $request->filled('start_date')
@@ -69,26 +93,21 @@ class EcommerceController extends Controller
             : now()->startOfDay();
 
         if ($from->gt($to)) {
-            [$from, $to] = [$to->copy(), $chartTo = $from->copy()];
+            [$from, $to] = [$to->copy(), $from->copy()];
         }
 
         $rangeStart = $from->copy()->startOfDay();
         $rangeEnd = $to->copy()->endOfDay();
 
-        // Carbon day boundaries, not 'Y-m-d' strings: stored dates carry a
-        // 00:00:00 time component, so a bare end-date string would compare
-        // lexically BELOW the final day's value and silently drop it.
         $kpiRows = EcommerceKpi::whereBetween('date', [$rangeStart, $rangeEnd])
             ->orderByDesc('date')
             ->get();
 
-        // Query revenue-channel sales in the date range belonging to New Customers
-        // (excluding returning buyers who had a revenue-channel purchase prior to $rangeStart).
-        $normalizePhone = fn ($phone) => preg_replace('/\D+/', '', (string) $phone);
+        $normalizePhone = fn ($phone) => EcommerceCustomer::normalizePhone($phone);
 
         $priorCustomerPhones = EcommerceSale::whereNotNull('customer_phone')
             ->where('customer_phone', '!=', '')
-            ->whereNotIn('channel', EcommerceSalesController::NON_REVENUE_CHANNELS)
+            ->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
             ->where('created_at', '<', $rangeStart)
             ->pluck('customer_phone')
             ->map($normalizePhone)
@@ -96,7 +115,7 @@ class EcommerceController extends Controller
             ->unique()
             ->flip();
 
-        $newCustomerSales = EcommerceSale::whereNotIn('channel', EcommerceSalesController::NON_REVENUE_CHANNELS)
+        $newCustomerSales = EcommerceSale::whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
             ->whereBetween('created_at', [$rangeStart, $rangeEnd])
             ->get()
             ->reject(function (EcommerceSale $sale) use ($normalizePhone, $priorCustomerPhones) {
@@ -115,25 +134,53 @@ class EcommerceController extends Controller
             'filterText' => ($request->filled('start_date') || $request->filled('end_date'))
                 ? 'From ' . $from->format('M d, Y') . ' to ' . $to->format('M d, Y')
                 : 'This month to date',
+            'backbarConversion' => $this->backbarConversion(),
         ]);
     }
 
+    /**
+     * Salon Backbar-to-Retail conversion: for every unit a stylist consumes at
+     * the wash basin, how many units does the front desk actually sell?
+     */
+    private function backbarConversion(): array
+    {
+        $rows = EcommerceSale::with('product')
+            ->whereIn('channel', array_merge(EcommerceSale::BACKBAR_CHANNELS, EcommerceSale::SALON_RETAIL_CHANNELS))
+            ->get();
 
-    // ---- Daily KPI snapshots -------------------------------------------------
+        $byProduct = $rows->groupBy('ecommerce_product_id')->map(function ($group) {
+            $backbar = (int) $group->whereIn('channel', EcommerceSale::BACKBAR_CHANNELS)->sum('quantity');
+            $retail = (int) $group->whereIn('channel', EcommerceSale::SALON_RETAIL_CHANNELS)->sum('quantity');
+
+            return [
+                'product' => $group->first()->product,
+                'backbar_units' => $backbar,
+                'retail_units' => $retail,
+                'old_airport_units' => (int) $group->where('channel', 'Salon (Old Airport)')->sum('quantity'),
+                'wakrah_units' => (int) $group->where('channel', 'Salon (Wakrah)')->sum('quantity'),
+                'retail_revenue' => (float) $group->whereIn('channel', EcommerceSale::SALON_RETAIL_CHANNELS)->sum('total_price'),
+                'ratio' => $backbar > 0 ? ($retail / $backbar) * 100 : null,
+            ];
+        })->sortByDesc('backbar_units')->values();
+
+        $totalBackbar = (int) $rows->whereIn('channel', EcommerceSale::BACKBAR_CHANNELS)->sum('quantity');
+        $totalRetail = (int) $rows->whereIn('channel', EcommerceSale::SALON_RETAIL_CHANNELS)->sum('quantity');
+
+        return [
+            'by_product' => $byProduct,
+            'total_backbar_units' => $totalBackbar,
+            'total_retail_units' => $totalRetail,
+            'total_retail_revenue' => (float) $rows->whereIn('channel', EcommerceSale::SALON_RETAIL_CHANNELS)->sum('total_price'),
+            'efficiency' => $totalBackbar > 0 ? ($totalRetail / $totalBackbar) * 100 : null,
+        ];
+    }
 
     public function storeKpi(Request $request)
     {
         $validated = $this->validatedKpi($request);
-
-        // The 'date' cast writes a time component ('2026-10-14 00:00:00'), so
-        // looking the row up by the bare 'Y-m-d' string never matches and the
-        // unique index throws instead of updating. Normalising both sides to
-        // a Carbon day boundary keeps the binding format identical.
         $date = Carbon::parse($validated['date'])->startOfDay();
         $validated['date'] = $date;
 
-        // A re-submitted day is an update, not a second row — otherwise
-        // revenue and ad spend would double-count.
         EcommerceKpi::updateOrCreate(['date' => $date], $validated);
 
         return back()->with('success', 'Daily KPI snapshot saved.');

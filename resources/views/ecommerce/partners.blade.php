@@ -6,6 +6,7 @@
 @section('content')
     <div class="ec-header">
         <div>
+            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Financials &amp; Inventory</div>
             <h4>Partner Investment &amp; Capital Ledger</h4>
             <p>Capital matching across the partners, plus the full capital injection history.</p>
         </div>
@@ -14,7 +15,7 @@
         @endmoduleEdit
     </div>
 
-    @include('ecommerce._nav')
+    @include('ecommerce.partials._financials_tabs')
 
     <div class="row">
         <div class="col-md-6">

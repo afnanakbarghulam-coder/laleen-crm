@@ -41,7 +41,7 @@ class EcommerceBundle extends Model
     public function bundleUnitCogs(): float
     {
         return (float) $this->items->sum(function (EcommerceBundleItem $item) {
-            return ($item->product?->pricingModel?->bomUnitCost() ?? 0.0) * (int) $item->quantity;
+            return ($item->product?->unit_cogs ?? 0.0) * (int) $item->quantity;
         });
     }
 

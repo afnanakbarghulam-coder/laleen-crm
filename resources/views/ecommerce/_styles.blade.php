@@ -108,6 +108,20 @@
     .ec-badge-stalled { background: rgba(154, 144, 136, 0.16); color: var(--ec-neutral); white-space: nowrap; }
     .ec-badge-bundle  { background: rgba(201, 166, 107, 0.18); color: var(--ec-gold); }
 
+    .ec-vip-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(142, 168, 138, 0.18);
+        border: 1px solid rgba(142, 168, 138, 0.45);
+        color: #9fc49a;
+        padding: 4px 11px;
+        border-radius: 20px;
+        font-size: 11.5px;
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+
     .ec-velocity-rate {
         font-weight: 700;
         font-size: 13.5px;

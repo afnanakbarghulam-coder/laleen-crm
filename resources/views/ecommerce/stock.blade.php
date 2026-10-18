@@ -6,6 +6,7 @@
 @section('content')
     <div class="ec-header">
         <div>
+            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Financials &amp; Inventory</div>
             <h4>Stock Levels</h4>
             <p>Multi-location finished goods inventory &mdash; Pakistan is the manufacturing master, Qatar is the retail satellite.</p>
         </div>
@@ -14,7 +15,7 @@
         @endmoduleEdit
     </div>
 
-    @include('ecommerce._nav')
+    @include('ecommerce.partials._financials_tabs')
 
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <p class="ec-sub mb-0">Scopes Batch History only &mdash; live stock and capital figures below always reflect right now.</p>

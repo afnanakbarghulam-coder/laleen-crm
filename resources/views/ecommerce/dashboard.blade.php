@@ -178,6 +178,72 @@
         </div>
     @endif
 
+    {{-- ============ Salon Backbar-to-Retail Conversion ============ --}}
+    <div id="backbar-conversion"></div>
+    @php
+        $bbEfficiency = $backbarConversion['efficiency'];
+        $bbMeterWidth = $bbEfficiency === null ? 0 : min(100, max(0, $bbEfficiency));
+    @endphp
+    <div class="row g-3 mt-1">
+        <div class="col-md-4">
+            <div class="ec-card ec-card-highlight">
+                <h6>Salon Backbar Conversion Efficiency</h6>
+                <div class="ec-value {{ $bbEfficiency === null ? '' : ($bbEfficiency >= 100 ? 'ec-positive' : 'ec-negative') }}">
+                    {{ $bbEfficiency === null ? '—' : number_format($bbEfficiency, 0) . '%' }}
+                </div>
+                <div class="ec-sub">
+                    {{ number_format($backbarConversion['total_retail_units'], 0) }} retail units sold per
+                    {{ number_format($backbarConversion['total_backbar_units'], 0) }} backbar units used
+                </div>
+                <div class="ec-conversion-meter">
+                    <div class="ec-conversion-fill" style="width: {{ $bbMeterWidth }}%;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="ec-card">
+                <h6 style="margin-bottom: 4px;">Are stylists converting wash-basin treatments into retail?</h6>
+                <p class="ec-sub mb-3">
+                    Backbar consumption is logged salon-wide (no branch), so the ratio is per product; branch columns split the retail side only.
+                </p>
+                @if ($backbarConversion['by_product']->isEmpty())
+                    <div class="ec-chart-empty">No backbar or salon retail activity logged yet.</div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table ec-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th class="text-end">Backbar Used</th>
+                                    <th class="text-end">Retail Sold</th>
+                                    <th class="text-end">Old Airport</th>
+                                    <th class="text-end">Wakrah</th>
+                                    <th class="text-end">Retail Revenue</th>
+                                    <th class="text-end">Conversion</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($backbarConversion['by_product'] as $row)
+                                    <tr>
+                                        <td>{{ $row['product']->name ?? 'Deleted product' }}</td>
+                                        <td class="text-end">{{ number_format($row['backbar_units'], 0) }}</td>
+                                        <td class="text-end">{{ number_format($row['retail_units'], 0) }}</td>
+                                        <td class="text-end">{{ number_format($row['old_airport_units'], 0) }}</td>
+                                        <td class="text-end">{{ number_format($row['wakrah_units'], 0) }}</td>
+                                        <td class="text-end">PKR {{ number_format($row['retail_revenue'], 2) }}</td>
+                                        <td class="text-end {{ $row['ratio'] === null ? '' : ($row['ratio'] >= 100 ? 'ec-positive' : 'ec-negative') }}">
+                                            {{ $row['ratio'] === null ? '—' : number_format($row['ratio'], 0) . '%' }}
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+
     {{-- ============ Logged KPI snapshots ============ --}}
     @if ($kpiRows->isNotEmpty())
         <div class="ec-card mt-3">

@@ -6,6 +6,7 @@
 @section('content')
     <div class="ec-header">
         <div>
+            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Financials &amp; Inventory</div>
             <h4>Ecommerce Expense Tracker</h4>
             <p>Online-only operating expenses, isolated from salon/physical costs.</p>
         </div>
@@ -14,7 +15,7 @@
         @endmoduleEdit
     </div>
 
-    @include('ecommerce._nav')
+    @include('ecommerce.partials._financials_tabs')
 
     <div class="row">
         <div class="col-md-4">

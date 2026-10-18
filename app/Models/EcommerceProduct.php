@@ -47,6 +47,7 @@ class EcommerceProduct extends Model
     protected $appends = [
         'liquid_cost',
         'total_cogs',
+        'unit_cogs',
         'payment_gateway_fee',
         'gross_profit',
         'gross_margin_percent',
@@ -92,6 +93,20 @@ class EcommerceProduct extends Model
             + (float) $this->box_cost
             + (float) $this->labor_cost
             + (float) $this->shipping_cost;
+    }
+
+    public function getUnitCogsAttribute(): float
+    {
+        if (array_key_exists('unit_cogs', $this->attributes) && $this->attributes['unit_cogs'] !== null) {
+            return (float) $this->attributes['unit_cogs'];
+        }
+
+        $model = $this->relationLoaded('pricingModel') ? $this->pricingModel : $this->pricingModel()->first();
+        if ($model && $model->bomUnitCost() > 0) {
+            return (float) $model->bomUnitCost();
+        }
+
+        return (float) $this->total_cogs;
     }
 
     public function getPaymentGatewayFeeAttribute(): float
