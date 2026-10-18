@@ -14,18 +14,18 @@
     <div class="ec-header">
         <div>
             <h4>Ecommerce KPIs</h4>
-            <p>Blended acquisition economics &mdash; MER, CAC, AOV and repeat rate from your daily Shopify + Meta snapshots.</p>
+            <p>Live sales &amp; customer retention economics paired with your daily ad spend.</p>
         </div>
         <div class="d-flex align-items-center gap-2">
             @moduleEdit('ecommerce')
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#kpiModal">+ Log Daily KPIs</button>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#kpiModal">+ Enter Daily Ad Spend</button>
             @endmoduleEdit
             <a href="{{ route('ecommerce.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Ecommerce</a>
         </div>
     </div>
 
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <p class="ec-sub mb-0">{{ $filterText }} &middot; {{ $metrics['day_count'] }} day(s) of data</p>
+        <p class="ec-sub mb-0">{{ $filterText }} &middot; {{ $metrics['day_count'] }} day(s) of ad spend logged</p>
         <form method="GET" action="{{ route('ecommerce.dashboard') }}" class="d-flex align-items-center flex-wrap gap-2">
             <div class="d-flex align-items-center gap-2">
                 <label for="startDateFilter" class="ec-sub mb-0">From</label>
@@ -37,217 +37,244 @@
         </form>
     </div>
 
-    @unless ($metrics['has_data'])
+    @unless ($metrics['has_ad_spend'] ?? $metrics['has_data'])
         <div class="ec-accounting-note">
             <span>📊</span>
             <div>
-                <strong>No KPI snapshots in this range.</strong>
-                Log a day's blended revenue, ad spend and order counts to populate MER, CAC, AOV and Repeat Rate.
+                <strong>No ad spend logged in this range.</strong>
+                Click <strong>+ Enter Daily Ad Spend</strong> to calculate Return on Ad Spend (ROAS) and Cost Per New Customer alongside your live sales metrics.
             </div>
         </div>
     @endunless
 
-    {{-- ============ Day-0 Net Contribution (New Customers) — Paid Ad Reality Check ============ --}}
-    <div class="row g-3 mb-3">
-        <div class="col-12">
-            @php
-                $day0Val = $metrics['day0_net_contribution'];
-                $day0Healthy = $metrics['day0_healthy'];
-            @endphp
-            <div class="ec-card ec-kpi-card {{ $borderClass($day0Healthy) }}">
-                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                    <div>
-                        <h6>Day-0 Net Contribution (New Customers) &mdash; Per-Order Cash Margin</h6>
-                        <div class="ec-kpi-value {{ $day0Healthy === null ? '' : ($day0Healthy ? 'ec-positive' : 'ec-negative') }}">
-                            {{ $day0Val === null ? '—' : ($day0Val < 0 ? '-PKR ' . number_format(abs($day0Val), 2) : 'PKR ' . number_format($day0Val, 2)) }}
-                        </div>
-                        <div class="ec-sub">
-                            [New Customer Revenue &minus; (COGS + Shipping + Ad Spend)] &divide; New Customers
-                        </div>
-                    </div>
-                    @if ($day0Val !== null)
-                        <div>
-                            @if ($day0Val > 0)
-                                <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-6">
-                                    ✓ Infinite Scale
-                                </span>
-                            @elseif ($day0Val < 0)
-                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6">
-                                    ⚠ Bleeding Cash
-                                </span>
-                            @else
-                                <span class="badge bg-secondary-subtle text-secondary px-3 py-2 fs-6">
-                                    Break-Even (PKR 0.00)
-                                </span>
-                            @endif
-                        </div>
-                    @endif
-                </div>
-                @if ($day0Val !== null)
-                    <div class="ec-kpi-flag {{ $day0Healthy === null ? 'ec-sub' : ($day0Healthy ? 'ec-positive' : 'ec-negative') }} mt-2">
-                        @if ($day0Val > 0)
-                            ✓ Infinite Scale &mdash; Each new customer generates +PKR {{ number_format($day0Val, 2) }} net cash on Day 0 after COGS, Shipping &amp; Meta Ads (Total Pool: +PKR {{ number_format($metrics['day0_net_total'], 2) }}).
-                        @elseif ($day0Val < 0)
-                            ⚠ Bleeding Cash &mdash; Losing PKR {{ number_format(abs($day0Val), 2) }} per new customer on Day 0 after COGS, Shipping &amp; Meta Ads (Total Deficit: -PKR {{ number_format(abs($metrics['day0_net_total']), 2) }}).
-                        @else
-                            Exact Day-0 break-even across {{ number_format($metrics['new_customers']) }} new customer(s).
-                        @endif
-                    </div>
-                    <div class="d-flex flex-wrap gap-4 mt-2 pt-2" style="border-top: 1px solid var(--ec-border, rgba(255,255,255,0.08)); font-size: 12px;">
-                        <span class="ec-sub">New Cust. Revenue: <strong>PKR {{ number_format($metrics['new_customer_revenue'], 2) }}</strong></span>
-                        <span class="ec-sub">New Cust. COGS: <strong>PKR {{ number_format($metrics['new_customer_cogs'], 2) }}</strong></span>
-                        <span class="ec-sub">New Cust. Shipping: <strong>PKR {{ number_format($metrics['new_customer_shipping'], 2) }}</strong></span>
-                        <span class="ec-sub">Total Ad Spend: <strong>PKR {{ number_format($metrics['total_ad_spend'], 2) }}</strong></span>
-                        <span class="ec-sub">New Customers: <strong>{{ number_format($metrics['new_customers']) }}</strong></span>
-                    </div>
-                @endif
-            </div>
-        </div>
-    </div>
+    <style>
+        .ec-kpi-grid-row {
+            position: relative;
+            z-index: 30;
+            overflow: visible !important;
+        }
+        .ec-kpi-col {
+            position: relative;
+            overflow: visible !important;
+            z-index: 1;
+        }
+        .ec-kpi-col:hover,
+        .ec-kpi-col:focus-within {
+            z-index: 50 !important;
+        }
+        .ec-kpi-card {
+            position: relative;
+            overflow: visible !important;
+            z-index: 1;
+        }
+        .ec-kpi-card:hover,
+        .ec-kpi-card:focus-within {
+            z-index: 50 !important;
+        }
+        .ec-kpi-title-row {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .ec-info-trigger {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--ec-muted, #c9a39a);
+            opacity: 0.75;
+            cursor: pointer;
+            transition: opacity 0.18s ease, color 0.18s ease;
+            outline: none;
+        }
+        .ec-info-trigger:hover,
+        .ec-info-trigger:focus,
+        .ec-kpi-title-row.group:hover .ec-info-trigger {
+            opacity: 1;
+            color: #d98f83;
+        }
+        .ec-info-tooltip {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 8px;
+            width: 18rem;
+            padding: 16px;
+            background: #1c1615;
+            border: 1px solid rgba(217, 143, 131, 0.5);
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+            z-index: 100 !important;
+            font-size: 0.875rem;
+            font-weight: 400;
+            line-height: 1.45;
+            color: #e5e7eb;
+            text-transform: none;
+            letter-spacing: normal;
+            text-align: left;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.15s ease, visibility 0.15s ease;
+        }
+        .ec-info-tooltip hr {
+            margin: 12px 0;
+            border: 0;
+            border-top: 1px solid rgba(217, 143, 131, 0.2);
+            opacity: 1;
+        }
+        .ec-info-tooltip strong {
+            color: #d98f83;
+            font-weight: 600;
+        }
+        .ec-info-trigger:hover .ec-info-tooltip,
+        .ec-info-trigger:focus .ec-info-tooltip,
+        .ec-kpi-title-row.group:hover .ec-info-tooltip,
+        .ec-info-tooltip.is-visible {
+            display: block !important;
+            opacity: 1;
+            visibility: visible;
+        }
+        .ec-summary-strip-card {
+            position: relative;
+            z-index: 1;
+        }
+    </style>
 
-    {{-- ============ Ecommerce KPIs ============ --}}
-    <div class="row g-3">
-        <div class="col-md-3">
-            <div class="ec-card ec-kpi-card {{ $borderClass($metrics['mer_healthy']) }}">
-                <h6>MER</h6>
-                <div class="ec-kpi-value">
+    {{-- ============ The Big 4 Ecommerce KPIs ============ --}}
+    <div class="row g-3 ec-kpi-grid-row">
+        <div class="col-6 col-lg-3 ec-kpi-col relative hover:z-50">
+            <div class="ec-card ec-kpi-card {{ $borderClass($metrics['mer_healthy']) }} relative hover:z-50 text-center d-flex flex-column justify-content-center py-4 h-100">
+                <h6 class="text-uppercase mb-2 relative group flex items-center gap-2 ec-kpi-title-row" style="letter-spacing: 0.08em;">
+                    <span>Return on Ad Spend (ROAS)</span>
+                    <span class="ec-info-trigger relative flex items-center" tabindex="0" x-data="{ tooltip: false }" @mouseenter="tooltip = true" @mouseleave="tooltip = false" @focus="tooltip = true" @blur="tooltip = false" aria-label="What is Return on Ad Spend (ROAS)?">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <div x-cloak class="ec-info-tooltip absolute top-full left-1/2 -translate-x-1/2 mt-2 w-72 p-4 bg-[#1c1615] border border-[#d98f83]/50 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] z-[100] text-sm text-gray-200 normal-case tracking-normal text-left" :class="{ 'is-visible': tooltip }" role="tooltip">
+                            For every PKR 1 you feed into the advertising machine, how many PKR come back. If you spend 10k and make 30k, your ROAS is 3.0x.
+                            <hr class="my-3 border-[#d98f83]/20">
+                            <div><strong>Formula:</strong> Total Revenue &divide; Total Ad Spend</div>
+                        </div>
+                    </span>
+                </h6>
+                <div class="ec-kpi-value my-1" style="font-size: 2rem; font-weight: 800;">
                     {{ $metrics['mer'] === null ? '—' : number_format($metrics['mer'], 2) . 'x' }}
                 </div>
-                <div class="ec-sub">Revenue &divide; Ad Spend &middot; target &ge; {{ number_format($merTarget, 1) }}x</div>
+                <div class="ec-sub mt-1">Target: &ge; {{ number_format($merTarget, 1) }}x</div>
                 @if ($metrics['mer'] !== null)
-                    <div class="ec-kpi-flag {{ $metrics['mer_healthy'] ? 'ec-positive' : 'ec-negative' }}">
-                        {{ $metrics['mer_healthy'] ? '✓ Efficient' : '⚠ Below target — ads are eating margin' }}
+                    <div class="ec-kpi-flag {{ $metrics['mer_healthy'] ? 'ec-positive' : 'ec-negative' }} mt-2">
+                        {{ $metrics['mer_healthy'] ? '✓ Efficient' : '⚠ Below target' }}
                     </div>
                 @endif
             </div>
         </div>
 
-        <div class="col-md-3">
-            <div class="ec-card ec-kpi-card {{ $borderClass($metrics['cac_healthy']) }}">
-                <h6>Blended CAC</h6>
-                <div class="ec-kpi-value">
+        <div class="col-6 col-lg-3 ec-kpi-col relative hover:z-50">
+            <div class="ec-card ec-kpi-card {{ $borderClass($metrics['cac_healthy']) }} relative hover:z-50 text-center d-flex flex-column justify-content-center py-4 h-100">
+                <h6 class="text-uppercase mb-2 relative group flex items-center gap-2 ec-kpi-title-row" style="letter-spacing: 0.08em;">
+                    <span>Cost Per New Customer</span>
+                    <span class="ec-info-trigger relative flex items-center" tabindex="0" x-data="{ tooltip: false }" @mouseenter="tooltip = true" @mouseleave="tooltip = false" @focus="tooltip = true" @blur="tooltip = false" aria-label="What is Cost Per New Customer?">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <div x-cloak class="ec-info-tooltip absolute top-full left-1/2 -translate-x-1/2 mt-2 w-72 p-4 bg-[#1c1615] border border-[#d98f83]/50 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] z-[100] text-sm text-gray-200 normal-case tracking-normal text-left" :class="{ 'is-visible': tooltip }" role="tooltip">
+                            The exact price you pay to acquire a brand-new buyer. As long as this stays lower than your Average Order Value (AOV), you profit on day one.
+                            <hr class="my-3 border-[#d98f83]/20">
+                            <div><strong>Formula:</strong> Total Ad Spend &divide; New Customers Acquired</div>
+                        </div>
+                    </span>
+                </h6>
+                <div class="ec-kpi-value my-1" style="font-size: 2rem; font-weight: 800;">
                     {{ $metrics['cac'] === null ? '—' : 'PKR ' . number_format($metrics['cac'], 2) }}
                 </div>
-                <div class="ec-sub">Ad Spend &divide; New Customers</div>
+                <div class="ec-sub mt-1">Target: &lt; {{ ($metrics['aov'] ?? 0) > 0 ? 'PKR ' . number_format($metrics['aov'], 0) . ' (AOV)' : 'AOV' }}</div>
                 @if ($metrics['cac_healthy'] !== null)
-                    <div class="ec-kpi-flag {{ $metrics['cac_healthy'] ? 'ec-positive' : 'ec-negative' }}">
-                        {{ $metrics['cac_healthy'] ? '✓ Below AOV' : '⚠ Costs more than an order is worth' }}
+                    <div class="ec-kpi-flag {{ $metrics['cac_healthy'] ? 'ec-positive' : 'ec-negative' }} mt-2">
+                        {{ $metrics['cac_healthy'] ? '✓ Below AOV' : '⚠ Exceeds AOV' }}
                     </div>
                 @endif
             </div>
         </div>
 
-        <div class="col-md-3">
-            <div class="ec-card ec-kpi-card">
-                <h6>AOV</h6>
-                <div class="ec-kpi-value">
-                    {{ $metrics['aov'] === null ? '—' : 'PKR ' . number_format($metrics['aov'], 2) }}
+        <div class="col-6 col-lg-3 ec-kpi-col relative hover:z-50">
+            <div class="ec-card ec-kpi-card relative hover:z-50 text-center d-flex flex-column justify-content-center py-4 h-100">
+                <h6 class="text-uppercase mb-2 relative group flex items-center gap-2 ec-kpi-title-row" style="letter-spacing: 0.08em;">
+                    <span>Average Order Value</span>
+                    <span class="ec-info-trigger relative flex items-center" tabindex="0" x-data="{ tooltip: false }" @mouseenter="tooltip = true" @mouseleave="tooltip = false" @focus="tooltip = true" @blur="tooltip = false" aria-label="What is Average Order Value?">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <div x-cloak class="ec-info-tooltip absolute top-full left-1/2 -translate-x-1/2 mt-2 w-72 p-4 bg-[#1c1615] border border-[#d98f83]/50 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] z-[100] text-sm text-gray-200 normal-case tracking-normal text-left" :class="{ 'is-visible': tooltip }" role="tooltip">
+                            The average size of a customer's cart. Push this higher through bundles so you can afford to spend more on ads to acquire a buyer.
+                            <hr class="my-3 border-[#d98f83]/20">
+                            <div><strong>Formula:</strong> Total Revenue &divide; Total Orders</div>
+                        </div>
+                    </span>
+                </h6>
+                <div class="ec-kpi-value my-1" style="font-size: 2rem; font-weight: 800;">
+                    PKR {{ number_format($metrics['aov'] ?? 0, 2) }}
                 </div>
-                <div class="ec-sub">Revenue &divide; Orders</div>
-                @if ($metrics['aov'] !== null)
-                    <div class="ec-kpi-flag ec-sub">{{ number_format($metrics['total_orders']) }} orders in range</div>
+                <div class="ec-sub mt-1">{{ number_format($metrics['total_orders'] ?? 0) }} orders in range</div>
+                @if (($metrics['total_orders'] ?? 0) > 0)
+                    <div class="ec-kpi-flag ec-sub mt-2">✓ Live from Sales Ledger</div>
                 @endif
             </div>
         </div>
 
-        <div class="col-md-3">
-            <div class="ec-card ec-kpi-card {{ $borderClass($metrics['repeat_rate_healthy']) }}">
-                <h6>Repeat Purchase Rate</h6>
-                <div class="ec-kpi-value">
-                    {{ $metrics['repeat_rate'] === null ? '—' : number_format($metrics['repeat_rate'], 1) . '%' }}
+        <div class="col-6 col-lg-3 ec-kpi-col relative hover:z-50">
+            <div class="ec-card ec-kpi-card {{ $borderClass($metrics['repeat_rate_healthy']) }} relative hover:z-50 text-center d-flex flex-column justify-content-center py-4 h-100">
+                <h6 class="text-uppercase mb-2 relative group flex items-center gap-2 ec-kpi-title-row" style="letter-spacing: 0.08em;">
+                    <span>Repeat Customer Rate</span>
+                    <span class="ec-info-trigger relative flex items-center" tabindex="0" x-data="{ tooltip: false }" @mouseenter="tooltip = true" @mouseleave="tooltip = false" @focus="tooltip = true" @blur="tooltip = false" aria-label="What is Repeat Customer Rate?">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <div x-cloak class="ec-info-tooltip absolute top-full left-1/2 -translate-x-1/2 mt-2 w-72 p-4 bg-[#1c1615] border border-[#d98f83]/50 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] z-[100] text-sm text-gray-200 normal-case tracking-normal text-left" :class="{ 'is-visible': tooltip }" role="tooltip">
+                            The percentage of your buyer base that returns for a second purchase. Proves product quality and builds pure-margin lifetime value.
+                            <hr class="my-3 border-[#d98f83]/20">
+                            <div><strong>Formula:</strong> Repeat Customers &divide; Total Unique Customers</div>
+                        </div>
+                    </span>
+                </h6>
+                <div class="ec-kpi-value my-1" style="font-size: 2rem; font-weight: 800;">
+                    {{ number_format($metrics['repeat_rate'] ?? 0, 1) }}%
                 </div>
-                <div class="ec-sub">Repeat &divide; Orders &middot; target &ge; {{ number_format($repeatRateTarget, 0) }}%</div>
+                <div class="ec-sub mt-1">Target: &ge; {{ number_format($repeatRateTarget, 0) }}%</div>
                 @if ($metrics['repeat_rate'] !== null)
-                    <div class="ec-kpi-flag {{ $metrics['repeat_rate_healthy'] ? 'ec-positive' : 'ec-negative' }}">
-                        {{ $metrics['repeat_rate_healthy'] ? '✓ Healthy retention' : '⚠ Too reliant on new buyers' }}
+                    <div class="ec-kpi-flag {{ $metrics['repeat_rate_healthy'] ? 'ec-positive' : 'ec-negative' }} mt-2">
+                        {{ $metrics['repeat_rate_healthy'] ? '✓ Healthy retention' : '⚠ Below target' }}
                     </div>
                 @endif
             </div>
         </div>
     </div>
 
-    @if ($metrics['has_data'])
-        <div class="ec-card mt-3">
-            <div class="d-flex flex-wrap gap-4">
-                <div><span class="ec-sub">Revenue</span><div class="ec-stock-emphasis">PKR {{ number_format($metrics['total_revenue'], 2) }}</div></div>
-                <div><span class="ec-sub">Ad Spend</span><div class="ec-stock-emphasis">PKR {{ number_format($metrics['total_ad_spend'], 2) }}</div></div>
-                <div><span class="ec-sub">Orders</span><div class="ec-stock-emphasis">{{ number_format($metrics['total_orders']) }}</div></div>
-                <div><span class="ec-sub">New Customers</span><div class="ec-stock-emphasis">{{ number_format($metrics['new_customers']) }}</div></div>
-                <div><span class="ec-sub">Repeat Customers</span><div class="ec-stock-emphasis">{{ number_format($metrics['repeat_customers']) }}</div></div>
-            </div>
-        </div>
-    @endif
-
-    {{-- ============ Salon Backbar-to-Retail Conversion ============ --}}
-    <div id="backbar-conversion"></div>
-    @php
-        $bbEfficiency = $backbarConversion['efficiency'];
-        $bbMeterWidth = $bbEfficiency === null ? 0 : min(100, max(0, $bbEfficiency));
-    @endphp
-    <div class="row g-3 mt-1">
-        <div class="col-md-4">
-            <div class="ec-card ec-card-highlight">
-                <h6>Salon Backbar Conversion Efficiency</h6>
-                <div class="ec-value {{ $bbEfficiency === null ? '' : ($bbEfficiency >= 100 ? 'ec-positive' : 'ec-negative') }}">
-                    {{ $bbEfficiency === null ? '—' : number_format($bbEfficiency, 0) . '%' }}
-                </div>
-                <div class="ec-sub">
-                    {{ number_format($backbarConversion['total_retail_units'], 0) }} retail units sold per
-                    {{ number_format($backbarConversion['total_backbar_units'], 0) }} backbar units used
-                </div>
-                <div class="ec-conversion-meter">
-                    <div class="ec-conversion-fill" style="width: {{ $bbMeterWidth }}%;"></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-8">
-            <div class="ec-card">
-                <h6 style="margin-bottom: 4px;">Are stylists converting wash-basin treatments into retail?</h6>
-                <p class="ec-sub mb-3">
-                    Backbar consumption is logged salon-wide (no branch), so the ratio is per product; branch columns split the retail side only.
-                </p>
-                @if ($backbarConversion['by_product']->isEmpty())
-                    <div class="ec-chart-empty">No backbar or salon retail activity logged yet.</div>
-                @else
-                    <div class="table-responsive">
-                        <table class="table ec-table align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Product</th>
-                                    <th class="text-end">Backbar Used</th>
-                                    <th class="text-end">Retail Sold</th>
-                                    <th class="text-end">Old Airport</th>
-                                    <th class="text-end">Wakrah</th>
-                                    <th class="text-end">Retail Revenue</th>
-                                    <th class="text-end">Conversion</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($backbarConversion['by_product'] as $row)
-                                    <tr>
-                                        <td>{{ $row['product']->name ?? 'Deleted product' }}</td>
-                                        <td class="text-end">{{ number_format($row['backbar_units'], 0) }}</td>
-                                        <td class="text-end">{{ number_format($row['retail_units'], 0) }}</td>
-                                        <td class="text-end">{{ number_format($row['old_airport_units'], 0) }}</td>
-                                        <td class="text-end">{{ number_format($row['wakrah_units'], 0) }}</td>
-                                        <td class="text-end">PKR {{ number_format($row['retail_revenue'], 2) }}</td>
-                                        <td class="text-end {{ $row['ratio'] === null ? '' : ($row['ratio'] >= 100 ? 'ec-positive' : 'ec-negative') }}">
-                                            {{ $row['ratio'] === null ? '—' : number_format($row['ratio'], 0) . '%' }}
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                @endif
-            </div>
+    <div class="ec-card ec-summary-strip-card mt-3">
+        <div class="d-flex flex-wrap justify-content-between gap-4">
+            <div><span class="ec-sub">Revenue</span><div class="ec-stock-emphasis">PKR {{ number_format($metrics['total_revenue'], 2) }}</div></div>
+            <div><span class="ec-sub">Ad Spend</span><div class="ec-stock-emphasis">PKR {{ number_format($metrics['total_ad_spend'], 2) }}</div></div>
+            <div><span class="ec-sub">Orders</span><div class="ec-stock-emphasis">{{ number_format($metrics['total_orders']) }}</div></div>
+            <div><span class="ec-sub">New Customers</span><div class="ec-stock-emphasis">{{ number_format($metrics['new_customers']) }}</div></div>
+            <div><span class="ec-sub">Repeat Customers</span><div class="ec-stock-emphasis">{{ number_format($metrics['repeat_customers']) }}</div></div>
         </div>
     </div>
 
-    {{-- ============ Logged KPI snapshots ============ --}}
+    {{-- ============ Logged Daily Ad Spend ============ --}}
     @if ($kpiRows->isNotEmpty())
         <div class="ec-card mt-3">
-            <h6 class="mb-3">Daily KPI Snapshots</h6>
+            <h6 class="mb-3">Daily Ad Spend Log</h6>
             <div class="table-responsive">
                 <table class="table ec-table align-middle mb-0">
                     <thead>
@@ -256,28 +283,24 @@
                             <th class="text-end">Revenue</th>
                             <th class="text-end">Ad Spend</th>
                             <th class="text-end">Orders</th>
-                            <th class="text-end">New</th>
-                            <th class="text-end">Repeat</th>
-                            <th class="text-end">MER</th>
+                            <th class="text-end">ROAS</th>
                             @moduleEdit('ecommerce')<th></th>@endmoduleEdit
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($kpiRows as $row)
-                            @php $rowMer = (float) $row->total_ad_spend > 0 ? (float) $row->total_revenue / (float) $row->total_ad_spend : null; @endphp
+                            @php $rowRoas = (float) $row->total_ad_spend > 0 ? (float) $row->total_revenue / (float) $row->total_ad_spend : null; @endphp
                             <tr>
                                 <td>{{ $row->date->format('d M Y') }}</td>
                                 <td class="text-end">PKR {{ number_format($row->total_revenue, 2) }}</td>
                                 <td class="text-end">PKR {{ number_format($row->total_ad_spend, 2) }}</td>
                                 <td class="text-end">{{ number_format($row->total_orders) }}</td>
-                                <td class="text-end">{{ number_format($row->new_customers) }}</td>
-                                <td class="text-end">{{ number_format($row->repeat_customers) }}</td>
-                                <td class="text-end {{ $rowMer === null ? '' : ($rowMer >= $merTarget ? 'ec-positive' : 'ec-negative') }}">
-                                    {{ $rowMer === null ? '—' : number_format($rowMer, 2) . 'x' }}
+                                <td class="text-end {{ $rowRoas === null ? '' : ($rowRoas >= $merTarget ? 'ec-positive' : 'ec-negative') }}">
+                                    {{ $rowRoas === null ? '—' : number_format($rowRoas, 2) . 'x' }}
                                 </td>
                                 @moduleEdit('ecommerce')
                                     <td class="text-end">
-                                        <form action="{{ route('ecommerce.kpis.destroy', $row->id) }}" method="POST" onsubmit="return confirm('Delete this snapshot?')">
+                                        <form action="{{ route('ecommerce.kpis.destroy', $row->id) }}" method="POST" onsubmit="return confirm('Delete this ad spend entry?')">
                                             @csrf @method('DELETE')
                                             <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
                                         </form>
@@ -292,90 +315,41 @@
     @endif
 
     @moduleEdit('ecommerce')
-        {{-- Log Daily KPIs Modal --}}
+        {{-- Enter Daily Ad Spend Modal --}}
         <div class="modal fade" id="kpiModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
+            <div class="modal-dialog">
                 <div class="modal-content">
                     <form action="{{ route('ecommerce.kpis.store') }}" method="POST">
                         @csrf
                         <div class="modal-header">
-                            <h5 class="modal-title">Log Daily KPI Snapshot</h5>
+                            <h5 class="modal-title">Enter Daily Ad Spend</h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <p class="ec-sub mb-3">Blended figures for one day, straight from Shopify + Meta. Re-submitting a date overwrites it rather than adding a second row.</p>
+                            <p class="ec-sub mb-3">Revenue, order counts, and customer retention are calculated automatically from your Sales &amp; Customers database. Enter the day's total ad spend below.</p>
                             <div class="row g-3">
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label class="form-label">Date</label>
                                     <input type="date" name="date" class="form-control" value="{{ now()->toDateString() }}" required>
                                 </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Total Revenue (PKR)</label>
-                                    <input type="number" step="0.01" min="0" name="total_revenue" id="kpiRevenue" class="form-control" required>
-                                </div>
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label class="form-label">Total Ad Spend (PKR)</label>
-                                    <input type="number" step="0.01" min="0" name="total_ad_spend" id="kpiAdSpend" class="form-control" required>
+                                    <input type="number" step="0.01" min="0" name="total_ad_spend" id="kpiAdSpend" class="form-control" placeholder="0.00" required>
                                 </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Total Orders</label>
-                                    <input type="number" step="1" min="0" name="total_orders" id="kpiOrders" class="form-control" required>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">New Customers</label>
-                                    <input type="number" step="1" min="0" name="new_customers" id="kpiNew" class="form-control" required>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Repeat Customers</label>
-                                    <input type="number" step="1" min="0" name="repeat_customers" id="kpiRepeat" class="form-control" required>
-                                </div>
-                            </div>
-                            <div class="ec-accounting-note mt-3 mb-0" id="kpiPreview" style="display: none;">
-                                <span>🧮</span>
-                                <div id="kpiPreviewText"></div>
                             </div>
                         </div>
                         <div class="modal-footer">
-                            <button type="submit" class="btn btn-primary">Save Snapshot</button>
+                            <button type="submit" class="btn btn-primary">Save Ad Spend</button>
                         </div>
                     </form>
                 </div>
             </div>
         </div>
 
-
         <script>
-            const MER_TARGET = {{ $merTarget }};
-
-            // Live preview so the operator sees the consequence of the numbers
-            // before they commit the snapshot.
-            const kpiFields = ['kpiRevenue', 'kpiAdSpend', 'kpiOrders', 'kpiNew', 'kpiRepeat'].map((id) => document.getElementById(id));
-            const kpiPreview = document.getElementById('kpiPreview');
-            const kpiPreviewText = document.getElementById('kpiPreviewText');
-
-            function refreshKpiPreview() {
-                const [rev, spend, orders, , repeat] = kpiFields.map((f) => parseFloat(f.value) || 0);
-
-                if (rev <= 0 && spend <= 0 && orders <= 0) {
-                    kpiPreview.style.display = 'none';
-                    return;
-                }
-
-                const parts = [];
-                parts.push(spend > 0 ? 'MER ' + (rev / spend).toFixed(2) + 'x' + ((rev / spend) < MER_TARGET ? ' ⚠' : ' ✓') : 'MER —');
-                parts.push(orders > 0 ? 'AOV PKR ' + (rev / orders).toFixed(2) : 'AOV —');
-                parts.push(orders > 0 ? 'Repeat ' + ((repeat / orders) * 100).toFixed(1) + '%' : 'Repeat —');
-
-                kpiPreviewText.innerHTML = '<strong>This day computes to:</strong> ' + parts.join(' · ');
-                kpiPreview.style.display = '';
-            }
-
-            kpiFields.forEach((f) => f.addEventListener('input', refreshKpiPreview));
             document.getElementById('kpiModal').addEventListener('hidden.bs.modal', function () {
                 this.querySelector('form').reset();
-                kpiPreview.style.display = 'none';
             });
-
         </script>
     @endmoduleEdit
 @endsection

@@ -82,7 +82,7 @@ class EcommerceController extends Controller
         ]);
     }
 
-    /** Performance & KPIs — blended acquisition economics + Salon Backbar Conversion. */
+    /** Performance & KPIs — automated sales/customer metrics + daily ad spend ROAS/CAC. */
     public function dashboard(Request $request)
     {
         $from = $request->filled('start_date')
@@ -103,29 +103,86 @@ class EcommerceController extends Controller
             ->orderByDesc('date')
             ->get();
 
-        $normalizePhone = fn ($phone) => EcommerceCustomer::normalizePhone($phone);
-
-        $priorCustomerPhones = EcommerceSale::whereNotNull('customer_phone')
-            ->where('customer_phone', '!=', '')
-            ->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
-            ->where('created_at', '<', $rangeStart)
-            ->pluck('customer_phone')
-            ->map($normalizePhone)
-            ->filter()
-            ->unique()
-            ->flip();
-
-        $newCustomerSales = EcommerceSale::whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+        // 1. Dynamically calculate Revenue, Orders, and AOV from ecommerce_sales
+        $salesInRange = EcommerceSale::whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
             ->whereBetween('created_at', [$rangeStart, $rangeEnd])
-            ->get()
-            ->reject(function (EcommerceSale $sale) use ($normalizePhone, $priorCustomerPhones) {
-                $phone = $normalizePhone($sale->customer_phone);
-                return $phone !== '' && $priorCustomerPhones->has($phone);
-            })
-            ->values();
+            ->get();
+
+        $totalRevenue = (float) $salesInRange->sum('total_price');
+
+        $groupOrders = fn ($sales) => $sales->groupBy(function (EcommerceSale $s) {
+            if (!empty($s->reference_id)) {
+                return 'ref:' . $s->reference_id;
+            }
+            if (!empty($s->ecommerce_bundle_id)) {
+                return 'bundle:' . $s->ecommerce_bundle_id . ':' . $s->created_at;
+            }
+            return 'id:' . $s->id;
+        });
+
+        $totalOrders = $groupOrders($salesInRange)->count();
+        $aov = $totalOrders > 0 ? ($totalRevenue / $totalOrders) : 0.0;
+
+        // 2. Dynamically calculate Repeat Customer Rate & New Customers from ecommerce_customers
+        $customersInRange = EcommerceCustomer::where(function ($q) use ($rangeStart, $rangeEnd) {
+            $q->whereBetween('last_purchase_at', [$rangeStart, $rangeEnd])
+                ->orWhereBetween('created_at', [$rangeStart, $rangeEnd])
+                ->orWhereHas('sales', function ($sq) use ($rangeStart, $rangeEnd) {
+                    $sq->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+                        ->whereBetween('created_at', [$rangeStart, $rangeEnd]);
+                });
+        })->get();
+
+        $totalCustomersInRange = $customersInRange->count();
+        $repeatCustomers = $customersInRange->where('total_orders', '>=', 2)->count();
+        $newCustomers = $customersInRange->where('total_orders', '<=', 1)->count();
+        $repeatRate = $totalCustomersInRange > 0
+            ? ($repeatCustomers / $totalCustomersInRange) * 100
+            : 0.0;
+
+        // 3. Calculate ROAS & Cost Per New Customer using logged Ad Spend + dynamic Revenue/Orders
+        $totalAdSpend = (float) $kpiRows->sum('total_ad_spend');
+        $roas = $totalAdSpend > 0 ? ($totalRevenue / $totalAdSpend) : null;
+
+        $acquisitionDenominator = $newCustomers > 0 ? $newCustomers : $totalOrders;
+        $cac = ($totalAdSpend > 0 && $acquisitionDenominator > 0)
+            ? ($totalAdSpend / $acquisitionDenominator)
+            : null;
+
+        // Enrich daily ad spend rows with live per-day revenue & order counts
+        $salesByDate = $salesInRange->groupBy(fn (EcommerceSale $s) => $s->created_at->toDateString());
+        foreach ($kpiRows as $row) {
+            $dateKey = $row->date->toDateString();
+            $daySales = $salesByDate->get($dateKey, collect());
+            if ($daySales->isNotEmpty() || (float) $row->total_revenue == 0.0) {
+                $row->total_revenue = (float) $daySales->sum('total_price');
+                $row->total_orders = $groupOrders($daySales)->count();
+            }
+        }
+
+        $metrics = [
+            'has_data' => $kpiRows->isNotEmpty() || $totalOrders > 0 || $totalCustomersInRange > 0,
+            'has_ad_spend' => $kpiRows->isNotEmpty(),
+            'day_count' => $kpiRows->count(),
+            'total_revenue' => $totalRevenue,
+            'total_ad_spend' => $totalAdSpend,
+            'total_orders' => $totalOrders,
+            'new_customers' => $newCustomers,
+            'repeat_customers' => $repeatCustomers,
+
+            'mer' => $roas,
+            'cac' => $cac,
+            'aov' => $aov,
+            'repeat_rate' => $repeatRate,
+
+            'mer_healthy' => $roas === null ? null : $roas >= EcommerceKpi::MER_TARGET,
+            'cac_healthy' => ($cac === null || $aov <= 0) ? null : $cac < $aov,
+            'aov_healthy' => null,
+            'repeat_rate_healthy' => $repeatRate >= EcommerceKpi::REPEAT_RATE_TARGET,
+        ];
 
         return view('ecommerce.dashboard', [
-            'metrics' => EcommerceKpi::summarize($kpiRows, $newCustomerSales),
+            'metrics' => $metrics,
             'kpiRows' => $kpiRows,
             'merTarget' => EcommerceKpi::MER_TARGET,
             'repeatRateTarget' => EcommerceKpi::REPEAT_RATE_TARGET,
@@ -134,74 +191,66 @@ class EcommerceController extends Controller
             'filterText' => ($request->filled('start_date') || $request->filled('end_date'))
                 ? 'From ' . $from->format('M d, Y') . ' to ' . $to->format('M d, Y')
                 : 'This month to date',
-            'backbarConversion' => $this->backbarConversion(),
         ]);
-    }
-
-    /**
-     * Salon Backbar-to-Retail conversion: for every unit a stylist consumes at
-     * the wash basin, how many units does the front desk actually sell?
-     */
-    private function backbarConversion(): array
-    {
-        $rows = EcommerceSale::with('product')
-            ->whereIn('channel', array_merge(EcommerceSale::BACKBAR_CHANNELS, EcommerceSale::SALON_RETAIL_CHANNELS))
-            ->get();
-
-        $byProduct = $rows->groupBy('ecommerce_product_id')->map(function ($group) {
-            $backbar = (int) $group->whereIn('channel', EcommerceSale::BACKBAR_CHANNELS)->sum('quantity');
-            $retail = (int) $group->whereIn('channel', EcommerceSale::SALON_RETAIL_CHANNELS)->sum('quantity');
-
-            return [
-                'product' => $group->first()->product,
-                'backbar_units' => $backbar,
-                'retail_units' => $retail,
-                'old_airport_units' => (int) $group->where('channel', 'Salon (Old Airport)')->sum('quantity'),
-                'wakrah_units' => (int) $group->where('channel', 'Salon (Wakrah)')->sum('quantity'),
-                'retail_revenue' => (float) $group->whereIn('channel', EcommerceSale::SALON_RETAIL_CHANNELS)->sum('total_price'),
-                'ratio' => $backbar > 0 ? ($retail / $backbar) * 100 : null,
-            ];
-        })->sortByDesc('backbar_units')->values();
-
-        $totalBackbar = (int) $rows->whereIn('channel', EcommerceSale::BACKBAR_CHANNELS)->sum('quantity');
-        $totalRetail = (int) $rows->whereIn('channel', EcommerceSale::SALON_RETAIL_CHANNELS)->sum('quantity');
-
-        return [
-            'by_product' => $byProduct,
-            'total_backbar_units' => $totalBackbar,
-            'total_retail_units' => $totalRetail,
-            'total_retail_revenue' => (float) $rows->whereIn('channel', EcommerceSale::SALON_RETAIL_CHANNELS)->sum('total_price'),
-            'efficiency' => $totalBackbar > 0 ? ($totalRetail / $totalBackbar) * 100 : null,
-        ];
     }
 
     public function storeKpi(Request $request)
     {
         $validated = $this->validatedKpi($request);
         $date = Carbon::parse($validated['date'])->startOfDay();
-        $validated['date'] = $date;
+        $dayEnd = $date->copy()->endOfDay();
 
-        EcommerceKpi::updateOrCreate(['date' => $date], $validated);
+        $daySales = EcommerceSale::whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+            ->whereBetween('created_at', [$date, $dayEnd])
+            ->get();
 
-        return back()->with('success', 'Daily KPI snapshot saved.');
+        $dayRevenue = (float) $daySales->sum('total_price');
+        $dayOrders = $daySales->groupBy(function (EcommerceSale $s) {
+            if (!empty($s->reference_id)) {
+                return 'ref:' . $s->reference_id;
+            }
+            if (!empty($s->ecommerce_bundle_id)) {
+                return 'bundle:' . $s->ecommerce_bundle_id . ':' . $s->created_at;
+            }
+            return 'id:' . $s->id;
+        })->count();
+
+        $dayCustomers = EcommerceCustomer::where(function ($q) use ($date, $dayEnd) {
+            $q->whereBetween('last_purchase_at', [$date, $dayEnd])
+                ->orWhereBetween('created_at', [$date, $dayEnd])
+                ->orWhereHas('sales', function ($sq) use ($date, $dayEnd) {
+                    $sq->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+                        ->whereBetween('created_at', [$date, $dayEnd]);
+                });
+        })->get();
+
+        EcommerceKpi::updateOrCreate(
+            ['date' => $date],
+            [
+                'date' => $date,
+                'total_ad_spend' => $validated['total_ad_spend'],
+                'total_revenue' => $dayRevenue,
+                'total_orders' => $dayOrders,
+                'new_customers' => $dayCustomers->where('total_orders', '<=', 1)->count(),
+                'repeat_customers' => $dayCustomers->where('total_orders', '>=', 2)->count(),
+            ]
+        );
+
+        return back()->with('success', 'Daily ad spend saved.');
     }
 
     public function destroyKpi(EcommerceKpi $kpi)
     {
         $kpi->delete();
 
-        return back()->with('success', 'KPI snapshot deleted.');
+        return back()->with('success', 'Ad spend entry deleted.');
     }
 
     private function validatedKpi(Request $request): array
     {
         return $request->validate([
             'date' => 'required|date',
-            'total_revenue' => 'required|numeric|min:0',
             'total_ad_spend' => 'required|numeric|min:0',
-            'total_orders' => 'required|integer|min:0',
-            'new_customers' => 'required|integer|min:0',
-            'repeat_customers' => 'required|integer|min:0',
         ]);
     }
 }
