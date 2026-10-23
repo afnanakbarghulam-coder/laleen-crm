@@ -31,6 +31,7 @@ use App\Http\Controllers\Kpi\MonthlyAdController;
 use App\Http\Controllers\Kpi\StaffEvaluationController;
 use App\Http\Controllers\Kpi\StaffSalesController;
 use App\Http\Controllers\LeadController;
+use App\Http\Controllers\LegalTaskController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ServiceCategoryController;
@@ -336,5 +337,14 @@ Route::middleware(['auth'])->group(function () {
             Route::patch('/marketing/ads-plan/{ad}/scale', [EcommerceMonthlyAdsController::class, 'scale'])->name('marketing.ads-plan.scale');
             Route::patch('/marketing/ads-plan/{ad}/kill', [EcommerceMonthlyAdsController::class, 'kill'])->name('marketing.ads-plan.kill');
         });
+    });
+
+    // ---- Legal Tasks ----
+    Route::prefix('legal')->name('legal.')->group(function () {
+        Route::get('/', [LegalTaskController::class, 'index'])->name('index');
+        Route::get('/tasks', [LegalTaskController::class, 'index'])->name('tasks.index');
+        Route::post('/tasks', [LegalTaskController::class, 'store'])->name('tasks.store');
+        Route::match(['put', 'patch'], '/tasks/{legalTask}', [LegalTaskController::class, 'update'])->name('tasks.update');
+        Route::delete('/tasks/{legalTask}', [LegalTaskController::class, 'destroy'])->name('tasks.destroy');
     });
 });

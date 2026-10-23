@@ -352,6 +352,14 @@
              </li>
          @endmoduleView
 
+         <!-- Legal Tasks -->
+         <li class="menu-item {{ request()->routeIs('legal.*') ? 'active' : '' }}">
+             <a href="{{ route('legal.tasks.index') }}" class="menu-link">
+                 <i class="bx bx-check-shield me-2"></i>
+                 <div>Legal Tasks</div>
+             </a>
+         </li>
+
      </ul>
  </aside>
 
