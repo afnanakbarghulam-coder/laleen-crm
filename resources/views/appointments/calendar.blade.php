@@ -1109,6 +1109,262 @@
         outline: 2px dashed #d98f83;
         outline-offset: -2px;
     }
+
+    /* ---------------- UNSCHEDULED QUEUE SIDEBAR ---------------- */
+    .cal-workspace {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        position: relative;
+    }
+
+    .cal-workspace > .cal-scroll {
+        flex: 1 1 0%;
+        min-width: 0;
+    }
+
+    .cal-unscheduled-sidebar {
+        width: 290px;
+        flex-shrink: 0;
+        border: 1px solid var(--cal-border);
+        border-radius: 12px;
+        background: rgba(36, 30, 28, 0.72);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 210px);
+        min-height: 360px;
+        transition: width .22s ease, min-width .22s ease;
+        overflow: hidden;
+    }
+
+    .cal-unscheduled-sidebar.is-collapsed {
+        width: 46px;
+        min-height: 220px;
+    }
+
+    .cal-unscheduled-header {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--cal-border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        background: #241e1c;
+    }
+
+    .cal-unscheduled-sidebar.is-collapsed .cal-unscheduled-header {
+        flex-direction: column;
+        padding: 12px 6px;
+        border-bottom: none;
+        height: 100%;
+        justify-content: flex-start;
+        gap: 14px;
+    }
+
+    .cal-unscheduled-title-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .cal-unscheduled-sidebar.is-collapsed .cal-unscheduled-title-wrap {
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        white-space: nowrap;
+        gap: 8px;
+    }
+
+    .cal-unscheduled-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--cal-ink);
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .cal-unscheduled-badge {
+        background: rgba(201, 166, 107, 0.2);
+        color: #d9b878;
+        border: 1px solid rgba(201, 166, 107, 0.35);
+        font-size: 11px;
+        font-weight: 700;
+        border-radius: 999px;
+        padding: 1px 7px;
+        line-height: 1.3;
+    }
+
+    .cal-unscheduled-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    .cal-unscheduled-sidebar.is-collapsed .cal-unscheduled-add-btn {
+        display: none;
+    }
+
+    .cal-unscheduled-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        border: 1px solid var(--cal-border-strong);
+        background: rgba(217, 143, 131, 0.06);
+        color: #cbb8b0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        transition: all .15s ease;
+    }
+
+    .cal-unscheduled-btn:hover {
+        background: rgba(217, 143, 131, 0.14);
+        color: var(--cal-ink);
+    }
+
+    .cal-unscheduled-sub {
+        padding: 8px 14px;
+        font-size: 11px;
+        color: var(--cal-muted);
+        border-bottom: 1px dashed var(--cal-border);
+        background: rgba(36, 30, 28, 0.4);
+    }
+
+    .cal-unscheduled-body {
+        padding: 10px;
+        overflow-y: auto;
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .cal-unscheduled-sidebar.is-collapsed .cal-unscheduled-sub,
+    .cal-unscheduled-sidebar.is-collapsed .cal-unscheduled-body {
+        display: none;
+    }
+
+    .cal-unscheduled-card {
+        border: 1px solid rgba(201, 166, 107, 0.28);
+        border-left: 3px solid #c9a66b;
+        background: rgba(201, 166, 107, 0.1);
+        border-radius: 8px;
+        padding: 9px 10px;
+        cursor: grab;
+        transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+        user-select: none;
+        -webkit-user-drag: element;
+    }
+
+    .cal-unscheduled-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+        border-color: rgba(217, 143, 131, 0.45);
+    }
+
+    .cal-unscheduled-card.dragging {
+        opacity: .4;
+        cursor: grabbing;
+    }
+
+    .cal-unscheduled-card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-bottom: 3px;
+    }
+
+    .cal-unscheduled-card .unsched-customer {
+        font-size: 12.5px;
+        font-weight: 700;
+        color: #e79a91;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .cal-unscheduled-card .unsched-grip {
+        color: #8a7d76;
+        font-size: 14px;
+        flex-shrink: 0;
+    }
+
+    .cal-unscheduled-card .unsched-service {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: #e6d9d5;
+        margin-bottom: 4px;
+        line-height: 1.3;
+    }
+
+    .cal-unscheduled-card .unsched-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--cal-muted);
+    }
+
+    .cal-unscheduled-card .unsched-contact {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .cal-unscheduled-card .unsched-duration {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #d9b878;
+        background: rgba(201, 166, 107, 0.16);
+        padding: 1px 6px;
+        border-radius: 999px;
+        flex-shrink: 0;
+    }
+
+    .cal-unscheduled-empty {
+        text-align: center;
+        padding: 28px 12px;
+        color: #8a7d76;
+        font-size: 12px;
+    }
+
+    .cal-unscheduled-empty i {
+        font-size: 24px;
+        display: block;
+        margin-bottom: 6px;
+        color: rgba(217, 143, 131, 0.35);
+    }
+
+    @media (max-width: 991px) {
+        .cal-workspace {
+            flex-direction: column-reverse;
+        }
+        .cal-unscheduled-sidebar,
+        .cal-unscheduled-sidebar.is-collapsed {
+            width: 100%;
+            max-height: 280px;
+            min-height: auto;
+        }
+        .cal-unscheduled-sidebar.is-collapsed .cal-unscheduled-header {
+            flex-direction: row;
+            padding: 10px 14px;
+        }
+        .cal-unscheduled-sidebar.is-collapsed .cal-unscheduled-title-wrap {
+            writing-mode: horizontal-tb;
+            transform: none;
+        }
+    }
 </style>
 
 @section('content')
@@ -1179,6 +1435,7 @@
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="#" id="addNewAppointment"><i class="bx bx-calendar-plus me-2"></i> New Appointment</a></li>
+                        <li><a class="dropdown-item" href="#" id="addNewUnscheduledAppointment"><i class="bx bx-time-five me-2"></i> Unscheduled Booking</a></li>
                         <li><a class="dropdown-item" href="#" id="addBlockTime" data-bs-toggle="modal" data-bs-target="#blockTimeModal"><i class="bx bx-block me-2"></i> Block Time</a></li>
                         <li><a class="dropdown-item" href="{{ route('sales.create') }}"><i class="bx bx-cart-add me-2"></i> New Sale</a></li>
                     </ul>
@@ -1189,8 +1446,57 @@
         <div class="cal-legend" id="calLegend"></div>
     </div>
 
-    <div class="cal-scroll">
-        <div id="calendarBody"></div>
+    <div class="cal-workspace">
+        <div class="cal-scroll">
+            <div id="calendarBody"></div>
+        </div>
+
+        <!-- Collapsible Unscheduled Queue Sidebar -->
+        <aside class="cal-unscheduled-sidebar" id="unscheduledSidebar">
+            <div class="cal-unscheduled-header">
+                <div class="cal-unscheduled-title-wrap">
+                    <h6 class="cal-unscheduled-title" id="unscheduledSidebarTitle">Unscheduled (Today)</h6>
+                    <span class="cal-unscheduled-badge" id="unscheduledCountBadge">{{ count($pendingTimeBookings ?? []) }}</span>
+                </div>
+                <div class="cal-unscheduled-actions">
+                    <button type="button" class="cal-unscheduled-btn cal-unscheduled-add-btn" id="sidebarAddUnscheduledBtn" title="Add Unscheduled Booking">
+                        <i class="bx bx-plus"></i>
+                    </button>
+                    <button type="button" class="cal-unscheduled-btn" id="toggleUnscheduledSidebarBtn" title="Collapse / Expand Queue">
+                        <i class="bx bx-chevron-right" id="toggleUnscheduledIcon"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="cal-unscheduled-sub">
+                Drag a booking card onto a time &amp; staff slot to schedule it.
+            </div>
+            <div class="cal-unscheduled-body" id="unscheduledQueueList">
+                @forelse ($pendingTimeBookings ?? [] as $booking)
+                    <div class="cal-unscheduled-card"
+                        data-id="{{ $booking['id'] }}"
+                        data-services="{{ $booking['service_name'] }}"
+                        draggable="{{ auth()->user()->canEdit('bookings') ? 'true' : 'false' }}"
+                        ondragstart="onApptDragStart(event, {{ $booking['id'] }}, null, true)"
+                        ondragend="onApptDragEnd(event)"
+                        onclick="openDrawer({{ $booking['id'] }})">
+                        <div class="cal-unscheduled-card-top">
+                            <span class="unsched-customer">{{ $booking['customer_name'] ?: 'Walk-in' }}</span>
+                            <i class="bx bx-grid-vertical unsched-grip"></i>
+                        </div>
+                        <div class="unsched-service">{{ $booking['service_name'] }}</div>
+                        <div class="unsched-meta">
+                            <span class="unsched-contact"><i class="bx bx-phone"></i> {{ $booking['phone'] ?: 'No phone' }}</span>
+                            <span class="unsched-duration">{{ $booking['duration'] ?? 30 }}m</span>
+                        </div>
+                    </div>
+                @empty
+                    <div class="cal-unscheduled-empty">
+                        <i class="bx bx-calendar-check"></i>
+                        No unscheduled bookings for this date.
+                    </div>
+                @endforelse
+            </div>
+        </aside>
     </div>
 
     <div class="cal-slot-popover" id="slotPopover">
@@ -1520,7 +1826,10 @@
         // Hide every mutating "Add" entry point up front for view-only users.
         (function applyCalendarPermissionGates() {
             document.getElementById('addNewAppointment').closest('li').style.display = CAN_EDIT_BOOKINGS ? '' : 'none';
+            document.getElementById('addNewUnscheduledAppointment').closest('li').style.display = CAN_EDIT_BOOKINGS ? '' : 'none';
             document.getElementById('addBlockTime').closest('li').style.display = CAN_EDIT_BOOKINGS ? '' : 'none';
+            const sidebarAddBtn = document.getElementById('sidebarAddUnscheduledBtn');
+            if (sidebarAddBtn) sidebarAddBtn.style.display = CAN_EDIT_BOOKINGS ? '' : 'none';
             const newSaleItem = document.getElementById('addNewAppointment').closest('.dropdown-menu').querySelector('a[href*="/sales/new"]');
             if (newSaleItem) newSaleItem.closest('li').style.display = CAN_EDIT_FINANCE ? '' : 'none';
             if (!CAN_EDIT_BOOKINGS && !CAN_EDIT_FINANCE) {
@@ -1870,6 +2179,61 @@
             loadCalendar();
         }
 
+        /* ---------------- UNSCHEDULED QUEUE SIDEBAR ---------------- */
+        function escapeHtml(str) {
+            return String(str ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function renderUnscheduledQueue(bookings) {
+            const listEl = document.getElementById('unscheduledQueueList');
+            const badgeEl = document.getElementById('unscheduledCountBadge');
+            if (!listEl || !badgeEl) return;
+
+            const items = Array.isArray(bookings) ? bookings : [];
+            badgeEl.textContent = items.length;
+
+            if (!items.length) {
+                listEl.innerHTML = `
+                    <div class="cal-unscheduled-empty">
+                        <i class="bx bx-calendar-check"></i>
+                        No unscheduled bookings for this date.
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = items.map(b => `
+                <div class="cal-unscheduled-card"
+                    data-id="${b.id}"
+                    data-services="${escapeHtml(b.service_name)}"
+                    draggable="${CAN_EDIT_BOOKINGS ? 'true' : 'false'}"
+                    ondragstart="onApptDragStart(event, ${b.id}, null, true)"
+                    ondragend="onApptDragEnd(event)"
+                    onclick="openDrawer(${b.id})">
+                    <div class="cal-unscheduled-card-top">
+                        <span class="unsched-customer">${escapeHtml(b.customer_name || 'Walk-in')}</span>
+                        <i class="bx bx-grid-vertical unsched-grip"></i>
+                    </div>
+                    <div class="unsched-service">${escapeHtml(b.service_name)}</div>
+                    <div class="unsched-meta">
+                        <span class="unsched-contact"><i class="bx bx-phone"></i> ${escapeHtml(b.phone || 'No phone')}</span>
+                        <span class="unsched-duration">${b.duration || 30}m</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        document.getElementById('toggleUnscheduledSidebarBtn').addEventListener('click', function() {
+            const sidebar = document.getElementById('unscheduledSidebar');
+            const icon = document.getElementById('toggleUnscheduledIcon');
+            const collapsed = sidebar.classList.toggle('is-collapsed');
+            icon.className = collapsed ? 'bx bx-chevron-left' : 'bx bx-chevron-right';
+        });
+
         /* ---------------- LOAD / NAV ---------------- */
         function loadCalendar() {
             const params = new URLSearchParams({
@@ -1884,6 +2248,7 @@
                 .then(data => {
                     latestData = data;
                     renderLegend(data.status_colors);
+                    renderUnscheduledQueue(data.pending_time_bookings || data.pendingTimeBookings || []);
 
                     if (data.view === 'month') {
                         document.getElementById('dateLabel').textContent = data.month_label;
@@ -1978,6 +2343,19 @@
                 staffId: state.staff_id || null
             });
         });
+
+        function openNewUnscheduledModal(e) {
+            if (e) e.preventDefault();
+            if (!CAN_EDIT_BOOKINGS) return;
+            openCalendarBookModal({
+                date: state.date,
+                unscheduled: true,
+                branch: state.branch,
+                staffId: null
+            });
+        }
+        document.getElementById('addNewUnscheduledAppointment').addEventListener('click', openNewUnscheduledModal);
+        document.getElementById('sidebarAddUnscheduledBtn').addEventListener('click', openNewUnscheduledModal);
 
         syncToolbar();
         loadCalendar();
@@ -2572,17 +2950,19 @@
         /* ---------------- DRAG AND DROP ---------------- */
         let draggedAppointmentId = null;
         let draggedApptMinutes = null;
+        let draggedFromUnscheduled = false;
 
-        function onApptDragStart(e, id, startMinutes) {
+        function onApptDragStart(e, id, startMinutes, isUnscheduled = false) {
             draggedAppointmentId = id;
             draggedApptMinutes = startMinutes;
-            e.target.classList.add('dragging');
+            draggedFromUnscheduled = !!isUnscheduled;
+            e.currentTarget.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', String(id));
         }
 
         function onApptDragEnd(e) {
-            e.target.classList.remove('dragging');
+            e.currentTarget.classList.remove('dragging');
         }
 
         function onDropTargetDragOver(e) {
@@ -2596,12 +2976,21 @@
 
         /**
          * Looks up a dragged appointment's service names from the last
-         * fetched calendar payload, without a round trip. `latestData.appointments`
-         * is keyed by staff_id in day view ({staffId: [appt, ...]}) and by
-         * staff_id then date in week/3-day view ({staffId: {date: [appt, ...]}}),
-         * so this normalizes both shapes into a flat list of appointment arrays.
+         * fetched calendar payload (including `pending_time_bookings`),
+         * without a round trip.
          */
         function findApptServiceNames(id) {
+            if (latestData) {
+                const pendingList = latestData.pending_time_bookings || latestData.pendingTimeBookings || [];
+                const foundPending = pendingList.find(a => String(a.id) === String(id));
+                if (foundPending && foundPending.service_name) {
+                    return foundPending.service_name.split(',').map(s => s.trim()).filter(s => s && s !== 'Decide in Salon');
+                }
+            }
+            const cardEl = document.querySelector(`.cal-unscheduled-card[data-id="${id}"]`);
+            if (cardEl && cardEl.dataset.services) {
+                return cardEl.dataset.services.split(',').map(s => s.trim()).filter(s => s && s !== 'Decide in Salon');
+            }
             if (!latestData || !latestData.appointments) return null;
             for (const key in latestData.appointments) {
                 const byKey = latestData.appointments[key];
@@ -2609,7 +2998,7 @@
                 for (const list of lists) {
                     const found = list.find(a => String(a.id) === String(id));
                     if (found) {
-                        return found.service_name.split(',').map(s => s.trim()).filter(Boolean);
+                        return found.service_name.split(',').map(s => s.trim()).filter(s => s && s !== 'Decide in Salon');
                     }
                 }
             }
@@ -2624,11 +3013,33 @@
          * reschedule() is the real authority and still applies either way.
          */
         function staffMissingSkillsFor(staffId, serviceNames) {
-            if (!latestData || !latestData.staffs || !serviceNames) return [];
+            if (!latestData || !latestData.staffs || !serviceNames || !serviceNames.length) return [];
             const staff = latestData.staffs.find(s => String(s.id) === String(staffId));
             if (!staff) return [];
             const skills = staff.skills || [];
-            return serviceNames.filter(name => !skills.includes(name));
+            return serviceNames.filter(name => name !== 'Decide in Salon' && !skills.includes(name));
+        }
+
+        function removeCardFromUnscheduledSidebar(id) {
+            const card = document.querySelector(`.cal-unscheduled-card[data-id="${id}"]`);
+            if (card) {
+                card.remove();
+            }
+            if (latestData && Array.isArray(latestData.pending_time_bookings)) {
+                latestData.pending_time_bookings = latestData.pending_time_bookings.filter(b => String(b.id) !== String(id));
+            }
+            const listEl = document.getElementById('unscheduledQueueList');
+            const badgeEl = document.getElementById('unscheduledCountBadge');
+            const remaining = listEl ? listEl.querySelectorAll('.cal-unscheduled-card').length : 0;
+            if (badgeEl) badgeEl.textContent = remaining;
+            if (listEl && remaining === 0) {
+                listEl.innerHTML = `
+                    <div class="cal-unscheduled-empty">
+                        <i class="bx bx-calendar-check"></i>
+                        No unscheduled bookings for this date.
+                    </div>
+                `;
+            }
         }
 
         function onSlotDrop(e, staffId, date, time) {
@@ -2637,7 +3048,9 @@
             if (!draggedAppointmentId) return;
 
             const id = draggedAppointmentId;
+            const fromUnscheduled = draggedFromUnscheduled;
             draggedAppointmentId = null;
+            draggedFromUnscheduled = false;
 
             const missing = staffMissingSkillsFor(staffId, findApptServiceNames(id));
             if (missing.length) {
@@ -2645,7 +3058,15 @@
                 return;
             }
 
-            rescheduleAppointment(id, `${date}T${time}`, staffId);
+            if (fromUnscheduled) {
+                removeCardFromUnscheduledSidebar(id);
+            }
+
+            rescheduleAppointment(id, `${date}T${time}`, staffId, function(ok) {
+                if (!ok && fromUnscheduled) {
+                    loadCalendar();
+                }
+            });
         }
 
         function onWeekCellDrop(e, staffId, date) {
@@ -2654,8 +3075,10 @@
             if (!draggedAppointmentId) return;
 
             const id = draggedAppointmentId;
-            const minutes = draggedApptMinutes ?? 0;
+            const fromUnscheduled = draggedFromUnscheduled;
+            const minutes = draggedApptMinutes ?? 600;
             draggedAppointmentId = null;
+            draggedFromUnscheduled = false;
 
             const missing = staffMissingSkillsFor(staffId, findApptServiceNames(id));
             if (missing.length) {
@@ -2663,9 +3086,17 @@
                 return;
             }
 
+            if (fromUnscheduled) {
+                removeCardFromUnscheduledSidebar(id);
+            }
+
             const hh = String(Math.floor(minutes / 60)).padStart(2, '0');
             const mm = String(minutes % 60).padStart(2, '0');
-            rescheduleAppointment(id, `${date}T${hh}:${mm}`, staffId);
+            rescheduleAppointment(id, `${date}T${hh}:${mm}`, staffId, function(ok) {
+                if (!ok && fromUnscheduled) {
+                    loadCalendar();
+                }
+            });
         }
     </script>
 @endsection

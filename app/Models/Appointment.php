@@ -15,6 +15,8 @@ class Appointment extends Model
         'phone',
         'customer_id',
         'appointment_datetime',
+        'booking_date',
+        'start_time',
         // 'service_id',
         'service_name',
         'notes',
@@ -104,7 +106,11 @@ class Appointment extends Model
 
         $this->service_name = $services->pluck('name')->implode(', ');
         $this->price = $services->sum(fn($s) => $s->final_price);
-        $this->appointment_datetime = $first->start_time;
+        if ($first->start_time) {
+            $this->appointment_datetime = $first->start_time;
+            $this->booking_date = $first->start_time->toDateString();
+            $this->start_time = $first->start_time->format('H:i:s');
+        }
         $this->staff_id = $first->staff_id ?? $this->staff_id;
         $this->save();
     }

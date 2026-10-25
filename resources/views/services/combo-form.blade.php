@@ -45,6 +45,7 @@
                         Eligible service pool
                         <span class="text-muted">(<span id="comboSvcCount">0</span> selected · <span id="comboSvcTotal">0.00</span> QAR regular price)</span>
                     </label>
+                    <input type="text" id="comboServiceSearch" class="form-control mb-2" placeholder="Search services..." autocomplete="off">
                     <div class="combo-svc-picker">
                         @forelse ($allServices as $service)
                             <div class="combo-svc-row">
@@ -91,6 +92,19 @@
         }
         modalEl.querySelectorAll('.combo-svc-checkbox').forEach(cb => cb.addEventListener('change', updateSelectionSummary));
 
+        const serviceSearchInput = document.getElementById('comboServiceSearch');
+        function filterComboServices() {
+            const query = (serviceSearchInput ? serviceSearchInput.value : '').trim().toLowerCase();
+            modalEl.querySelectorAll('.combo-svc-row').forEach(row => {
+                const labelEl = row.querySelector('label');
+                const serviceName = labelEl ? labelEl.textContent.toLowerCase() : '';
+                row.style.display = (!query || serviceName.includes(query)) ? '' : 'none';
+            });
+        }
+        if (serviceSearchInput) {
+            serviceSearchInput.addEventListener('input', filterComboServices);
+        }
+
         function resetForm() {
             editingId = null;
             document.getElementById('comboModalTitle').textContent = 'New Combo Package';
@@ -98,6 +112,10 @@
             form.reset();
             errorBox.classList.add('d-none');
             modalEl.querySelectorAll('.combo-svc-checkbox').forEach(cb => cb.checked = false);
+            if (serviceSearchInput) {
+                serviceSearchInput.value = '';
+                filterComboServices();
+            }
             updateSelectionSummary();
         }
 

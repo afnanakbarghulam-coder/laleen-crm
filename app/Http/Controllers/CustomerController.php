@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\Sale;
 use App\Support\ClientMaintenancePlanner;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class CustomerController extends Controller
 {
@@ -89,6 +90,29 @@ class CustomerController extends Controller
         $clientPackages = $customer->clientPackages()->with('services', 'redeemedServices')->get();
 
         return view('customers.show', compact('customer', 'appointments', 'upcoming', 'past', 'lifetimeValue', 'favoriteServices', 'loyaltyHistory', 'maintenanceSchedule', 'clientPackages'));
+    }
+
+    public function update(Request $request, Customer $customer)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['required', 'string', 'max:255', Rule::unique('customers', 'phone')->ignore($customer->id)],
+        ]);
+
+        $customer->update($validated);
+
+        return back()->with('success', 'Client profile updated successfully.');
+    }
+
+    public function destroy(Customer $customer)
+    {
+        if ($customer->appointments()->exists() || $customer->sales()->exists()) {
+            return back()->with('error', 'Cannot delete a client with existing appointments or sales history.');
+        }
+
+        $customer->delete();
+
+        return redirect()->route('customers.index')->with('success', 'Client deleted successfully.');
     }
 
     public function updateNotes(Request $request, Customer $customer)

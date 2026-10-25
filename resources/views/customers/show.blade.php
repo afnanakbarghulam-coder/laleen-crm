@@ -173,6 +173,11 @@
             <a href="{{ route('customers.index') }}" class="btn btn-outline-secondary btn-sm">
                 <i class="bx bx-arrow-back"></i> Back to Clients
             </a>
+            @moduleEdit('clients')
+                <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editClientModal">
+                    <i class="bx bx-edit"></i> Edit Profile
+                </button>
+            @endmoduleEdit
             <a href="{{ route('appointments.calendar') }}" class="btn btn-primary btn-sm">
                 <i class="bx bx-plus"></i> Book Appointment
             </a>
@@ -440,6 +445,64 @@
     </div>
 
     @moduleEdit('clients')
+        <!-- Edit Client Profile Modal -->
+        <div class="modal fade" id="editClientModal" tabindex="-1" aria-labelledby="editClientModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="editClientModalLabel">Edit Client Profile</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form action="{{ route('customers.update', $customer->id) }}" method="POST" id="editClientForm">
+                            @csrf
+                            @method('PUT')
+
+                            <div class="mb-3">
+                                <label for="editClientName" class="form-label">Name</label>
+                                <input type="text" name="name" id="editClientName" class="form-control"
+                                    value="{{ old('name', $customer->name) }}" required maxlength="255">
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="editClientPhone" class="form-label">Phone Number</label>
+                                <input type="text" name="phone" id="editClientPhone" class="form-control"
+                                    value="{{ old('phone', $customer->phone) }}" required maxlength="255">
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                            </div>
+                        </form>
+
+                        <hr class="my-4">
+
+                        <div class="p-3 rounded" style="background: rgba(168, 82, 74, 0.12); border: 1px solid rgba(168, 82, 74, 0.35);">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div>
+                                    <h6 class="fw-bold mb-1" style="color: #e07a72;">
+                                        <i class="bx bx-error-alt"></i> Danger Zone
+                                    </h6>
+                                    <p class="small mb-0" style="color: #c9a39a;">
+                                        Permanently delete this client profile. Clients with appointments or sales history cannot be deleted.
+                                    </p>
+                                </div>
+                                <form action="{{ route('customers.destroy', $customer->id) }}" method="POST" class="m-0">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn btn-danger btn-sm"
+                                        onclick="return confirm('Are you sure you want to permanently delete this client? This cannot be undone.')">
+                                        <i class="bx bx-trash"></i> Delete Client
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <script>
             document.getElementById('notesForm').addEventListener('submit', function(e) {
                 e.preventDefault();

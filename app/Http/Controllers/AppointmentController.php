@@ -171,10 +171,16 @@ class AppointmentController extends Controller
 
     public function store(Request $request)
     {
+        $isUnscheduled = $request->boolean('unscheduled')
+            || ($request->filled('booking_date') && !$request->filled('start_time') && !$request->filled('appointment_datetime'));
+
         $rules = [
             'customer_name' => 'required|string|max:255',
             'phone' => ['required', 'string', 'max:20', 'regex:/^\+?[1-9]\d{6,14}$/'],
-            'appointment_datetime' => 'required|date',
+            'appointment_datetime' => $isUnscheduled ? 'nullable|date' : 'required|date',
+            'booking_date' => $isUnscheduled ? 'required_without:appointment_datetime|nullable|date' : 'nullable|date',
+            'start_time' => 'nullable|string',
+            'unscheduled' => 'nullable|boolean',
             // "Decide in Salon" bookings defer service selection until the
             // client arrives, and a combo package can stand on its own too,
             // so service_name is only mandatory when neither is set.
@@ -187,7 +193,7 @@ class AppointmentController extends Controller
             'branch' => 'required|in:old_airport,wakrah,home_service',
             'price' => 'nullable|numeric',
             'booking_agent_id' => 'nullable|exists:users,id',
-            'staff_id' => 'required|exists:staff,id',
+            'staff_id' => $isUnscheduled ? 'nullable|exists:staff,id' : 'required|exists:staff,id',
             'decide_in_salon' => 'nullable|boolean',
             // A combo package picked at booking time - sold now, paid for
             // whenever this appointment is checked out. Immediate services
@@ -215,6 +221,7 @@ class AppointmentController extends Controller
             'customer_name.required' => 'Please select an existing client or add a new client.',
             'phone.required' => 'Please select an existing client or add a new client.',
             'appointment_datetime.required' => 'Appointment date and time is required.',
+            'booking_date.required_without' => 'Appointment date is required.',
             'service_name.required_without_all' => 'At least one service must be selected.',
             'branch.required' => 'Please select a branch.',
             'branch.in' => 'Selected branch is invalid.',
@@ -228,52 +235,45 @@ class AppointmentController extends Controller
 
         $request->validate($rules, $messages);
 
-        $appointmentDate = Carbon::parse($request->appointment_datetime)->format('Y-m-d');
-        $appointmentTime = Carbon::parse($request->appointment_datetime);
+        $rawDateSource = $request->booking_date ?: $request->appointment_datetime;
+        $appointmentDate = Carbon::parse($rawDateSource)->format('Y-m-d');
+        $appointmentTime = $isUnscheduled ? null : Carbon::parse($request->appointment_datetime);
 
-        // Get branch working hours
-        $workingHours = $this->branchWorkingHours($request->branch, $appointmentTime);
-        $startBranch = Carbon::createFromFormat('H:i', $workingHours['start'])
-            ->setDate($appointmentTime->year, $appointmentTime->month, $appointmentTime->day);
+        if (!$isUnscheduled) {
+            // Get branch working hours
+            $workingHours = $this->branchWorkingHours($request->branch, $appointmentTime);
+            $startBranch = Carbon::createFromFormat('H:i', $workingHours['start'])
+                ->setDate($appointmentTime->year, $appointmentTime->month, $appointmentTime->day);
 
-        $endBranch = Carbon::createFromFormat('H:i', $workingHours['end'])
-            ->setDate($appointmentTime->year, $appointmentTime->month, $appointmentTime->day);
+            $endBranch = Carbon::createFromFormat('H:i', $workingHours['end'])
+                ->setDate($appointmentTime->year, $appointmentTime->month, $appointmentTime->day);
 
-        // Check if appointment is outside working hours
-        if ($appointmentTime->lt($startBranch) || $appointmentTime->gt($endBranch)) {
-            return redirect()->back()
-                ->with('error', 'Appointment must be within branch working hours: '
-                    . $startBranch->format('H:i') . ' - ' . $endBranch->format('H:i'))
-                ->withInput();
+            // Check if appointment is outside working hours
+            if ($appointmentTime->lt($startBranch) || $appointmentTime->gt($endBranch)) {
+                return redirect()->back()
+                    ->with('error', 'Appointment must be within branch working hours: '
+                        . $startBranch->format('H:i') . ' - ' . $endBranch->format('H:i'))
+                    ->withInput();
+            }
         }
 
+        $staffId = $request->staff_id ?: null;
 
-        $staffId = $request->staff_id;
-
-        // dd($request->all());
         // Check staff unavailability
-        $staff = \App\Models\Staff::find($staffId);
+        $staff = $staffId ? \App\Models\Staff::find($staffId) : null;
         if ($staff && in_array($staff->availability_status, ['on-leave', 'sick'])) {
             if ($staff->off_from && $staff->off_to) {
                 $offFrom = Carbon::parse($staff->off_from)->startOfDay();
                 $offTo = Carbon::parse($staff->off_to)->endOfDay();
-                $appointment = Carbon::parse($request->appointment_datetime);
+                $appointment = Carbon::parse($rawDateSource);
 
                 if ($appointment->between($offFrom, $offTo)) {
-                    // return redirect()->back()
-                    //     ->with('error', 'Selected staff is on leave or sick for this date.')
-                    //     ->withInput();
-
                     return redirect()->route('appointments.calendar', [
-                        'date' => Carbon::parse($request->appointment_datetime)->toDateString(),
+                        'date' => $appointmentDate,
                         'staff_id' => $staffId
                     ])->with('error', 'Selected staff is on leave or sick for this date.');
                 }
             } else {
-                // fallback if off_from/off_to is missing
-                // return redirect()->back()
-                //     ->with('error', 'Selected staff is on leave or sick and unavailable.')
-                //     ->withInput();
                 return redirect()->route('appointments.calendar', [
                     'staff_id' => $staffId
                 ])->with('error', 'Selected staff is on leave or sick and unavailable.');
@@ -302,7 +302,7 @@ class AppointmentController extends Controller
             return redirect()->back()->withInput()->with('error', $redemptionPlanError);
         }
 
-        $startTime = Carbon::parse($request->appointment_datetime);
+        $startTime = $isUnscheduled ? null : Carbon::parse($request->appointment_datetime);
         $serviceNames = $request->service_name ?? [];
 
         // Every service actually being performed today, each tagged with
@@ -312,68 +312,71 @@ class AppointmentController extends Controller
         // (validated - skill included - when the package plan was built).
         $scheduleEntries = [];
         foreach ($serviceNames as $name) {
-            $scheduleEntries[] = ['name' => $name, 'staff_id' => (int) $staffId];
+            $scheduleEntries[] = ['name' => $name, 'staff_id' => $staffId ? (int) $staffId : null];
         }
         foreach ($redemptionPlans as $plan) {
-            $scheduleEntries[] = ['name' => $plan['service']->name, 'staff_id' => (int) $staffId];
+            $scheduleEntries[] = ['name' => $plan['service']->name, 'staff_id' => $staffId ? (int) $staffId : null];
         }
         foreach ($packagePlans as $plan) {
             foreach ($plan['immediate_ids'] as $sid) {
+                $assigned = $plan['service_staff'][$sid] ?? $staffId;
                 $scheduleEntries[] = [
                     'name' => $plan['pool']->get($sid)->name,
-                    'staff_id' => (int) ($plan['service_staff'][$sid] ?? $staffId),
+                    'staff_id' => $assigned ? (int) $assigned : null,
                 ];
             }
         }
 
-        if (empty($scheduleEntries)) {
-            // Nothing performed today (a plain "Decide in Salon", or a combo
-            // bought with every service left pending) - still hold a nominal
-            // slot on the main staff's calendar, matching the long-standing
-            // "Decide in Salon" behavior.
-            if ($this->staffHasTimeConflict($staffId, $startTime, 30)) {
-                return redirect()->route('appointments.calendar', [
-                    'date' => $startTime->toDateString(),
-                    'staff_id' => $staffId
-                ])->with('error', 'Staff is already booked during this time.');
-            }
-        } else {
-            $namesByStaff = [];
-            foreach ($scheduleEntries as $entry) {
-                $namesByStaff[$entry['staff_id']][] = $entry['name'];
-            }
-
-            foreach ($namesByStaff as $entryStaffId => $names) {
-                $unskilled = $this->unskilledServices((int) $entryStaffId, $names);
-                if (!empty($unskilled)) {
-                    $staffLabel = optional(\App\Models\Staff::find($entryStaffId))->name ?? 'Selected staff';
+        if (!$isUnscheduled) {
+            if (empty($scheduleEntries)) {
+                // Nothing performed today (a plain "Decide in Salon", or a combo
+                // bought with every service left pending) - still hold a nominal
+                // slot on the main staff's calendar, matching the long-standing
+                // "Decide in Salon" behavior.
+                if ($this->staffHasTimeConflict($staffId, $startTime, 30)) {
                     return redirect()->route('appointments.calendar', [
                         'date' => $startTime->toDateString(),
                         'staff_id' => $staffId
-                    ])->with('error', "{$staffLabel} is not skilled to do this service: " . implode(', ', $unskilled) . '.');
+                    ])->with('error', 'Staff is already booked during this time.');
                 }
-            }
-
-            // Services stack back-to-back for this one visit regardless of
-            // who performs them, so each entry's staff is conflict-checked
-            // against its own slice of that shared timeline - never against
-            // the whole combined span, since two different staff members
-            // working in parallel wouldn't actually conflict with each other.
-            $entryCatalog = Service::whereIn('name', array_column($scheduleEntries, 'name'))->get()->keyBy('name');
-            $cursor = $startTime->copy();
-
-            foreach ($scheduleEntries as $entry) {
-                $entryDuration = optional($entryCatalog->get($entry['name']))->duration ?? 30;
-
-                if ($this->staffHasTimeConflict($entry['staff_id'], $cursor, $entryDuration)) {
-                    $staffLabel = optional(\App\Models\Staff::find($entry['staff_id']))->name ?? 'Selected staff';
-                    return redirect()->route('appointments.calendar', [
-                        'date' => $startTime->toDateString(),
-                        'staff_id' => $staffId
-                    ])->with('error', "{$staffLabel} is already booked during this time.");
+            } else {
+                $namesByStaff = [];
+                foreach ($scheduleEntries as $entry) {
+                    $namesByStaff[$entry['staff_id']][] = $entry['name'];
                 }
 
-                $cursor = $cursor->copy()->addMinutes($entryDuration);
+                foreach ($namesByStaff as $entryStaffId => $names) {
+                    $unskilled = $this->unskilledServices((int) $entryStaffId, $names);
+                    if (!empty($unskilled)) {
+                        $staffLabel = optional(\App\Models\Staff::find($entryStaffId))->name ?? 'Selected staff';
+                        return redirect()->route('appointments.calendar', [
+                            'date' => $startTime->toDateString(),
+                            'staff_id' => $staffId
+                        ])->with('error', "{$staffLabel} is not skilled to do this service: " . implode(', ', $unskilled) . '.');
+                    }
+                }
+
+                // Services stack back-to-back for this one visit regardless of
+                // who performs them, so each entry's staff is conflict-checked
+                // against its own slice of that shared timeline - never against
+                // the whole combined span, since two different staff members
+                // working in parallel wouldn't actually conflict with each other.
+                $entryCatalog = Service::whereIn('name', array_column($scheduleEntries, 'name'))->get()->keyBy('name');
+                $cursor = $startTime->copy();
+
+                foreach ($scheduleEntries as $entry) {
+                    $entryDuration = optional($entryCatalog->get($entry['name']))->duration ?? 30;
+
+                    if ($this->staffHasTimeConflict($entry['staff_id'], $cursor, $entryDuration)) {
+                        $staffLabel = optional(\App\Models\Staff::find($entry['staff_id']))->name ?? 'Selected staff';
+                        return redirect()->route('appointments.calendar', [
+                            'date' => $startTime->toDateString(),
+                            'staff_id' => $staffId
+                        ])->with('error', "{$staffLabel} is already booked during this time.");
+                    }
+
+                    $cursor = $cursor->copy()->addMinutes($entryDuration);
+                }
             }
         }
 
@@ -387,10 +390,14 @@ class AppointmentController extends Controller
             ->sum('price');
         $lifetimeRevenue = $previousRevenue + ($request->price ?? 0);
 
-        $appointment = DB::transaction(function () use ($request, $services, $phone, $customer, $lifetimeRevenue, $staffId, $startTime, $serviceNames, $packagePlans, $redemptionPlans) {
+        $appointment = DB::transaction(function () use ($request, $services, $phone, $customer, $lifetimeRevenue, $staffId, $startTime, $appointmentDate, $isUnscheduled, $serviceNames, $packagePlans, $redemptionPlans) {
             $appointment = Appointment::create(array_merge(
                 $request->all(),
                 [
+                    'appointment_datetime' => $startTime ? $startTime : Carbon::parse($appointmentDate)->startOfDay(),
+                    'booking_date' => $appointmentDate,
+                    'start_time' => $startTime ? $startTime->format('H:i:s') : null,
+                    'staff_id' => $staffId ? (int) $staffId : null,
                     'lifetime_revenue' => $lifetimeRevenue,
                     'service_name' => $services,
                     'customer_name' => $request->customer_name,
@@ -403,21 +410,21 @@ class AppointmentController extends Controller
             $this->createServiceLineItems(
                 $appointment,
                 $serviceNames,
-                (int) $staffId,
+                $staffId ? (int) $staffId : null,
                 $startTime,
                 $request->service_price ?? [],
                 $request->service_discount_reason ?? []
             );
 
             if (!empty($redemptionPlans) || !empty($packagePlans)) {
-                $lastLine = $appointment->appointmentServices()->orderByDesc('start_time')->first();
-                $cursor = $lastLine ? $lastLine->end_time : $startTime;
+                $lastLine = $appointment->appointmentServices()->whereNotNull('start_time')->orderByDesc('start_time')->first();
+                $cursor = $startTime ? ($lastLine ? $lastLine->end_time : $startTime) : null;
 
                 foreach ($redemptionPlans as $plan) {
                     $service = $plan['service'];
                     $package = $plan['client_package'];
 
-                    $appointmentService = $this->addRedeemedServiceLine($appointment, $service, $package->combo_name, $cursor, (int) $staffId);
+                    $appointmentService = $this->addRedeemedServiceLine($appointment, $service, $package->combo_name, $cursor, $staffId ? (int) $staffId : null);
                     ClientPackageService::create([
                         'client_package_id' => $package->id,
                         'service_id' => $service->id,
@@ -441,7 +448,7 @@ class AppointmentController extends Controller
             return redirect()->route('appointments.revenue.payment', $appointment->id);
         }
 
-        return redirect()->back()->with('success', 'Appointment booked successfully.');
+        return redirect()->back()->with('success', $isUnscheduled ? 'Unscheduled booking added to queue.' : 'Appointment booked successfully.');
     }
 
     /**
@@ -528,6 +535,8 @@ class AppointmentController extends Controller
         $appointment->update(array_merge(
             $request->all(),
             [
+                'booking_date' => $startTime->toDateString(),
+                'start_time' => $startTime->format('H:i:s'),
                 'service_name' => $services,
                 'lifetime_revenue' => $lifetimeRevenue,
                 'customer_name' => $request->customer_name ?: 'Walk-in',
@@ -586,7 +595,57 @@ class AppointmentController extends Controller
             ->filter(fn($c) => $c['services']->isNotEmpty())
             ->values();
 
-        return view('appointments.calendar', compact('staffs', 'activeStaffs', 'services', 'products', 'agents', 'servicesCatalog', 'productsCatalog', 'combosCatalog'));
+        $anchor = $request->date ? Carbon::parse($request->date)->startOfDay() : now()->startOfDay();
+        $pendingTimeBookings = $this->pendingTimeBookingsForDate($request, $anchor);
+
+        return view('appointments.calendar', compact('staffs', 'activeStaffs', 'services', 'products', 'agents', 'servicesCatalog', 'productsCatalog', 'combosCatalog', 'pendingTimeBookings'));
+    }
+
+    /**
+     * Bookings where booking_date equals the current viewed date, but
+     * start_time is null (the "Unscheduled Queue" for the calendar sidebar).
+     */
+    private function pendingTimeBookingsForDate(Request $request, Carbon $date): array
+    {
+        $branch = $this->resolveBranch($request);
+        $dateStr = $date->toDateString();
+
+        $query = Appointment::query()
+            ->whereNotIn('status', ['cancelled', 'no_show'])
+            ->where('branch', $branch)
+            ->where(function ($q) use ($dateStr) {
+                $q->whereDate('booking_date', $dateStr)
+                    ->orWhere(function ($sub) use ($dateStr) {
+                        $sub->whereNull('booking_date')
+                            ->whereDate('appointment_datetime', $dateStr);
+                    });
+            })
+            ->whereNull('start_time');
+
+        if ($request->filled('service_name')) {
+            $query->where('service_name', 'like', '%' . $request->service_name . '%');
+        }
+        if ($request->filled('agent_id')) {
+            $query->where('booking_agent_id', $request->agent_id);
+        }
+
+        return $query->orderBy('id', 'desc')
+            ->get()
+            ->map(fn(Appointment $a) => [
+                'id' => $a->id,
+                'customer_name' => $a->customer_name ?: 'Walk-in',
+                'phone' => $a->phone,
+                'service_name' => $a->service_name,
+                'duration' => $this->totalServiceDuration(explode(',', $a->service_name)),
+                'price' => (float) $a->price,
+                'status' => $a->status,
+                'branch' => $a->branch,
+                'booking_date' => $a->booking_date ?: optional($a->appointment_datetime)->format('Y-m-d'),
+                'staff_id' => $a->staff_id,
+                'notes' => $a->notes,
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -662,8 +721,11 @@ class AppointmentController extends Controller
         // Cancelled/no-show bookings no longer occupy a slot, so the
         // calendar (month/week/day) shouldn't render them at all - once a
         // booking is marked either, it drops off the timeline and the slot
-        // is immediately free for a new booking.
-        $query = Appointment::query()->whereNotIn('status', ['cancelled', 'no_show']);
+        // is immediately free for a new booking. Unscheduled bookings
+        // (start_time is null) live in the Unscheduled Queue sidebar instead.
+        $query = Appointment::query()
+            ->whereNotIn('status', ['cancelled', 'no_show'])
+            ->whereNotNull('start_time');
 
         $query->where('branch', $this->resolveBranch($request));
         if ($request->filled('staff_id'))     $query->where('staff_id', $request->staff_id);
@@ -742,6 +804,8 @@ class AppointmentController extends Controller
             'skills' => $s->services->pluck('name'),
         ]);
 
+        $pendingTimeBookings = $this->pendingTimeBookingsForDate($request, $anchor);
+
         if ($view === 'month') {
             $monthStart = $anchor->copy()->startOfMonth()->startOfWeek(Carbon::SUNDAY);
             $monthEnd = $anchor->copy()->endOfMonth()->endOfWeek(Carbon::SUNDAY);
@@ -778,6 +842,8 @@ class AppointmentController extends Controller
                 'days' => $days,
                 'status_colors' => $this->statusColors(),
                 'appointments' => $appointments,
+                'pending_time_bookings' => $pendingTimeBookings,
+                'pendingTimeBookings' => $pendingTimeBookings,
             ]);
         }
 
@@ -869,6 +935,8 @@ class AppointmentController extends Controller
                 'appointments'   => $appointments,
                 'off'            => $off,
                 'blocks'         => $blocks,
+                'pending_time_bookings' => $pendingTimeBookings,
+                'pendingTimeBookings'   => $pendingTimeBookings,
             ]);
         }
 
@@ -961,6 +1029,8 @@ class AppointmentController extends Controller
             'off'           => $offInfo,
             'staffs'        => $staffPayload,
             'blocks'        => $blocks,
+            'pending_time_bookings' => $pendingTimeBookings,
+            'pendingTimeBookings'   => $pendingTimeBookings,
         ]);
     }
 
@@ -1024,7 +1094,8 @@ class AppointmentController extends Controller
         // they must never count as a conflict for a new or rescheduled
         // booking.
         $query = Appointment::where('staff_id', $staffId)
-            ->whereNotIn('status', ['cancelled', 'no_show']);
+            ->whereNotIn('status', ['cancelled', 'no_show'])
+            ->whereNotNull('start_time');
 
         if ($ignoreAppointmentId) {
             $query->where('id', '!=', $ignoreAppointmentId);
@@ -1434,6 +1505,9 @@ class AppointmentController extends Controller
                 ])->all();
         }
 
+        $isUnscheduled = $appointment->start_time === null;
+        $dateObj = Carbon::parse($appointment->booking_date ?: $appointment->appointment_datetime);
+
         return response()->json([
             'id' => $appointment->id,
             'customer_name' => $appointment->customer_name,
@@ -1443,9 +1517,12 @@ class AppointmentController extends Controller
             'customer_allergies' => $customer->allergies ?? null,
             'customer_notes' => $customer->notes ?? null,
             'recent_visits' => $recentVisits,
-            'appointment_datetime' => $appointment->appointment_datetime->format('D, d M Y \a\t h:i A'),
-            'date' => $appointment->appointment_datetime->format('Y-m-d'),
-            'time' => $appointment->appointment_datetime->format('H:i'),
+            'appointment_datetime' => $isUnscheduled
+                ? $dateObj->format('D, d M Y') . ' (Unscheduled)'
+                : $appointment->appointment_datetime->format('D, d M Y \a\t h:i A'),
+            'date' => $dateObj->format('Y-m-d'),
+            'time' => $isUnscheduled ? '' : $appointment->appointment_datetime->format('H:i'),
+            'is_unscheduled' => $isUnscheduled,
             'branch' => ucwords(str_replace('_', ' ', $appointment->branch)),
             'branch_raw' => $appointment->branch,
             'staff_id' => $appointment->staff_id,
@@ -1464,19 +1541,31 @@ class AppointmentController extends Controller
 
     /**
      * Move an appointment to a new date/time and, optionally, a different
-     * staff member. Used by both calendar drag-and-drop and the drawer's
-     * manual "Reschedule" quick action.
+     * staff member. Used by both calendar drag-and-drop (including dragging
+     * from the Unscheduled Queue sidebar) and the drawer's manual
+     * "Reschedule" quick action.
      */
     public function reschedule(Request $request, Appointment $appointment)
     {
         $request->validate([
-            'appointment_datetime' => 'required|date',
+            'appointment_datetime' => 'required_without:start_time|nullable|date',
+            'start_time' => 'required_without:appointment_datetime|nullable|string',
+            'booking_date' => 'nullable|date',
             'staff_id' => 'nullable|exists:staff,id',
             'branch' => 'nullable|in:old_airport,wakrah',
         ]);
 
+        $wasUnscheduled = $appointment->start_time === null;
         $oldStart = Carbon::parse($appointment->appointment_datetime);
-        $newStart = Carbon::parse($request->appointment_datetime);
+
+        if ($request->filled('appointment_datetime')) {
+            $newStart = Carbon::parse($request->appointment_datetime);
+        } else {
+            $baseDate = $request->booking_date
+                ?: ($appointment->booking_date ?: $appointment->appointment_datetime->toDateString());
+            $newStart = Carbon::parse($baseDate . ' ' . $request->start_time);
+        }
+
         $staffId = $request->staff_id ?: $appointment->staff_id;
         $branch = $request->branch ?: $appointment->branch;
 
@@ -1506,7 +1595,7 @@ class AppointmentController extends Controller
 
         $duration = $this->totalServiceDuration(explode(',', $appointment->service_name));
 
-        if ($staffId) {
+        if ($staffId && $appointment->service_name !== 'Decide in Salon') {
             $unskilled = $this->unskilledServices((int) $staffId, explode(',', $appointment->service_name));
             if (!empty($unskilled)) {
                 return response()->json([
@@ -1525,6 +1614,8 @@ class AppointmentController extends Controller
 
         $appointment->update([
             'appointment_datetime' => $newStart,
+            'booking_date' => $newStart->toDateString(),
+            'start_time' => $newStart->format('H:i:s'),
             'staff_id' => $staffId,
             'branch' => $branch,
         ]);
@@ -1533,18 +1624,27 @@ class AppointmentController extends Controller
         // AppointmentService line items (start_time/staff_id), not from the
         // appointment's own fields just updated above - without this, a
         // rescheduled appointment keeps rendering at its old slot even
-        // though the appointment row itself moved correctly.
+        // though the appointment row itself moved correctly. For previously
+        // unscheduled bookings (where line start_time was null), stack each
+        // service sequentially starting at $newStart.
         $minuteDelta = $oldStart->diffInMinutes($newStart, false);
-        $appointment->appointmentServices->each(function ($line) use ($minuteDelta, $staffId) {
+        $cursor = $newStart->copy();
+        $appointment->appointmentServices->each(function ($line) use ($wasUnscheduled, $minuteDelta, $staffId, &$cursor) {
+            $lineStart = (!$wasUnscheduled && $line->start_time)
+                ? Carbon::parse($line->start_time)->addMinutes($minuteDelta)
+                : $cursor->copy();
+
             $line->update([
-                'start_time' => Carbon::parse($line->start_time)->addMinutes($minuteDelta),
+                'start_time' => $lineStart,
                 'staff_id' => $staffId,
             ]);
+
+            $cursor = $lineStart->copy()->addMinutes($line->duration ?: 30);
         });
 
         return response()->json([
             'success' => true,
-            'message' => 'Appointment rescheduled',
+            'message' => $wasUnscheduled ? 'Booking scheduled onto calendar' : 'Appointment rescheduled',
         ]);
     }
 
@@ -1594,10 +1694,10 @@ class AppointmentController extends Controller
      * records the catalog price, independent of any override, so the
      * discount given can be recovered later.
      */
-    private function createServiceLineItems(Appointment $appointment, array $serviceNames, int $staffId, Carbon $startTime, array $customPrices = [], array $discountReasons = []): void
+    private function createServiceLineItems(Appointment $appointment, array $serviceNames, ?int $staffId, ?Carbon $startTime, array $customPrices = [], array $discountReasons = []): void
     {
         $catalog = Service::whereIn('name', $serviceNames)->get()->keyBy('name');
-        $cursor = $startTime->copy();
+        $cursor = $startTime ? $startTime->copy() : null;
 
         foreach ($serviceNames as $index => $name) {
             $service = $catalog->get($name);
@@ -1615,13 +1715,15 @@ class AppointmentController extends Controller
                 'price' => $price,
                 'original_price' => $catalogPrice,
                 'duration' => $duration,
-                'start_time' => $cursor->copy(),
+                'start_time' => $cursor ? $cursor->copy() : null,
                 'discount_reason' => $discountReasons[$index] ?? null,
             ]);
 
             $this->logPriceOverrideIfDiscounted($line);
 
-            $cursor->addMinutes($duration);
+            if ($cursor) {
+                $cursor->addMinutes($duration);
+            }
         }
     }
 
@@ -1661,8 +1763,10 @@ class AppointmentController extends Controller
         ]);
 
         $service = Service::find($request->service_id);
-        $lastLine = $appointment->appointmentServices()->orderByDesc('start_time')->first();
-        $startTime = $lastLine ? $lastLine->end_time : $appointment->appointment_datetime;
+        $lastLine = $appointment->appointmentServices()->whereNotNull('start_time')->orderByDesc('start_time')->first();
+        $startTime = $appointment->start_time !== null
+            ? ($lastLine ? $lastLine->end_time : $appointment->appointment_datetime)
+            : null;
 
         $line = AppointmentService::create([
             'appointment_id' => $appointment->id,
@@ -1778,8 +1882,8 @@ class AppointmentController extends Controller
             'discount_value' => (float) $s->discount_value,
             'discount_amount' => (float) $s->discount_amount,
             'discount_reason' => $s->discount_reason,
-            'start_time' => $s->start_time->format('H:i'),
-            'start_time_label' => $s->start_time->format('g:i A'),
+            'start_time' => $s->start_time ? $s->start_time->format('H:i') : '',
+            'start_time_label' => $s->start_time ? $s->start_time->format('g:i A') : 'Pending time',
             'staff_id' => $s->staff_id,
             'staff_name' => optional($s->staff)->name,
         ];
@@ -2367,7 +2471,7 @@ class AppointmentController extends Controller
      * checkout totals/reporting without any special-casing. $cursor is
      * advanced past this line's duration for whatever gets added next.
      */
-    private function addRedeemedServiceLine(Appointment $appointment, Service $service, string $comboName, Carbon &$cursor, ?int $staffId = null): AppointmentService
+    private function addRedeemedServiceLine(Appointment $appointment, Service $service, string $comboName, ?Carbon &$cursor, ?int $staffId = null): AppointmentService
     {
         $line = AppointmentService::create([
             'appointment_id' => $appointment->id,
@@ -2377,13 +2481,15 @@ class AppointmentController extends Controller
             'price' => $service->price,
             'original_price' => $service->price,
             'duration' => $service->duration,
-            'start_time' => $cursor->copy(),
+            'start_time' => $cursor ? $cursor->copy() : null,
             'discount_type' => 'percent',
             'discount_value' => 100,
             'discount_reason' => "Redeemed from {$comboName} package",
         ]);
 
-        $cursor = $cursor->copy()->addMinutes($service->duration);
+        if ($cursor) {
+            $cursor = $cursor->copy()->addMinutes($service->duration);
+        }
 
         return $line;
     }
@@ -2401,7 +2507,7 @@ class AppointmentController extends Controller
      * checkout. Returns the created ClientPackage models so the caller can
      * total/charge them whenever payment does happen.
      */
-    private function createPackagePurchases(Appointment $appointment, Customer $customer, array $packagePlans, Carbon &$cursor): array
+    private function createPackagePurchases(Appointment $appointment, Customer $customer, array $packagePlans, ?Carbon &$cursor): array
     {
         $purchased = [];
 

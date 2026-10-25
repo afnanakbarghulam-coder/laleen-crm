@@ -62,7 +62,7 @@ class AppointmentService extends Model
 
     public function getEndTimeAttribute()
     {
-        return $this->start_time->copy()->addMinutes($this->duration);
+        return $this->start_time ? $this->start_time->copy()->addMinutes($this->duration) : null;
     }
 
     public function getFinalPriceAttribute(): float

@@ -599,6 +599,8 @@
         @csrf
         <input type="hidden" name="then" id="bookThen" value="">
         <input type="hidden" name="appointment_datetime" id="bookDatetimeHidden">
+        <input type="hidden" name="booking_date" id="bookDateHidden">
+        <input type="hidden" name="unscheduled" id="bookUnscheduledHidden" value="0">
         <input type="hidden" name="customer_name" id="bookCustomerNameHidden">
         <input type="hidden" name="phone" id="bookPhoneHidden">
         <input type="hidden" name="price" id="bookPriceHidden" value="0">
@@ -626,6 +628,12 @@
                         <div class="col-6">
                             <input type="time" id="bookTimeInput" class="form-control form-control-sm">
                         </div>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="bookUnscheduledToggle">
+                        <label class="form-check-label small" for="bookUnscheduledToggle" style="color: #c9a39a; cursor: pointer;">
+                            Pending time &mdash; add to <strong>Unscheduled Queue</strong>
+                        </label>
                     </div>
 
                     <div class="mt-2">
@@ -835,8 +843,19 @@
             if (prefill.datetime) {
                 const [d, t] = prefill.datetime.split('T');
                 document.getElementById('bookDateInput').value = d;
-                document.getElementById('bookTimeInput').value = t;
+                document.getElementById('bookTimeInput').value = t || '';
+            } else if (prefill.date) {
+                document.getElementById('bookDateInput').value = prefill.date;
+                document.getElementById('bookTimeInput').value = '';
             }
+
+            const unscheduledToggle = document.getElementById('bookUnscheduledToggle');
+            unscheduledToggle.checked = !!prefill.unscheduled;
+            document.getElementById('bookTimeInput').disabled = !!prefill.unscheduled;
+            if (prefill.unscheduled) {
+                document.getElementById('bookTimeInput').value = '';
+            }
+
             if (prefill.branch) {
                 document.getElementById('bookBranch').value = prefill.branch;
             }
@@ -847,6 +866,7 @@
             fbRenderRedemptions();
             fbUpdateRedeemButton();
             fbUpdateDateLabel();
+            fbUpdateTeamMemberVisibility();
             fbShowPanel('main');
 
             const modalEl = document.getElementById('calendarBookModal');
@@ -878,12 +898,15 @@
         function fbUpdateDateLabel() {
             const dateVal = document.getElementById('bookDateInput').value;
             const timeVal = document.getElementById('bookTimeInput').value;
+            const isUnscheduled = document.getElementById('bookUnscheduledToggle').checked;
             if (!dateVal) return;
             const d = new Date(dateVal + 'T00:00:00');
             document.getElementById('fbDateLabel').textContent =
                 d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
-            if (timeVal) {
+            if (isUnscheduled || !timeVal) {
+                document.getElementById('fbDateSub').textContent = 'Unscheduled (Pending time) · Drag onto calendar to assign slot';
+            } else {
                 const [h, m] = timeVal.split(':').map(Number);
                 const p = h >= 12 ? 'PM' : 'AM';
                 const hh = h % 12 || 12;
@@ -892,6 +915,19 @@
         }
         document.getElementById('bookDateInput').addEventListener('change', () => { fbUpdateDateLabel(); loadAvailableStaff(); fbRefreshComboStaffOptions(); });
         document.getElementById('bookTimeInput').addEventListener('change', () => { fbUpdateDateLabel(); loadAvailableStaff(); fbRefreshComboStaffOptions(); });
+        document.getElementById('bookUnscheduledToggle').addEventListener('change', function() {
+            const timeInput = document.getElementById('bookTimeInput');
+            timeInput.disabled = this.checked;
+            if (this.checked) {
+                timeInput.value = '';
+            } else if (!timeInput.value) {
+                const now = new Date();
+                timeInput.value = `${String(now.getHours()).padStart(2, '0')}:00`;
+            }
+            fbUpdateDateLabel();
+            fbUpdateTeamMemberVisibility();
+            loadAvailableStaff();
+        });
         document.getElementById('bookBranch').addEventListener('change', () => { loadAvailableStaff(); fbRefreshComboStaffOptions(); });
 
         /* ---------------- RAIL / CLIENT ---------------- */
@@ -1394,7 +1430,8 @@
            a valid staff_id for the appointment record itself, auto-filled
            in loadAvailableStaff's callback) whenever any combo is present. */
         function fbUpdateTeamMemberVisibility() {
-            const hide = selectedCombos.length > 0;
+            const isUnscheduled = document.getElementById('bookUnscheduledToggle').checked;
+            const hide = selectedCombos.length > 0 || isUnscheduled;
             document.getElementById('fbTeamMemberSection').classList.toggle('d-none', hide);
             // A hidden-but-required field blocks native form submission
             // silently (a display:none control can't be focused for the
@@ -1643,7 +1680,14 @@
         document.getElementById('calendarBookForm').addEventListener('submit', function(e) {
             const dateVal = document.getElementById('bookDateInput').value;
             const timeVal = document.getElementById('bookTimeInput').value;
-            document.getElementById('bookDatetimeHidden').value = (dateVal && timeVal) ? `${dateVal}T${timeVal}` : '';
+            const isUnscheduled = document.getElementById('bookUnscheduledToggle').checked || !timeVal;
+
+            document.getElementById('bookDateHidden').value = dateVal || '';
+            document.getElementById('bookUnscheduledHidden').value = isUnscheduled ? '1' : '0';
+            document.getElementById('bookDatetimeHidden').value = (!isUnscheduled && dateVal && timeVal) ? `${dateVal}T${timeVal}` : '';
+            if (isUnscheduled) {
+                document.getElementById('bookStaffSelect').required = false;
+            }
 
             if (!selectedClient) {
                 e.preventDefault();
