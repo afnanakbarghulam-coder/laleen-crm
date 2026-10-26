@@ -113,18 +113,52 @@ class StaffController extends Controller
 
         // ---- Complaints & Deductions ----
         $complaintsStaffFilter = $request->filled('complaints_staff') ? (int) $request->complaints_staff : null;
+        $complaintsSearch = $request->filled('complaints_search') ? trim((string) $request->input('complaints_search')) : null;
+        $complaintsDate = $request->filled('complaints_date') ? $request->input('complaints_date') : null;
+        $complaintsFrom = $request->filled('complaints_from') ? $request->input('complaints_from') : null;
+        $complaintsTo = $request->filled('complaints_to') ? $request->input('complaints_to') : null;
+
+        $deductionsDate = $request->filled('deductions_date') ? $request->input('deductions_date') : null;
+        $deductionsFrom = $request->filled('deductions_from') ? $request->input('deductions_from') : null;
+        $deductionsTo = $request->filled('deductions_to') ? $request->input('deductions_to') : null;
+
+        $hrAppendParams = array_filter([
+            'complaints_staff' => $complaintsStaffFilter,
+            'complaints_search' => $complaintsSearch,
+            'complaints_date' => $complaintsDate,
+            'complaints_from' => $complaintsFrom,
+            'complaints_to' => $complaintsTo,
+            'deductions_date' => $deductionsDate,
+            'deductions_from' => $deductionsFrom,
+            'deductions_to' => $deductionsTo,
+            'tab' => 'complaints',
+        ]);
 
         $complaints = StaffComplaint::with(['staffMembers', 'customer', 'service', 'deductions.staff', 'notices.staff'])
             ->when($complaintsStaffFilter, fn ($q) => $q->whereHas('staffMembers', fn ($s) => $s->where('staff.id', $complaintsStaffFilter)))
+            ->when($complaintsSearch, function ($q) use ($complaintsSearch) {
+                $q->where(function ($sub) use ($complaintsSearch) {
+                    $sub->where('reference_number', 'like', "%{$complaintsSearch}%")
+                        ->orWhere('customer_name', 'like', "%{$complaintsSearch}%")
+                        ->orWhere('customer_phone', 'like', "%{$complaintsSearch}%")
+                        ->orWhere('category', 'like', "%{$complaintsSearch}%");
+                });
+            })
+            ->when($complaintsDate, fn ($q) => $q->whereDate('complaint_date', $complaintsDate))
+            ->when($complaintsFrom, fn ($q) => $q->whereDate('complaint_date', '>=', $complaintsFrom))
+            ->when($complaintsTo, fn ($q) => $q->whereDate('complaint_date', '<=', $complaintsTo))
             ->orderByDesc('complaint_date')->orderByDesc('id')
             ->paginate(15, ['*'], 'complaints_page')
-            ->appends(array_filter(['complaints_staff' => $complaintsStaffFilter, 'tab' => 'complaints']));
+            ->appends($hrAppendParams);
 
         $deductions = StaffDeduction::with(['staff', 'complaint'])
             ->when($complaintsStaffFilter, fn ($q) => $q->where('staff_id', $complaintsStaffFilter))
+            ->when($deductionsDate, fn ($q) => $q->whereDate('deduction_date', $deductionsDate))
+            ->when($deductionsFrom, fn ($q) => $q->whereDate('deduction_date', '>=', $deductionsFrom))
+            ->when($deductionsTo, fn ($q) => $q->whereDate('deduction_date', '<=', $deductionsTo))
             ->orderByDesc('deduction_date')->orderByDesc('id')
             ->paginate(15, ['*'], 'deductions_page')
-            ->appends(array_filter(['complaints_staff' => $complaintsStaffFilter, 'tab' => 'complaints']));
+            ->appends($hrAppendParams);
 
         // For the deduction quick-add's "link to penalty" dropdown.
         $openComplaints = StaffComplaint::with('staffMembers')->orderByDesc('complaint_date')->get();
@@ -145,13 +179,16 @@ class StaffController extends Controller
             ->when($noticesStaffFilter, fn ($q) => $q->where('staff_id', $noticesStaffFilter))
             ->orderByDesc('notice_date')->orderByDesc('id')
             ->paginate(15, ['*'], 'notices_page')
-            ->appends(array_filter(['complaints_staff' => $complaintsStaffFilter, 'notices_staff' => $request->input('notices_staff'), 'tab' => 'complaints']));
+            ->appends(array_merge($hrAppendParams, array_filter(['notices_staff' => $request->input('notices_staff')])));
 
         return view('staff.index', compact(
             'staff', 'services', 'categories', 'activeTab', 'allStaff', 'allStaffOptions', 'serviceOptions',
             'staffWorkspaceOptions', 'selectedWorkspaceStaffId',
             'payrollBranch', 'payrollFrom', 'payrollTo', 'payrollRows', 'overtimeEntries',
-            'complaints', 'deductions', 'complaintsStaffFilter', 'openComplaints', 'openComplaintOptions',
+            'complaints', 'deductions', 'complaintsStaffFilter', 'complaintsSearch',
+            'complaintsDate', 'complaintsFrom', 'complaintsTo',
+            'deductionsDate', 'deductionsFrom', 'deductionsTo',
+            'openComplaints', 'openComplaintOptions',
             'notices', 'noticesStaffFilter'
         ));
     }

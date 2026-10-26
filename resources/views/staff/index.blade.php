@@ -120,6 +120,21 @@
         white-space: nowrap;
     }
 
+    .ref-badge-action {
+        cursor: pointer;
+        border: 1px solid rgba(217, 143, 131, 0.25);
+        transition: all .15s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .ref-badge-action:hover {
+        background: rgba(217, 143, 131, 0.22);
+        border-color: var(--luxe-accent);
+        color: #f2e6e2;
+    }
+
     .client-picker {
         position: relative;
     }
@@ -459,6 +474,59 @@
         background: rgba(36, 30, 28, 0.65);
         padding: 12px 14px;
         height: 100%;
+    }
+
+    .btn-download-notice {
+        background: rgba(217, 143, 131, 0.14) !important;
+        border: 1px solid var(--luxe-accent, #d98f83) !important;
+        color: #f2e6e2 !important;
+        font-weight: 600;
+        padding: 5px 14px;
+        border-radius: 999px;
+        transition: all .2s ease;
+    }
+
+    .btn-download-notice:hover,
+    .btn-download-notice:focus {
+        background: var(--luxe-accent, #d98f83) !important;
+        border-color: var(--luxe-accent, #d98f83) !important;
+        color: #241a16 !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(217, 143, 131, 0.28);
+    }
+
+    /* ---------------- HR & DISCIPLINARY MINIMALISTIC POLISH ---------------- */
+    #staff-pane-complaints .hr-filter-bar .form-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--luxe-muted);
+        margin-bottom: 3px;
+    }
+
+    #staff-pane-complaints .hr-table-card {
+        border: 1px solid rgba(217, 143, 131, 0.14) !important;
+        border-radius: 12px !important;
+        background: rgba(36, 30, 28, 0.5) !important;
+        overflow: hidden;
+    }
+
+    #staff-pane-complaints .team-table thead th {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--luxe-muted);
+        padding: 10px 14px;
+        background: rgba(20, 16, 14, 0.35);
+        border-bottom: 1px solid rgba(217, 143, 131, 0.16);
+    }
+
+    #staff-pane-complaints .team-table > tbody > tr > td {
+        padding: 10px 14px;
+        font-size: 13px;
+        color: var(--luxe-body);
+        border-color: rgba(217, 143, 131, 0.1);
     }
 </style>
 
@@ -964,41 +1032,60 @@
 
     {{-- ================= HR & DISCIPLINARY (COMPLAINTS, DEDUCTIONS & NOTICES) ================= --}}
     <div id="staff-pane-complaints" class="staff-tab-pane {{ $activeTab === 'complaints' ? '' : 'd-none' }}">
-        <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
-            <form method="GET" action="{{ route('staffs.index') }}" class="row g-3 align-items-end flex-grow-1" style="max-width: 560px;">
-                <input type="hidden" name="tab" value="complaints">
-                <div class="col-md-7">
-                    <label class="form-label">Filter by staff member</label>
-                    <select name="complaints_staff" class="form-select">
-                        <option value="">All staff</option>
-                        @foreach ($allStaff as $s)
-                            <option value="{{ $s->id }}" {{ $complaintsStaffFilter === $s->id ? 'selected' : '' }}>{{ $s->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="col-md-5 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary w-100">Filter</button>
-                    @if ($complaintsStaffFilter)
-                        <a href="{{ route('staffs.index', ['tab' => 'complaints']) }}" class="btn btn-outline-secondary w-100">Reset</a>
-                    @endif
-                </div>
-            </form>
-
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <div>
+                <h6 class="fw-bold mb-0">Complaints &amp; Feedback</h6>
+                <p class="text-muted small mb-0">Click any incident row to expand its Full Incident Detail, What Happened &amp; Corrective Action, and HR Resolution panel.</p>
+            </div>
             @moduleEdit('staff_management')
-                <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#logComplaintModal">
-                        <i class="bx bx-plus me-1"></i> Log Complaint
-                    </button>
-                    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addDeductionModal">
-                        <i class="bx bx-plus me-1"></i> Add Deduction
-                    </button>
-                </div>
+                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#logComplaintModal">
+                    <i class="bx bx-plus me-1"></i> Log Complaint
+                </button>
             @endmoduleEdit
         </div>
 
-        <h6 class="fw-bold mb-1">Complaints &amp; Feedback</h6>
-        <p class="text-muted small mb-3">Click any incident row to expand its Full Incident Detail, What Happened &amp; Corrective Action, and HR Resolution panel.</p>
-        <div class="card p-0 mb-3" style="overflow:hidden;">
+        <form method="GET" action="{{ route('staffs.index') }}" id="complaintsFilterForm" class="row g-2 align-items-end hr-filter-bar mb-2">
+            <input type="hidden" name="tab" value="complaints">
+            @if ($deductionsDate)
+                <input type="hidden" name="deductions_date" value="{{ $deductionsDate }}">
+            @endif
+            @if ($deductionsFrom)
+                <input type="hidden" name="deductions_from" value="{{ $deductionsFrom }}">
+            @endif
+            @if ($deductionsTo)
+                <input type="hidden" name="deductions_to" value="{{ $deductionsTo }}">
+            @endif
+
+            <div class="col-sm-6 col-md-3">
+                <label class="form-label">Search Ref # / Client</label>
+                <input type="text" name="complaints_search" id="complaintsSearchInput" class="form-control form-control-sm" value="{{ $complaintsSearch }}" placeholder="e.g. CMP-2026-001">
+            </div>
+            <div class="col-sm-6 col-md-3">
+                <label class="form-label">Staff member</label>
+                <select name="complaints_staff" class="form-select form-select-sm">
+                    <option value="">All staff</option>
+                    @foreach ($allStaff as $s)
+                        <option value="{{ $s->id }}" {{ $complaintsStaffFilter === $s->id ? 'selected' : '' }}>{{ $s->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-sm-4 col-md-2">
+                <label class="form-label">From Date</label>
+                <input type="date" name="complaints_from" class="form-control form-control-sm" value="{{ $complaintsFrom ?: $complaintsDate }}">
+            </div>
+            <div class="col-sm-4 col-md-2">
+                <label class="form-label">To Date</label>
+                <input type="date" name="complaints_to" class="form-control form-control-sm" value="{{ $complaintsTo ?: $complaintsDate }}">
+            </div>
+            <div class="col-sm-4 col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-sm btn-primary w-100">Filter</button>
+                @if ($complaintsStaffFilter || $complaintsSearch || $complaintsDate || $complaintsFrom || $complaintsTo)
+                    <a href="{{ route('staffs.index', array_filter(['tab' => 'complaints', 'deductions_date' => $deductionsDate, 'deductions_from' => $deductionsFrom, 'deductions_to' => $deductionsTo])) }}" class="btn btn-sm btn-outline-secondary w-100">Reset</a>
+                @endif
+            </div>
+        </form>
+
+        <div class="card hr-table-card p-0 mb-2">
             <div class="table-responsive">
                 <table class="table team-table mb-0" id="complaintsTable">
                     <thead>
@@ -1343,10 +1430,48 @@
                 </table>
             </div>
         </div>
-        <div class="mb-4">{{ $complaints->links() }}</div>
+        <div class="mb-3">{{ $complaints->links() }}</div>
 
-        <h6 class="fw-bold mb-3">Deductions</h6>
-        <div class="card p-0 mb-3" style="overflow:hidden;">
+        <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-2">
+            <div>
+                <h6 class="fw-bold mb-0">Deductions</h6>
+                <p class="text-muted small mb-0">Deductions are managed through the complaint HR Resolution panel. Click any linked complaint reference to jump to or copy it.</p>
+            </div>
+            <form method="GET" action="{{ route('staffs.index') }}" class="row g-2 align-items-end hr-filter-bar" style="max-width: 500px;">
+                <input type="hidden" name="tab" value="complaints">
+                @if ($complaintsStaffFilter)
+                    <input type="hidden" name="complaints_staff" value="{{ $complaintsStaffFilter }}">
+                @endif
+                @if ($complaintsSearch)
+                    <input type="hidden" name="complaints_search" value="{{ $complaintsSearch }}">
+                @endif
+                @if ($complaintsDate)
+                    <input type="hidden" name="complaints_date" value="{{ $complaintsDate }}">
+                @endif
+                @if ($complaintsFrom)
+                    <input type="hidden" name="complaints_from" value="{{ $complaintsFrom }}">
+                @endif
+                @if ($complaintsTo)
+                    <input type="hidden" name="complaints_to" value="{{ $complaintsTo }}">
+                @endif
+
+                <div class="col-sm-4">
+                    <label class="form-label">From Date</label>
+                    <input type="date" name="deductions_from" class="form-control form-control-sm" value="{{ $deductionsFrom ?: $deductionsDate }}">
+                </div>
+                <div class="col-sm-4">
+                    <label class="form-label">To Date</label>
+                    <input type="date" name="deductions_to" class="form-control form-control-sm" value="{{ $deductionsTo ?: $deductionsDate }}">
+                </div>
+                <div class="col-sm-4 d-flex gap-2">
+                    <button type="submit" class="btn btn-sm btn-primary w-100">Filter</button>
+                    @if ($deductionsDate || $deductionsFrom || $deductionsTo)
+                        <a href="{{ route('staffs.index', array_filter(['tab' => 'complaints', 'complaints_staff' => $complaintsStaffFilter, 'complaints_search' => $complaintsSearch, 'complaints_date' => $complaintsDate, 'complaints_from' => $complaintsFrom, 'complaints_to' => $complaintsTo])) }}" class="btn btn-sm btn-outline-secondary w-100">Reset</a>
+                    @endif
+                </div>
+            </form>
+        </div>
+        <div class="card hr-table-card p-0 mb-2">
             <div class="table-responsive">
                 <table class="table team-table mb-0" id="deductionsTable">
                     <thead>
@@ -1356,7 +1481,6 @@
                             <th style="min-width:110px;">Amount</th>
                             <th style="min-width:170px;">Reason</th>
                             <th style="min-width:220px;">Linked complaint</th>
-                            <th style="min-width:90px;"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1366,18 +1490,21 @@
                                 <td class="fw-semibold">{{ $deduction->staff->name ?? '—' }}</td>
                                 <td>QAR {{ number_format($deduction->amount, 2) }}</td>
                                 <td>{{ $deduction->reason }}</td>
-                                <td>{{ $deduction->complaint->reference_number ?? '—' }}</td>
-                                <td class="text-end">
-                                    @moduleEdit('staff_management')
-                                        <div class="d-flex gap-1 justify-content-end">
-                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="startEditDed({{ $deduction->id }})" title="Edit"><i class="bi bi-pencil-square"></i></button>
-                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteDed({{ $deduction->id }})" title="Delete"><i class="bi bi-trash"></i></button>
-                                        </div>
-                                    @endmoduleEdit
+                                <td>
+                                    @if ($deduction->complaint && $deduction->complaint->reference_number)
+                                        <span class="ref-badge ref-badge-action"
+                                            title="Click to copy &amp; filter by {{ $deduction->complaint->reference_number }}"
+                                            onclick='filterByComplaintRef(@json($deduction->complaint->reference_number))'>
+                                            {{ $deduction->complaint->reference_number }}
+                                            <i class="bi bi-copy" style="font-size: 10px;"></i>
+                                        </span>
+                                    @else
+                                        <span class="text-muted small">—</span>
+                                    @endif
                                 </td>
                             </tr>
                         @empty
-                            <tr id="dedEmptyRow"><td colspan="6" class="text-center text-muted py-4">No deductions logged.</td></tr>
+                            <tr id="dedEmptyRow"><td colspan="5" class="text-center text-muted py-4">No deductions logged.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -1758,6 +1885,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script>
         document.querySelectorAll('.staff-tab-btn').forEach(btn => {
             btn.addEventListener('click', function () {
@@ -2710,6 +2838,37 @@
             });
         }
 
+        const NOTICE_MANAGERS = @json(\App\Models\StaffNotice::MANAGERS);
+        let noticeStore = {};
+
+        function renderNoticeAckHtml(n) {
+            const isAck = (n.acknowledged === 'Y') || !!n.acknowledged_by;
+            if (isAck) {
+                const byName = n.acknowledged_by || 'Manager';
+                const onDate = n.acknowledged_at_label || n.notice_date_label || '';
+                const label = n.acknowledged_by
+                    ? `Acknowledged by ${escapeHtml(byName)}${onDate ? ' on ' + escapeHtml(onDate) : ''}`
+                    : 'Acknowledged';
+                return `<span class="ack-badge y"><i class="bi bi-check-circle-fill me-1"></i>${label}</span>`;
+            }
+
+            if (!CAN_EDIT_STAFF) {
+                return `<span class="ack-badge n">Pending Acknowledgment</span>`;
+            }
+
+            const opts = NOTICE_MANAGERS.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+            return `
+                <div class="d-flex align-items-center gap-1" data-html2canvas-ignore="true">
+                    <select class="form-select form-select-sm py-0 px-2" id="ack-manager-${n.id}" style="width: auto; min-width: 95px; height: 28px; font-size: 12px;">
+                        ${opts}
+                    </select>
+                    <button type="button" class="btn btn-sm btn-primary py-0 px-2" id="ack-btn-${n.id}" style="height: 28px; font-size: 12px;" onclick="acknowledgeNotice(${n.id})">
+                        <i class="bi bi-check2 me-1"></i>Acknowledge
+                    </button>
+                </div>
+            `;
+        }
+
         window.openViewNoticeModal = function (referenceNumber, notices) {
             const modalEl = document.getElementById('viewNoticeModal');
             const titleEl = document.getElementById('viewNoticeModalTitle');
@@ -2722,31 +2881,127 @@
             if (!list.length) {
                 bodyEl.innerHTML = '<p class="text-muted small mb-0">No staff notices found for this incident.</p>';
             } else {
-                bodyEl.innerHTML = list.map(n => `
-                    <div class="payroll-subcard mb-3">
-                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-                            <div>
-                                <div class="fw-bold">${escapeHtml(n.staff_name || '—')} &bull; <span class="text-warning">${escapeHtml(n.type || 'Written Warning')}</span></div>
-                                <div class="text-muted small">${escapeHtml(n.notice_date_label || '')} &mdash; ${escapeHtml(n.subject || '')}</div>
-                                <div class="text-muted small mt-1">Client: ${escapeHtml(n.client_name || '—')} | Service: ${escapeHtml(n.service_received || '—')} | Appt Date: ${escapeHtml(n.appt_date || '—')}</div>
+                list.forEach(item => {
+                    if (item && item.id) {
+                        noticeStore[item.id] = Object.assign({}, item, noticeStore[item.id] || {});
+                    }
+                });
+
+                bodyEl.innerHTML = list.map(raw => {
+                    const n = (raw && raw.id && noticeStore[raw.id]) ? noticeStore[raw.id] : raw;
+                    return `
+                        <div class="payroll-subcard mb-3" id="notice-card-${n.id}" data-notice-card="${n.id}" data-staff-name="${escapeHtml(n.staff_name || 'Staff')}" data-notice-date="${escapeHtml(n.notice_date || n.notice_date_label || '')}">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                                <div>
+                                    <div class="fw-bold">${escapeHtml(n.staff_name || '—')} &bull; <span class="text-warning">${escapeHtml(n.type || 'Written Warning')}</span></div>
+                                    <div class="text-muted small">${escapeHtml(n.notice_date_label || '')} &mdash; ${escapeHtml(n.subject || '')}</div>
+                                    <div class="text-muted small mt-1">Client: ${escapeHtml(n.client_name || '—')} | Service: ${escapeHtml(n.service_received || '—')} | Appt Date: ${escapeHtml(n.appt_date || '—')}</div>
+                                </div>
+                                <div id="notice-ack-wrap-${n.id}">
+                                    ${renderNoticeAckHtml(n)}
+                                </div>
                             </div>
-                            <span class="ack-badge ${(n.acknowledged || 'N').toLowerCase()}">
-                                ${n.acknowledged === 'Y' ? 'Acknowledged' : 'Pending Acknowledgment'}
-                            </span>
+                            <div class="mb-2">
+                                <div class="fw-bold small text-uppercase text-muted mb-1">What Happened</div>
+                                <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap;">${escapeHtml(n.description || '—')}</div>
+                            </div>
+                            <div class="mb-2">
+                                <div class="fw-bold small text-uppercase text-muted mb-1">Corrective Action to be taken</div>
+                                <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap;">${escapeHtml(n.corrective_actions || '—')}</div>
+                            </div>
+                            <div class="d-flex justify-content-end mt-2 pt-2 border-top border-secondary border-opacity-25" data-html2canvas-ignore="true">
+                                <button type="button" class="btn btn-sm btn-outline-primary btn-download-notice" id="download-jpg-btn-${n.id}" onclick="downloadNoticeJpg(${n.id})">
+                                    <i class="bi bi-download me-1"></i> Download JPG
+                                </button>
+                            </div>
                         </div>
-                        <div class="mb-2">
-                            <div class="fw-bold small text-uppercase text-muted mb-1">What Happened</div>
-                            <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap;">${escapeHtml(n.description || '—')}</div>
-                        </div>
-                        <div>
-                            <div class="fw-bold small text-uppercase text-muted mb-1">Corrective Action to be taken</div>
-                            <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap;">${escapeHtml(n.corrective_actions || '—')}</div>
-                        </div>
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
             }
 
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        };
+
+        window.acknowledgeNotice = function (noticeId) {
+            const selectEl = document.getElementById(`ack-manager-${noticeId}`);
+            const btnEl = document.getElementById(`ack-btn-${noticeId}`);
+            const wrapEl = document.getElementById(`notice-ack-wrap-${noticeId}`);
+            const manager = selectEl?.value || '';
+
+            if (!manager) {
+                showStaffToast('Please select a manager.', 'error');
+                return;
+            }
+
+            if (btnEl) btnEl.disabled = true;
+            if (selectEl) selectEl.disabled = true;
+
+            jsonFetch(`/staff-notices/${noticeId}/acknowledge`, 'POST', { acknowledged_by: manager })
+                .then(({ ok, data }) => {
+                    if (ok && data.success && data.entry) {
+                        noticeStore[noticeId] = Object.assign({}, noticeStore[noticeId] || {}, data.entry);
+                        if (wrapEl) {
+                            wrapEl.innerHTML = renderNoticeAckHtml(noticeStore[noticeId]);
+                        }
+                        showStaffToast(data.message || `Acknowledged by ${manager}.`);
+                    } else {
+                        const firstError = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'Could not acknowledge notice.');
+                        showStaffToast(firstError, 'error');
+                        if (btnEl) btnEl.disabled = false;
+                        if (selectEl) selectEl.disabled = false;
+                    }
+                })
+                .catch(() => {
+                    showStaffToast('Network error while acknowledging notice.', 'error');
+                    if (btnEl) btnEl.disabled = false;
+                    if (selectEl) selectEl.disabled = false;
+                });
+        };
+
+        window.downloadNoticeJpg = function (noticeId) {
+            const cardEl = document.getElementById(`notice-card-${noticeId}`);
+            const btnEl = document.getElementById(`download-jpg-btn-${noticeId}`);
+            if (!cardEl) return;
+
+            if (typeof html2canvas === 'undefined') {
+                showStaffToast('Image export library is still loading. Please try again in a moment.', 'error');
+                return;
+            }
+
+            const stored = noticeStore[noticeId] || {};
+            const rawStaff = stored.staff_name || cardEl.dataset.staffName || 'Staff';
+            const rawDate = stored.notice_date || stored.notice_date_label || cardEl.dataset.noticeDate || new Date().toISOString().slice(0, 10);
+
+            const cleanStaff = String(rawStaff).trim().replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'Staff';
+            const cleanDate = String(rawDate).trim().replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'Date';
+            const filename = `Staff-Notice-${cleanStaff}-${cleanDate}.jpg`;
+
+            const origHtml = btnEl ? btnEl.innerHTML : '';
+            if (btnEl) {
+                btnEl.disabled = true;
+                btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Exporting...';
+            }
+
+            html2canvas(cardEl, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#241e1c',
+                logging: false,
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = filename;
+                link.href = canvas.toDataURL('image/jpeg', 0.95);
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            }).catch(() => {
+                showStaffToast('Could not generate JPG image.', 'error');
+            }).finally(() => {
+                if (btnEl) {
+                    btnEl.disabled = false;
+                    btnEl.innerHTML = origHtml;
+                }
+            });
         };
 
         const coQaSaveBtn = document.getElementById('coQaSaveBtn');
@@ -2787,6 +3042,39 @@
         }
 
         /* ---------- DEDUCTIONS ---------- */
+        window.filterByComplaintRef = function (referenceNumber) {
+            if (!referenceNumber) return;
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(referenceNumber).catch(() => {});
+            }
+
+            // Check if the complaint row is already visible on the current page
+            const matchingEntry = Object.values(coEntries).find(e => e.reference_number === referenceNumber);
+            if (matchingEntry) {
+                const row = document.querySelector(`#complaintsTable tr[data-entry-row="${matchingEntry.id}"]`);
+                const detailEl = document.getElementById(`complaint-details-${matchingEntry.id}`);
+                if (row) {
+                    const searchInput = document.getElementById('complaintsSearchInput');
+                    if (searchInput) searchInput.value = referenceNumber;
+                    showStaffToast(`Copied ${referenceNumber} & jumped to complaint.`);
+                    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    if (detailEl && !detailEl.classList.contains('show')) {
+                        bootstrap.Collapse.getOrCreateInstance(detailEl).show();
+                    }
+                    return;
+                }
+            }
+
+            // Otherwise submit the filter form to load that complaint
+            const searchInput = document.getElementById('complaintsSearchInput');
+            const filterForm = document.getElementById('complaintsFilterForm');
+            if (searchInput && filterForm) {
+                searchInput.value = referenceNumber;
+                filterForm.submit();
+            }
+        };
+
         let dedEntries = {};
         document.querySelectorAll('#deductionsTable tr[data-entry-row]').forEach(row => {
             const entry = JSON.parse(row.dataset.entry);
@@ -2794,61 +3082,18 @@
         });
 
         function dedViewRowHtml(e) {
+            const refCode = e.complaint_reference || (OPEN_COMPLAINTS.find(x => x.id === e.complaint_id)?.reference_number) || '';
+            const refCell = refCode
+                ? `<span class="ref-badge ref-badge-action" title="Click to copy &amp; filter by ${escapeHtml(refCode)}" onclick="filterByComplaintRef('${escapeHtml(refCode)}')">${escapeHtml(refCode)} <i class="bi bi-copy" style="font-size: 10px;"></i></span>`
+                : '<span class="text-muted small">—</span>';
             return `
                 <td>${e.deduction_date_label}</td>
                 <td class="fw-semibold">${escapeHtml(e.staff_name)}</td>
                 <td>QAR ${Number(e.amount).toFixed(2)}</td>
                 <td>${escapeHtml(e.reason)}</td>
-                <td>${complaintLabel(e.complaint_id)}</td>
-                <td class="text-end">${actionsHtml(e.id, 'view', 'startEditDed', 'deleteDed')}</td>
+                <td>${refCell}</td>
             `;
         }
-
-        function dedEditRowHtml(e) {
-            return `
-                <td><input type="date" class="form-control form-control-sm" data-field="deduction_date" value="${e.deduction_date}"></td>
-                <td><select class="form-select form-select-sm" data-field="staff_id">${staffOptionsHtml(e.staff_id)}</select></td>
-                <td><input type="number" min="0" step="0.01" class="form-control form-control-sm" data-field="amount" value="${e.amount}"></td>
-                <td><input type="text" class="form-control form-control-sm" data-field="reason" value="${escapeHtml(e.reason)}"></td>
-                <td><select class="form-select form-select-sm" data-field="complaint_id">${complaintOptionsHtml(e.complaint_id)}</select></td>
-                <td class="text-end">${actionsHtml(e.id, 'edit', '', '', 'saveEditDed', 'cancelEditDed')}</td>
-            `;
-        }
-
-        window.startEditDed = function (id) {
-            const row = document.querySelector(`#deductionsTable tr[data-entry-row="${id}"]`);
-            if (row) row.innerHTML = dedEditRowHtml(dedEntries[id]);
-        };
-        window.cancelEditDed = function (id) {
-            const row = document.querySelector(`#deductionsTable tr[data-entry-row="${id}"]`);
-            if (row) row.innerHTML = dedViewRowHtml(dedEntries[id]);
-        };
-        window.saveEditDed = function (id) {
-            const row = document.querySelector(`#deductionsTable tr[data-entry-row="${id}"]`);
-            jsonFetch(`/staff-deductions/${id}`, 'PUT', readRowFields(row)).then(({ ok, data }) => {
-                if (ok && data.success) {
-                    dedEntries[id] = data.entry;
-                    row.innerHTML = dedViewRowHtml(data.entry);
-                    showStaffToast(data.message || 'Deduction updated.');
-                } else {
-                    const firstError = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'Could not update deduction.');
-                    showStaffToast(firstError, 'error');
-                }
-            });
-        };
-        window.deleteDed = function (id) {
-            if (!confirm('Delete this deduction?')) return;
-            jsonDelete(`/staff-deductions/${id}`).then(({ ok, data }) => {
-                if (ok && data.success) {
-                    document.querySelector(`#deductionsTable tr[data-entry-row="${id}"]`)?.remove();
-                    delete dedEntries[id];
-                    showStaffToast(data.message || 'Deduction deleted.');
-                    maybeShowEmptyState('#deductionsTable', 'dedEmptyRow', 6, 'No deductions logged.');
-                } else {
-                    showStaffToast(data.message || 'Could not delete deduction.', 'error');
-                }
-            });
-        };
 
         const dedQaSaveBtn = document.getElementById('dedQaSaveBtn');
         if (dedQaSaveBtn) {

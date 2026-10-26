@@ -145,6 +145,7 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/staff-deductions/{staffDeduction}', [StaffDeductionController::class, 'update'])->name('staff-deductions.update');
         Route::delete('/staff-deductions/{staffDeduction}', [StaffDeductionController::class, 'destroy'])->name('staff-deductions.destroy');
 
+        Route::match(['post', 'put', 'patch'], '/staff-notices/{staffNotice}/acknowledge', [StaffNoticeController::class, 'acknowledge'])->name('staff-notices.acknowledge');
         Route::put('/staff-notices/{staffNotice}', [StaffNoticeController::class, 'update'])->name('staff-notices.update');
         Route::delete('/staff-notices/{staffNotice}', [StaffNoticeController::class, 'destroy'])->name('staff-notices.destroy');
     });

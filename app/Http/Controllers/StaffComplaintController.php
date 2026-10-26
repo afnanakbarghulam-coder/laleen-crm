@@ -109,6 +109,7 @@ class StaffComplaintController extends Controller
         ]);
 
         $attachedStaffIds = $staffComplaint->staffMembers()->pluck('staff.id')->map(fn ($id) => (int) $id)->all();
+        $existingNoticesByStaff = $staffComplaint->notices()->get()->keyBy('staff_id');
 
         $staffComplaint->deductions()->delete();
         $staffComplaint->notices()->delete();
@@ -154,16 +155,19 @@ class StaffComplaintController extends Controller
             }
 
             if ($generateNotice) {
+                $priorNotice = $existingNoticesByStaff->get($staffId);
                 StaffNotice::create([
                     'staff_id' => $staffId,
                     'complaint_id' => $staffComplaint->id,
-                    'notice_date' => now()->toDateString(),
-                    'type' => 'Written Warning',
+                    'notice_date' => $priorNotice?->notice_date?->toDateString() ?? now()->toDateString(),
+                    'type' => $priorNotice?->type ?? 'Written Warning',
                     'subject' => $subject,
                     'description' => $whatHappened,
                     'corrective_actions' => $customAction,
-                    'acknowledged' => 'N',
-                    'created_by' => auth()->id(),
+                    'acknowledged' => $priorNotice?->acknowledged ?? 'N',
+                    'acknowledged_by' => $priorNotice?->acknowledged_by,
+                    'acknowledged_at' => $priorNotice?->acknowledged_at,
+                    'created_by' => $priorNotice?->created_by ?? auth()->id(),
                 ]);
             }
         }

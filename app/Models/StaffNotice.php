@@ -13,6 +13,11 @@ class StaffNotice extends Model
         'Termination Notice',
     ];
 
+    const MANAGERS = [
+        'Rhea',
+        'Ahana',
+    ];
+
     protected $fillable = [
         'staff_id',
         'complaint_id',
@@ -22,11 +27,14 @@ class StaffNotice extends Model
         'description',
         'corrective_actions',
         'acknowledged',
+        'acknowledged_by',
+        'acknowledged_at',
         'created_by',
     ];
 
     protected $casts = [
         'notice_date' => 'date',
+        'acknowledged_at' => 'datetime',
     ];
 
     public function staff()
@@ -48,9 +56,21 @@ class StaffNotice extends Model
     {
         $complaint = $this->complaint;
 
-        return array_merge($this->only(['id', 'staff_id', 'complaint_id', 'type', 'subject', 'description', 'corrective_actions', 'acknowledged']), [
+        return array_merge($this->only([
+            'id',
+            'staff_id',
+            'complaint_id',
+            'type',
+            'subject',
+            'description',
+            'corrective_actions',
+            'acknowledged',
+            'acknowledged_by',
+        ]), [
             'notice_date' => $this->notice_date->format('Y-m-d'),
             'notice_date_label' => $this->notice_date->format('d M Y'),
+            'acknowledged_at' => $this->acknowledged_at?->toIso8601String(),
+            'acknowledged_at_label' => $this->acknowledged_at?->format('d M Y'),
             'staff_name' => $this->staff->name ?? '—',
             'complaint_reference' => $complaint->reference_number ?? null,
             'client_name' => $complaint?->customer?->name ?? $complaint?->customer_name ?? '—',
