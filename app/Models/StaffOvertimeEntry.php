@@ -11,6 +11,7 @@ class StaffOvertimeEntry extends Model
         'entry_date',
         'hours',
         'rate',
+        'customer_name',
         'note',
         'created_by',
     ];
@@ -44,7 +45,7 @@ class StaffOvertimeEntry extends Model
 
     public function toEditPayload(): array
     {
-        return array_merge($this->only(['id', 'staff_id', 'hours', 'rate', 'note']), [
+        return array_merge($this->only(['id', 'staff_id', 'hours', 'rate', 'customer_name', 'note']), [
             'entry_date' => $this->entry_date->format('Y-m-d'),
             'entry_date_label' => $this->entry_date->format('d M Y'),
             'staff_name' => $this->staff->name ?? '—',

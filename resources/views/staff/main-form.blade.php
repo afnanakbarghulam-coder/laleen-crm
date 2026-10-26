@@ -116,9 +116,8 @@
                         <div class="stf-nav-item" data-pane="address"><span>Addresses</span></div>
                         <div class="stf-nav-item" data-pane="emergency"><span>Emergency contact</span></div>
 
-                        <div class="stf-nav-group">Pay &amp; Employment</div>
+                        <div class="stf-nav-group">Employment</div>
                         <div class="stf-nav-item" data-pane="employment"><span>Employment details</span></div>
-                        <div class="stf-nav-item" data-pane="pay"><span>Wages &amp; commissions</span></div>
 
                         <div class="stf-nav-group">Access</div>
                         <div class="stf-nav-item" data-pane="access"><span>Roles &amp; permissions</span></div>
@@ -239,27 +238,6 @@
                             </div>
                         </div>
 
-                        <!-- WAGES & COMMISSIONS -->
-                        <div class="stf-pane" id="stf-pay">
-                            <h6 class="fw-bold">Wages &amp; commissions</h6>
-                            <p class="text-muted small">Used for internal wage tracking. Base salary and hourly wage feed the Payroll &amp; Overtime tab (Net Salary = Base Salary + Overtime Pay - Deductions); commission is not part of that calculation.</p>
-
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <label class="form-label">Base salary (QAR / period)</label>
-                                    <input type="number" name="base_salary" id="stfBaseSalary" class="form-control" min="0" step="0.01">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Hourly wage (QAR)</label>
-                                    <input type="number" name="hourly_wage" id="stfWage" class="form-control" min="0" step="0.01">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Commission rate (%)</label>
-                                    <input type="number" name="commission_rate" id="stfCommission" class="form-control" min="0" max="100" step="0.1">
-                                </div>
-                            </div>
-                        </div>
-
                         <!-- ACCESS -->
                         <div class="stf-pane" id="stf-access">
                             <h6 class="fw-bold">Roles &amp; permissions</h6>
@@ -374,10 +352,6 @@
             document.getElementById('stfEmploymentType').value = member.employment_type || '';
             document.getElementById('stfMemberId').value = member.staff_member_id || '';
             document.getElementById('stfNotes').value = member.internal_notes || '';
-
-            document.getElementById('stfBaseSalary').value = member.base_salary || '';
-            document.getElementById('stfWage').value = member.hourly_wage || '';
-            document.getElementById('stfCommission').value = member.commission_rate || '';
 
             if (member.profile_picture) {
                 const preview = document.getElementById('stfPhotoPreview');

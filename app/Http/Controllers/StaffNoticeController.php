@@ -25,7 +25,7 @@ class StaffNoticeController extends Controller
             ]);
         }
 
-        return redirect()->route('staffs.index', ['tab' => 'notices'])->with('success', 'Notice updated.');
+        return redirect()->route('staffs.index', ['tab' => 'complaints'])->with('success', 'Notice updated.');
     }
 
     public function destroy(Request $request, StaffNotice $staffNotice)
@@ -36,7 +36,7 @@ class StaffNoticeController extends Controller
             return response()->json(['success' => true, 'message' => 'Notice deleted.']);
         }
 
-        return redirect()->route('staffs.index', ['tab' => 'notices'])->with('success', 'Notice deleted.');
+        return redirect()->route('staffs.index', ['tab' => 'complaints'])->with('success', 'Notice deleted.');
     }
 
     private function validated(Request $request): array

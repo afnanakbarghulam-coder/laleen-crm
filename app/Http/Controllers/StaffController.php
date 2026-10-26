@@ -19,8 +19,12 @@ class StaffController extends Controller
 {
     public function index(Request $request)
     {
-        $activeTab = in_array($request->query('tab'), ['directory', 'payroll', 'complaints', 'notices', 'workspace'], true)
-            ? $request->query('tab')
+        $rawTab = $request->query('tab');
+        if ($rawTab === 'notices') {
+            $rawTab = 'complaints';
+        }
+        $activeTab = in_array($rawTab, ['directory', 'payroll', 'complaints', 'workspace'], true)
+            ? $rawTab
             : 'directory';
 
         // ---- Staff Directory ----
@@ -58,6 +62,7 @@ class StaffController extends Controller
             'id' => $s->id,
             'name' => $s->name,
             'branch' => $s->branch,
+            'hourly_wage' => (float) ($s->hourly_wage ?? 0),
         ])->values();
 
         // For the Complaints & Feedback "Service Received" dropdown.
@@ -109,7 +114,7 @@ class StaffController extends Controller
         // ---- Complaints & Deductions ----
         $complaintsStaffFilter = $request->filled('complaints_staff') ? (int) $request->complaints_staff : null;
 
-        $complaints = StaffComplaint::with(['staffMembers', 'customer', 'service'])
+        $complaints = StaffComplaint::with(['staffMembers', 'customer', 'service', 'deductions.staff', 'notices.staff'])
             ->when($complaintsStaffFilter, fn ($q) => $q->whereHas('staffMembers', fn ($s) => $s->where('staff.id', $complaintsStaffFilter)))
             ->orderByDesc('complaint_date')->orderByDesc('id')
             ->paginate(15, ['*'], 'complaints_page')
@@ -132,13 +137,15 @@ class StaffController extends Controller
         ])->values();
 
         // ---- Notices ----
-        $noticesStaffFilter = $request->filled('notices_staff') ? (int) $request->notices_staff : null;
+        $noticesStaffFilter = $request->filled('notices_staff')
+            ? (int) $request->notices_staff
+            : $complaintsStaffFilter;
 
         $notices = StaffNotice::with('staff')
             ->when($noticesStaffFilter, fn ($q) => $q->where('staff_id', $noticesStaffFilter))
             ->orderByDesc('notice_date')->orderByDesc('id')
             ->paginate(15, ['*'], 'notices_page')
-            ->appends(array_filter(['notices_staff' => $noticesStaffFilter, 'tab' => 'notices']));
+            ->appends(array_filter(['complaints_staff' => $complaintsStaffFilter, 'notices_staff' => $request->input('notices_staff'), 'tab' => 'complaints']));
 
         return view('staff.index', compact(
             'staff', 'services', 'categories', 'activeTab', 'allStaff', 'allStaffOptions', 'serviceOptions',
@@ -210,6 +217,27 @@ class StaffController extends Controller
             ->with('success', 'Workspace updated for ' . $staff->name . '.');
     }
 
+    /**
+     * Quick-edit a team member's Base Salary, Hourly Wage, and Commission Rate
+     * directly from the Payroll & Overtime tab.
+     */
+    public function updateWages(Request $request, Staff $staff)
+    {
+        $validated = $request->validate([
+            'base_salary' => 'nullable|numeric|min:0',
+            'hourly_wage' => 'nullable|numeric|min:0',
+            'commission_rate' => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        $staff->update([
+            'base_salary' => $validated['base_salary'] ?? 0,
+            'hourly_wage' => $validated['hourly_wage'] ?? 0,
+            'commission_rate' => $validated['commission_rate'] ?? 0,
+        ]);
+
+        return redirect()->back()->with('success', 'Wage settings updated for ' . $staff->name . '.');
+    }
+
     public function destroy(Staff $staff)
     {
         $staff->delete();
@@ -249,6 +277,12 @@ class StaffController extends Controller
         ]);
 
         unset($data['profile_picture']);
+
+        foreach (['hourly_wage', 'commission_rate', 'base_salary'] as $wageField) {
+            if (!$request->has($wageField)) {
+                unset($data[$wageField]);
+            }
+        }
 
         return $data;
     }

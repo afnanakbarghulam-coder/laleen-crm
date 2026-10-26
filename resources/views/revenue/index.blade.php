@@ -302,9 +302,69 @@
         background: rgba(168,82,74, .08);
         color: #c9a66b;
     }
+
+    /* ---------------- TABS ---------------- */
+    .fin-tabs-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .fin-tabs-nav {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(36, 30, 28, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--fin-border);
+        border-radius: 12px;
+        padding: 5px;
+        flex-wrap: wrap;
+    }
+
+    .fin-tab-btn {
+        border: none;
+        background: transparent;
+        color: var(--fin-muted);
+        font-size: 13.5px;
+        font-weight: 700;
+        padding: 8px 18px;
+        border-radius: 8px;
+        transition: all .15s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .fin-tab-btn:hover {
+        color: var(--fin-ink);
+        background: rgba(217, 143, 131, 0.08);
+    }
+
+    .fin-tab-btn.active {
+        background: var(--fin-primary);
+        color: #1b1513;
+        box-shadow: 0 2px 8px rgba(217, 143, 131, 0.25);
+    }
 </style>
 
 @section('content')
+
+    @php
+        $rawTab = request('tab', 'overview');
+        if ($rawTab === 'sales') {
+            $rawTab = 'sales-ledger';
+        }
+        $activeTab = in_array($rawTab, ['overview', 'sales-ledger', 'expenses'], true)
+            ? $rawTab
+            : 'overview';
+        $activeBranchLabel = $branch ? ($branches[$branch] ?? $branch) : 'All Branches';
+        $activeStaffName = $staffId ? $staffList->firstWhere('id', $staffId)?->name : null;
+    @endphp
 
     <div class="fin-header">
         <div>
@@ -316,60 +376,88 @@
                         <span class="fin-pay-chip">Branch: {{ $branches[$branch] }}</span>
                     @endif
                     @if ($staffId)
-                        <span class="fin-pay-chip">Staff: {{ $staffList->firstWhere('id', $staffId)?->name }}</span>
+                        <span class="fin-pay-chip {{ $activeTab === 'sales-ledger' ? '' : 'd-none' }}" id="finHeaderStaffChip">Staff: {{ $activeStaffName }}</span>
                     @endif
                 </div>
             @endif
         </div>
-        @moduleEdit('finance')
-            <button type="button" class="btn btn-primary fin-apply-btn" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
-                <i class="bx bx-plus me-1"></i> Add Expense
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-outline-secondary fin-apply-btn d-inline-flex align-items-center"
+                data-bs-toggle="collapse" data-bs-target="#finFilterCollapse" aria-expanded="false" aria-controls="finFilterCollapse">
+                <i class="bx bx-filter-alt me-1"></i> Filters
             </button>
-        @endmoduleEdit
+        </div>
     </div>
 
-    <!-- FILTER BAR -->
-    <div class="fin-filter-card">
-        <form method="GET" action="{{ route('appointments.revenue.index') }}" id="finFilterForm">
-            <div class="fin-filter-row">
-                <div class="fin-preset-group" id="finPresetGroup">
-                    <button type="button" class="fin-preset-btn" data-preset="today">Today</button>
-                    <button type="button" class="fin-preset-btn" data-preset="yesterday">Yesterday</button>
-                    <button type="button" class="fin-preset-btn" data-preset="this_week">This Week</button>
-                    <button type="button" class="fin-preset-btn" data-preset="this_month">This Month</button>
-                    <button type="button" class="fin-preset-btn" data-preset="last_month">Last Month</button>
+    <!-- COLLAPSIBLE FILTER BAR -->
+    <div class="collapse" id="finFilterCollapse">
+        <div class="fin-filter-card">
+            <form method="GET" action="{{ route('appointments.revenue.index') }}" id="finFilterForm">
+                <input type="hidden" name="tab" id="finActiveTab" value="{{ $activeTab }}">
+                <div class="fin-filter-row">
+                    <div class="fin-preset-group" id="finPresetGroup">
+                        <button type="button" class="fin-preset-btn" data-preset="today">Today</button>
+                        <button type="button" class="fin-preset-btn" data-preset="yesterday">Yesterday</button>
+                        <button type="button" class="fin-preset-btn" data-preset="this_week">This Week</button>
+                        <button type="button" class="fin-preset-btn" data-preset="this_month">This Month</button>
+                        <button type="button" class="fin-preset-btn" data-preset="last_month">Last Month</button>
+                    </div>
+
+                    <div class="fin-filter-divider"></div>
+
+                    <input type="date" name="from" id="finFrom" class="fin-date-input" value="{{ $from->format('Y-m-d') }}">
+                    <span class="text-muted small">to</span>
+                    <input type="date" name="to" id="finTo" class="fin-date-input" value="{{ $to->format('Y-m-d') }}">
+
+                    <div class="fin-filter-divider"></div>
+
+                    <select name="branch" class="fin-branch-select">
+                        <option value="">All Branches</option>
+                        @foreach ($branches as $key => $label)
+                            <option value="{{ $key }}" {{ $branch === $key ? 'selected' : '' }}>{{ $label }}</option>
+                        @endforeach
+                    </select>
+
+                    <div id="staff-filter-wrapper" class="{{ $activeTab === 'sales-ledger' ? '' : 'd-none' }}">
+                        <select name="staff_id" class="fin-branch-select">
+                            <option value="">All Staff</option>
+                            @foreach ($staffList as $staffMember)
+                                <option value="{{ $staffMember->id }}" {{ $staffId === $staffMember->id ? 'selected' : '' }}>{{ $staffMember->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary fin-apply-btn">Apply</button>
+                    @if ($branch || $staffId || request()->hasAny(['from', 'to']))
+                        <a href="{{ route('appointments.revenue.index') }}" class="btn btn-outline-secondary fin-apply-btn d-inline-flex align-items-center">Reset</a>
+                    @endif
                 </div>
-
-                <div class="fin-filter-divider"></div>
-
-                <input type="date" name="from" id="finFrom" class="fin-date-input" value="{{ $from->format('Y-m-d') }}">
-                <span class="text-muted small">to</span>
-                <input type="date" name="to" id="finTo" class="fin-date-input" value="{{ $to->format('Y-m-d') }}">
-
-                <div class="fin-filter-divider"></div>
-
-                <select name="branch" class="fin-branch-select">
-                    <option value="">All Branches</option>
-                    @foreach ($branches as $key => $label)
-                        <option value="{{ $key }}" {{ $branch === $key ? 'selected' : '' }}>{{ $label }}</option>
-                    @endforeach
-                </select>
-
-                <select name="staff_id" class="fin-branch-select">
-                    <option value="">All Staff</option>
-                    @foreach ($staffList as $staffMember)
-                        <option value="{{ $staffMember->id }}" {{ $staffId === $staffMember->id ? 'selected' : '' }}>{{ $staffMember->name }}</option>
-                    @endforeach
-                </select>
-
-                <button type="submit" class="btn btn-primary fin-apply-btn">Apply</button>
-                @if ($branch || $staffId || request()->hasAny(['from', 'to']))
-                    <a href="{{ route('appointments.revenue.index') }}" class="btn btn-outline-secondary fin-apply-btn">Reset</a>
-                @endif
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 
+    <!-- TAB NAVIGATION & ACTIVE FILTER SUMMARY -->
+    <div class="fin-tabs-bar">
+        <div class="fin-tabs-nav" role="tablist">
+            <button type="button" class="fin-tab-btn {{ $activeTab === 'overview' ? 'active' : '' }}" data-tab="overview">
+                <i class="bx bx-bar-chart-alt-2"></i> Overview
+            </button>
+            <button type="button" class="fin-tab-btn {{ $activeTab === 'sales-ledger' ? 'active' : '' }}" data-tab="sales-ledger">
+                <i class="bx bx-list-ul"></i> Sales Ledger
+            </button>
+            <button type="button" class="fin-tab-btn {{ $activeTab === 'expenses' ? 'active' : '' }}" data-tab="expenses">
+                <i class="bx bx-wallet"></i> Expenses
+            </button>
+        </div>
+        <span class="text-muted small" id="finShowingSummary"
+            data-base-summary="Showing: {{ $from->format('d/m/Y') }} - {{ $to->format('d/m/Y') }} | {{ $activeBranchLabel }}"
+            data-staff-name="{{ $activeStaffName ?? '' }}">
+            Showing: {{ $from->format('d/m/Y') }} - {{ $to->format('d/m/Y') }} | {{ $activeBranchLabel }}{{ ($activeTab === 'sales-ledger' && $activeStaffName) ? ' | ' . $activeStaffName : '' }}
+        </span>
+    </div>
+
+    <!-- TAB 1: OVERVIEW -->
+    <div id="fin-tab-overview" class="fin-tab-pane {{ $activeTab === 'overview' ? '' : 'd-none' }}">
     <!-- KPI CARDS -->
     <div class="row g-3 mb-3">
         <div class="col-md-6 col-xl-3">
@@ -493,7 +581,11 @@
             </div>
         </div>
     </div>
+    </div>
+    <!-- /TAB 1: OVERVIEW -->
 
+    <!-- TAB 2: SALES LEDGER -->
+    <div id="fin-tab-sales-ledger" class="fin-tab-pane {{ $activeTab === 'sales-ledger' ? '' : 'd-none' }}">
     <!-- DAILY SALES LEDGER -->
     <div class="fin-section-card">
         <div class="fin-section-head">
@@ -547,36 +639,23 @@
             </table>
         </div>
     </div>
+    </div>
+    <!-- /TAB 2: SALES LEDGER -->
 
+    <!-- TAB 3: EXPENSES -->
+    <div id="fin-tab-expenses" class="fin-tab-pane {{ $activeTab === 'expenses' ? '' : 'd-none' }}">
     <!-- EXPENSE TRACKER -->
     <div class="fin-section-card">
-        <div class="fin-section-head">
-            <h6><i class="bx bx-wallet me-1"></i> Expense Tracker</h6>
+        <div class="fin-section-head flex-wrap gap-2">
+            <div>
+                <h6><i class="bx bx-wallet me-1"></i> Expense Tracker</h6>
+                <span class="text-muted small">{{ $expenses->count() }} {{ Str::plural('expense', $expenses->count()) }} &middot; Total: {{ number_format($totalExpenses, 2) }} QAR</span>
+            </div>
             @moduleEdit('finance')
-                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
-                    <i class="bx bx-plus"></i> Add Expense
+                <button type="button" class="btn btn-primary fin-apply-btn d-inline-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
+                    <i class="bx bx-plus me-1"></i> Add Expense
                 </button>
             @endmoduleEdit
-        </div>
-        <div class="px-3 py-3 border-bottom d-flex flex-wrap align-items-center gap-2" style="background:rgba(217, 143, 131,0.05);">
-            <form method="GET" action="{{ route('appointments.revenue.index') }}" class="d-flex flex-wrap align-items-center gap-2">
-                <input type="hidden" name="staff_id" value="{{ $staffId }}">
-                <span class="text-muted small fw-semibold">Check total expenses between</span>
-                <input type="date" name="from" class="fin-date-input" style="height:32px;" value="{{ $from->format('Y-m-d') }}">
-                <span class="text-muted small">and</span>
-                <input type="date" name="to" class="fin-date-input" style="height:32px;" value="{{ $to->format('Y-m-d') }}">
-                <span class="text-muted small">for</span>
-                <select name="branch" class="fin-branch-select" style="height:32px;">
-                    <option value="">All Branches</option>
-                    @foreach ($branches as $key => $label)
-                        <option value="{{ $key }}" {{ $branch === $key ? 'selected' : '' }}>{{ $label }}</option>
-                    @endforeach
-                </select>
-                <button type="submit" class="btn btn-sm btn-primary">Filter</button>
-            </form>
-            <span class="ms-auto fw-bold">
-                Total for {{ $from->format('d M') }} &ndash; {{ $to->format('d M Y') }}: {{ number_format($totalExpenses, 2) }} QAR
-            </span>
         </div>
         <div class="table-responsive">
             <table class="table fin-table">
@@ -631,6 +710,8 @@
             </table>
         </div>
     </div>
+    </div>
+    <!-- /TAB 3: EXPENSES -->
 
     <!-- ADD EXPENSE MODAL -->
     @moduleEdit('finance')
@@ -786,5 +867,62 @@
             tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
             grid: { borderColor: 'rgba(217, 143, 131,0.16)' },
         }).render();
+
+        // Multi-tab switching logic
+        const finTabBtns = document.querySelectorAll('.fin-tab-btn');
+        const finTabPanes = document.querySelectorAll('.fin-tab-pane');
+        const finActiveTabInput = document.getElementById('finActiveTab');
+        const staffFilterWrapper = document.getElementById('staff-filter-wrapper');
+        const finShowingSummary = document.getElementById('finShowingSummary');
+        const finHeaderStaffChip = document.getElementById('finHeaderStaffChip');
+
+        function syncTabFilterUI(tab) {
+            const isSalesLedger = tab === 'sales-ledger';
+
+            if (staffFilterWrapper) {
+                staffFilterWrapper.classList.toggle('d-none', !isSalesLedger);
+            }
+
+            if (finHeaderStaffChip) {
+                finHeaderStaffChip.classList.toggle('d-none', !isSalesLedger);
+            }
+
+            if (finShowingSummary) {
+                const baseSummary = finShowingSummary.dataset.baseSummary || '';
+                const staffName = finShowingSummary.dataset.staffName || '';
+                finShowingSummary.textContent = (isSalesLedger && staffName)
+                    ? `${baseSummary} | ${staffName}`
+                    : baseSummary;
+            }
+        }
+
+        // Run on initial page load so Staff dropdown and Showing summary match the initial tab
+        syncTabFilterUI(finActiveTabInput ? finActiveTabInput.value : 'overview');
+
+        finTabBtns.forEach(btn => {
+            btn.addEventListener('click', function () {
+                const tab = this.dataset.tab;
+
+                finTabBtns.forEach(b => b.classList.toggle('active', b === this));
+
+                finTabPanes.forEach(pane => {
+                    pane.classList.toggle('d-none', pane.id !== 'fin-tab-' + tab);
+                });
+
+                if (finActiveTabInput) {
+                    finActiveTabInput.value = tab;
+                }
+
+                syncTabFilterUI(tab);
+
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', tab);
+                history.replaceState(null, '', url.toString());
+
+                if (tab === 'overview') {
+                    window.dispatchEvent(new Event('resize'));
+                }
+            });
+        });
     </script>
 @endsection

@@ -46,11 +46,16 @@ class StaffNotice extends Model
 
     public function toEditPayload(): array
     {
+        $complaint = $this->complaint;
+
         return array_merge($this->only(['id', 'staff_id', 'complaint_id', 'type', 'subject', 'description', 'corrective_actions', 'acknowledged']), [
             'notice_date' => $this->notice_date->format('Y-m-d'),
             'notice_date_label' => $this->notice_date->format('d M Y'),
             'staff_name' => $this->staff->name ?? '—',
-            'complaint_reference' => $this->complaint->reference_number ?? null,
+            'complaint_reference' => $complaint->reference_number ?? null,
+            'client_name' => $complaint?->customer?->name ?? $complaint?->customer_name ?? '—',
+            'service_received' => $complaint?->service?->name ?? '—',
+            'appt_date' => $complaint?->complaint_date?->format('d M Y') ?? '—',
         ]);
     }
 }

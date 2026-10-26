@@ -53,12 +53,29 @@ class StaffOvertimeController extends Controller
 
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'staff_id' => ['required', Rule::exists('staff', 'id')],
             'entry_date' => 'required|date',
-            'hours' => 'required|numeric|min:0.25|max:24',
+            'hours' => 'nullable|numeric|min:0|max:24',
+            'minutes' => 'nullable|integer|min:0|max:59',
             'rate' => 'nullable|numeric|min:0',
+            'customer_name' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:255',
         ]);
+
+        $hoursInput = (float) ($data['hours'] ?? 0);
+        $minutesInput = (int) ($data['minutes'] ?? 0);
+        unset($data['minutes']);
+
+        $totalDecimalHours = round($hoursInput + ($minutesInput / 60), 2);
+        if ($totalDecimalHours <= 0 || $totalDecimalHours > 24) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'hours' => ['Total overtime duration must be between 1 minute and 24 hours.'],
+            ]);
+        }
+
+        $data['hours'] = $totalDecimalHours;
+
+        return $data;
     }
 }

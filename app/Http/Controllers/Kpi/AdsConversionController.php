@@ -11,13 +11,9 @@ class AdsConversionController extends Controller
 {
     public function index(Request $request)
     {
-        $activeTab = in_array($request->query('tab'), ['leads', 'reports', 'analytics'], true)
-            ? $request->query('tab')
+        $activeTab = in_array($request->query('tab'), ['analytics', 'reports'], true)
+            ? 'analytics'
             : 'leads';
-
-        $reports = KpiAdsConversionReport::orderByDesc('date_to')->orderByDesc('id')
-            ->paginate(15)
-            ->appends(['tab' => 'reports']);
 
         $entriesFrom = $request->date('entries_from');
         $entriesTo = $request->date('entries_to');
@@ -53,6 +49,14 @@ class AdsConversionController extends Controller
             'date_to' => $analyticsTo,
         ]);
 
+        $reports = KpiAdsConversionReport::orderByDesc('date_to')->orderByDesc('id')
+            ->paginate(15, ['*'], 'reports_page')
+            ->appends(array_filter([
+                'analytics_from' => $request->filled('analytics_from') ? $analyticsFrom->format('Y-m-d') : null,
+                'analytics_to' => $request->filled('analytics_to') ? $analyticsTo->format('Y-m-d') : null,
+                'tab' => 'analytics',
+            ]));
+
         return view('kpi.ads.index', compact(
             'reports', 'adLeadEntries', 'categories', 'branches', 'entriesFrom', 'entriesTo',
             'analyticsReport', 'analyticsFrom', 'analyticsTo', 'activeTab'
@@ -66,13 +70,13 @@ class AdsConversionController extends Controller
             'date_to' => 'required|date|after_or_equal:date_from',
         ]);
 
-        $report = KpiAdsConversionReport::create([
+        KpiAdsConversionReport::create([
             'date_from' => $validated['date_from'],
             'date_to' => $validated['date_to'],
             'created_by' => auth()->id(),
         ]);
 
-        return redirect()->route('kpi.ads.show', $report)->with('success', 'Ads conversion report generated from the lead log.');
+        return redirect()->route('kpi.ads.index', ['tab' => 'analytics'])->with('success', 'Ads conversion report generated from the lead log.');
     }
 
     public function show(KpiAdsConversionReport $report)
@@ -84,6 +88,6 @@ class AdsConversionController extends Controller
     {
         $report->delete();
 
-        return redirect()->route('kpi.ads.index', ['tab' => 'reports'])->with('success', 'Report deleted.');
+        return redirect()->route('kpi.ads.index', ['tab' => 'analytics'])->with('success', 'Report deleted.');
     }
 }

@@ -122,6 +122,7 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('module:staff_management,edit')->group(function () {
         Route::post('/staffs', [StaffController::class, 'store'])->name('staffs.store');
         Route::put('/staffs/{staff}', [StaffController::class, 'update'])->name('staffs.update');
+        Route::put('/staffs/{staff}/wages', [StaffController::class, 'updateWages'])->name('staffs.wages.update');
         Route::put('/staffs/{staff}/workspace', [StaffController::class, 'updateWorkspace'])->name('staffs.workspace.update');
         Route::delete('/staffs/{staff}', [StaffController::class, 'destroy'])->name('staffs.destroy');
         Route::post('/scheduled-shifts/{staff}/pattern', [ShiftController::class, 'savePattern'])->name('shifts.pattern.store');
@@ -135,6 +136,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/staff-complaints', [StaffComplaintController::class, 'store'])->name('staff-complaints.store');
         Route::put('/staff-complaints/{staffComplaint}', [StaffComplaintController::class, 'update'])->name('staff-complaints.update');
         Route::delete('/staff-complaints/{staffComplaint}', [StaffComplaintController::class, 'destroy'])->name('staff-complaints.destroy');
+        Route::post('/staff-complaints/{staffComplaint}/resolve', [StaffComplaintController::class, 'resolve'])->name('staff-complaints.resolve');
+        Route::post('/complaints/{staffComplaint}/resolve', [StaffComplaintController::class, 'resolve'])->name('complaints.resolve');
         Route::post('/staff-complaints/{staffComplaint}/generate-notice', [StaffComplaintController::class, 'generateNotice'])->name('staff-complaints.generate-notice');
         Route::post('/staff-complaints/{staffComplaint}/draft-notice-ai', [StaffComplaintController::class, 'draftNoticeAi'])->name('staff-complaints.draft-notice-ai');
 

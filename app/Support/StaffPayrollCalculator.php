@@ -73,15 +73,22 @@ class StaffPayrollCalculator
     /** One computed payroll row per staff member. */
     public function rowFor(Staff $staff): array
     {
+        $overtimeEntries = $this->overtimeEntriesFor($staff)->sortByDesc('entry_date')->values();
+        $deductionEntries = $this->deductionsFor($staff)->load('complaint')->sortByDesc('deduction_date')->values();
+
         return [
             'staff_id' => $staff->id,
             'name' => $staff->name,
             'branch' => $staff->branch,
             'base_salary' => $this->baseSalary($staff),
+            'hourly_wage' => (float) ($staff->hourly_wage ?? 0),
+            'commission_rate' => (float) ($staff->commission_rate ?? 0),
             'overtime_hours' => $this->overtimeHours($staff),
             'overtime_pay' => $this->overtimePay($staff),
             'deductions' => $this->deductionsTotal($staff),
             'net_salary' => $this->netSalary($staff),
+            'overtime_entries' => $overtimeEntries,
+            'deduction_entries' => $deductionEntries,
         ];
     }
 

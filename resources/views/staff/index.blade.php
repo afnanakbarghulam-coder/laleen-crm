@@ -427,6 +427,39 @@
         font-size: 11px;
         color: var(--luxe-muted);
     }
+
+    .payroll-summary-row {
+        cursor: pointer;
+        transition: background-color .15s ease;
+    }
+
+    .payroll-summary-row:hover {
+        background-color: rgba(217, 143, 131, 0.06);
+    }
+
+    .payroll-chevron {
+        display: inline-block;
+        transition: transform .2s ease;
+        color: var(--luxe-muted);
+    }
+
+    .payroll-summary-row[aria-expanded="true"] .payroll-chevron {
+        transform: rotate(90deg);
+        color: var(--luxe-accent);
+    }
+
+    .payroll-detail-row > td {
+        background: rgba(20, 16, 14, 0.45);
+        border-bottom: 1px solid var(--luxe-border-strong);
+    }
+
+    .payroll-subcard {
+        border: 1px solid rgba(217, 143, 131, 0.16);
+        border-radius: 10px;
+        background: rgba(36, 30, 28, 0.65);
+        padding: 12px 14px;
+        height: 100%;
+    }
 </style>
 
 @section('content')
@@ -436,7 +469,7 @@
             <p class="text-muted small mb-0">Manage your staff, payroll, operations, and CRM access.</p>
         </div>
         @moduleEdit('staff_management')
-            <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#addStaffModal" onclick="resetStaffForm()">
+            <button id="globalAddStaffBtn" class="btn btn-dark {{ $activeTab === 'directory' ? '' : 'd-none' }}" data-bs-toggle="modal" data-bs-target="#addStaffModal" onclick="resetStaffForm()">
                 <i class="bx bx-plus me-1"></i> Add
             </button>
         @endmoduleEdit
@@ -454,8 +487,7 @@
         <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'directory' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="directory">Staff Directory</button>
         <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'workspace' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="workspace">Staff Workspace</button>
         <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'payroll' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="payroll">Payroll &amp; Overtime</button>
-        <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'complaints' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="complaints">Complaints &amp; Deductions</button>
-        <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'notices' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="notices">Notices</button>
+        <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'complaints' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="complaints">HR &amp; Disciplinary</button>
     </div>
 
     {{-- ================= STAFF DIRECTORY ================= --}}
@@ -737,8 +769,17 @@
     {{-- ================= PAYROLL & OVERTIME ================= --}}
     <div id="staff-pane-payroll" class="staff-tab-pane {{ $activeTab === 'payroll' ? '' : 'd-none' }}">
         <div class="mb-3">
-            <h6 class="fw-bold mb-1">Payroll</h6>
-            <p class="text-muted small mb-3">Net Salary = Base Salary + Overtime Pay &minus; Deductions. Commission is never part of this calculation.</p>
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                <div>
+                    <h6 class="fw-bold mb-1">Payroll &amp; Wage Settings</h6>
+                    <p class="text-muted small mb-0">Net Salary = Base Salary + Overtime Pay &minus; Deductions. Click any staff row to expand their overtime entries and deductions for the selected date range.</p>
+                </div>
+                @moduleEdit('staff_management')
+                    <button type="button" class="btn btn-primary btn-sm" onclick="openLogOvertimeModal()">
+                        <i class="bx bx-plus me-1"></i> Log Overtime
+                    </button>
+                @endmoduleEdit
+            </div>
 
             <form method="GET" action="{{ route('staffs.index') }}" class="row g-3 align-items-end">
                 <input type="hidden" name="tab" value="payroll">
@@ -767,11 +808,10 @@
 
         <div class="card mb-4">
             <div class="table-responsive">
-                <table class="table team-table align-middle mb-0">
+                <table class="table team-table align-middle mb-0" id="payrollAccordionTable">
                     <thead>
                         <tr>
                             <th>Staff</th>
-                            <th>Branch</th>
                             <th class="text-end">Base Salary</th>
                             <th class="text-end">Overtime Hours</th>
                             <th class="text-end">Overtime Pay</th>
@@ -781,203 +821,230 @@
                     </thead>
                     <tbody>
                         @forelse ($payrollRows as $row)
-                            <tr>
-                                <td class="team-name">{{ $row['name'] }}</td>
-                                <td>{{ ucwords(str_replace('_', ' ', $row['branch'])) }}</td>
-                                <td class="text-end">QAR {{ number_format($row['base_salary'], 2) }}</td>
+                            @php
+                                $rowOtEntries = $row['overtime_entries'] ?? collect();
+                                $rowDedEntries = $row['deduction_entries'] ?? collect();
+                            @endphp
+                            <tr class="payroll-summary-row" data-bs-toggle="collapse" data-bs-target="#payroll-details-{{ $row['staff_id'] }}" aria-expanded="false" aria-controls="payroll-details-{{ $row['staff_id'] }}">
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="bx bx-chevron-right payroll-chevron me-2"></i>
+                                        <div>
+                                            <div class="team-name">{{ $row['name'] }}</div>
+                                            <div class="text-muted small">{{ ucwords(str_replace('_', ' ', $row['branch'])) }}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    QAR {{ number_format($row['base_salary'], 2) }}
+                                    @moduleEdit('staff_management')
+                                        <button type="button" class="btn btn-sm btn-link text-warning p-0 ms-1"
+                                            title="Quick-edit wages &amp; commission"
+                                            onclick='event.stopPropagation(); openEditWagesModal({{ $row["staff_id"] }}, @json($row["name"]), {{ (float) $row["base_salary"] }}, {{ (float) $row["hourly_wage"] }}, {{ (float) $row["commission_rate"] }})'>
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                    @endmoduleEdit
+                                </td>
                                 <td class="text-end">{{ number_format($row['overtime_hours'], 2) }}</td>
                                 <td class="text-end">QAR {{ number_format($row['overtime_pay'], 2) }}</td>
                                 <td class="text-end text-danger">- QAR {{ number_format($row['deductions'], 2) }}</td>
                                 <td class="text-end fw-bold">QAR {{ number_format($row['net_salary'], 2) }}</td>
                             </tr>
-                        @empty
-                            <tr><td colspan="7" class="text-center text-muted py-4">No active staff match this branch filter.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <h6 class="fw-bold mb-3">Overtime ledger</h6>
-        <div class="card p-0 mb-3" style="overflow:hidden;">
-            <div class="table-responsive">
-                <table class="table team-table mb-0" id="overtimeTable">
-                    <thead>
-                        <tr>
-                            <th style="min-width:130px;">Date</th>
-                            <th style="min-width:160px;">Staff</th>
-                            <th style="min-width:90px;">Hours</th>
-                            <th style="min-width:110px;">Rate (QAR/hr)</th>
-                            <th style="min-width:100px;">Pay</th>
-                            <th style="min-width:150px;">Note</th>
-                            <th style="min-width:90px;"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @moduleEdit('staff_management')
-                            <tr class="staff-quick-add-row" id="otQuickAddRow">
-                                <td><input type="date" class="form-control form-control-sm" id="otQaDate" value="{{ now()->format('Y-m-d') }}"></td>
-                                <td>
-                                    <select class="form-select form-select-sm" id="otQaStaff">
-                                        <option value="">Select staff</option>
-                                        @foreach ($allStaff as $s)
-                                            <option value="{{ $s->id }}">{{ $s->name }}</option>
-                                        @endforeach
-                                    </select>
-                                </td>
-                                <td><input type="number" min="0.25" max="24" step="0.25" class="form-control form-control-sm" id="otQaHours" placeholder="Hours"></td>
-                                <td><input type="number" min="0" step="0.01" class="form-control form-control-sm" id="otQaRate" placeholder="Default"></td>
-                                <td class="text-muted small">—</td>
-                                <td><input type="text" class="form-control form-control-sm" id="otQaNote" placeholder="Note"></td>
-                                <td class="text-end">
-                                    <button type="button" class="btn btn-sm btn-primary" id="otQaSaveBtn" title="Add entry"><i class="bx bx-plus"></i></button>
-                                </td>
-                            </tr>
-                        @endmoduleEdit
-
-                        @forelse ($overtimeEntries as $entry)
-                            <tr data-entry-row="{{ $entry->id }}" data-entry='@json($entry->toEditPayload())'>
-                                <td>{{ $entry->entry_date->format('d M Y') }}</td>
-                                <td class="fw-semibold">{{ $entry->staff->name ?? '—' }}</td>
-                                <td>{{ $entry->hours }}</td>
-                                <td>{{ $entry->rate !== null ? 'QAR ' . number_format($entry->rate, 2) : 'Default' }}</td>
-                                <td>QAR {{ number_format($entry->pay(), 2) }}</td>
-                                <td>{{ $entry->note ?: '—' }}</td>
-                                <td class="text-end">
-                                    @moduleEdit('staff_management')
-                                        <div class="d-flex gap-1 justify-content-end">
-                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="startEditOt({{ $entry->id }})" title="Edit"><i class="bi bi-pencil-square"></i></button>
-                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteOt({{ $entry->id }})" title="Delete"><i class="bi bi-trash"></i></button>
+                            <tr class="collapse payroll-detail-row" id="payroll-details-{{ $row['staff_id'] }}">
+                                <td colspan="6" class="p-3">
+                                    <div class="row g-3">
+                                        <div class="col-lg-6">
+                                            <div class="payroll-subcard">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="fw-bold small text-uppercase text-muted">
+                                                        <i class="bx bx-time-five me-1"></i> Overtime Entries ({{ $payrollFrom->format('d M Y') }} &ndash; {{ $payrollTo->format('d M Y') }})
+                                                    </span>
+                                                    @moduleEdit('staff_management')
+                                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2"
+                                                            onclick="openLogOvertimeModal({{ $row['staff_id'] }})">
+                                                            <i class="bx bx-plus"></i> Add Overtime
+                                                        </button>
+                                                    @endmoduleEdit
+                                                </div>
+                                                @if ($rowOtEntries->count())
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm mb-0 align-middle">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Date</th>
+                                                                    <th class="text-end">Hours</th>
+                                                                    <th class="text-end">Rate</th>
+                                                                    <th class="text-end">Pay</th>
+                                                                    <th>Customer</th>
+                                                                    <th>Note</th>
+                                                                    <th></th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach ($rowOtEntries as $entry)
+                                                                    <tr data-ot-row="{{ $entry->id }}">
+                                                                        <td class="text-nowrap">{{ $entry->entry_date->format('d M Y') }}</td>
+                                                                        <td class="text-end">{{ number_format($entry->hours, 2) }}</td>
+                                                                        <td class="text-end">{{ $entry->rate !== null ? 'QAR ' . number_format($entry->rate, 2) : 'Default' }}</td>
+                                                                        <td class="text-end fw-semibold">QAR {{ number_format($entry->pay(), 2) }}</td>
+                                                                        <td class="small">{{ $entry->customer_name ?: '—' }}</td>
+                                                                        <td class="small text-muted">{{ $entry->note ?: '—' }}</td>
+                                                                        <td class="text-end">
+                                                                            @moduleEdit('staff_management')
+                                                                                <button type="button" class="btn btn-sm btn-link text-danger p-0"
+                                                                                    onclick="deleteOt({{ $entry->id }})" title="Delete overtime entry">
+                                                                                    <i class="bi bi-trash"></i>
+                                                                                </button>
+                                                                            @endmoduleEdit
+                                                                        </td>
+                                                                    </tr>
+                                                                @endforeach
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                @else
+                                                    <p class="text-muted small mb-0">No overtime entries for {{ $row['name'] }} in this period.</p>
+                                                @endif
+                                            </div>
                                         </div>
-                                    @endmoduleEdit
+
+                                        <div class="col-lg-6">
+                                            <div class="payroll-subcard">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="fw-bold small text-uppercase text-muted">
+                                                        <i class="bx bx-minus-circle me-1"></i> Deductions ({{ $payrollFrom->format('d M Y') }} &ndash; {{ $payrollTo->format('d M Y') }})
+                                                    </span>
+                                                    <span class="small text-danger fw-semibold">Total: - QAR {{ number_format($row['deductions'], 2) }}</span>
+                                                </div>
+                                                @if ($rowDedEntries->count())
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm mb-0 align-middle">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Date</th>
+                                                                    <th class="text-end">Amount</th>
+                                                                    <th>Reason</th>
+                                                                    <th>Complaint Ref</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach ($rowDedEntries as $deduction)
+                                                                    <tr>
+                                                                        <td class="text-nowrap">{{ $deduction->deduction_date->format('d M Y') }}</td>
+                                                                        <td class="text-end text-danger fw-semibold">- QAR {{ number_format($deduction->amount, 2) }}</td>
+                                                                        <td>{{ $deduction->reason }}</td>
+                                                                        <td>
+                                                                            @if ($deduction->complaint)
+                                                                                <span class="ref-badge">{{ $deduction->complaint->reference_number }}</span>
+                                                                            @else
+                                                                                <span class="text-muted small">—</span>
+                                                                            @endif
+                                                                        </td>
+                                                                    </tr>
+                                                                @endforeach
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                @else
+                                                    <p class="text-muted small mb-0">No deductions recorded for {{ $row['name'] }} in this period.</p>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                         @empty
-                            <tr id="otEmptyRow"><td colspan="7" class="text-center text-muted py-4">No overtime entries logged for this range.</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted py-4">No active staff match this branch filter.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
-        <div class="mb-4">{{ $overtimeEntries->links() }}</div>
     </div>
 
-    {{-- ================= COMPLAINTS & DEDUCTIONS ================= --}}
+    {{-- ================= HR & DISCIPLINARY (COMPLAINTS, DEDUCTIONS & NOTICES) ================= --}}
     <div id="staff-pane-complaints" class="staff-tab-pane {{ $activeTab === 'complaints' ? '' : 'd-none' }}">
-        <form method="GET" action="{{ route('staffs.index') }}" class="row g-3 align-items-end mb-4">
-            <input type="hidden" name="tab" value="complaints">
-            <div class="col-md-4">
-                <label class="form-label">Staff member</label>
-                <select name="complaints_staff" class="form-select">
-                    <option value="">All staff</option>
-                    @foreach ($allStaff as $s)
-                        <option value="{{ $s->id }}" {{ $complaintsStaffFilter === $s->id ? 'selected' : '' }}>{{ $s->name }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="col-md-3 d-flex gap-2">
-                <button type="submit" class="btn btn-primary w-100">Filter</button>
-                @if ($complaintsStaffFilter)
-                    <a href="{{ route('staffs.index', ['tab' => 'complaints']) }}" class="btn btn-outline-secondary w-100">Reset</a>
-                @endif
-            </div>
-        </form>
+        <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+            <form method="GET" action="{{ route('staffs.index') }}" class="row g-3 align-items-end flex-grow-1" style="max-width: 560px;">
+                <input type="hidden" name="tab" value="complaints">
+                <div class="col-md-7">
+                    <label class="form-label">Filter by staff member</label>
+                    <select name="complaints_staff" class="form-select">
+                        <option value="">All staff</option>
+                        @foreach ($allStaff as $s)
+                            <option value="{{ $s->id }}" {{ $complaintsStaffFilter === $s->id ? 'selected' : '' }}>{{ $s->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-5 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary w-100">Filter</button>
+                    @if ($complaintsStaffFilter)
+                        <a href="{{ route('staffs.index', ['tab' => 'complaints']) }}" class="btn btn-outline-secondary w-100">Reset</a>
+                    @endif
+                </div>
+            </form>
+
+            @moduleEdit('staff_management')
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#logComplaintModal">
+                        <i class="bx bx-plus me-1"></i> Log Complaint
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addDeductionModal">
+                        <i class="bx bx-plus me-1"></i> Add Deduction
+                    </button>
+                </div>
+            @endmoduleEdit
+        </div>
 
         <h6 class="fw-bold mb-1">Complaints &amp; Feedback</h6>
-        <p class="text-muted small mb-3">Deduction Applied automatically syncs to that staff member's deductions total in Payroll &amp; Overtime.</p>
+        <p class="text-muted small mb-3">Click any incident row to expand its Full Incident Detail, What Happened &amp; Corrective Action, and HR Resolution panel.</p>
         <div class="card p-0 mb-3" style="overflow:hidden;">
             <div class="table-responsive">
                 <table class="table team-table mb-0" id="complaintsTable">
                     <thead>
                         <tr>
-                            <th style="min-width:110px;">Ref #</th>
+                            <th style="min-width:125px;">Ref #</th>
                             <th style="min-width:140px;">Date &amp; Time</th>
                             <th style="min-width:120px;">Branch</th>
-                            <th style="min-width:220px;">Client</th>
-                            <th style="min-width:160px;">Service Received</th>
-                            <th style="min-width:160px;">Category</th>
+                            <th style="min-width:200px;">Client</th>
+                            <th style="min-width:150px;">Service Received</th>
+                            <th style="min-width:150px;">Category</th>
                             <th style="min-width:150px;">Staff Involved</th>
-                            <th style="min-width:130px;">Deduction</th>
-                            <th style="min-width:220px;">Feedback / Complaint Detail</th>
-                            <th style="min-width:170px;"></th>
+                            <th style="min-width:120px;">Deduction</th>
+                            <th style="min-width:200px;">What Happened</th>
+                            <th style="min-width:130px;"></th>
                         </tr>
                     </thead>
                     <tbody>
-                        @moduleEdit('staff_management')
-                            <tr class="staff-quick-add-row" id="coQuickAddRow">
-                                <td class="text-muted small">Auto</td>
-                                <td>
-                                    <input type="date" class="form-control form-control-sm mb-1" id="coQaDate" value="{{ now()->format('Y-m-d') }}">
-                                    <input type="time" class="form-control form-control-sm" id="coQaTime" value="{{ now()->format('H:i') }}">
-                                </td>
-                                <td>
-                                    <select class="form-select form-select-sm" id="coQaBranch">
-                                        <option value="">Select branch</option>
-                                        @foreach (\App\Models\StaffComplaint::BRANCHES as $val => $label)
-                                            <option value="{{ $val }}">{{ $label }}</option>
-                                        @endforeach
-                                    </select>
-                                </td>
-                                <td>
-                                    <div class="client-picker">
-                                        <input type="text" class="form-control form-control-sm" id="coQaClientQuery" placeholder="Search client (name/phone)" autocomplete="off">
-                                        <input type="hidden" id="coQaClientName">
-                                        <input type="hidden" id="coQaClientPhone">
-                                        <div class="client-picker-results d-none" id="coQaClientResults"></div>
-                                    </div>
-                                    <button type="button" class="btn btn-link btn-sm p-0 mt-1" onclick="openQuickAddClientModal('coQa')">+ Add new client</button>
-                                </td>
-                                <td>
-                                    <select class="form-select form-select-sm" id="coQaService">
-                                        <option value="">Select service</option>
-                                        @foreach ($services as $svc)
-                                            <option value="{{ $svc->id }}">{{ $svc->name }}</option>
-                                        @endforeach
-                                    </select>
-                                </td>
-                                <td>
-                                    <select class="form-select form-select-sm" id="coQaCategory">
-                                        @foreach (\App\Models\StaffComplaint::CATEGORIES as $cat)
-                                            <option value="{{ $cat }}">{{ $cat }}</option>
-                                        @endforeach
-                                    </select>
-                                </td>
-                                <td>
-                                    <div class="staff-tagselect" id="coQaStaffWrap">
-                                        <div class="staff-tagselect-control" onclick="toggleStaffDropdown('coQa')">
-                                            <div class="staff-tagselect-chips" id="coQaStaffChips">
-                                                <span class="staff-tagselect-placeholder">Select staff...</span>
-                                            </div>
-                                            <i class="bx bx-chevron-down"></i>
-                                        </div>
-                                        <div class="staff-tagselect-dropdown d-none" id="coQaStaffDropdown">
-                                            <input type="text" class="form-control form-control-sm" placeholder="Search staff..." id="coQaStaffSearch" oninput="filterStaffOptions('coQa')">
-                                            <div class="staff-tagselect-options" id="coQaStaffOptions"></div>
-                                        </div>
-                                        <input type="hidden" data-field="staff_ids" data-multi="1" id="coQaStaffValue" value="">
-                                    </div>
-                                </td>
-                                <td>
-                                    <select class="form-select form-select-sm" id="coQaDeductionApplied" onchange="toggleDeductionAmount('coQa', this.value)">
-                                        <option value="N">No</option>
-                                        <option value="Y">Yes</option>
-                                    </select>
-                                    <input type="number" min="0" step="0.01" class="form-control form-control-sm mt-1 d-none" id="coQaDeductionAmount" placeholder="QAR">
-                                </td>
-                                <td><input type="text" class="form-control form-control-sm" id="coQaDescription" placeholder="Feedback / complaint detail"></td>
-                                <td class="text-end">
-                                    <button type="button" class="btn btn-sm btn-primary" id="coQaSaveBtn" title="Add complaint"><i class="bx bx-plus"></i></button>
-                                </td>
-                            </tr>
-                        @endmoduleEdit
-
                         @forelse ($complaints as $complaint)
-                            <tr data-entry-row="{{ $complaint->id }}" data-entry='@json($complaint->toEditPayload())'>
+                            @php
+                                $incidentDeductions = $complaint->deductions ?? collect();
+                                $incidentNotices = $complaint->notices ?? collect();
+                                $isResolved = $complaint->is_staff_mistake !== null || $incidentNotices->count() > 0;
+                                $whatHappenedText = $complaint->what_happened ?: $complaint->description;
+                                $clientDisplayName = $complaint->customer->name ?? $complaint->customer_name ?: '—';
+                                $serviceDisplayName = $complaint->service->name ?? '—';
+                                $apptDateDisplay = $complaint->complaint_date->format('d M Y');
+                                $noticePayloads = $incidentNotices->map(fn ($n) => array_merge($n->toEditPayload(), [
+                                    'client_name' => $clientDisplayName,
+                                    'service_received' => $serviceDisplayName,
+                                    'appt_date' => $apptDateDisplay,
+                                ]))->values();
+                            @endphp
+                            <tr class="payroll-summary-row" data-entry-row="{{ $complaint->id }}" data-entry='@json($complaint->toEditPayload())'
+                                data-bs-toggle="collapse" data-bs-target="#complaint-details-{{ $complaint->id }}" aria-expanded="false" aria-controls="complaint-details-{{ $complaint->id }}">
                                 <td>
-                                    <span class="ref-badge">{{ $complaint->reference_number }}</span>
-                                    @if ($complaint->notices()->count())
-                                        <div class="text-muted small mt-1">{{ $complaint->notices()->count() }} notice{{ $complaint->notices()->count() > 1 ? 's' : '' }}</div>
-                                    @endif
+                                    <div class="d-flex align-items-center">
+                                        <i class="bx bx-chevron-right payroll-chevron me-1"></i>
+                                        <div>
+                                            <span class="ref-badge">{{ $complaint->reference_number }}</span>
+                                            @if ($isResolved)
+                                                <div class="mt-1"><span class="status-badge resolved">Resolved</span></div>
+                                            @else
+                                                <div class="mt-1"><span class="status-badge open">Pending HR</span></div>
+                                            @endif
+                                        </div>
+                                    </div>
                                 </td>
                                 <td>{{ $complaint->complaint_date->format('d M Y') }}<div class="text-muted small">{{ $complaint->timeLabel() }}</div></td>
                                 <td>{{ \App\Models\StaffComplaint::BRANCHES[$complaint->branch] ?? $complaint->branch }}</td>
@@ -992,15 +1059,281 @@
                                         <span class="text-muted small">No</span>
                                     @endif
                                 </td>
-                                <td>{{ $complaint->description }}</td>
-                                <td class="text-end">
+                                <td>{{ \Illuminate\Support\Str::limit($whatHappenedText, 70) }}</td>
+                                <td class="text-end" onclick="event.stopPropagation();">
                                     @moduleEdit('staff_management')
                                         <div class="d-flex gap-1 justify-content-end">
-                                            <button type="button" class="btn btn-sm btn-outline-info" onclick="openGenerateNoticeModal({{ $complaint->id }})" title="Generate staff notice"><i class="bi bi-file-earmark-text"></i></button>
-                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="startEditCo({{ $complaint->id }})" title="Edit"><i class="bi bi-pencil-square"></i></button>
-                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteCo({{ $complaint->id }})" title="Delete"><i class="bi bi-trash"></i></button>
+                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="event.stopPropagation(); openEditComplaintModal({{ $complaint->id }})" title="Edit What Happened &amp; Corrective Action"><i class="bi bi-pencil-square"></i></button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation(); deleteCo({{ $complaint->id }})" title="Delete"><i class="bi bi-trash"></i></button>
                                         </div>
                                     @endmoduleEdit
+                                </td>
+                            </tr>
+                            <tr class="collapse payroll-detail-row" id="complaint-details-{{ $complaint->id }}">
+                                <td colspan="10" class="p-3">
+                                    <div class="row g-3">
+                                        <!-- Section 1 (Left): Full Incident Detail (static meta-data) -->
+                                        <div class="col-lg-3">
+                                            <div class="payroll-subcard">
+                                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                                    <span class="fw-bold small text-uppercase text-muted">
+                                                        <i class="bx bx-info-circle me-1"></i> Full Incident Detail
+                                                    </span>
+                                                    <span class="ref-badge">{{ $complaint->reference_number }}</span>
+                                                </div>
+                                                <div class="small d-flex flex-column gap-2">
+                                                    <div class="d-flex justify-content-between border-bottom border-secondary border-opacity-25 pb-1">
+                                                        <span class="text-muted">Client</span>
+                                                        <span class="fw-semibold text-end">{{ $complaint->customer_name }} <span class="text-muted">({{ $complaint->customer_phone ?: '—' }})</span></span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between border-bottom border-secondary border-opacity-25 pb-1">
+                                                        <span class="text-muted">Service</span>
+                                                        <span class="fw-semibold text-end">{{ $complaint->service->name ?? '—' }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between border-bottom border-secondary border-opacity-25 pb-1">
+                                                        <span class="text-muted">Category</span>
+                                                        <span class="fw-semibold text-end">{{ $complaint->category }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between border-bottom border-secondary border-opacity-25 pb-1">
+                                                        <span class="text-muted">Branch &amp; Date</span>
+                                                        <span class="text-end">{{ \App\Models\StaffComplaint::BRANCHES[$complaint->branch] ?? $complaint->branch }} &bull; {{ $complaint->complaint_date->format('d M Y') }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="text-muted">Staff Involved</span>
+                                                        <span class="fw-semibold text-end">{{ $complaint->staffMembers->pluck('name')->implode(', ') ?: '—' }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Section 2 (Middle): What Happened & Corrective Action -->
+                                        <div class="col-lg-4">
+                                            <div class="payroll-subcard d-flex flex-column gap-3">
+                                                <div>
+                                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                                        <span class="fw-bold small text-uppercase text-muted">
+                                                            <i class="bx bx-message-square-detail me-1"></i> What Happened
+                                                        </span>
+                                                        @moduleEdit('staff_management')
+                                                            <button type="button" class="btn btn-sm btn-link text-warning p-0"
+                                                                onclick="openEditComplaintModal({{ $complaint->id }})" title="Edit What Happened &amp; Corrective Action">
+                                                                <i class="bi bi-pencil-square"></i>
+                                                            </button>
+                                                        @endmoduleEdit
+                                                    </div>
+                                                    <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap; background: rgba(20, 16, 14, 0.35);">{{ $whatHappenedText ?: '—' }}</div>
+                                                </div>
+                                                <div>
+                                                    <div class="fw-bold small text-uppercase text-muted mb-1">
+                                                        <i class="bx bx-check-shield me-1"></i> Corrective Action to be taken
+                                                    </div>
+                                                    <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap; background: rgba(20, 16, 14, 0.35);">{{ $complaint->corrective_action ?: '—' }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Section 3 (Right): HR Resolution (Per-Staff Grid) -->
+                                        <div class="col-lg-5">
+                                            <div class="payroll-subcard" x-data="{ editMode: {{ $complaint->is_resolved ? 'false' : 'true' }} }">
+                                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                                    <span class="fw-bold small text-uppercase text-muted">
+                                                        <i class="bx bx-gavel me-1"></i> HR Resolution
+                                                    </span>
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        @if ($complaint->is_resolved)
+                                                            <span class="status-badge resolved">Resolved</span>
+                                                        @else
+                                                            <span class="status-badge open">Action Required</span>
+                                                        @endif
+                                                        @moduleEdit('staff_management')
+                                                            <button type="button" class="btn btn-sm btn-link text-warning p-0"
+                                                                x-show="!editMode" x-cloak
+                                                                @click="editMode = true"
+                                                                title="Edit HR Resolution">
+                                                                <i class="bi bi-pencil-square"></i>
+                                                            </button>
+                                                        @endmoduleEdit
+                                                    </div>
+                                                </div>
+
+                                                @php
+                                                    $initialStaffState = [];
+                                                    foreach ($complaint->staff as $staffMember) {
+                                                        $staffDed = $incidentDeductions->firstWhere('staff_id', $staffMember->id);
+                                                        $staffNotice = $incidentNotices->firstWhere('staff_id', $staffMember->id);
+                                                        $hasDed = $staffDed && $staffDed->amount > 0;
+                                                        $hasNotice = (bool) $staffNotice;
+                                                        $initialStaffState[$staffMember->id] = [
+                                                            'mistake' => ($hasDed || $hasNotice || $complaint->is_staff_mistake) ? 'yes' : 'no',
+                                                            'deduction' => $hasDed ? 'yes' : 'no',
+                                                            'deduction_amount' => $hasDed ? (float) $staffDed->amount : '',
+                                                            'notice' => $hasNotice,
+                                                            'corrective_action' => $staffNotice ? ($staffNotice->corrective_actions ?? '') : '',
+                                                        ];
+                                                    }
+                                                @endphp
+
+                                                <!-- Read-Only Saved State -->
+                                                <div x-show="!editMode" x-cloak class="small d-flex flex-column gap-2">
+                                                    @forelse ($complaint->staff as $staff)
+                                                        @php
+                                                            $staffDed = $incidentDeductions->firstWhere('staff_id', $staff->id);
+                                                            $staffNotice = $incidentNotices->firstWhere('staff_id', $staff->id);
+                                                            $hasDed = $staffDed && $staffDed->amount > 0;
+                                                            $hasNotice = (bool) $staffNotice;
+                                                            $staffMistake = ($hasDed || $hasNotice || $complaint->is_staff_mistake);
+                                                        @endphp
+                                                        <div class="p-2 rounded border border-secondary border-opacity-25" style="background: rgba(20, 16, 14, 0.35);">
+                                                            <div class="fw-semibold mb-1">{{ $staff->name }}</div>
+                                                            <div class="text-muted">
+                                                                Mistake: <span class="fw-semibold {{ $staffMistake ? 'text-warning' : 'text-body' }}">{{ $staffMistake ? 'Yes' : 'No' }}</span>
+                                                                | Deduction: <span class="fw-semibold {{ $hasDed ? 'text-danger' : 'text-body' }}">{{ $hasDed ? 'QAR ' . number_format($staffDed->amount, 2) : 'None' }}</span>
+                                                                | Notice: <span class="fw-semibold {{ $hasNotice ? 'text-info' : 'text-body' }}">{{ $hasNotice ? 'Issued' : 'None' }}</span>
+                                                            </div>
+                                                            @if ($hasNotice && !empty($staffNotice->corrective_actions))
+                                                                <div class="text-muted mt-1">
+                                                                    Corrective Action: <span class="text-body">{{ $staffNotice->corrective_actions }}</span>
+                                                                </div>
+                                                            @endif
+                                                        </div>
+                                                    @empty
+                                                        <p class="text-muted small mb-0">No staff members attached to this complaint.</p>
+                                                    @endforelse
+
+                                                    @if ($incidentNotices->count())
+                                                        <div class="mt-1">
+                                                            <a href="javascript:void(0)" class="btn btn-sm btn-outline-info w-100"
+                                                                onclick='openViewNoticeModal(@json($complaint->reference_number), @json($noticePayloads))'>
+                                                                <i class="bi bi-file-earmark-text me-1"></i> View Generated Staff Notice{{ $incidentNotices->count() > 1 ? 's (' . $incidentNotices->count() . ')' : '' }}
+                                                            </a>
+                                                        </div>
+                                                    @endif
+                                                </div>
+
+                                                <!-- Interactive Edit Form -->
+                                                <div x-show="editMode" x-cloak>
+                                                    @moduleEdit('staff_management')
+                                                        <form action="{{ route('complaints.resolve', $complaint->id) }}" method="POST" x-data="hrResolution(@js($initialStaffState))">
+                                                            @csrf
+                                                            <div class="d-flex flex-column gap-2 mb-3">
+                                                                @forelse ($complaint->staff as $staff)
+                                                                    <div class="p-2 rounded border border-secondary border-opacity-25" style="background: rgba(20, 16, 14, 0.35);">
+                                                                        <div class="row g-2 align-items-start">
+                                                                            <!-- Staff Name -->
+                                                                            <div class="col-md-3">
+                                                                                <label class="form-label small text-muted mb-1">Staff Member</label>
+                                                                                <div class="fw-semibold small pt-1">{{ $staff->name }}</div>
+                                                                            </div>
+
+                                                                            <!-- Pillar 1: Staff Mistake -->
+                                                                            <div class="col-md-3">
+                                                                                <label class="form-label small text-muted mb-1 d-block">Staff Mistake</label>
+                                                                                <div class="d-flex gap-2 align-items-center pt-1">
+                                                                                    <div class="form-check form-check-inline mb-0 me-1">
+                                                                                        <input class="form-check-input" type="radio"
+                                                                                            name="staff[{{ $staff->id }}][mistake]"
+                                                                                            id="mistakeYes-{{ $complaint->id }}-{{ $staff->id }}"
+                                                                                            value="yes"
+                                                                                            x-model="staff[{{ $staff->id }}].mistake">
+                                                                                        <label class="form-check-label small" for="mistakeYes-{{ $complaint->id }}-{{ $staff->id }}">Yes</label>
+                                                                                    </div>
+                                                                                    <div class="form-check form-check-inline mb-0">
+                                                                                        <input class="form-check-input" type="radio"
+                                                                                            name="staff[{{ $staff->id }}][mistake]"
+                                                                                            id="mistakeNo-{{ $complaint->id }}-{{ $staff->id }}"
+                                                                                            value="no"
+                                                                                            x-model="staff[{{ $staff->id }}].mistake">
+                                                                                        <label class="form-check-label small" for="mistakeNo-{{ $complaint->id }}-{{ $staff->id }}">No</label>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            <!-- Pillar 2: Deduction (strictly shown when Mistake == 'yes') -->
+                                                                            <div class="col-md-3" x-show="staff[{{ $staff->id }}].mistake == 'yes'" x-cloak>
+                                                                                <label class="form-label small text-muted mb-1 d-block">Deduction</label>
+                                                                                <div class="d-flex gap-2 align-items-center pt-1">
+                                                                                    <div class="form-check form-check-inline mb-0 me-1">
+                                                                                        <input class="form-check-input" type="radio"
+                                                                                            name="staff[{{ $staff->id }}][deduction]"
+                                                                                            id="dedYes-{{ $complaint->id }}-{{ $staff->id }}"
+                                                                                            value="yes"
+                                                                                            x-model="staff[{{ $staff->id }}].deduction">
+                                                                                        <label class="form-check-label small" for="dedYes-{{ $complaint->id }}-{{ $staff->id }}">Yes</label>
+                                                                                    </div>
+                                                                                    <div class="form-check form-check-inline mb-0">
+                                                                                        <input class="form-check-input" type="radio"
+                                                                                            name="staff[{{ $staff->id }}][deduction]"
+                                                                                            id="dedNo-{{ $complaint->id }}-{{ $staff->id }}"
+                                                                                            value="no"
+                                                                                            x-model="staff[{{ $staff->id }}].deduction">
+                                                                                        <label class="form-check-label small" for="dedNo-{{ $complaint->id }}-{{ $staff->id }}">No</label>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="mt-2" x-show="staff[{{ $staff->id }}].deduction == 'yes'" x-cloak>
+                                                                                    <input type="number" class="form-control form-control-sm"
+                                                                                        name="staff[{{ $staff->id }}][deduction_amount]"
+                                                                                        x-model="staff[{{ $staff->id }}].deduction_amount"
+                                                                                        min="0" step="0.01" placeholder="Amount (QAR)">
+                                                                                </div>
+                                                                            </div>
+
+                                                                            <!-- Pillar 3: Generate Notice (strictly shown when Mistake == 'yes') -->
+                                                                            <div class="col-md-3" x-show="staff[{{ $staff->id }}].mistake == 'yes'" x-cloak>
+                                                                                <label class="form-label small text-muted mb-1 d-block">Notice</label>
+                                                                                <div class="form-check pt-1 mb-0">
+                                                                                    <input class="form-check-input" type="checkbox"
+                                                                                        name="staff[{{ $staff->id }}][notice]"
+                                                                                        id="noticeChk-{{ $complaint->id }}-{{ $staff->id }}"
+                                                                                        value="1"
+                                                                                        x-model="staff[{{ $staff->id }}].notice">
+                                                                                    <label class="form-check-label small" for="noticeChk-{{ $complaint->id }}-{{ $staff->id }}">Generate Notice</label>
+                                                                                </div>
+                                                                                <div class="mt-2" x-show="staff[{{ $staff->id }}].notice == true" x-cloak>
+                                                                                    <label class="form-label small text-muted mb-1">Corrective action to be taken</label>
+                                                                                    <input type="text" class="form-control form-control-sm"
+                                                                                        name="staff[{{ $staff->id }}][corrective_action]"
+                                                                                        x-model="staff[{{ $staff->id }}].corrective_action"
+                                                                                        placeholder="Corrective action...">
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                @empty
+                                                                    <p class="text-muted small mb-0">No staff members attached to this complaint.</p>
+                                                                @endforelse
+                                                            </div>
+
+                                                            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                                                @if ($incidentNotices->count())
+                                                                    <a href="javascript:void(0)" class="btn btn-sm btn-outline-info"
+                                                                        onclick='openViewNoticeModal(@json($complaint->reference_number), @json($noticePayloads))'>
+                                                                        <i class="bi bi-file-earmark-text me-1"></i> View Notice{{ $incidentNotices->count() > 1 ? 's (' . $incidentNotices->count() . ')' : '' }}
+                                                                    </a>
+                                                                @else
+                                                                    <span></span>
+                                                                @endif
+
+                                                                <div class="d-flex gap-2 ms-auto">
+                                                                    @if ($complaint->is_resolved)
+                                                                        <button type="button" class="btn btn-outline-secondary btn-sm" @click="editMode = false">
+                                                                            Cancel
+                                                                        </button>
+                                                                    @endif
+                                                                    @if ($complaint->staff->count())
+                                                                        <button type="submit" class="btn btn-primary btn-sm">
+                                                                            <i class="bi bi-check2-circle me-1"></i> Save Resolutions
+                                                                        </button>
+                                                                    @endif
+                                                                </div>
+                                                            </div>
+                                                        </form>
+                                                    @else
+                                                        <p class="text-muted small mb-0">Pending HR resolution.</p>
+                                                    @endmoduleEdit
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                         @empty
@@ -1027,33 +1360,6 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @moduleEdit('staff_management')
-                            <tr class="staff-quick-add-row" id="dedQuickAddRow">
-                                <td><input type="date" class="form-control form-control-sm" id="dedQaDate" value="{{ now()->format('Y-m-d') }}"></td>
-                                <td>
-                                    <select class="form-select form-select-sm" id="dedQaStaff">
-                                        <option value="">Select staff</option>
-                                        @foreach ($allStaff as $s)
-                                            <option value="{{ $s->id }}">{{ $s->name }}</option>
-                                        @endforeach
-                                    </select>
-                                </td>
-                                <td><input type="number" min="0" step="0.01" class="form-control form-control-sm" id="dedQaAmount" placeholder="QAR"></td>
-                                <td><input type="text" class="form-control form-control-sm" id="dedQaReason" placeholder="Reason"></td>
-                                <td>
-                                    <select class="form-select form-select-sm" id="dedQaComplaint">
-                                        <option value="">No linked complaint</option>
-                                        @foreach ($openComplaints as $c)
-                                            <option value="{{ $c->id }}">{{ $c->reference_number }} — {{ $c->staffMembers->pluck('name')->implode(', ') ?: '—' }} ({{ $c->complaint_date->format('d M Y') }})</option>
-                                        @endforeach
-                                    </select>
-                                </td>
-                                <td class="text-end">
-                                    <button type="button" class="btn btn-sm btn-primary" id="dedQaSaveBtn" title="Add deduction"><i class="bx bx-plus"></i></button>
-                                </td>
-                            </tr>
-                        @endmoduleEdit
-
                         @forelse ($deductions as $deduction)
                             <tr data-entry-row="{{ $deduction->id }}" data-entry='@json($deduction->toEditPayload())'>
                                 <td>{{ $deduction->deduction_date->format('d M Y') }}</td>
@@ -1080,75 +1386,271 @@
         <div class="mb-4">{{ $deductions->links() }}</div>
     </div>
 
-    {{-- ================= NOTICES ================= --}}
-    <div id="staff-pane-notices" class="staff-tab-pane {{ $activeTab === 'notices' ? '' : 'd-none' }}">
-        <p class="text-muted small mb-3">Notices are drafted from the Complaints &amp; Feedback tab (via "Generate staff notice" on a complaint row) — they can be reviewed, edited, or removed here, but not created directly.</p>
-
-        <form method="GET" action="{{ route('staffs.index') }}" class="row g-3 align-items-end mb-4">
-            <input type="hidden" name="tab" value="notices">
-            <div class="col-md-4">
-                <label class="form-label">Staff member</label>
-                <select name="notices_staff" class="form-select">
-                    <option value="">All staff</option>
-                    @foreach ($allStaff as $s)
-                        <option value="{{ $s->id }}" {{ $noticesStaffFilter === $s->id ? 'selected' : '' }}>{{ $s->name }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="col-md-3 d-flex gap-2">
-                <button type="submit" class="btn btn-primary w-100">Filter</button>
-                @if ($noticesStaffFilter)
-                    <a href="{{ route('staffs.index', ['tab' => 'notices']) }}" class="btn btn-outline-secondary w-100">Reset</a>
-                @endif
-            </div>
-        </form>
-
-        <div class="card p-0 mb-3" style="overflow:hidden;">
-            <div class="table-responsive">
-                <table class="table team-table mb-0" id="noticesTable">
-                    <thead>
-                        <tr>
-                            <th style="min-width:130px;">Date</th>
-                            <th style="min-width:150px;">Staff</th>
-                            <th style="min-width:150px;">Type</th>
-                            <th style="min-width:150px;">Subject</th>
-                            <th style="min-width:200px;">Description</th>
-                            <th style="min-width:200px;">Corrective Actions</th>
-                            <th style="min-width:120px;">Acknowledged</th>
-                            <th style="min-width:90px;"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-
-                        @forelse ($notices as $notice)
-                            <tr data-entry-row="{{ $notice->id }}" data-entry='@json($notice->toEditPayload())'>
-                                <td>{{ $notice->notice_date->format('d M Y') }}</td>
-                                <td class="fw-semibold">{{ $notice->staff->name ?? '—' }}</td>
-                                <td>{{ $notice->type }}</td>
-                                <td>{{ $notice->subject }}</td>
-                                <td>{{ $notice->description ?: '—' }}</td>
-                                <td>{{ $notice->corrective_actions ?: '—' }}</td>
-                                <td><span class="ack-badge {{ strtolower($notice->acknowledged) }}">{{ $notice->acknowledged === 'Y' ? 'Acknowledged' : 'Not acknowledged' }}</span></td>
-                                <td class="text-end">
-                                    @moduleEdit('staff_management')
-                                        <div class="d-flex gap-1 justify-content-end">
-                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="startEditNo({{ $notice->id }})" title="Edit"><i class="bi bi-pencil-square"></i></button>
-                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteNo({{ $notice->id }})" title="Delete"><i class="bi bi-trash"></i></button>
-                                        </div>
-                                    @endmoduleEdit
-                                </td>
-                            </tr>
-                        @empty
-                            <tr id="noEmptyRow"><td colspan="8" class="text-center text-muted py-4">No notices logged.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
+    @moduleEdit('staff_management')
+        <!-- Quick-Edit Wage Settings Modal -->
+        <div class="modal fade" id="editWagesModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <form method="POST" id="editWagesForm">
+                        @csrf
+                        @method('PUT')
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="editWagesModalTitle">Edit Wage Settings</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Base Salary (QAR / period)</label>
+                                <input type="number" name="base_salary" id="ewBaseSalary" class="form-control" min="0" step="0.01" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Hourly Wage (QAR)</label>
+                                <input type="number" name="hourly_wage" id="ewHourlyWage" class="form-control" min="0" step="0.01" required>
+                            </div>
+                            <div class="mb-1">
+                                <label class="form-label">Commission Rate (%)</label>
+                                <input type="number" name="commission_rate" id="ewCommissionRate" class="form-control" min="0" max="100" step="0.1" required>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Save Wages</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-        <div class="mb-4">{{ $notices->links() }}</div>
-    </div>
 
-    @moduleEdit('staff_management')
+        <!-- Log Overtime Modal -->
+        <div class="modal fade" id="logOvertimeModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Log Overtime Entry</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Date *</label>
+                                <input type="date" class="form-control" id="otQaDate" value="{{ now()->format('Y-m-d') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Staff Member *</label>
+                                <select class="form-select" id="otQaStaff">
+                                    <option value="" data-hourly-wage="">Select staff</option>
+                                    @foreach ($allStaff as $s)
+                                        <option value="{{ $s->id }}" data-hourly-wage="{{ (float) ($s->hourly_wage ?? 0) }}">{{ $s->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Hours *</label>
+                                <input type="number" min="0" max="24" step="1" class="form-control" id="otQaHours" placeholder="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Minutes (0-59)</label>
+                                <input type="number" min="0" max="59" step="1" class="form-control" id="otQaMinutes" placeholder="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Rate (QAR/hr)</label>
+                                <input type="number" min="0" step="0.01" class="form-control" id="otQaRate" placeholder="Auto-filled">
+                            </div>
+                        </div>
+                        <div class="small text-muted mb-3 d-none" id="otQaCalcPreview"></div>
+                        <div class="mb-3">
+                            <label class="form-label">Customer Name <span class="text-muted small">(optional)</span></label>
+                            <input type="text" class="form-control" id="otQaCustomerName" placeholder="Optional customer name">
+                        </div>
+                        <div class="mb-1">
+                            <label class="form-label">Note <span class="text-muted small">(optional)</span></label>
+                            <input type="text" class="form-control" id="otQaNote" placeholder="Reason or shift note">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="otQaSaveBtn">Save Overtime</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log Complaint Modal -->
+        <div class="modal fade" id="logComplaintModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Log Complaint</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Date *</label>
+                                <input type="date" class="form-control" id="coQaDate" value="{{ now()->format('Y-m-d') }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Time</label>
+                                <input type="time" class="form-control" id="coQaTime" value="{{ now()->format('H:i') }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Branch *</label>
+                                <select class="form-select" id="coQaBranch">
+                                    <option value="">Select branch</option>
+                                    @foreach (\App\Models\StaffComplaint::BRANCHES as $val => $label)
+                                        <option value="{{ $val }}">{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Client *</label>
+                                <div class="client-picker">
+                                    <input type="text" class="form-control" id="coQaClientQuery" placeholder="Search client (name/phone)" autocomplete="off">
+                                    <input type="hidden" id="coQaClientName">
+                                    <input type="hidden" id="coQaClientPhone">
+                                    <div class="client-picker-results d-none" id="coQaClientResults"></div>
+                                </div>
+                                <button type="button" class="btn btn-link btn-sm p-0 mt-1" onclick="openQuickAddClientModal('coQa')">+ Add new client</button>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Service Received *</label>
+                                <select class="form-select" id="coQaService">
+                                    <option value="">Select service</option>
+                                    @foreach ($services as $svc)
+                                        <option value="{{ $svc->id }}">{{ $svc->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Category *</label>
+                                <select class="form-select" id="coQaCategory">
+                                    @foreach (\App\Models\StaffComplaint::CATEGORIES as $cat)
+                                        <option value="{{ $cat }}">{{ $cat }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Staff Involved *</label>
+                                <div class="staff-tagselect" id="coQaStaffWrap">
+                                    <div class="staff-tagselect-control" onclick="toggleStaffDropdown('coQa')">
+                                        <div class="staff-tagselect-chips" id="coQaStaffChips">
+                                            <span class="staff-tagselect-placeholder">Select staff...</span>
+                                        </div>
+                                        <i class="bx bx-chevron-down"></i>
+                                    </div>
+                                    <div class="staff-tagselect-dropdown d-none" id="coQaStaffDropdown">
+                                        <input type="text" class="form-control form-control-sm" placeholder="Search staff..." id="coQaStaffSearch" oninput="filterStaffOptions('coQa')">
+                                        <div class="staff-tagselect-options" id="coQaStaffOptions"></div>
+                                    </div>
+                                    <input type="hidden" data-field="staff_ids" data-multi="1" id="coQaStaffValue" value="">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">What Happened *</label>
+                            <textarea class="form-control" id="coQaWhatHappened" rows="3" placeholder="Describe what happened..."></textarea>
+                        </div>
+
+                        <div class="mb-1">
+                            <label class="form-label">Corrective Action to be taken <span class="text-muted small">(optional)</span></label>
+                            <textarea class="form-control" id="coQaCorrectiveAction" rows="3" placeholder="Optional global corrective action (can also be customized per staff member during HR Resolution)..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="coQaSaveBtn">Save Complaint</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Complaint Modal (What Happened & Corrective Action) -->
+        <div class="modal fade" id="editComplaintModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <form method="POST" id="editComplaintForm" class="modal-content">
+                    @csrf
+                    @method('PUT')
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="editComplaintModalTitle">Edit Incident Details</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">What Happened *</label>
+                            <textarea class="form-control" name="what_happened" id="editCoWhatHappened" rows="4" required placeholder="Describe what happened..."></textarea>
+                        </div>
+                        <div class="mb-1">
+                            <label class="form-label">Corrective Action <span class="text-muted small">(optional)</span></label>
+                            <textarea class="form-control" name="corrective_action" id="editCoCorrectiveAction" rows="4" placeholder="Optional global corrective action..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary"><i class="bx bx-check me-1"></i>Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Add Deduction Modal -->
+        <div class="modal fade" id="addDeductionModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add Deduction</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Date *</label>
+                                <input type="date" class="form-control" id="dedQaDate" value="{{ now()->format('Y-m-d') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Amount (QAR) *</label>
+                                <input type="number" min="0" step="0.01" class="form-control" id="dedQaAmount" placeholder="QAR">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Staff Member *</label>
+                            <select class="form-select" id="dedQaStaff">
+                                <option value="">Select staff</option>
+                                @foreach ($allStaff as $s)
+                                    <option value="{{ $s->id }}">{{ $s->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Reason *</label>
+                            <input type="text" class="form-control" id="dedQaReason" placeholder="Reason for deduction">
+                        </div>
+                        <div class="mb-1">
+                            <label class="form-label">Linked Complaint <span class="text-muted small">(optional)</span></label>
+                            <select class="form-select" id="dedQaComplaint">
+                                <option value="">No linked complaint</option>
+                                @foreach ($openComplaints as $c)
+                                    <option value="{{ $c->id }}">{{ $c->reference_number }} — {{ $c->staffMembers->pluck('name')->implode(', ') ?: '—' }} ({{ $c->complaint_date->format('d M Y') }})</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="dedQaSaveBtn">Save Deduction</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="modal fade" id="quickAddClientModal" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
@@ -1240,6 +1742,22 @@
         </script>
     @endmoduleEdit
 
+    <!-- View Generated Staff Notice Modal -->
+    <div class="modal fade" id="viewNoticeModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="viewNoticeModalTitle">Generated Staff Notice</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="viewNoticeModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.querySelectorAll('.staff-tab-btn').forEach(btn => {
             btn.addEventListener('click', function () {
@@ -1252,8 +1770,82 @@
 
                 document.querySelectorAll('.staff-tab-pane').forEach(p => p.classList.add('d-none'));
                 document.getElementById('staff-pane-' + this.dataset.tab).classList.remove('d-none');
+
+                const globalAddBtn = document.getElementById('globalAddStaffBtn');
+                if (globalAddBtn) {
+                    globalAddBtn.classList.toggle('d-none', this.dataset.tab !== 'directory');
+                }
+
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', this.dataset.tab);
+                history.replaceState(null, '', url.toString());
             });
         });
+
+        window.openEditWagesModal = function (staffId, staffName, baseSalary, hourlyWage, commissionRate) {
+            const modalEl = document.getElementById('editWagesModal');
+            if (!modalEl) return;
+            document.getElementById('editWagesModalTitle').textContent = `Edit Wage Settings — ${staffName}`;
+            document.getElementById('editWagesForm').action = `/staffs/${staffId}/wages`;
+            document.getElementById('ewBaseSalary').value = Number(baseSalary || 0).toFixed(2);
+            document.getElementById('ewHourlyWage').value = Number(hourlyWage || 0).toFixed(2);
+            document.getElementById('ewCommissionRate').value = Number(commissionRate || 0).toFixed(1);
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        };
+
+        function updateOvertimeRateAndPreview(autoFillRate = false) {
+            const staffSelect = document.getElementById('otQaStaff');
+            const rateInput = document.getElementById('otQaRate');
+            const hoursInput = document.getElementById('otQaHours');
+            const minutesInput = document.getElementById('otQaMinutes');
+            const previewEl = document.getElementById('otQaCalcPreview');
+            if (!staffSelect || !rateInput) return;
+
+            if (autoFillRate) {
+                const selectedOpt = staffSelect.options[staffSelect.selectedIndex];
+                const staffId = Number(staffSelect.value || 0);
+                const staffObj = (typeof ALL_STAFF !== 'undefined' ? ALL_STAFF : []).find(s => s.id === staffId);
+                const wage = staffObj !== undefined
+                    ? Number(staffObj.hourly_wage || 0)
+                    : Number(selectedOpt?.dataset?.hourlyWage || 0);
+                rateInput.value = staffId ? wage.toFixed(2) : '';
+            }
+
+            if (previewEl) {
+                const hrs = Number(hoursInput?.value || 0);
+                const mins = Number(minutesInput?.value || 0);
+                const rate = Number(rateInput.value || 0);
+                const totalDec = hrs + (mins / 60);
+                if (totalDec > 0 && rate >= 0 && rateInput.value !== '') {
+                    const estPay = (totalDec * rate).toFixed(2);
+                    previewEl.textContent = `Duration: ${totalDec.toFixed(2)} hrs × QAR ${rate.toFixed(2)}/hr = QAR ${estPay}`;
+                    previewEl.classList.remove('d-none');
+                } else {
+                    previewEl.textContent = '';
+                    previewEl.classList.add('d-none');
+                }
+            }
+        }
+
+        document.getElementById('otQaStaff')?.addEventListener('change', () => updateOvertimeRateAndPreview(true));
+        document.getElementById('otQaHours')?.addEventListener('input', () => updateOvertimeRateAndPreview(false));
+        document.getElementById('otQaMinutes')?.addEventListener('input', () => updateOvertimeRateAndPreview(false));
+        document.getElementById('otQaRate')?.addEventListener('input', () => updateOvertimeRateAndPreview(false));
+
+        window.openLogOvertimeModal = function (preselectedStaffId = '') {
+            const modalEl = document.getElementById('logOvertimeModal');
+            if (!modalEl) return;
+            const staffSelect = document.getElementById('otQaStaff');
+            if (staffSelect) {
+                staffSelect.value = preselectedStaffId ? String(preselectedStaffId) : '';
+            }
+            document.getElementById('otQaHours').value = '';
+            document.getElementById('otQaMinutes').value = '0';
+            document.getElementById('otQaCustomerName').value = '';
+            document.getElementById('otQaNote').value = '';
+            updateOvertimeRateAndPreview(true);
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        };
 
         /* ---------------- STAFF WORKSPACE ---------------- */
         (function() {
@@ -1392,6 +1984,12 @@
         })();
 
         /* ---------------- PAYROLL & OPERATIONS: INLINE LEDGERS ---------------- */
+        window.hrResolution = function (initialStaff = {}) {
+            return {
+                staff: initialStaff
+            };
+        };
+
         const CAN_EDIT_STAFF = @json(auth()->check() && auth()->user()->canEdit('staff_management'));
         const CSRF_TOKEN = '{{ csrf_token() }}';
         const ALL_STAFF = @json($allStaffOptions);
@@ -1780,10 +2378,8 @@
             if (!confirm('Delete this overtime entry?')) return;
             jsonDelete(`/staff-overtime/${id}`).then(({ ok, data }) => {
                 if (ok && data.success) {
-                    document.querySelector(`#overtimeTable tr[data-entry-row="${id}"]`)?.remove();
-                    delete otEntries[id];
                     showStaffToast(data.message || 'Overtime entry deleted.');
-                    maybeShowEmptyState('#overtimeTable', 'otEmptyRow', 7, 'No overtime entries logged for this range.');
+                    window.location.reload();
                 } else {
                     showStaffToast(data.message || 'Could not delete entry.', 'error');
                 }
@@ -1793,30 +2389,30 @@
         const otQaSaveBtn = document.getElementById('otQaSaveBtn');
         if (otQaSaveBtn) {
             otQaSaveBtn.addEventListener('click', function () {
+                const hoursVal = Number(document.getElementById('otQaHours').value || 0);
+                const minutesVal = Number(document.getElementById('otQaMinutes').value || 0);
                 const fields = {
                     entry_date: document.getElementById('otQaDate').value,
                     staff_id: document.getElementById('otQaStaff').value,
-                    hours: document.getElementById('otQaHours').value,
+                    hours: hoursVal,
+                    minutes: minutesVal,
                     rate: document.getElementById('otQaRate').value,
+                    customer_name: document.getElementById('otQaCustomerName').value,
                     note: document.getElementById('otQaNote').value,
                 };
-                if (!fields.entry_date || !fields.staff_id || !fields.hours) {
-                    showStaffToast('Date, staff, and hours are required.', 'error');
+                if (!fields.entry_date || !fields.staff_id || (hoursVal <= 0 && minutesVal <= 0)) {
+                    showStaffToast('Date, staff, and overtime duration (hours or minutes) are required.', 'error');
+                    return;
+                }
+                if (minutesVal < 0 || minutesVal > 59) {
+                    showStaffToast('Minutes must be between 0 and 59.', 'error');
                     return;
                 }
                 jsonFetch(`{{ route('staff-overtime.store') }}`, 'POST', fields).then(({ ok, data }) => {
                     if (ok && data.success) {
-                        otEntries[data.entry.id] = data.entry;
-                        document.getElementById('otEmptyRow')?.remove();
-                        const tr = document.createElement('tr');
-                        tr.setAttribute('data-entry-row', data.entry.id);
-                        tr.innerHTML = otViewRowHtml(data.entry);
-                        document.getElementById('otQuickAddRow').insertAdjacentElement('afterend', tr);
-                        document.getElementById('otQaStaff').value = '';
-                        document.getElementById('otQaHours').value = '';
-                        document.getElementById('otQaRate').value = '';
-                        document.getElementById('otQaNote').value = '';
+                        bootstrap.Modal.getInstance(document.getElementById('logOvertimeModal'))?.hide();
                         showStaffToast(data.message || 'Overtime entry logged.');
+                        window.location.reload();
                     } else {
                         const firstError = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'Could not add entry.');
                         showStaffToast(firstError, 'error');
@@ -1835,15 +2431,15 @@
         function coActionsHtml(id, mode) {
             if (!CAN_EDIT_STAFF) return '';
             if (mode === 'edit') {
-                return `<div class="d-flex gap-1 justify-content-end">
-                    <button type="button" class="btn btn-sm btn-primary" onclick="saveEditCo(${id})" title="Save"><i class="bi bi-check-lg"></i></button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cancelEditCo(${id})" title="Cancel"><i class="bi bi-x-lg"></i></button>
+                return `<div class="d-flex gap-1 justify-content-end" onclick="event.stopPropagation();">
+                    <button type="button" class="btn btn-sm btn-primary" onclick="event.stopPropagation(); saveEditCo(${id})" title="Save"><i class="bi bi-check-lg"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="event.stopPropagation(); cancelEditCo(${id})" title="Cancel"><i class="bi bi-x-lg"></i></button>
                 </div>`;
             }
-            return `<div class="d-flex gap-1 justify-content-end">
-                <button type="button" class="btn btn-sm btn-outline-info" onclick="openGenerateNoticeModal(${id})" title="Generate staff notice"><i class="bi bi-file-earmark-text"></i></button>
-                <button type="button" class="btn btn-sm btn-outline-warning" onclick="startEditCo(${id})" title="Edit"><i class="bi bi-pencil-square"></i></button>
-                <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteCo(${id})" title="Delete"><i class="bi bi-trash"></i></button>
+            return `<div class="d-flex gap-1 justify-content-end" onclick="event.stopPropagation();">
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="event.stopPropagation(); openGenerateNoticeModal(${id})" title="Generate staff notice"><i class="bi bi-file-earmark-text"></i></button>
+                <button type="button" class="btn btn-sm btn-outline-warning" onclick="event.stopPropagation(); openEditComplaintModal(${id})" title="Edit What Happened & Corrective Action"><i class="bi bi-pencil-square"></i></button>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation(); deleteCo(${id})" title="Delete"><i class="bi bi-trash"></i></button>
             </div>`;
         }
 
@@ -1855,7 +2451,15 @@
 
         function coViewRowHtml(e) {
             return `
-                <td><span class="ref-badge">${escapeHtml(e.reference_number)}</span>${e.notice_count > 0 ? `<div class="text-muted small mt-1">${e.notice_count} notice${e.notice_count > 1 ? 's' : ''}</div>` : ''}</td>
+                <td>
+                    <div class="d-flex align-items-center">
+                        <i class="bx bx-chevron-right payroll-chevron me-1"></i>
+                        <div>
+                            <span class="ref-badge">${escapeHtml(e.reference_number)}</span>
+                            ${e.notice_count > 0 ? `<div class="text-muted small mt-1">${e.notice_count} notice${e.notice_count > 1 ? 's' : ''}</div>` : ''}
+                        </div>
+                    </div>
+                </td>
                 <td>${e.complaint_date_label}<div class="text-muted small">${e.time_label}</div></td>
                 <td>${branchLabel(e.branch)}</td>
                 <td>${escapeHtml(e.customer_name)}<div class="text-muted small">${escapeHtml(e.customer_phone) || '—'}</div></td>
@@ -1864,7 +2468,7 @@
                 <td class="fw-semibold">${escapeHtml(e.staff_names)}</td>
                 <td>${coDeductionCellHtml(e)}</td>
                 <td>${escapeHtml(e.description)}</td>
-                <td class="text-end">${coActionsHtml(e.id, 'view')}</td>
+                <td class="text-end" onclick="event.stopPropagation();">${coActionsHtml(e.id, 'view')}</td>
             `;
         }
 
@@ -1889,20 +2493,23 @@
                     <input type="number" min="0" step="0.01" class="form-control form-control-sm mt-1 ${e.deduction_applied === 'Y' ? '' : 'd-none'}" data-field="deduction_amount" id="${prefix}DeductionAmount" placeholder="QAR" value="${e.deduction_amount || ''}">
                 </td>
                 <td><input type="text" class="form-control form-control-sm" data-field="description" value="${escapeHtml(e.description)}"></td>
-                <td class="text-end">${coActionsHtml(e.id, 'edit')}</td>
+                <td class="text-end" onclick="event.stopPropagation();">${coActionsHtml(e.id, 'edit')}</td>
             `;
         }
 
         window.startEditCo = function (id) {
             const row = document.querySelector(`#complaintsTable tr[data-entry-row="${id}"]`);
             if (!row) return;
+            row.removeAttribute('data-bs-toggle');
             row.innerHTML = coEditRowHtml(coEntries[id]);
             wireClientPicker(`coEdit${id}`);
             renderStaffTagSelect(`coEdit${id}`);
         };
         window.cancelEditCo = function (id) {
             const row = document.querySelector(`#complaintsTable tr[data-entry-row="${id}"]`);
-            if (row) row.innerHTML = coViewRowHtml(coEntries[id]);
+            if (!row) return;
+            row.setAttribute('data-bs-toggle', 'collapse');
+            row.innerHTML = coViewRowHtml(coEntries[id]);
         };
         window.saveEditCo = function (id) {
             const row = document.querySelector(`#complaintsTable tr[data-entry-row="${id}"]`);
@@ -1917,9 +2524,8 @@
             }
             jsonFetch(`/staff-complaints/${id}`, 'PUT', fields).then(({ ok, data }) => {
                 if (ok && data.success) {
-                    coEntries[id] = data.entry;
-                    row.innerHTML = coViewRowHtml(data.entry);
                     showStaffToast(data.message || 'Complaint updated.');
+                    window.location.reload();
                 } else {
                     const firstError = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'Could not update complaint.');
                     showStaffToast(firstError, 'error');
@@ -1931,6 +2537,7 @@
             jsonDelete(`/staff-complaints/${id}`).then(({ ok, data }) => {
                 if (ok && data.success) {
                     document.querySelector(`#complaintsTable tr[data-entry-row="${id}"]`)?.remove();
+                    document.getElementById(`complaint-details-${id}`)?.remove();
                     delete coEntries[id];
                     showStaffToast(data.message || 'Complaint deleted.');
                     maybeShowEmptyState('#complaintsTable', 'coEmptyRow', 10, 'No complaints logged.');
@@ -2048,21 +2655,9 @@
                 }
                 jsonFetch(`/staff-complaints/${activeNoticeComplaintId}/generate-notice`, 'POST', fields).then(({ ok, data }) => {
                     if (ok && data.success) {
-                        coEntries[activeNoticeComplaintId] = data.entry;
-                        const row = document.querySelector(`#complaintsTable tr[data-entry-row="${activeNoticeComplaintId}"]`);
-                        if (row) row.innerHTML = coViewRowHtml(data.entry);
-
-                        (data.notices || []).forEach(notice => {
-                            noEntries[notice.id] = notice;
-                            document.getElementById('noEmptyRow')?.remove();
-                            const tr = document.createElement('tr');
-                            tr.setAttribute('data-entry-row', notice.id);
-                            tr.innerHTML = noViewRowHtml(notice);
-                            document.querySelector('#noticesTable tbody').prepend(tr);
-                        });
-
                         bootstrap.Modal.getInstance(document.getElementById('generateNoticeModal'))?.hide();
-                        showStaffToast(data.message || 'Staff notice(s) drafted — see the Notices tab.');
+                        showStaffToast(data.message || 'Staff notice(s) issued.');
+                        window.location.reload();
                     } else {
                         const firstError = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'Could not draft notice.');
                         showStaffToast(firstError, 'error');
@@ -2071,11 +2666,96 @@
             });
         }
 
+        window.toggleHrResolutionDeduction = function (complaintId, value) {
+            const wrap = document.getElementById(`hrResDedWrap-${complaintId}`);
+            const input = document.getElementById(`hrResDedInput-${complaintId}`);
+            if (!wrap || !input) return;
+            const show = value === 'Y';
+            wrap.classList.toggle('d-none', !show);
+            input.required = show;
+            if (!show) {
+                input.value = '';
+            }
+        };
+
+        window.openEditComplaintModal = function (id) {
+            const e = coEntries[id];
+            if (!e) return;
+            const modalEl = document.getElementById('editComplaintModal');
+            const formEl = document.getElementById('editComplaintForm');
+            const titleEl = document.getElementById('editComplaintModalTitle');
+            const whatHappenedEl = document.getElementById('editCoWhatHappened');
+            const correctiveActionEl = document.getElementById('editCoCorrectiveAction');
+            if (!modalEl || !formEl) return;
+
+            formEl.action = `/staff-complaints/${id}`;
+            if (titleEl) {
+                titleEl.textContent = `Edit Incident Details — ${e.reference_number || ''}`;
+            }
+            if (whatHappenedEl) {
+                whatHappenedEl.value = e.what_happened || e.description || '';
+            }
+            if (correctiveActionEl) {
+                correctiveActionEl.value = e.corrective_action || '';
+            }
+
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        };
+
+        const logComplaintModalEl = document.getElementById('logComplaintModal');
+        if (logComplaintModalEl) {
+            logComplaintModalEl.addEventListener('show.bs.modal', function () {
+                const ca = document.getElementById('coQaCorrectiveAction');
+                if (ca) ca.value = '';
+            });
+        }
+
+        window.openViewNoticeModal = function (referenceNumber, notices) {
+            const modalEl = document.getElementById('viewNoticeModal');
+            const titleEl = document.getElementById('viewNoticeModalTitle');
+            const bodyEl = document.getElementById('viewNoticeModalBody');
+            if (!modalEl || !bodyEl) return;
+
+            titleEl.textContent = `Staff Notice — ${referenceNumber}`;
+            const list = Array.isArray(notices) ? notices : [];
+
+            if (!list.length) {
+                bodyEl.innerHTML = '<p class="text-muted small mb-0">No staff notices found for this incident.</p>';
+            } else {
+                bodyEl.innerHTML = list.map(n => `
+                    <div class="payroll-subcard mb-3">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                            <div>
+                                <div class="fw-bold">${escapeHtml(n.staff_name || '—')} &bull; <span class="text-warning">${escapeHtml(n.type || 'Written Warning')}</span></div>
+                                <div class="text-muted small">${escapeHtml(n.notice_date_label || '')} &mdash; ${escapeHtml(n.subject || '')}</div>
+                                <div class="text-muted small mt-1">Client: ${escapeHtml(n.client_name || '—')} | Service: ${escapeHtml(n.service_received || '—')} | Appt Date: ${escapeHtml(n.appt_date || '—')}</div>
+                            </div>
+                            <span class="ack-badge ${(n.acknowledged || 'N').toLowerCase()}">
+                                ${n.acknowledged === 'Y' ? 'Acknowledged' : 'Pending Acknowledgment'}
+                            </span>
+                        </div>
+                        <div class="mb-2">
+                            <div class="fw-bold small text-uppercase text-muted mb-1">What Happened</div>
+                            <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap;">${escapeHtml(n.description || '—')}</div>
+                        </div>
+                        <div>
+                            <div class="fw-bold small text-uppercase text-muted mb-1">Corrective Action to be taken</div>
+                            <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap;">${escapeHtml(n.corrective_actions || '—')}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        };
+
         const coQaSaveBtn = document.getElementById('coQaSaveBtn');
         if (coQaSaveBtn) {
             wireClientPicker('coQa');
             renderStaffTagSelect('coQa');
             coQaSaveBtn.addEventListener('click', function () {
+                const whatHappened = document.getElementById('coQaWhatHappened')?.value || '';
+                const correctiveAction = document.getElementById('coQaCorrectiveAction')?.value || '';
                 const fields = {
                     complaint_date: document.getElementById('coQaDate').value,
                     complaint_time: document.getElementById('coQaTime').value,
@@ -2085,41 +2765,19 @@
                     customer_phone: document.getElementById('coQaClientPhone').value,
                     service_id: document.getElementById('coQaService').value,
                     category: document.getElementById('coQaCategory').value,
-                    description: document.getElementById('coQaDescription').value,
-                    deduction_applied: document.getElementById('coQaDeductionApplied').value,
-                    deduction_amount: document.getElementById('coQaDeductionAmount').value,
+                    what_happened: whatHappened,
+                    description: whatHappened,
+                    corrective_action: correctiveAction,
                 };
-                if (!fields.complaint_date || !fields.branch || !fields.staff_ids.length || !fields.customer_name.trim() || !fields.service_id || !fields.category || !fields.description.trim()) {
-                    showStaffToast('Date, branch, staff involved, client name, service received, category, and feedback detail are required.', 'error');
-                    return;
-                }
-                if (fields.deduction_applied === 'Y' && !fields.deduction_amount) {
-                    showStaffToast('Enter a deduction amount, or set Deduction Applied to No.', 'error');
+                if (!fields.complaint_date || !fields.branch || !fields.staff_ids.length || !fields.customer_name.trim() || !fields.service_id || !fields.category || !fields.what_happened.trim()) {
+                    showStaffToast('Date, branch, staff involved, client name, service received, category, and What Happened are required.', 'error');
                     return;
                 }
                 jsonFetch(`{{ route('staff-complaints.store') }}`, 'POST', fields).then(({ ok, data }) => {
                     if (ok && data.success) {
-                        coEntries[data.entry.id] = data.entry;
-                        document.getElementById('coEmptyRow')?.remove();
-                        const tr = document.createElement('tr');
-                        tr.setAttribute('data-entry-row', data.entry.id);
-                        tr.innerHTML = coViewRowHtml(data.entry);
-                        document.getElementById('coQuickAddRow').insertAdjacentElement('afterend', tr);
-
-                        document.getElementById('coQaClientQuery').value = '';
-                        document.getElementById('coQaClientName').value = '';
-                        document.getElementById('coQaClientPhone').value = '';
-                        document.getElementById('coQaStaffValue').value = '';
-                        renderStaffTagSelect('coQa');
-                        document.getElementById('coQaService').value = '';
-                        document.getElementById('coQaDescription').value = '';
-                        document.getElementById('coQaDeductionApplied').value = 'N';
-                        toggleDeductionAmount('coQa', 'N');
-
-                        const msg = data.entry.deduction_applied === 'Y'
-                            ? `${data.message} Refresh to see the synced deduction under Deductions / Payroll.`
-                            : data.message;
-                        showStaffToast(msg || 'Complaint logged.');
+                        bootstrap.Modal.getInstance(document.getElementById('logComplaintModal'))?.hide();
+                        showStaffToast(data.message || 'Complaint logged.');
+                        window.location.reload();
                     } else {
                         const firstError = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'Could not add complaint.');
                         showStaffToast(firstError, 'error');
@@ -2208,17 +2866,9 @@
                 }
                 jsonFetch(`{{ route('staff-deductions.store') }}`, 'POST', fields).then(({ ok, data }) => {
                     if (ok && data.success) {
-                        dedEntries[data.entry.id] = data.entry;
-                        document.getElementById('dedEmptyRow')?.remove();
-                        const tr = document.createElement('tr');
-                        tr.setAttribute('data-entry-row', data.entry.id);
-                        tr.innerHTML = dedViewRowHtml(data.entry);
-                        document.getElementById('dedQuickAddRow').insertAdjacentElement('afterend', tr);
-                        document.getElementById('dedQaStaff').value = '';
-                        document.getElementById('dedQaAmount').value = '';
-                        document.getElementById('dedQaReason').value = '';
-                        document.getElementById('dedQaComplaint').value = '';
+                        bootstrap.Modal.getInstance(document.getElementById('addDeductionModal'))?.hide();
                         showStaffToast(data.message || 'Deduction logged.');
+                        window.location.reload();
                     } else {
                         const firstError = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'Could not add deduction.');
                         showStaffToast(firstError, 'error');
@@ -2228,67 +2878,13 @@
         }
 
         /* ---------- NOTICES ---------- */
-        let noEntries = {};
-        document.querySelectorAll('#noticesTable tr[data-entry-row]').forEach(row => {
-            const entry = JSON.parse(row.dataset.entry);
-            noEntries[entry.id] = entry;
-        });
-
-        function noViewRowHtml(e) {
-            return `
-                <td>${e.notice_date_label}</td>
-                <td class="fw-semibold">${escapeHtml(e.staff_name)}</td>
-                <td>${escapeHtml(e.type)}</td>
-                <td>${escapeHtml(e.subject)}</td>
-                <td>${escapeHtml(e.description) || '—'}</td>
-                <td>${escapeHtml(e.corrective_actions) || '—'}</td>
-                <td><span class="ack-badge ${e.acknowledged.toLowerCase()}">${e.acknowledged === 'Y' ? 'Acknowledged' : 'Not acknowledged'}</span></td>
-                <td class="text-end">${actionsHtml(e.id, 'view', 'startEditNo', 'deleteNo')}</td>
-            `;
-        }
-
-        function noEditRowHtml(e) {
-            return `
-                <td><input type="date" class="form-control form-control-sm" data-field="notice_date" value="${e.notice_date}"></td>
-                <td><select class="form-select form-select-sm" data-field="staff_id">${staffOptionsHtml(e.staff_id)}</select></td>
-                <td><select class="form-select form-select-sm" data-field="type">${plainOptionsHtml(NOTICE_TYPES, e.type)}</select></td>
-                <td><input type="text" class="form-control form-control-sm" data-field="subject" value="${escapeHtml(e.subject)}"></td>
-                <td><input type="text" class="form-control form-control-sm" data-field="description" value="${escapeHtml(e.description || '')}"></td>
-                <td><input type="text" class="form-control form-control-sm" data-field="corrective_actions" value="${escapeHtml(e.corrective_actions || '')}"></td>
-                <td><select class="form-select form-select-sm" data-field="acknowledged"><option value="N" ${e.acknowledged === 'N' ? 'selected' : ''}>No</option><option value="Y" ${e.acknowledged === 'Y' ? 'selected' : ''}>Yes</option></select></td>
-                <td class="text-end">${actionsHtml(e.id, 'edit', '', '', 'saveEditNo', 'cancelEditNo')}</td>
-            `;
-        }
-
-        window.startEditNo = function (id) {
-            const row = document.querySelector(`#noticesTable tr[data-entry-row="${id}"]`);
-            if (row) row.innerHTML = noEditRowHtml(noEntries[id]);
-        };
-        window.cancelEditNo = function (id) {
-            const row = document.querySelector(`#noticesTable tr[data-entry-row="${id}"]`);
-            if (row) row.innerHTML = noViewRowHtml(noEntries[id]);
-        };
-        window.saveEditNo = function (id) {
-            const row = document.querySelector(`#noticesTable tr[data-entry-row="${id}"]`);
-            jsonFetch(`/staff-notices/${id}`, 'PUT', readRowFields(row)).then(({ ok, data }) => {
-                if (ok && data.success) {
-                    noEntries[id] = data.entry;
-                    row.innerHTML = noViewRowHtml(data.entry);
-                    showStaffToast(data.message || 'Notice updated.');
-                } else {
-                    const firstError = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'Could not update notice.');
-                    showStaffToast(firstError, 'error');
-                }
-            });
-        };
         window.deleteNo = function (id) {
             if (!confirm('Delete this notice?')) return;
             jsonDelete(`/staff-notices/${id}`).then(({ ok, data }) => {
                 if (ok && data.success) {
-                    document.querySelector(`#noticesTable tr[data-entry-row="${id}"]`)?.remove();
-                    delete noEntries[id];
+                    document.querySelector(`[data-notice-card="${id}"]`)?.remove();
                     showStaffToast(data.message || 'Notice deleted.');
-                    maybeShowEmptyState('#noticesTable', 'noEmptyRow', 8, 'No notices logged.');
+                    window.location.reload();
                 } else {
                     showStaffToast(data.message || 'Could not delete notice.', 'error');
                 }

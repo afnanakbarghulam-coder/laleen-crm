@@ -19,9 +19,12 @@ class StaffComplaintController extends Controller
         unset($validated['staff_ids']);
         $validated = $this->resolveCustomer($validated);
 
-        $complaint = StaffComplaint::create($validated + ['created_by' => auth()->id()]);
+        $validated['deduction_applied'] = 'N';
+        $validated['deduction_amount'] = null;
+        $validated['created_by'] = auth()->id();
+
+        $complaint = StaffComplaint::create($validated);
         $complaint->staffMembers()->sync($staffIds);
-        $this->syncDeduction($complaint, $staffIds);
 
         if ($request->wantsJson()) {
             return response()->json([
@@ -36,6 +39,34 @@ class StaffComplaintController extends Controller
 
     public function update(Request $request, StaffComplaint $staffComplaint)
     {
+        if (!$request->has('staff_ids') && $request->hasAny(['what_happened', 'corrective_action'])) {
+            $data = $request->validate([
+                'what_happened' => 'required|string|max:2000',
+                'corrective_action' => 'nullable|string|max:2000',
+            ]);
+
+            $whatHappened = trim($data['what_happened']);
+            $correctiveAction = isset($data['corrective_action']) && trim($data['corrective_action']) !== ''
+                ? trim($data['corrective_action'])
+                : null;
+
+            $staffComplaint->update([
+                'what_happened' => $whatHappened,
+                'description' => $whatHappened,
+                'corrective_action' => $correctiveAction,
+            ]);
+
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Complaint details updated.',
+                    'entry' => $staffComplaint->fresh(['staffMembers', 'service'])->toEditPayload(),
+                ]);
+            }
+
+            return redirect()->route('staffs.index', ['tab' => 'complaints'])->with('success', 'Complaint details updated.');
+        }
+
         $validated = $this->validated($request);
         $staffIds = $validated['staff_ids'];
         unset($validated['staff_ids']);
@@ -43,7 +74,9 @@ class StaffComplaintController extends Controller
 
         $staffComplaint->update($validated);
         $staffComplaint->staffMembers()->sync($staffIds);
-        $this->syncDeduction($staffComplaint, $staffIds);
+        if ($request->has('deduction_applied')) {
+            $this->syncDeduction($staffComplaint, $staffIds);
+        }
 
         if ($request->wantsJson()) {
             return response()->json([
@@ -54,6 +87,103 @@ class StaffComplaintController extends Controller
         }
 
         return redirect()->route('staffs.index', ['tab' => 'complaints'])->with('success', 'Complaint updated.');
+    }
+
+    /**
+     * Resolve an incident from the HR Resolution panel inside the expanded
+     * complaint accordion row: reads the nested staff[id] payload (mistake,
+     * deduction, deduction_amount/amount, notice, corrective_action) and
+     * generates StaffDeduction and StaffNotice records only for the staff
+     * members where those specific options were toggled "Yes".
+     */
+    public function resolve(Request $request, StaffComplaint $staffComplaint)
+    {
+        $validated = $request->validate([
+            'staff' => 'required|array|min:1',
+            'staff.*.mistake' => 'nullable|in:yes,no,1,0,true,false,Y,N',
+            'staff.*.deduction' => 'nullable|in:yes,no,1,0,true,false,Y,N',
+            'staff.*.deduction_amount' => 'nullable|numeric|min:0',
+            'staff.*.amount' => 'nullable|numeric|min:0',
+            'staff.*.notice' => 'nullable',
+            'staff.*.corrective_action' => 'nullable|string|max:2000',
+        ]);
+
+        $attachedStaffIds = $staffComplaint->staffMembers()->pluck('staff.id')->map(fn ($id) => (int) $id)->all();
+
+        $staffComplaint->deductions()->delete();
+        $staffComplaint->notices()->delete();
+
+        $totalDeduction = 0.0;
+        $anyMistake = false;
+        $whatHappened = $staffComplaint->what_happened ?: $staffComplaint->description;
+        $subject = "Complaint {$staffComplaint->reference_number}: {$staffComplaint->category}";
+
+        foreach ($validated['staff'] as $rawStaffId => $res) {
+            $staffId = (int) $rawStaffId;
+            if (!in_array($staffId, $attachedStaffIds, true)) {
+                continue;
+            }
+
+            $isMistake = in_array(strtolower((string) ($res['mistake'] ?? 'no')), ['yes', '1', 'true', 'y'], true);
+            if ($isMistake) {
+                $anyMistake = true;
+            }
+
+            $isDeduction = $isMistake && in_array(strtolower((string) ($res['deduction'] ?? 'no')), ['yes', '1', 'true', 'y'], true);
+            $deductionAmount = round((float) ($res['deduction_amount'] ?? $res['amount'] ?? 0), 2);
+
+            $generateNotice = $isMistake && (
+                filter_var($res['notice'] ?? false, FILTER_VALIDATE_BOOLEAN)
+                || in_array(strtolower((string) ($res['notice'] ?? '')), ['yes', '1', 'on', 'y', 'true'], true)
+            );
+
+            $customAction = isset($res['corrective_action'])
+                ? trim((string) $res['corrective_action'])
+                : '';
+
+            if ($isDeduction && $deductionAmount > 0) {
+                $totalDeduction += $deductionAmount;
+                StaffDeduction::create([
+                    'staff_id' => $staffId,
+                    'deduction_date' => $staffComplaint->complaint_date,
+                    'amount' => $deductionAmount,
+                    'reason' => "Complaint {$staffComplaint->reference_number}: {$staffComplaint->category}",
+                    'complaint_id' => $staffComplaint->id,
+                    'created_by' => auth()->id(),
+                ]);
+            }
+
+            if ($generateNotice) {
+                StaffNotice::create([
+                    'staff_id' => $staffId,
+                    'complaint_id' => $staffComplaint->id,
+                    'notice_date' => now()->toDateString(),
+                    'type' => 'Written Warning',
+                    'subject' => $subject,
+                    'description' => $whatHappened,
+                    'corrective_actions' => $customAction,
+                    'acknowledged' => 'N',
+                    'created_by' => auth()->id(),
+                ]);
+            }
+        }
+
+        $staffComplaint->update([
+            'is_staff_mistake' => $anyMistake,
+            'deduction_applied' => $totalDeduction > 0 ? 'Y' : 'N',
+            'deduction_amount' => $totalDeduction > 0 ? round($totalDeduction, 2) : null,
+        ]);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Resolutions saved for {$staffComplaint->reference_number}.",
+                'entry' => $staffComplaint->fresh(['staffMembers', 'service', 'deductions.staff', 'notices.staff'])->toEditPayload(),
+            ]);
+        }
+
+        return redirect()->route('staffs.index', ['tab' => 'complaints'])
+            ->with('success', "Resolutions saved for {$staffComplaint->reference_number}.");
     }
 
     public function destroy(Request $request, StaffComplaint $staffComplaint)
@@ -105,7 +235,7 @@ class StaffComplaintController extends Controller
             ]);
         }
 
-        return redirect()->route('staffs.index', ['tab' => 'notices'])->with('success', 'Staff notice(s) drafted.');
+        return redirect()->route('staffs.index', ['tab' => 'complaints'])->with('success', 'Staff notice(s) drafted.');
     }
 
     /**
@@ -184,7 +314,7 @@ class StaffComplaintController extends Controller
 
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'staff_ids' => 'required|array|min:1',
             'staff_ids.*' => [Rule::exists('staff', 'id')],
             'complaint_date' => 'required|date',
@@ -194,9 +324,28 @@ class StaffComplaintController extends Controller
             'customer_phone' => 'nullable|string|max:30',
             'service_id' => ['required', Rule::exists('services', 'id')],
             'category' => ['required', Rule::in(StaffComplaint::CATEGORIES)],
-            'description' => 'required|string|max:2000',
-            'deduction_applied' => ['required', Rule::in(['Y', 'N'])],
+            'what_happened' => 'nullable|string|max:2000',
+            'description' => 'nullable|string|max:2000',
+            'corrective_action' => 'nullable|string|max:2000',
+            'is_staff_mistake' => 'nullable|boolean',
+            'deduction_applied' => ['nullable', Rule::in(['Y', 'N'])],
             'deduction_amount' => 'nullable|required_if:deduction_applied,Y|numeric|min:0',
         ]);
+
+        $whatHappened = trim((string) ($data['what_happened'] ?? $data['description'] ?? ''));
+        if ($whatHappened === '') {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'what_happened' => ['The What Happened field is required.'],
+            ]);
+        }
+
+        $data['what_happened'] = $whatHappened;
+        $data['description'] = $whatHappened;
+
+        if (!array_key_exists('deduction_applied', $data) || $data['deduction_applied'] === null) {
+            unset($data['deduction_applied'], $data['deduction_amount']);
+        }
+
+        return $data;
     }
 }

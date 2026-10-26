@@ -4,7 +4,6 @@
 @section('content')
     <div class="d-flex gap-2 mb-4">
         <button type="button" class="ads-tab-btn btn btn-sm {{ $activeTab === 'leads' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="leads">Ad Leads Log</button>
-        <button type="button" class="ads-tab-btn btn btn-sm {{ $activeTab === 'reports' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="reports">Ads Conversion Reports</button>
         <button type="button" class="ads-tab-btn btn btn-sm {{ $activeTab === 'analytics' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="analytics">Ads Analytics</button>
     </div>
 
@@ -101,80 +100,6 @@
         @moduleEdit('kpis')
             @include('kpi.ads._lead-entry-modal', ['uid' => 'new', 'entry' => null])
         @endmoduleEdit
-    </div>
-
-    {{-- ================= ADS CONVERSION REPORTS ================= --}}
-    <div id="ads-pane-reports" class="ads-tab-pane {{ $activeTab === 'reports' ? '' : 'd-none' }}">
-        <div class="kpi-header">
-            <div>
-                <h4>Ads Conversion Reports</h4>
-                <p>Pick a date range and generate a saved snapshot — leads, bookings, conversion %, revenue, and branch split are calculated automatically from the Ad Leads Log.</p>
-            </div>
-        </div>
-
-        @moduleEdit('kpis')
-            <div class="kpi-panel mb-3">
-                <form method="POST" action="{{ route('kpi.ads.store') }}" class="row g-3 align-items-end">
-                    @csrf
-                    <div class="col-md-3">
-                        <label class="form-label">From</label>
-                        <input type="date" name="date_from" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">To</label>
-                        <input type="date" name="date_to" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <button type="submit" class="btn btn-primary"><i class="bx bx-plus me-1"></i> Generate Report</button>
-                    </div>
-                </form>
-            </div>
-        @endmoduleEdit
-
-        <div class="kpi-panel p-0" style="overflow:hidden;">
-            <div class="table-responsive">
-                <table class="table kpi-table mb-0">
-                    <thead>
-                        <tr>
-                            <th>Period</th>
-                            <th>Categories</th>
-                            <th class="text-end">Total Leads</th>
-                            <th class="text-end">Total Bookings</th>
-                            <th class="text-end">Overall Conversion</th>
-                            <th class="text-end">Total Revenue (QAR)</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($reports as $report)
-                            @php $totals = $report->totals(); @endphp
-                            <tr>
-                                <td><a href="{{ route('kpi.ads.show', $report) }}">{{ $report->date_from->format('d M Y') }} – {{ $report->date_to->format('d M Y') }}</a></td>
-                                <td>{{ count($report->computedCategories()) }}</td>
-                                <td class="text-end">{{ $totals['total_leads'] }}</td>
-                                <td class="text-end">{{ $totals['total_bookings'] }}</td>
-                                <td class="text-end">
-                                    <span class="kpi-badge {{ $totals['overall_met_target'] ? 'kpi-badge-green' : 'kpi-badge-red' }}">{{ $totals['overall_conversion'] }}%</span>
-                                </td>
-                                <td class="text-end">{{ number_format($totals['total_revenue'], 2) }}</td>
-                                <td class="text-end">
-                                    @moduleEdit('kpis')
-                                        <form action="{{ route('kpi.ads.destroy', $report) }}" method="POST" onsubmit="return confirm('Delete this report?')">
-                                            @csrf @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bx bx-trash"></i></button>
-                                        </form>
-                                    @endmoduleEdit
-                                </td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="7" class="text-center text-muted py-4">No reports saved yet.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="mt-3">{{ $reports->links() }}</div>
     </div>
 
     {{-- ================= ADS ANALYTICS ================= --}}
@@ -329,7 +254,7 @@
             </div>
         </div>
 
-        <div class="kpi-panel">
+        <div class="kpi-panel mb-4">
             <h6>Actionable Insights</h6>
             <p class="text-muted small mb-3">Rule-based recommendations — which campaigns to scale, fix, or pause — based on conversion vs. the 20% target.</p>
             @forelse ($insights as $insight)
@@ -354,6 +279,77 @@
                 <p class="text-muted small mb-0">No ad leads logged for this period.</p>
             @endforelse
         </div>
+
+        <div class="kpi-header mt-4">
+            <div>
+                <h4>Ads Conversion Reports</h4>
+                <p>Pick a date range and generate a saved snapshot — leads, bookings, conversion %, revenue, and branch split are calculated automatically from the Ad Leads Log.</p>
+            </div>
+        </div>
+
+        @moduleEdit('kpis')
+            <div class="kpi-panel mb-3">
+                <form method="POST" action="{{ route('kpi.ads.store') }}" class="row g-3 align-items-end">
+                    @csrf
+                    <div class="col-md-3">
+                        <label class="form-label">From</label>
+                        <input type="date" name="date_from" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">To</label>
+                        <input type="date" name="date_to" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary"><i class="bx bx-plus me-1"></i> Generate Report</button>
+                    </div>
+                </form>
+            </div>
+        @endmoduleEdit
+
+        <div class="kpi-panel p-0" style="overflow:hidden;">
+            <div class="table-responsive">
+                <table class="table kpi-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>Categories</th>
+                            <th class="text-end">Total Leads</th>
+                            <th class="text-end">Total Bookings</th>
+                            <th class="text-end">Overall Conversion</th>
+                            <th class="text-end">Total Revenue (QAR)</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($reports as $report)
+                            @php $totals = $report->totals(); @endphp
+                            <tr>
+                                <td><a href="{{ route('kpi.ads.show', $report) }}">{{ $report->date_from->format('d M Y') }} – {{ $report->date_to->format('d M Y') }}</a></td>
+                                <td>{{ count($report->computedCategories()) }}</td>
+                                <td class="text-end">{{ $totals['total_leads'] }}</td>
+                                <td class="text-end">{{ $totals['total_bookings'] }}</td>
+                                <td class="text-end">
+                                    <span class="kpi-badge {{ $totals['overall_met_target'] ? 'kpi-badge-green' : 'kpi-badge-red' }}">{{ $totals['overall_conversion'] }}%</span>
+                                </td>
+                                <td class="text-end">{{ number_format($totals['total_revenue'], 2) }}</td>
+                                <td class="text-end">
+                                    @moduleEdit('kpis')
+                                        <form action="{{ route('kpi.ads.destroy', $report) }}" method="POST" onsubmit="return confirm('Delete this report?')">
+                                            @csrf @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bx bx-trash"></i></button>
+                                        </form>
+                                    @endmoduleEdit
+                                </td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="7" class="text-center text-muted py-4">No reports saved yet.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="mt-3">{{ $reports->links() }}</div>
     </div>
 
     <script>

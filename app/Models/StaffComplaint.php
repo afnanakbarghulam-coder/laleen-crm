@@ -33,6 +33,9 @@ class StaffComplaint extends Model
         'service_id',
         'category',
         'description',
+        'what_happened',
+        'corrective_action',
+        'is_staff_mistake',
         'deduction_applied',
         'deduction_amount',
         'created_by',
@@ -41,6 +44,7 @@ class StaffComplaint extends Model
     protected $casts = [
         'complaint_date' => 'date',
         'deduction_amount' => 'float',
+        'is_staff_mistake' => 'boolean',
     ];
 
     protected static function booted(): void
@@ -65,6 +69,12 @@ class StaffComplaint extends Model
     public function staffMembers()
     {
         return $this->belongsToMany(Staff::class, 'complaint_staff', 'staff_complaint_id', 'staff_id');
+    }
+
+    /** Alias for staffMembers() */
+    public function staff()
+    {
+        return $this->staffMembers();
     }
 
     public function customer()
@@ -97,13 +107,21 @@ class StaffComplaint extends Model
         return $this->complaint_time ? Carbon::parse($this->complaint_time)->format('h:i A') : '—';
     }
 
+    public function getIsResolvedAttribute(): bool
+    {
+        return $this->is_staff_mistake !== null || $this->notices()->exists();
+    }
+
     public function toEditPayload(): array
     {
         return array_merge($this->only([
             'id', 'reference_number', 'branch', 'customer_id', 'customer_name',
             'customer_phone', 'service_id', 'category', 'description',
+            'what_happened', 'corrective_action', 'is_staff_mistake',
             'deduction_applied', 'deduction_amount',
         ]), [
+            'what_happened' => $this->what_happened ?: $this->description,
+            'description' => $this->description ?: $this->what_happened,
             'complaint_date' => $this->complaint_date->format('Y-m-d'),
             'complaint_date_label' => $this->complaint_date->format('d M Y'),
             'complaint_time' => $this->complaint_time,
