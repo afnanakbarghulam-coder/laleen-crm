@@ -39,21 +39,26 @@ class StaffComplaintController extends Controller
 
     public function update(Request $request, StaffComplaint $staffComplaint)
     {
-        if (!$request->has('staff_ids') && $request->hasAny(['what_happened', 'corrective_action'])) {
+        if (!$request->has('staff_ids') && $request->hasAny(['what_happened', 'corrective_action', 'manager_feedback'])) {
             $data = $request->validate([
                 'what_happened' => 'required|string|max:2000',
                 'corrective_action' => 'nullable|string|max:2000',
+                'manager_feedback' => 'nullable|string|max:2000',
             ]);
 
             $whatHappened = trim($data['what_happened']);
             $correctiveAction = isset($data['corrective_action']) && trim($data['corrective_action']) !== ''
                 ? trim($data['corrective_action'])
                 : null;
+            $managerFeedback = isset($data['manager_feedback']) && trim($data['manager_feedback']) !== ''
+                ? trim($data['manager_feedback'])
+                : null;
 
             $staffComplaint->update([
                 'what_happened' => $whatHappened,
                 'description' => $whatHappened,
                 'corrective_action' => $correctiveAction,
+                'manager_feedback' => $managerFeedback,
             ]);
 
             if ($request->wantsJson()) {
@@ -331,6 +336,7 @@ class StaffComplaintController extends Controller
             'what_happened' => 'nullable|string|max:2000',
             'description' => 'nullable|string|max:2000',
             'corrective_action' => 'nullable|string|max:2000',
+            'manager_feedback' => 'nullable|string|max:2000',
             'is_staff_mistake' => 'nullable|boolean',
             'deduction_applied' => ['nullable', Rule::in(['Y', 'N'])],
             'deduction_amount' => 'nullable|required_if:deduction_applied,Y|numeric|min:0',

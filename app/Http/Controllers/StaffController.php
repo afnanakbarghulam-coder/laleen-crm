@@ -62,6 +62,7 @@ class StaffController extends Controller
             'id' => $s->id,
             'name' => $s->name,
             'branch' => $s->branch,
+            'base_salary' => (float) ($s->base_salary ?? 0),
             'hourly_wage' => (float) ($s->hourly_wage ?? 0),
         ])->values();
 
@@ -255,20 +256,18 @@ class StaffController extends Controller
     }
 
     /**
-     * Quick-edit a team member's Base Salary, Hourly Wage, and Commission Rate
+     * Quick-edit a team member's Base Salary and Commission Rate
      * directly from the Payroll & Overtime tab.
      */
     public function updateWages(Request $request, Staff $staff)
     {
         $validated = $request->validate([
             'base_salary' => 'nullable|numeric|min:0',
-            'hourly_wage' => 'nullable|numeric|min:0',
             'commission_rate' => 'nullable|numeric|min:0|max:100',
         ]);
 
         $staff->update([
             'base_salary' => $validated['base_salary'] ?? 0,
-            'hourly_wage' => $validated['hourly_wage'] ?? 0,
             'commission_rate' => $validated['commission_rate'] ?? 0,
         ]);
 

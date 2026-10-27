@@ -7,23 +7,20 @@ use Illuminate\Database\Eloquent\Model;
 class Lead extends Model
 {
     const CATEGORIES = [
-        'follow_up' => 'Follow up',
         'inquiry' => 'Inquiry',
-        'no_show' => 'No-show',
-        'cancel' => 'Cancel',
+        'follow_up' => 'Follow up',
+        'no_show' => 'No Show',
+        'cancel' => 'Cancelled',
     ];
 
     /**
-     * Categories staff can pick by hand when adding/editing a lead.
-     * No-show and Cancel are excluded on purpose - those are set
-     * automatically when an appointment is marked No Show or Cancelled
-     * on the Enhanced Calendar (see AppointmentController::updateStatus()),
-     * never chosen manually. They still appear in CATEGORIES above for
-     * filtering, badges, and analytics.
+     * Categories staff can pick when adding/editing a lead.
      */
     const MANUAL_CATEGORIES = [
-        'follow_up' => 'Follow up',
         'inquiry' => 'Inquiry',
+        'follow_up' => 'Follow up',
+        'no_show' => 'No Show',
+        'cancel' => 'Cancelled',
     ];
 
     const NEEDFUL_STATUSES = [

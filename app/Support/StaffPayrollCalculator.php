@@ -52,7 +52,11 @@ class StaffPayrollCalculator
 
     public function overtimePay(Staff $staff): float
     {
-        return round($this->overtimeEntriesFor($staff)->sum(fn ($e) => $e->hours * (float) ($e->rate ?? $staff->hourly_wage ?? 0)), 2);
+        return round($this->overtimeEntriesFor($staff)->sum(function ($e) use ($staff) {
+            $e->setRelation('staff', $staff);
+
+            return $e->pay();
+        }), 2);
     }
 
     public function deductionsTotal(Staff $staff): float

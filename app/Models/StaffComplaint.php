@@ -35,6 +35,7 @@ class StaffComplaint extends Model
         'description',
         'what_happened',
         'corrective_action',
+        'manager_feedback',
         'is_staff_mistake',
         'deduction_applied',
         'deduction_amount',
@@ -117,7 +118,7 @@ class StaffComplaint extends Model
         return array_merge($this->only([
             'id', 'reference_number', 'branch', 'customer_id', 'customer_name',
             'customer_phone', 'service_id', 'category', 'description',
-            'what_happened', 'corrective_action', 'is_staff_mistake',
+            'what_happened', 'corrective_action', 'manager_feedback', 'is_staff_mistake',
             'deduction_applied', 'deduction_amount',
         ]), [
             'what_happened' => $this->what_happened ?: $this->description,

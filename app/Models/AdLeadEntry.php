@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class AdLeadEntry extends Model
 {
@@ -54,5 +55,30 @@ class AdLeadEntry extends Model
     public function isBooked(): bool
     {
         return !is_null($this->branch);
+    }
+
+    /**
+     * All available ad categories (from the ad_categories table, default constants,
+     * and any distinct categories logged in ad_lead_entries).
+     */
+    public static function availableCategories(): array
+    {
+        $categories = self::CATEGORIES;
+
+        if (Schema::hasTable('ad_categories')) {
+            $stored = AdCategory::orderBy('id')->pluck('name')->all();
+            $categories = array_merge($categories, $stored);
+        }
+
+        if (Schema::hasTable('ad_lead_entries')) {
+            $logged = self::query()
+                ->whereNotNull('category')
+                ->distinct()
+                ->pluck('category')
+                ->all();
+            $categories = array_merge($categories, $logged);
+        }
+
+        return array_values(array_unique(array_filter(array_map('trim', $categories))));
     }
 }

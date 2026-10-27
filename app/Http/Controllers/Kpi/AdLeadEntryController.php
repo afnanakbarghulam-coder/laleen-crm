@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Kpi;
 
 use App\Http\Controllers\Controller;
+use App\Models\AdCategory;
 use App\Models\AdLeadEntry;
 use App\Models\Lead;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class AdLeadEntryController extends Controller
@@ -35,15 +37,39 @@ class AdLeadEntryController extends Controller
 
     private function validated(Request $request): array
     {
-        $validated = $request->validate([
+        if (!$request->filled('category') && $request->filled('ad_category')) {
+            $request->merge(['category' => $request->input('ad_category')]);
+        }
+
+        $isCreateNew = $request->input('category') === 'create_new'
+            || $request->input('ad_category') === 'create_new';
+
+        $rules = [
             'date' => 'required|date',
             'country_code' => 'required|string|max:5',
             'phone_number' => 'required|string|max:20',
-            'category' => ['required', Rule::in(AdLeadEntry::CATEGORIES)],
+            'category' => $isCreateNew
+                ? ['required', 'string']
+                : ['required', 'string', 'max:255', Rule::in(AdLeadEntry::availableCategories())],
             'ticket_amount' => 'nullable|numeric|min:0',
             'branch' => ['nullable', Rule::in(array_keys(AdLeadEntry::BRANCHES))],
             'remarks' => 'nullable|string|max:255',
-        ]);
+        ];
+
+        if ($isCreateNew) {
+            $rules['new_category'] = 'required|string|max:255';
+        }
+
+        $validated = $request->validate($rules);
+
+        if ($isCreateNew) {
+            $newCategory = trim($validated['new_category']);
+            if (Schema::hasTable('ad_categories')) {
+                AdCategory::firstOrCreate(['name' => $newCategory]);
+            }
+            $validated['category'] = $newCategory;
+            unset($validated['new_category']);
+        }
 
         $phone = Lead::normalizePhone($validated['country_code'], $validated['phone_number']);
         unset($validated['country_code'], $validated['phone_number']);

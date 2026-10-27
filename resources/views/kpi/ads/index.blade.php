@@ -41,7 +41,7 @@
             </form>
         </div>
 
-        <div class="kpi-panel p-0 mb-4" style="overflow:hidden;">
+        <div class="kpi-panel p-0 mb-2" style="overflow:hidden;">
             <div class="table-responsive">
                 <table class="table kpi-table mb-0">
                     <thead>
@@ -55,11 +55,60 @@
                             <th></th>
                         </tr>
                     </thead>
-                    <tbody>
-                        @forelse ($adLeadEntries as $entry)
-                            @php [$entryCountryCode, $entryPhoneNumber] = \App\Models\Lead::splitPhone($entry->phone); @endphp
-                            <tr>
-                                <td>{{ $entry->date->format('d M Y') }}</td>
+                    @forelse ($adLeadEntries as $entry)
+                        @php [$entryCountryCode, $entryPhoneNumber] = \App\Models\Lead::splitPhone($entry->phone); @endphp
+                        <tbody x-data="{
+                            showAiPanel: false,
+                            isLoading: false,
+                            script: '',
+                            copied: false,
+                            errorMsg: '',
+                            generateScript() {
+                                this.showAiPanel = true;
+                                this.isLoading = true;
+                                this.errorMsg = '';
+                                this.copied = false;
+                                fetch('{{ route('kpi.ad-leads.ai-script', $entry) }}', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Accept': 'application/json',
+                                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                    },
+                                    body: JSON.stringify({ lead_id: {{ $entry->id }} })
+                                })
+                                .then(r => r.json())
+                                .then(data => {
+                                    if (data && data.script) {
+                                        this.script = data.script;
+                                    } else {
+                                        this.errorMsg = 'Could not generate script. Please try again.';
+                                    }
+                                    this.isLoading = false;
+                                })
+                                .catch(() => {
+                                    this.errorMsg = 'Network error while generating AI script.';
+                                    this.isLoading = false;
+                                })
+                                .finally(() => {
+                                    this.isLoading = false;
+                                });
+                            },
+                            copyToWhatsApp() {
+                                if (!this.script) return;
+                                navigator.clipboard.writeText(this.script).then(() => {
+                                    this.copied = true;
+                                    setTimeout(() => { this.copied = false; }, 2500);
+                                });
+                            }
+                        }" style="border-top: none;">
+                            <tr @if (!$entry->isBooked()) @click="showAiPanel = !showAiPanel" style="cursor: pointer;" @endif>
+                                <td>
+                                    @if (!$entry->isBooked())
+                                        <i class="bx me-1 text-muted" :class="showAiPanel ? 'bx-chevron-down' : 'bx-chevron-right'"></i>
+                                    @endif
+                                    {{ $entry->date->format('d M Y') }}
+                                </td>
                                 <td>{{ $entry->phone }}</td>
                                 <td>{{ $entry->category }}</td>
                                 <td class="text-end">{{ $entry->ticket_amount > 0 ? number_format($entry->ticket_amount, 2) : '—' }}</td>
@@ -71,9 +120,22 @@
                                     @endif
                                 </td>
                                 <td class="text-muted small">{{ $entry->remarks ?? '—' }}</td>
-                                <td class="text-end">
-                                    @moduleEdit('kpis')
-                                        <div class="d-flex gap-1 justify-content-end">
+                                <td class="text-end" @click.stop>
+                                    <div class="d-flex gap-1 justify-content-end align-items-center">
+                                        @if (!$entry->isBooked() && empty($entry->branch))
+                                            <button type="button"
+                                                class="btn btn-sm btn-primary"
+                                                @click="generateScript()"
+                                                :disabled="isLoading"
+                                                title="Generate AI Closing Script">
+                                                <span x-show="!isLoading">🧠 Generate AI Closing Script</span>
+                                                <span x-show="isLoading" x-cloak>
+                                                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                                    Generating...
+                                                </span>
+                                            </button>
+                                        @endif
+                                        @moduleEdit('kpis')
                                             <button type="button" class="btn btn-sm btn-outline-warning ad-lead-edit-btn"
                                                 data-entry='@json(array_merge($entry->toArray(), ["country_code" => $entryCountryCode, "phone_number" => $entryPhoneNumber]))'
                                                 title="Edit">
@@ -83,19 +145,82 @@
                                                 @csrf @method('DELETE')
                                                 <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
                                             </form>
-                                        </div>
-                                    @endmoduleEdit
+                                        @endmoduleEdit
+                                    </div>
                                 </td>
                             </tr>
-                        @empty
+                            @if (!$entry->isBooked() && empty($entry->branch))
+                                <tr x-show="showAiPanel" x-cloak class="bg-dark bg-opacity-10">
+                                    <td colspan="7" class="p-3">
+                                        <div class="d-flex flex-column gap-2 p-3 rounded border border-secondary border-opacity-25" style="background: rgba(20, 16, 14, 0.45);">
+                                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                <div class="small fw-bold text-uppercase text-muted" style="letter-spacing: 0.04em;">
+                                                    🧠 Sales Consultant &mdash; {{ $entry->category }} ({{ max(0, (int) floor(($entry->created_at ?? $entry->date ?? now())->diffInDays(now()))) }}d old)
+                                                </div>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <button type="button"
+                                                        class="btn btn-sm btn-primary"
+                                                        @click="generateScript()"
+                                                        :disabled="isLoading">
+                                                        <span x-show="!isLoading">🧠 Generate AI Closing Script</span>
+                                                        <span x-show="isLoading" x-cloak>
+                                                            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                                            Thinking...
+                                                        </span>
+                                                    </button>
+                                                    <button type="button"
+                                                        class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                                                        x-on:click="showAiPanel = false"
+                                                        title="Close AI panel">
+                                                        <i class="bi bi-x-lg"></i>
+                                                        <span>Close</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div x-show="isLoading" x-cloak class="py-2 text-muted small">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+                                                    <span>Crafting high-converting 2-sentence WhatsApp closing script...</span>
+                                                </div>
+                                            </div>
+
+                                            <div x-show="errorMsg && !isLoading" x-cloak class="text-danger small" x-text="errorMsg"></div>
+
+                                            <div x-show="script && !isLoading" x-cloak>
+                                                <div class="p-3 rounded mb-2 border border-secondary border-opacity-25" style="background: rgba(255, 255, 255, 0.04); border-left: 3px solid var(--bs-primary, #c98a7b) !important; font-size: 0.92rem; line-height: 1.5;" x-text="script"></div>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <button type="button" class="btn btn-sm btn-success fw-semibold" @click="copyToWhatsApp()">
+                                                        <i class="bx bxl-whatsapp me-1"></i>
+                                                        <span x-text="copied ? 'Copied to Clipboard!' : 'Copy to WhatsApp'"></span>
+                                                    </button>
+                                                    <a :href="'https://wa.me/{{ preg_replace('/[^0-9]/', '', $entry->phone) }}?text=' + encodeURIComponent(script)"
+                                                       target="_blank"
+                                                       rel="noopener"
+                                                       class="btn btn-sm btn-outline-success">
+                                                        <i class="bx bx-link-external me-1"></i> Open WhatsApp Chat
+                                                    </a>
+                                                </div>
+                                            </div>
+
+                                            <div x-show="!script && !isLoading && !errorMsg" x-cloak class="text-muted small">
+                                                Click <strong>🧠 Generate AI Closing Script</strong> to create a 2-sentence scarcity + risk-reversal WhatsApp close tailored to this lead.
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endif
+                        </tbody>
+                    @empty
+                        <tbody>
                             <tr><td colspan="7" class="text-center text-muted py-4">No ad leads logged{{ ($entriesFrom || $entriesTo) ? ' for this period' : ' yet' }}.</td></tr>
-                        @endforelse
-                    </tbody>
+                        </tbody>
+                    @endforelse
                 </table>
             </div>
         </div>
 
-        <div class="mb-4">{{ $adLeadEntries->links() }}</div>
+        <div class="d-flex justify-content-end align-items-center mt-2 mb-0">{{ $adLeadEntries->links() }}</div>
 
         @moduleEdit('kpis')
             @include('kpi.ads._lead-entry-modal', ['uid' => 'new', 'entry' => null])
@@ -349,7 +474,7 @@
             </div>
         </div>
 
-        <div class="mt-3">{{ $reports->links() }}</div>
+        <div class="d-flex justify-content-end align-items-center mt-2 mb-0">{{ $reports->links() }}</div>
     </div>
 
     <script>

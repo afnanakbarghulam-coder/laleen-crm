@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AiScriptController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CustomerController;
@@ -52,6 +53,7 @@ Route::get('/', function () {
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [UserController::class, 'dashboard'])->name('dashboard');
+    Route::post('/ai-script/{leadId?}', [AiScriptController::class, 'generate'])->name('ai-script.generate');
 
     Route::get('/profile', [UserController::class, 'profile_edit'])->name('profile.edit');
     Route::put('/profile', [UserController::class, 'profile_update'])->name('profile.update');
@@ -73,6 +75,7 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/leads/{lead}', [LeadController::class, 'destroy'])->name('leads.destroy');
     });
     Route::middleware('module:leads')->group(function () {
+        Route::post('/leads/{lead}/ai-script', [AiScriptController::class, 'generateForLead'])->name('leads.ai-script');
         Route::get('/leads/{lead}', [LeadController::class, 'show'])->name('leads.show');
     });
 
@@ -224,6 +227,8 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->delete('/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'destroy'])->name('ads-plan.destroy');
 
         Route::middleware('module:kpis,edit')->post('/ad-leads', [AdLeadEntryController::class, 'store'])->name('ad-leads.store');
+        Route::middleware('module:kpis')->post('/ad-leads/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script.inline');
+        Route::middleware('module:kpis')->post('/ad-leads/{adLeadEntry}/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script');
         Route::middleware('module:kpis,edit')->put('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'update'])->name('ad-leads.update');
         Route::middleware('module:kpis,edit')->delete('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'destroy'])->name('ad-leads.destroy');
 

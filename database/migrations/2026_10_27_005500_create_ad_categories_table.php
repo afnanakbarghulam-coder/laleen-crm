@@ -1,0 +1,48 @@
+<?php
+
+use App\Models\AdLeadEntry;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        if (!Schema::hasTable('ad_categories')) {
+            Schema::create('ad_categories', function (Blueprint $table) {
+                $table->id();
+                $table->string('name')->unique();
+                $table->timestamps();
+            });
+        }
+
+        $now = now();
+        $defaultCategories = AdLeadEntry::CATEGORIES;
+
+        if (Schema::hasTable('ad_lead_entries')) {
+            $loggedCategories = DB::table('ad_lead_entries')
+                ->whereNotNull('category')
+                ->distinct()
+                ->pluck('category')
+                ->all();
+            $defaultCategories = array_values(array_unique(array_merge($defaultCategories, $loggedCategories)));
+        }
+
+        foreach ($defaultCategories as $name) {
+            $trimmed = trim((string) $name);
+            if ($trimmed !== '') {
+                DB::table('ad_categories')->updateOrInsert(
+                    ['name' => $trimmed],
+                    ['created_at' => $now, 'updated_at' => $now]
+                );
+            }
+        }
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('ad_categories');
+    }
+};

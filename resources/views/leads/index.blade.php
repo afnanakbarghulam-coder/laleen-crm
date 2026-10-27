@@ -277,21 +277,84 @@
         <div class="table-responsive text-nowrap">
             <table class="table">
                 <thead>
-                    <th>Date</th>
-                    <th>Contact</th>
-                    <th>Category</th>
-                    <th>Customer Remarks</th>
-                    <th>Service Interest</th>
-                    <th>Agent Assign</th>
-                    <th>Needful Done</th>
-                    <th>Next Follow-up Date</th>
-                    <th>Actions</th>
+                    <tr>
+                        <th>Date</th>
+                        <th>Contact</th>
+                        <th>Category</th>
+                        <th>Customer Remarks</th>
+                        <th>Service Interest</th>
+                        <th>Agent Assign</th>
+                        <th>Needful Done</th>
+                        <th>Next Follow-up Date</th>
+                        <th>Actions</th>
+                    </tr>
                 </thead>
-                <tbody class="table-border-bottom-0">
-                    @forelse($leads as $lead)
-                        <tr>
-                            <td>{{ $lead->created_at->format('d M Y') }}</td>
+                @forelse($leads as $lead)
+                    @php
+                        $isBookedOrClosed = ($lead->needful_done === 'yes')
+                            || in_array(strtolower((string) ($lead->status ?? '')), ['booked', 'closed'], true);
+                        $leadCatLabel = $lead->category ? (\App\Models\Lead::CATEGORIES[$lead->category] ?? $lead->category) : 'Inquiry';
+                        $leadAgeDays = max(0, (int) floor(($lead->created_at ?? now())->diffInDays(now())));
+                    @endphp
+                    <tbody class="table-border-bottom-0" x-data="{
+                        showAiPanel: false,
+                        isLoading: false,
+                        isClosed: {{ $isBookedOrClosed ? 'true' : 'false' }},
+                        script: '',
+                        copied: false,
+                        errorMsg: '',
+                        generateScript() {
+                            if (this.isClosed) return;
+                            this.showAiPanel = true;
+                            this.isLoading = true;
+                            this.errorMsg = '';
+                            this.copied = false;
+                            fetch('{{ route('leads.ai-script', $lead) }}', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                },
+                                body: JSON.stringify({
+                                    lead_id: {{ $lead->id }},
+                                    module: 'lead_management',
+                                    category: @js($lead->category ?: 'inquiry')
+                                })
+                            })
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data && data.script) {
+                                    this.script = data.script;
+                                } else {
+                                    this.errorMsg = 'Could not generate script. Please try again.';
+                                }
+                                this.isLoading = false;
+                            })
+                            .catch(() => {
+                                this.errorMsg = 'Network error while generating AI script.';
+                                this.isLoading = false;
+                            })
+                            .finally(() => {
+                                this.isLoading = false;
+                            });
+                        },
+                        copyToWhatsApp() {
+                            if (!this.script) return;
+                            navigator.clipboard.writeText(this.script).then(() => {
+                                this.copied = true;
+                                setTimeout(() => { this.copied = false; }, 2500);
+                            });
+                        }
+                    }" style="border-top: none;">
+                        <tr @if (!$isBookedOrClosed) @click="if (!isClosed) showAiPanel = !showAiPanel" style="cursor: pointer;" @endif>
                             <td>
+                                @if (!$isBookedOrClosed)
+                                    <i class="bx me-1 text-muted" x-show="!isClosed" :class="showAiPanel ? 'bx-chevron-down' : 'bx-chevron-right'"></i>
+                                @endif
+                                {{ $lead->created_at->format('d M Y') }}
+                            </td>
+                            <td @click.stop>
                                 {{ $lead->phone }}
                                 @if ($lead->customer)
                                     <a href="{{ route('customers.show', $lead->customer_id) }}" target="_blank" class="lead-client-link">
@@ -306,15 +369,16 @@
                                     <span class="text-muted">—</span>
                                 @endif
                             </td>
-                            <td>{{ $lead->customer_remarks ?? '—' }}</td>
-                            <td>{{ !empty($lead->service_interest) ? implode(', ', $lead->service_interest) : '—' }}</td>
+                            <td style="max-width: 220px; white-space: normal;">{{ $lead->customer_remarks ?? '—' }}</td>
+                            <td style="max-width: 200px; white-space: normal;">{{ !empty($lead->service_interest) ? implode(', ', $lead->service_interest) : '—' }}</td>
                             <td>{{ $lead->agent->name ?? '—' }}</td>
-                            <td>
+                            <td @click.stop>
                                 @moduleEdit('leads')
                                     <select class="needful-done-select {{ $lead->needful_done ? 'needful-' . $lead->needful_done : '' }}"
                                         data-lead-id="{{ $lead->id }}"
                                         data-previous="{{ $lead->needful_done }}"
-                                        data-url="{{ route('leads.needful-done', $lead->id) }}">
+                                        data-url="{{ route('leads.needful-done', $lead->id) }}"
+                                        @change="isClosed = ($event.target.value === 'yes'); if (isClosed) showAiPanel = false;">
                                         <option value="" {{ !$lead->needful_done ? 'selected' : '' }}>—</option>
                                         @foreach (\App\Models\Lead::NEEDFUL_STATUSES as $key => $label)
                                             <option value="{{ $key }}" {{ $lead->needful_done === $key ? 'selected' : '' }}>{{ $label }}</option>
@@ -327,9 +391,24 @@
                                 @endmoduleEdit
                             </td>
                             <td>{{ $lead->next_followup_date ? $lead->next_followup_date->format('d M Y') : '—' }}</td>
-                            <td>
-                                @moduleEdit('leads')
-                                    <div class="d-flex gap-2 justify-content-center">
+                            <td @click.stop>
+                                <div class="d-flex gap-2 justify-content-center align-items-center">
+                                    @if (!$isBookedOrClosed)
+                                        <button type="button"
+                                            class="btn btn-sm btn-primary"
+                                            x-show="!isClosed"
+                                            @click="generateScript()"
+                                            :disabled="isLoading"
+                                            title="Generate AI Closing Script">
+                                            <span x-show="!isLoading">🧠 Generate AI Closing Script</span>
+                                            <span x-show="isLoading" x-cloak>
+                                                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                                Generating...
+                                            </span>
+                                        </button>
+                                    @endif
+
+                                    @moduleEdit('leads')
                                         <!-- Edit Button -->
                                         <button type="button" class="btn btn-sm btn-outline-primary" title="Edit Lead"
                                             data-bs-toggle="modal" data-bs-target="#editLeadModal{{ $lead->id }}">
@@ -345,19 +424,79 @@
                                                 <i class="bx bx-trash"></i>
                                             </button>
                                         </form>
-
-                                    </div>
-                                @else
-                                    <span class="text-muted small">—</span>
-                                @endmoduleEdit
+                                    @endmoduleEdit
+                                </div>
                             </td>
                         </tr>
-                    @empty
+                        @if (!$isBookedOrClosed)
+                            <tr x-show="showAiPanel && !isClosed" x-cloak class="bg-dark bg-opacity-10">
+                                <td colspan="9" class="p-3" style="white-space: normal;">
+                                    <div class="d-flex flex-column gap-2 p-3 rounded border border-secondary border-opacity-25" style="background: rgba(20, 16, 14, 0.45);">
+                                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                            <div class="small fw-bold text-uppercase text-muted" style="letter-spacing: 0.04em;">
+                                                🧠 Sales Consultant &mdash; {{ $leadCatLabel }} ({{ $leadAgeDays }}d old)
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <button type="button"
+                                                    class="btn btn-sm btn-primary"
+                                                    @click="generateScript()"
+                                                    :disabled="isLoading">
+                                                    <span x-show="!isLoading">🧠 Generate AI Closing Script</span>
+                                                    <span x-show="isLoading" x-cloak>
+                                                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                                        Thinking...
+                                                    </span>
+                                                </button>
+                                                <button type="button"
+                                                    class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                                                    x-on:click="showAiPanel = false"
+                                                    title="Close AI panel">
+                                                    <i class="bi bi-x-lg"></i>
+                                                    <span>Close</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div x-show="isLoading" x-cloak class="py-2 text-muted small">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+                                                <span>Crafting high-converting 2-sentence WhatsApp closing script...</span>
+                                            </div>
+                                        </div>
+
+                                        <div x-show="errorMsg && !isLoading" x-cloak class="text-danger small" x-text="errorMsg"></div>
+
+                                        <div x-show="script && !isLoading" x-cloak>
+                                            <div class="p-3 rounded mb-2 border border-secondary border-opacity-25" style="background: rgba(255, 255, 255, 0.04); border-left: 3px solid var(--bs-primary, #c98a7b) !important; font-size: 0.92rem; line-height: 1.5;" x-text="script"></div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <button type="button" class="btn btn-sm btn-success fw-semibold" @click="copyToWhatsApp()">
+                                                    <i class="bx bxl-whatsapp me-1"></i>
+                                                    <span x-text="copied ? 'Copied to Clipboard!' : 'Copy to WhatsApp'"></span>
+                                                </button>
+                                                <a :href="'https://wa.me/{{ preg_replace('/[^0-9]/', '', $lead->phone) }}?text=' + encodeURIComponent(script)"
+                                                   target="_blank"
+                                                   rel="noopener"
+                                                   class="btn btn-sm btn-outline-success">
+                                                    <i class="bx bx-link-external me-1"></i> Open WhatsApp Chat
+                                                </a>
+                                            </div>
+                                        </div>
+
+                                        <div x-show="!script && !isLoading && !errorMsg" x-cloak class="text-muted small">
+                                            Click <strong>🧠 Generate AI Closing Script</strong> to create an ultra-short AIDA WhatsApp script tailored to this lead.
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
+                    </tbody>
+                @empty
+                    <tbody class="table-border-bottom-0">
                         <tr>
                             <td colspan="9" class="text-center text-muted">No leads found</td>
                         </tr>
-                    @endforelse
-                </tbody>
+                    </tbody>
+                @endforelse
 
             </table>
         </div>

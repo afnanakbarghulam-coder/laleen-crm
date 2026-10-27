@@ -30,7 +30,7 @@ class AdsConversionController extends Controller
                 'tab' => 'leads',
             ]));
 
-        $categories = AdLeadEntry::CATEGORIES;
+        $categories = AdLeadEntry::availableCategories();
         $branches = AdLeadEntry::BRANCHES;
 
         // Ads Analytics: a live, non-persisted breakdown for a date range —

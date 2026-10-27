@@ -908,7 +908,7 @@
                                     @moduleEdit('staff_management')
                                         <button type="button" class="btn btn-sm btn-link text-warning p-0 ms-1"
                                             title="Quick-edit wages &amp; commission"
-                                            onclick='event.stopPropagation(); openEditWagesModal({{ $row["staff_id"] }}, @json($row["name"]), {{ (float) $row["base_salary"] }}, {{ (float) $row["hourly_wage"] }}, {{ (float) $row["commission_rate"] }})'>
+                                            onclick='event.stopPropagation(); openEditWagesModal({{ $row["staff_id"] }}, @json($row["name"]), {{ (float) $row["base_salary"] }}, {{ (float) $row["commission_rate"] }})'>
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
                                     @endmoduleEdit
@@ -953,7 +953,7 @@
                                                                     <tr data-ot-row="{{ $entry->id }}">
                                                                         <td class="text-nowrap">{{ $entry->entry_date->format('d M Y') }}</td>
                                                                         <td class="text-end">{{ number_format($entry->hours, 2) }}</td>
-                                                                        <td class="text-end">{{ $entry->rate !== null ? 'QAR ' . number_format($entry->rate, 2) : 'Default' }}</td>
+                                                                        <td class="text-end">QAR {{ number_format($entry->effectiveRate(), 2) }}</td>
                                                                         <td class="text-end fw-semibold">QAR {{ number_format($entry->pay(), 2) }}</td>
                                                                         <td class="small">{{ $entry->customer_name ?: '—' }}</td>
                                                                         <td class="small text-muted">{{ $entry->note ?: '—' }}</td>
@@ -1193,7 +1193,7 @@
                                             </div>
                                         </div>
 
-                                        <!-- Section 2 (Middle): What Happened & Corrective Action -->
+                                        <!-- Section 2 (Middle): What Happened, Corrective Action & Manager Feedback -->
                                         <div class="col-lg-4">
                                             <div class="payroll-subcard d-flex flex-column gap-3">
                                                 <div>
@@ -1203,7 +1203,7 @@
                                                         </span>
                                                         @moduleEdit('staff_management')
                                                             <button type="button" class="btn btn-sm btn-link text-warning p-0"
-                                                                onclick="openEditComplaintModal({{ $complaint->id }})" title="Edit What Happened &amp; Corrective Action">
+                                                                onclick="openEditComplaintModal({{ $complaint->id }})" title="Edit What Happened, Corrective Action &amp; Manager Feedback">
                                                                 <i class="bi bi-pencil-square"></i>
                                                             </button>
                                                         @endmoduleEdit
@@ -1215,6 +1215,25 @@
                                                         <i class="bx bx-check-shield me-1"></i> Corrective Action to be taken
                                                     </div>
                                                     <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap; background: rgba(20, 16, 14, 0.35);">{{ $complaint->corrective_action ?: '—' }}</div>
+                                                </div>
+                                                <div>
+                                                    <div class="fw-bold small text-uppercase text-muted mb-1">
+                                                        <i class="bx bx-user-voice me-1"></i>
+                                                        @if ($complaint->branch === 'wakrah' || $complaint->branch === 'Wakrah' || $complaint->branch === 'Al Wakrah')
+                                                            MANAGER FEEDBACK: RHEA
+                                                        @elseif ($complaint->branch === 'old_airport' || $complaint->branch === 'Old Airport')
+                                                            MANAGER FEEDBACK: AHANA
+                                                        @else
+                                                            MANAGER FEEDBACK
+                                                        @endif
+                                                    </div>
+                                                    <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap; background: rgba(20, 16, 14, 0.35);">
+                                                        @if (!empty($complaint->manager_feedback))
+                                                            {{ $complaint->manager_feedback }}
+                                                        @else
+                                                            <span class="text-muted">— No feedback provided yet.</span>
+                                                        @endif
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -1530,10 +1549,6 @@
                                 <label class="form-label">Base Salary (QAR / period)</label>
                                 <input type="number" name="base_salary" id="ewBaseSalary" class="form-control" min="0" step="0.01" required>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label">Hourly Wage (QAR)</label>
-                                <input type="number" name="hourly_wage" id="ewHourlyWage" class="form-control" min="0" step="0.01" required>
-                            </div>
                             <div class="mb-1">
                                 <label class="form-label">Commission Rate (%)</label>
                                 <input type="number" name="commission_rate" id="ewCommissionRate" class="form-control" min="0" max="100" step="0.1" required>
@@ -1565,9 +1580,9 @@
                             <div class="col-md-6">
                                 <label class="form-label">Staff Member *</label>
                                 <select class="form-select" id="otQaStaff">
-                                    <option value="" data-hourly-wage="">Select staff</option>
+                                    <option value="" data-base-salary="">Select staff</option>
                                     @foreach ($allStaff as $s)
-                                        <option value="{{ $s->id }}" data-hourly-wage="{{ (float) ($s->hourly_wage ?? 0) }}">{{ $s->name }}</option>
+                                        <option value="{{ $s->id }}" data-base-salary="{{ (float) ($s->base_salary ?? 0) }}">{{ $s->name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -1583,13 +1598,13 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Rate (QAR/hr)</label>
-                                <input type="number" min="0" step="0.01" class="form-control" id="otQaRate" placeholder="Auto-filled">
+                                <input type="number" min="0" step="0.01" class="form-control" id="otQaRate" placeholder="Auto-calculated" readonly style="cursor: not-allowed; opacity: .85;">
                             </div>
                         </div>
-                        <div class="small text-muted mb-3 d-none" id="otQaCalcPreview"></div>
+                        <div class="p-2 rounded border border-secondary border-opacity-25 small mb-3 d-none" id="otQaCalcPreview" style="background: rgba(20, 16, 14, 0.35);"></div>
                         <div class="mb-3">
-                            <label class="form-label">Customer Name <span class="text-muted small">(optional)</span></label>
-                            <input type="text" class="form-control" id="otQaCustomerName" placeholder="Optional customer name">
+                            <label class="form-label">Customer Name *</label>
+                            <input type="text" class="form-control" id="otQaCustomerName" placeholder="Enter customer name" required>
                         </div>
                         <div class="mb-1">
                             <label class="form-label">Note <span class="text-muted small">(optional)</span></label>
@@ -1700,7 +1715,7 @@
             </div>
         </div>
 
-        <!-- Edit Complaint Modal (What Happened & Corrective Action) -->
+        <!-- Edit Complaint Modal (What Happened, Corrective Action & Manager Feedback) -->
         <div class="modal fade" id="editComplaintModal" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered modal-lg">
                 <form method="POST" id="editComplaintForm" class="modal-content">
@@ -1715,9 +1730,13 @@
                             <label class="form-label">What Happened *</label>
                             <textarea class="form-control" name="what_happened" id="editCoWhatHappened" rows="4" required placeholder="Describe what happened..."></textarea>
                         </div>
-                        <div class="mb-1">
+                        <div class="mb-3">
                             <label class="form-label">Corrective Action <span class="text-muted small">(optional)</span></label>
-                            <textarea class="form-control" name="corrective_action" id="editCoCorrectiveAction" rows="4" placeholder="Optional global corrective action..."></textarea>
+                            <textarea class="form-control" name="corrective_action" id="editCoCorrectiveAction" rows="3" placeholder="Optional global corrective action..."></textarea>
+                        </div>
+                        <div class="mb-1">
+                            <label class="form-label"><span id="editCoManagerFeedbackLabel">MANAGER FEEDBACK</span> <span class="text-muted small">(optional)</span></label>
+                            <textarea class="form-control" name="manager_feedback" id="editCoManagerFeedback" rows="3" placeholder="Enter manager feedback..."></textarea>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -1910,18 +1929,30 @@
             });
         });
 
-        window.openEditWagesModal = function (staffId, staffName, baseSalary, hourlyWage, commissionRate) {
+        window.openEditWagesModal = function (staffId, staffName, baseSalary, commissionRate) {
             const modalEl = document.getElementById('editWagesModal');
             if (!modalEl) return;
             document.getElementById('editWagesModalTitle').textContent = `Edit Wage Settings — ${staffName}`;
             document.getElementById('editWagesForm').action = `/staffs/${staffId}/wages`;
             document.getElementById('ewBaseSalary').value = Number(baseSalary || 0).toFixed(2);
-            document.getElementById('ewHourlyWage').value = Number(hourlyWage || 0).toFixed(2);
             document.getElementById('ewCommissionRate').value = Number(commissionRate || 0).toFixed(1);
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
         };
 
-        function updateOvertimeRateAndPreview(autoFillRate = false) {
+        function getDaysInMonthFromDateStr(dateStr) {
+            if (!dateStr) {
+                const now = new Date();
+                return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            }
+            const parts = dateStr.split('-').map(Number);
+            if (parts.length >= 2 && parts[0] && parts[1]) {
+                return new Date(parts[0], parts[1], 0).getDate();
+            }
+            return 30;
+        }
+
+        function updateOvertimeRateAndPreview() {
+            const dateInput = document.getElementById('otQaDate');
             const staffSelect = document.getElementById('otQaStaff');
             const rateInput = document.getElementById('otQaRate');
             const hoursInput = document.getElementById('otQaHours');
@@ -1929,36 +1960,47 @@
             const previewEl = document.getElementById('otQaCalcPreview');
             if (!staffSelect || !rateInput) return;
 
-            if (autoFillRate) {
-                const selectedOpt = staffSelect.options[staffSelect.selectedIndex];
-                const staffId = Number(staffSelect.value || 0);
-                const staffObj = (typeof ALL_STAFF !== 'undefined' ? ALL_STAFF : []).find(s => s.id === staffId);
-                const wage = staffObj !== undefined
-                    ? Number(staffObj.hourly_wage || 0)
-                    : Number(selectedOpt?.dataset?.hourlyWage || 0);
-                rateInput.value = staffId ? wage.toFixed(2) : '';
-            }
+            const selectedOpt = staffSelect.options[staffSelect.selectedIndex];
+            const staffId = Number(staffSelect.value || 0);
+            const staffObj = (typeof ALL_STAFF !== 'undefined' ? ALL_STAFF : []).find(s => s.id === staffId);
+            const baseSalary = staffObj !== undefined
+                ? Number(staffObj.base_salary || 0)
+                : Number(selectedOpt?.dataset?.baseSalary || 0);
+
+            const dateStr = dateInput?.value || '';
+            const daysInMonth = getDaysInMonthFromDateStr(dateStr);
+            const shiftHours = 9;
+            const dynamicRate = staffId ? ((baseSalary / daysInMonth) / shiftHours) : 0;
+
+            rateInput.value = staffId ? dynamicRate.toFixed(2) : '';
 
             if (previewEl) {
                 const hrs = Number(hoursInput?.value || 0);
                 const mins = Number(minutesInput?.value || 0);
-                const rate = Number(rateInput.value || 0);
                 const totalDec = hrs + (mins / 60);
-                if (totalDec > 0 && rate >= 0 && rateInput.value !== '') {
-                    const estPay = (totalDec * rate).toFixed(2);
-                    previewEl.textContent = `Duration: ${totalDec.toFixed(2)} hrs × QAR ${rate.toFixed(2)}/hr = QAR ${estPay}`;
+
+                if (staffId) {
+                    const rateRounded = Number(dynamicRate.toFixed(2));
+                    const estPay = (totalDec * rateRounded).toFixed(2);
+                    previewEl.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-1">
+                            <span class="text-muted">Formula: (QAR ${baseSalary.toFixed(2)} &divide; ${daysInMonth} days) &divide; ${shiftHours}h = <strong class="text-body">QAR ${rateRounded.toFixed(2)}/hr</strong></span>
+                            <span class="fw-bold text-primary">Expected Payout: QAR ${estPay}</span>
+                        </div>
+                    `;
                     previewEl.classList.remove('d-none');
                 } else {
-                    previewEl.textContent = '';
+                    previewEl.innerHTML = '';
                     previewEl.classList.add('d-none');
                 }
             }
         }
 
-        document.getElementById('otQaStaff')?.addEventListener('change', () => updateOvertimeRateAndPreview(true));
-        document.getElementById('otQaHours')?.addEventListener('input', () => updateOvertimeRateAndPreview(false));
-        document.getElementById('otQaMinutes')?.addEventListener('input', () => updateOvertimeRateAndPreview(false));
-        document.getElementById('otQaRate')?.addEventListener('input', () => updateOvertimeRateAndPreview(false));
+        document.getElementById('otQaDate')?.addEventListener('change', () => updateOvertimeRateAndPreview());
+        document.getElementById('otQaDate')?.addEventListener('input', () => updateOvertimeRateAndPreview());
+        document.getElementById('otQaStaff')?.addEventListener('change', () => updateOvertimeRateAndPreview());
+        document.getElementById('otQaHours')?.addEventListener('input', () => updateOvertimeRateAndPreview());
+        document.getElementById('otQaMinutes')?.addEventListener('input', () => updateOvertimeRateAndPreview());
 
         window.openLogOvertimeModal = function (preselectedStaffId = '') {
             const modalEl = document.getElementById('logOvertimeModal');
@@ -1971,7 +2013,7 @@
             document.getElementById('otQaMinutes').value = '0';
             document.getElementById('otQaCustomerName').value = '';
             document.getElementById('otQaNote').value = '';
-            updateOvertimeRateAndPreview(true);
+            updateOvertimeRateAndPreview();
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
         };
 
@@ -2519,17 +2561,22 @@
             otQaSaveBtn.addEventListener('click', function () {
                 const hoursVal = Number(document.getElementById('otQaHours').value || 0);
                 const minutesVal = Number(document.getElementById('otQaMinutes').value || 0);
+                const customerInput = document.getElementById('otQaCustomerName');
                 const fields = {
                     entry_date: document.getElementById('otQaDate').value,
                     staff_id: document.getElementById('otQaStaff').value,
                     hours: hoursVal,
                     minutes: minutesVal,
                     rate: document.getElementById('otQaRate').value,
-                    customer_name: document.getElementById('otQaCustomerName').value,
+                    customer_name: customerInput ? customerInput.value.trim() : '',
                     note: document.getElementById('otQaNote').value,
                 };
-                if (!fields.entry_date || !fields.staff_id || (hoursVal <= 0 && minutesVal <= 0)) {
-                    showStaffToast('Date, staff, and overtime duration (hours or minutes) are required.', 'error');
+                if (customerInput && !customerInput.checkValidity()) {
+                    customerInput.reportValidity();
+                    return;
+                }
+                if (!fields.entry_date || !fields.staff_id || (hoursVal <= 0 && minutesVal <= 0) || !fields.customer_name) {
+                    showStaffToast('Date, staff, overtime duration (hours or minutes), and customer name are required.', 'error');
                     return;
                 }
                 if (minutesVal < 0 || minutesVal > 59) {
@@ -2814,6 +2861,8 @@
             const titleEl = document.getElementById('editComplaintModalTitle');
             const whatHappenedEl = document.getElementById('editCoWhatHappened');
             const correctiveActionEl = document.getElementById('editCoCorrectiveAction');
+            const managerFeedbackEl = document.getElementById('editCoManagerFeedback');
+            const managerFeedbackLabelEl = document.getElementById('editCoManagerFeedbackLabel');
             if (!modalEl || !formEl) return;
 
             formEl.action = `/staff-complaints/${id}`;
@@ -2825,6 +2874,19 @@
             }
             if (correctiveActionEl) {
                 correctiveActionEl.value = e.corrective_action || '';
+            }
+            if (managerFeedbackEl) {
+                managerFeedbackEl.value = e.manager_feedback || '';
+            }
+            if (managerFeedbackLabelEl) {
+                const branchNorm = (e.branch || '').toLowerCase();
+                if (branchNorm === 'wakrah' || branchNorm === 'al wakrah') {
+                    managerFeedbackLabelEl.textContent = 'MANAGER FEEDBACK: RHEA';
+                } else if (branchNorm === 'old_airport' || branchNorm === 'old airport') {
+                    managerFeedbackLabelEl.textContent = 'MANAGER FEEDBACK: AHANA';
+                } else {
+                    managerFeedbackLabelEl.textContent = 'MANAGER FEEDBACK';
+                }
             }
 
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
