@@ -124,18 +124,20 @@ class AiScriptController extends Controller
         $selectedAngle = Arr::random($angles);
 
         $systemPrompt = <<<PROMPT
-You are a highly skilled front desk manager at a premium beauty salon. Your goal is to text a lead and get them to book/rebook.
+You are a warm, luxurious front desk manager at a premium beauty salon. Your goal is to text a lead and help them feel confident about booking.
 
 CRITICAL RULES:
-1. MAXIMUM LENGTH: Maximum 2 short sentences. Strict 30-word limit. Be ruthless with brevity.
-2. NO FLUFF: No filler phrases. Get straight to the point.
-3. FRAMEWORK (AIDA):
-Sentence 1: Warmly address them by name and address their specific situation based on this context: [{$contextModifier}].
-Sentence 2: Offer a risk-free guarantee or state the beautiful result of the service, ending with a polite A/B choice for booking times.
-4. TONE: Warm, human, empathetic, but highly confident.
-5. ANGLE: Use this psychological angle naturally: {$selectedAngle}.
+1. LENGTH: Exactly 3 sentences. No massive paragraphs, but allow enough room to sound genuinely caring.
+2. TONE: Empathetic, luxurious, and consultative. Speak like a friend who wants them to look their best. Never use aggressive sales tactics.
+3. FRAMEWORK:
 
-CONTEXT: Lead Name: {$customerName}. Service Interest: {$serviceInterest}. Remarks: {$remarks}. Write the ultra-short script now.
+Sentence 1 (Empathy & Hook): Warmly acknowledge their specific interest. CRITICAL: DO NOT start every message with "I saw you were looking into...". You must dynamically vary the opening line every single time so it sounds like a real human texting. Mix it up naturally (e.g., "Thanks for checking out our...", "We'd love to treat you to...", "Just following up on your interest in...", or simply start by praising the specific service).
+
+Sentence 2 (Desire & Value): Highlight the beautiful result they deserve. DO NOT repeat the same guarantee every time. Instead, dynamically vary the value proposition based on the service: mention our highly-trained staff, the premium luxury products we use, how relaxing the experience is, or how popular the treatment is right now. Never use the phrases "adjust it on us" or "happiness guarantee".
+
+Sentence 3 (Action): A polite A/B choice for booking (e.g., "Did you prefer a morning or afternoon appointment to get pampered?").
+
+CONTEXT: Lead Name: {$customerName}. Service: {$serviceInterest}. Remarks: {$remarks}. Write the script now.
 PROMPT;
 
         $result = $this->callLlm($systemPrompt, $selectedAngle, $customerName, $serviceInterest, $categoryLabel, $remarks);
@@ -169,10 +171,10 @@ PROMPT;
                         'model' => $model,
                         'messages' => [
                             ['role' => 'system', 'content' => $systemPrompt],
-                            ['role' => 'user', 'content' => 'Write the 2-sentence WhatsApp script now (strict 30-word limit). Output only the raw script text without surrounding quotes.'],
+                            ['role' => 'user', 'content' => 'Write the 3-sentence WhatsApp script now. Output only the raw script text without surrounding quotes.'],
                         ],
                         'temperature' => 0.8,
-                        'max_tokens' => 120,
+                        'max_tokens' => 160,
                     ]);
 
                 if ($response->successful()) {
@@ -204,7 +206,7 @@ PROMPT;
                         ],
                         'generationConfig' => [
                             'temperature' => 0.8,
-                            'maxOutputTokens' => 120,
+                            'maxOutputTokens' => 160,
                         ],
                     ]
                 );
@@ -241,20 +243,38 @@ PROMPT;
         $name = ($customerName !== '' && strtolower($customerName) !== 'unnamed') ? $customerName : 'lovely';
         $catNorm = strtolower(trim($categoryLabel));
 
+        $defaultHooks = [
+            "Hi {$name}, thanks for checking out our {$serviceInterest} service!",
+            "Hi {$name}, we'd love to treat you to a relaxing {$serviceInterest} session at the salon.",
+            "Hi {$name}, just following up on your interest in our {$serviceInterest} treatment.",
+            "Hi {$name}, our {$serviceInterest} treatment is such a wonderful choice for a fresh, radiant look.",
+        ];
+
         $sentence1 = match ($catNorm) {
-            'no show', 'no-show', 'no_show' => "Hi {$name}, we missed you at your {$serviceInterest} appointment and wanted to check in.",
-            'cancelled', 'cancel', 'canceled' => "Hi {$name}, we'd love to welcome you back for the {$serviceInterest} appointment you cancelled.",
-            'follow up', 'follow_up' => "Hi {$name}, just following up on the {$serviceInterest} session you asked about.",
-            default => "Hi {$name}, thank you for asking about our {$serviceInterest} service.",
+            'no show', 'no-show', 'no_show' => Arr::random([
+                "Hi {$name}, we missed seeing you for your {$serviceInterest} appointment and wanted to warmly check in.",
+                "Hi {$name}, hope everything is going well—we'd love to reschedule your {$serviceInterest} session whenever you're ready.",
+            ]),
+            'cancelled', 'cancel', 'canceled' => Arr::random([
+                "Hi {$name}, we'd love to welcome you back in for the {$serviceInterest} appointment you cancelled whenever the timing feels right.",
+                "Hi {$name}, just checking in after your cancelled {$serviceInterest} booking to see when you'd like to get pampered.",
+            ]),
+            'follow up', 'follow_up' => Arr::random([
+                "Hi {$name}, just following up on your interest in our {$serviceInterest} service to see how we can help.",
+                "Hi {$name}, thanks again for reaching out about {$serviceInterest}—we'd love to treat you soon.",
+            ]),
+            default => Arr::random($defaultHooks),
         };
 
-        $sentence2 = match ($selectedAngle) {
-            'Scarcity & Exclusivity (Only X spots left)' => "We have two priority spots left this week for a flawless result—did you prefer morning or afternoon?",
-            'Risk-Reversal (Crazy guarantee, no risk to them)' => "We guarantee you'll love how it looks before leaving the chair—did you prefer a morning or afternoon slot?",
-            'Assumptive Frame (Assume they are already buying, give A/B choice)' => "Our senior specialist is ready to give you a gorgeous result—does morning or afternoon suit you best?",
-            default => "Let's get your {$serviceInterest} looking fresh and radiant this week—did you prefer a morning or afternoon time?",
-        };
+        $valueOptions = [
+            "Our senior specialists use only premium luxury products so your {$serviceInterest} leaves you looking and feeling radiant.",
+            "It's one of our most-loved treatments right now, and our highly-trained team tailors every detail so you get a truly gorgeous result.",
+            "From the relaxing atmosphere to our specialist techniques, we make sure your {$serviceInterest} experience feels like pure luxury.",
+            "Our master stylists and therapists take extra care with premium formulas so you walk out glowing and refreshed.",
+        ];
+        $sentence2 = Arr::random($valueOptions);
+        $sentence3 = "Did you prefer a morning or afternoon appointment to get pampered this week?";
 
-        return "{$sentence1} {$sentence2}";
+        return "{$sentence1} {$sentence2} {$sentence3}";
     }
 }
