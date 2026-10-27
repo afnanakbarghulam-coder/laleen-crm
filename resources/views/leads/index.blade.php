@@ -319,7 +319,11 @@
                                 body: JSON.stringify({
                                     lead_id: {{ $lead->id }},
                                     module: 'lead_management',
-                                    category: @js($lead->category ?: 'inquiry')
+                                    name: @js($lead->customer->name ?? $lead->name ?? ''),
+                                    customer_name: @js($lead->customer->name ?? $lead->name ?? ''),
+                                    category: @js($lead->category ?: 'inquiry'),
+                                    service_interest: @js(!empty($lead->service_interest) ? implode(', ', (array) $lead->service_interest) : ''),
+                                    remarks: @js($lead->customer_remarks ?? '')
                                 })
                             })
                             .then(r => r.json())

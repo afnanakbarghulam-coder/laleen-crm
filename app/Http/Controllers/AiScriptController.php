@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AdLeadEntry;
+use App\Models\Customer;
 use App\Models\Lead;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -19,11 +20,19 @@ class AiScriptController extends Controller
         $categoryLabel = Lead::CATEGORIES[$rawCategory] ?? $rawCategory;
         $contextModifier = $this->resolveContextModifier($rawCategory);
 
-        $customerName = trim((string) ($lead->customer?->name ?: $request->input('customer_name') ?: 'lovely'));
-        $services = is_array($lead->service_interest) && count($lead->service_interest)
-            ? implode(', ', $lead->service_interest)
-            : ($categoryLabel ?: 'our salon service');
-        $remarks = trim((string) ($lead->customer_remarks ?: 'None'));
+        $customerName = trim((string) (
+            $request->input('customer_name')
+            ?: $request->input('name')
+            ?: $lead->customer?->name
+            ?: ($lead->phone ? Customer::where('phone', $lead->phone)->value('name') : null)
+            ?: 'lovely'
+        ));
+        $services = $request->filled('service_interest')
+            ? trim((string) $request->input('service_interest'))
+            : (is_array($lead->service_interest) && count($lead->service_interest)
+                ? implode(', ', $lead->service_interest)
+                : ($categoryLabel ?: 'our salon service'));
+        $remarks = trim((string) ($request->input('remarks') ?: $lead->customer_remarks ?: 'None'));
 
         return $this->buildAndRespond(
             leadId: $lead->id,
@@ -62,7 +71,12 @@ class AiScriptController extends Controller
             $remarks = trim((string) ($request->input('remarks') ?: 'None'));
         }
 
-        $customerName = trim((string) ($request->input('customer_name') ?: 'lovely'));
+        $customerName = trim((string) (
+            $request->input('customer_name')
+            ?: $request->input('name')
+            ?: ($adLead?->phone ? Customer::where('phone', $adLead->phone)->value('name') : null)
+            ?: 'lovely'
+        ));
         $contextModifier = $this->resolveContextModifier($request->input('lead_category') ?: $category);
 
         return $this->buildAndRespond(
