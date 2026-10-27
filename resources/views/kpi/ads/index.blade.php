@@ -56,7 +56,10 @@
                         </tr>
                     </thead>
                     @forelse ($adLeadEntries as $entry)
-                        @php [$entryCountryCode, $entryPhoneNumber] = \App\Models\Lead::splitPhone($entry->phone); @endphp
+                        @php
+                            [$entryCountryCode, $entryPhoneNumber] = \App\Models\Lead::splitPhone($entry->phone);
+                            $entryCustomerName = $entry->customer_name ?: ($entry->customer->name ?? null);
+                        @endphp
                         <tbody x-data="{
                             showAiPanel: false,
                             isLoading: false,
@@ -75,7 +78,13 @@
                                         'Accept': 'application/json',
                                         'X-CSRF-TOKEN': '{{ csrf_token() }}'
                                     },
-                                    body: JSON.stringify({ lead_id: {{ $entry->id }} })
+                                    body: JSON.stringify({
+                                        lead_id: {{ $entry->id }},
+                                        name: @js($entryCustomerName ?? ''),
+                                        customer_name: @js($entryCustomerName ?? ''),
+                                        category: @js($entry->category ?? ''),
+                                        remarks: @js($entry->remarks ?? '')
+                                    })
                                 })
                                 .then(r => r.json())
                                 .then(data => {
@@ -109,7 +118,22 @@
                                     @endif
                                     {{ $entry->date->format('d M Y') }}
                                 </td>
-                                <td>{{ $entry->phone }}</td>
+                                <td>
+                                    @if ($entryCustomerName)
+                                        <div class="fw-semibold">
+                                            @if ($entry->customer_id)
+                                                <a href="{{ route('customers.show', $entry->customer_id) }}" target="_blank" class="text-decoration-none text-reset" @click.stop>
+                                                    {{ $entryCustomerName }}
+                                                </a>
+                                            @else
+                                                {{ $entryCustomerName }}
+                                            @endif
+                                        </div>
+                                        <div class="text-muted small">{{ $entry->phone }}</div>
+                                    @else
+                                        <div>{{ $entry->phone }}</div>
+                                    @endif
+                                </td>
                                 <td>{{ $entry->category }}</td>
                                 <td class="text-end">{{ $entry->ticket_amount > 0 ? number_format($entry->ticket_amount, 2) : '—' }}</td>
                                 <td>
@@ -137,7 +161,7 @@
                                         @endif
                                         @moduleEdit('kpis')
                                             <button type="button" class="btn btn-sm btn-outline-warning ad-lead-edit-btn"
-                                                data-entry='@json(array_merge($entry->toArray(), ["country_code" => $entryCountryCode, "phone_number" => $entryPhoneNumber]))'
+                                                data-entry='@json(array_merge($entry->toArray(), ["country_code" => $entryCountryCode, "phone_number" => $entryPhoneNumber, "customer_name" => $entryCustomerName]))'
                                                 title="Edit">
                                                 <i class="bi bi-pencil-square"></i>
                                             </button>

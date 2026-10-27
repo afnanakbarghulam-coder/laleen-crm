@@ -30,6 +30,8 @@ class AdLeadEntry extends Model
 
     protected $fillable = [
         'date',
+        'customer_id',
+        'customer_name',
         'phone',
         'category',
         'ticket_amount',
@@ -42,6 +44,11 @@ class AdLeadEntry extends Model
         'date' => 'date',
         'ticket_amount' => 'decimal:2',
     ];
+
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
+    }
 
     public function creator()
     {

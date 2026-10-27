@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Kpi;
 use App\Http\Controllers\Controller;
 use App\Models\AdCategory;
 use App\Models\AdLeadEntry;
+use App\Models\Customer;
 use App\Models\Lead;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -46,6 +47,7 @@ class AdLeadEntryController extends Controller
 
         $rules = [
             'date' => 'required|date',
+            'customer_name' => 'required|string|max:255',
             'country_code' => 'required|string|max:5',
             'phone_number' => 'required|string|max:20',
             'category' => $isCreateNew
@@ -75,6 +77,17 @@ class AdLeadEntryController extends Controller
         unset($validated['country_code'], $validated['phone_number']);
         $validated['phone'] = $phone;
 
+        $customerName = trim($validated['customer_name']);
+        $customer = Customer::firstOrCreate(
+            ['phone' => $phone],
+            ['name' => $customerName]
+        );
+        if (empty($customer->name) && $customerName !== '') {
+            $customer->update(['name' => $customerName]);
+        }
+
+        $validated['customer_id'] = $customer->id;
+        $validated['customer_name'] = $customerName;
         $validated['ticket_amount'] = $validated['ticket_amount'] ?? 0;
 
         return $validated;

@@ -19,6 +19,10 @@
                             <input type="date" name="date" id="adLeadDate" class="form-control" required>
                         </div>
                         <div class="col-md-6">
+                            <label class="form-label">Customer Name <span class="text-danger">*</span></label>
+                            <input type="text" name="customer_name" id="adLeadCustomerName" class="form-control" placeholder="Customer name" required maxlength="255">
+                        </div>
+                        <div class="col-md-6">
                             <label class="form-label">Contact / Phone Number</label>
                             <div class="input-group">
                                 <select name="country_code" id="adLeadCountryCode" class="form-select" style="max-width: 110px; flex: 0 0 110px;">
@@ -76,8 +80,10 @@
                                 const catEl = document.getElementById('adLeadCategory');
                                 const newCatEl = document.getElementById('adLeadNewCategory');
                                 const remarksEl = document.getElementById('adLeadRemarks');
+                                const custNameEl = document.getElementById('adLeadCustomerName');
                                 const categoryVal = (catEl && catEl.value === 'create_new' && newCatEl) ? newCatEl.value : (catEl ? catEl.value : '');
                                 const remarksVal = remarksEl ? remarksEl.value : '';
+                                const customerNameVal = custNameEl ? custNameEl.value : '';
                                 const url = this.leadId ? `/kpis/ad-leads/${this.leadId}/ai-script` : `{{ route('kpi.ad-leads.ai-script.inline') }}`;
 
                                 fetch(url, {
@@ -89,6 +95,8 @@
                                     },
                                     body: JSON.stringify({
                                         lead_id: this.leadId,
+                                        name: customerNameVal,
+                                        customer_name: customerNameVal,
                                         category: categoryVal,
                                         remarks: remarksVal
                                     })
@@ -169,6 +177,7 @@
         document.getElementById('adLeadEntryFormMethod').value = '';
         document.getElementById('adLeadEntryForm').reset();
         document.getElementById('adLeadDate').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('adLeadCustomerName').value = '';
         document.getElementById('adLeadCountryCode').value = '974';
         const catSelect = document.getElementById('adLeadCategory');
         const newCatInput = document.getElementById('adLeadNewCategory');
@@ -192,6 +201,7 @@
         window.dispatchEvent(new CustomEvent('ad-lead-modal-reset', { detail: { id: entry.id } }));
 
         document.getElementById('adLeadDate').value = entry.date ? entry.date.slice(0, 10) : '';
+        document.getElementById('adLeadCustomerName').value = entry.customer_name || '';
         document.getElementById('adLeadCountryCode').value = entry.country_code || '974';
         document.getElementById('adLeadPhoneNumber').value = entry.phone_number || '';
         const catSelect = document.getElementById('adLeadCategory');

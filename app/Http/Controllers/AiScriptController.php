@@ -74,6 +74,8 @@ class AiScriptController extends Controller
         $customerName = trim((string) (
             $request->input('customer_name')
             ?: $request->input('name')
+            ?: $adLead?->customer_name
+            ?: $adLead?->customer?->name
             ?: ($adLead?->phone ? Customer::where('phone', $adLead->phone)->value('name') : null)
             ?: 'lovely'
         ));

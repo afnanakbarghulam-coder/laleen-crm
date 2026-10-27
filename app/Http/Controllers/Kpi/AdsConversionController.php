@@ -19,6 +19,7 @@ class AdsConversionController extends Controller
         $entriesTo = $request->date('entries_to');
 
         $adLeadEntries = AdLeadEntry::query()
+            ->with('customer')
             ->when($entriesFrom, fn ($q) => $q->whereDate('date', '>=', $entriesFrom))
             ->when($entriesTo, fn ($q) => $q->whereDate('date', '<=', $entriesTo))
             ->orderByDesc('date')
