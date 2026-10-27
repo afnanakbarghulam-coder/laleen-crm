@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AdLeadEntry;
 use App\Models\KpiAdsConversionReport;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class AdsConversionController extends Controller
 {
@@ -18,8 +19,10 @@ class AdsConversionController extends Controller
         $entriesFrom = $request->date('entries_from');
         $entriesTo = $request->date('entries_to');
 
+        $hasCustomerId = Schema::hasColumn('ad_lead_entries', 'customer_id');
+
         $adLeadEntries = AdLeadEntry::query()
-            ->with('customer')
+            ->when($hasCustomerId, fn ($q) => $q->with('customer'))
             ->when($entriesFrom, fn ($q) => $q->whereDate('date', '>=', $entriesFrom))
             ->when($entriesTo, fn ($q) => $q->whereDate('date', '<=', $entriesTo))
             ->orderByDesc('date')

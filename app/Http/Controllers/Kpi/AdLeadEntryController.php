@@ -86,8 +86,14 @@ class AdLeadEntryController extends Controller
             $customer->update(['name' => $customerName]);
         }
 
-        $validated['customer_id'] = $customer->id;
-        $validated['customer_name'] = $customerName;
+        if (Schema::hasColumn('ad_lead_entries', 'customer_id')) {
+            $validated['customer_id'] = $customer->id;
+        }
+        if (Schema::hasColumn('ad_lead_entries', 'customer_name')) {
+            $validated['customer_name'] = $customerName;
+        } else {
+            unset($validated['customer_name']);
+        }
         $validated['ticket_amount'] = $validated['ticket_amount'] ?? 0;
 
         return $validated;

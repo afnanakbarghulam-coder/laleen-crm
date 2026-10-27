@@ -59,6 +59,19 @@
                         @php
                             [$entryCountryCode, $entryPhoneNumber] = \App\Models\Lead::splitPhone($entry->phone);
                             $entryCustomerName = $entry->customer_name ?: ($entry->customer->name ?? null);
+                            $entryPayload = [
+                                'id' => $entry->id,
+                                'date' => $entry->date?->format('Y-m-d'),
+                                'phone' => $entry->phone,
+                                'country_code' => $entryCountryCode,
+                                'phone_number' => $entryPhoneNumber,
+                                'customer_id' => $entry->customer_id,
+                                'customer_name' => $entryCustomerName,
+                                'category' => $entry->category,
+                                'ticket_amount' => $entry->ticket_amount,
+                                'branch' => $entry->branch,
+                                'remarks' => $entry->remarks,
+                            ];
                         @endphp
                         <tbody x-data="{
                             showAiPanel: false,
@@ -161,7 +174,7 @@
                                         @endif
                                         @moduleEdit('kpis')
                                             <button type="button" class="btn btn-sm btn-outline-warning ad-lead-edit-btn"
-                                                data-entry='@json(array_merge($entry->toArray(), ["country_code" => $entryCountryCode, "phone_number" => $entryPhoneNumber, "customer_name" => $entryCustomerName]))'
+                                                data-entry='@json($entryPayload)'
                                                 title="Edit">
                                                 <i class="bi bi-pencil-square"></i>
                                             </button>
