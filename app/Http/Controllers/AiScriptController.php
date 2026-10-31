@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\AdLeadEntry;
+use App\Models\Appointment;
 use App\Models\Customer;
 use App\Models\Lead;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -16,9 +18,17 @@ class AiScriptController extends Controller
     {
         $lead->loadMissing('customer');
 
-        $rawCategory = $request->input('category') ?: $lead->category ?: 'inquiry';
-        $categoryLabel = Lead::CATEGORIES[$rawCategory] ?? $rawCategory;
-        $contextModifier = $this->resolveContextModifier($rawCategory);
+        $leadCategories = !empty($lead->categories_list)
+            ? $lead->categories_list
+            : ($request->filled('categories')
+                ? Lead::normalizeCategories($request->input('categories'))
+                : ($request->filled('category')
+                    ? Lead::normalizeCategories($request->input('category'))
+                    : ['inquiry']));
+
+        $categoryLabels = array_map(fn($c) => Lead::CATEGORIES[$c] ?? $c, $leadCategories);
+        $categoryLabel = implode(' + ', $categoryLabels);
+        $contextModifier = $this->resolveContextModifier($leadCategories);
 
         $customerName = trim((string) (
             $request->input('customer_name')
@@ -34,6 +44,8 @@ class AiScriptController extends Controller
                 : ($categoryLabel ?: 'our salon service'));
         $remarks = trim((string) ($request->input('remarks') ?: $lead->customer_remarks ?: 'None'));
 
+        $salonHistory = $this->resolveSalonClientHistory($lead->customer, $lead->phone);
+
         return $this->buildAndRespond(
             leadId: $lead->id,
             customerName: $customerName,
@@ -42,6 +54,7 @@ class AiScriptController extends Controller
             categoryLabel: $categoryLabel,
             contextModifier: $contextModifier,
             daysOld: max(0, (int) floor(($lead->created_at ?? now())->diffInDays(now()))),
+            salonHistory: $salonHistory,
         );
     }
 
@@ -80,6 +93,7 @@ class AiScriptController extends Controller
             ?: 'lovely'
         ));
         $contextModifier = $this->resolveContextModifier($request->input('lead_category') ?: $category);
+        $salonHistory = $this->resolveSalonClientHistory($adLead?->customer, $adLead?->phone ?? $request->input('phone'));
 
         return $this->buildAndRespond(
             leadId: $adLead?->id,
@@ -89,20 +103,100 @@ class AiScriptController extends Controller
             categoryLabel: $category,
             contextModifier: $contextModifier,
             daysOld: $daysOld,
+            salonHistory: $salonHistory,
         );
     }
 
-    private function resolveContextModifier(?string $category): string
+    /**
+     * Query read-only Salon CRM history (Customer & completed Appointments)
+     * for the given client or phone number.
+     */
+    private function resolveSalonClientHistory(?Customer $customer, ?string $phone): array
     {
-        $normalized = strtolower(trim((string) $category));
+        $rawPhone = trim((string) $phone);
+        [$countryCode, $localNumber] = Lead::splitPhone($rawPhone);
+        $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
+        $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $rawPhone])));
 
-        return match ($normalized) {
-            'follow_up', 'follow up', 'followup' => 'They inquired before but hesitated or said they would let us know.',
-            'no_show', 'no show', 'no-show', 'noshow' => 'They missed their scheduled appointment without telling us.',
-            'cancel', 'cancelled', 'canceled' => 'They explicitly cancelled a past appointment and we want to win them back.',
-            'inquiry' => 'They just asked a general question about a service.',
-            default => 'They just asked a general question about a service.',
-        };
+        if (!$customer && !empty($phoneCandidates)) {
+            $customer = Customer::whereIn('phone', $phoneCandidates)->first();
+        }
+
+        if (!$customer && empty($phoneCandidates)) {
+            return [
+                'completed_visits' => 0,
+                'last_service' => null,
+                'last_visit_date' => null,
+                'prompt_summary' => 'First-time salon guest (0 past completed visits). Treat them as a first-time salon guest and make them feel warmly welcomed.',
+            ];
+        }
+
+        $completedQuery = Appointment::where('status', 'completed')
+            ->where(function ($q) use ($customer, $phoneCandidates) {
+                if ($customer) {
+                    $q->where('customer_id', $customer->id);
+                    if (!empty($phoneCandidates)) {
+                        $q->orWhereIn('phone', $phoneCandidates);
+                    }
+                } else {
+                    $q->whereIn('phone', $phoneCandidates);
+                }
+            });
+
+        $completedVisitsCount = (clone $completedQuery)->count();
+
+        if ($completedVisitsCount > 0) {
+            $lastCompleted = (clone $completedQuery)
+                ->orderByDesc('appointment_datetime')
+                ->orderByDesc('id')
+                ->first(['service_name', 'appointment_datetime', 'booking_date']);
+
+            $lastService = trim((string) ($lastCompleted?->service_name ?: 'Salon Service'));
+            $dateObj = $lastCompleted?->appointment_datetime
+                ?: ($lastCompleted?->booking_date ? Carbon::parse($lastCompleted->booking_date) : null);
+            $lastVisitDate = $dateObj ? $dateObj->format('d M Y') : null;
+            $dateClause = $lastVisitDate ? " on {$lastVisitDate}" : '';
+
+            return [
+                'completed_visits' => $completedVisitsCount,
+                'last_service' => $lastService,
+                'last_visit_date' => $lastVisitDate,
+                'prompt_summary' => "Returning salon client with {$completedVisitsCount} past completed visit(s). Last completed service: {$lastService}{$dateClause}. Warmly reference their loyalty or past visits in Sentence 1 or Sentence 2.",
+            ];
+        }
+
+        return [
+            'completed_visits' => 0,
+            'last_service' => null,
+            'last_visit_date' => null,
+            'prompt_summary' => 'First-time salon guest (0 past completed visits). Treat them as a first-time salon guest and make them feel warmly welcomed.',
+        ];
+    }
+
+    private function resolveContextModifier(array|string|null $category): string
+    {
+        $categories = is_array($category) ? $category : [$category];
+        $descriptions = [];
+
+        foreach ($categories as $cat) {
+            $normalized = strtolower(trim((string) $cat));
+            $desc = match ($normalized) {
+                'follow_up', 'follow up', 'followup' => 'They inquired before but hesitated or said they would let us know.',
+                'no_show', 'no show', 'no-show', 'noshow' => 'They missed their scheduled appointment without telling us.',
+                'cancel', 'cancelled', 'canceled' => 'They explicitly cancelled a past appointment and we want to win them back.',
+                'inquiry' => 'They just asked a general question about a service.',
+                default => 'They just asked a general question about a service.',
+            };
+            if (!in_array($desc, $descriptions, true)) {
+                $descriptions[] = $desc;
+            }
+        }
+
+        if (count($descriptions) > 1) {
+            return implode(' Additionally: ', $descriptions) . ' Acknowledge their missed/cancelled appointment AND address their active inquiry/follow-up in one cohesive 3-sentence script.';
+        }
+
+        return $descriptions[0] ?? 'They just asked a general question about a service.';
     }
 
     private function buildAndRespond(
@@ -112,7 +206,8 @@ class AiScriptController extends Controller
         string $remarks,
         string $categoryLabel,
         string $contextModifier,
-        int $daysOld
+        int $daysOld,
+        array $salonHistory = []
     ) {
         $angles = [
             'Scarcity & Exclusivity (Only X spots left)',
@@ -122,6 +217,11 @@ class AiScriptController extends Controller
         ];
 
         $selectedAngle = Arr::random($angles);
+        $salonHistoryPrompt = $salonHistory['prompt_summary']
+            ?? 'First-time salon guest (0 past completed visits). Treat them as a first-time salon guest and make them feel warmly welcomed.';
+        $leadAgeContext = $daysOld === 0
+            ? 'Fresh lead (0 days old — reached out today; respond with warm, immediate attentiveness).'
+            : "Lead is {$daysOld} day(s) old — adapt your urgency and follow-up warmth based on this {$daysOld}-day elapsed time.";
 
         $systemPrompt = <<<PROMPT
 You are a warm, luxurious front desk manager at a premium beauty salon. Your goal is to text a lead and help them feel confident about booking.
@@ -129,20 +229,24 @@ You are a warm, luxurious front desk manager at a premium beauty salon. Your goa
 CRITICAL RULES:
 1. LENGTH: Exactly 3 sentences. No massive paragraphs, but allow enough room to sound genuinely caring.
 2. TONE: Empathetic, luxurious, and consultative. Speak like a friend who wants them to look their best. Never use aggressive sales tactics.
-3. FRAMEWORK:
+3. PSYCHOLOGICAL ANGLE: Subtly weave in this closing angle: [ {$selectedAngle} ].
+4. LEAD AGE & URGENCY: {$leadAgeContext}
+5. SALON CLIENT HISTORY: {$salonHistoryPrompt}
+6. FRAMEWORK:
 
 Sentence 1 (The Hook): You must adapt your opening based on this context: [ {$contextModifier} ]. 
 - IF CANCELLED OR NO-SHOW: Do not pitch immediately. Start by empathetically checking in, acknowledging we missed them at their appointment, and saying we hope everything is okay.
 - IF INQUIRY OR NEW LEAD: Warmly acknowledge their interest. CRITICAL: Vary the opening dynamically every single time (e.g., "Thanks for checking out our...", "We'd love to treat you to..."). NEVER start every message with "I saw you were looking into...".
+- IF RETURNING CLIENT: You may warmly reference their loyalty or past visits in Sentence 1 or Sentence 2.
 
-Sentence 2 (Desire & Value): Highlight the beautiful result they deserve. DO NOT repeat the same guarantee every time. Instead, dynamically vary the value proposition based on the service: mention our highly-trained staff, the premium luxury products we use, how relaxing the experience is, or how popular the treatment is right now. Never use the phrases "adjust it on us" or "happiness guarantee".
+Sentence 2 (Desire & Value): Highlight the beautiful result they deserve using the [ {$selectedAngle} ] angle. If they have past completed salon visits, warmly reference their loyalty/past visits in Sentence 1 or 2; if they have 0 past completed visits, treat them as a first-time salon guest. DO NOT repeat the same guarantee every time. Instead, dynamically vary the value proposition based on the service: mention our highly-trained staff, the premium luxury products we use, how relaxing the experience is, or how popular the treatment is right now. Never use the phrases "adjust it on us" or "happiness guarantee".
 
-Sentence 3 (Action): A polite A/B choice for booking (e.g., "Did you prefer a morning or afternoon appointment to get pampered?").
+Sentence 3 (Action): A polite A/B choice for booking adapted to the lead's age ({$daysOld}d old) (e.g., "Did you prefer a morning or afternoon appointment to get pampered?").
 
-CONTEXT: Lead Name: {$customerName}. Service: {$serviceInterest}. Remarks: {$remarks}. Write the script now.
+CONTEXT: Lead Name: {$customerName}. Service: {$serviceInterest}. Category: {$categoryLabel}. Lead Age: {$daysOld} day(s) old. Psychological Angle: {$selectedAngle}. Salon Client History: {$salonHistoryPrompt}. Remarks: {$remarks}. Write the script now.
 PROMPT;
 
-        $result = $this->callLlm($systemPrompt, $selectedAngle, $customerName, $serviceInterest, $categoryLabel, $remarks);
+        $result = $this->callLlm($systemPrompt, $selectedAngle, $customerName, $serviceInterest, $categoryLabel, $remarks, $daysOld, $salonHistory);
 
         return response()->json([
             'success' => true,
@@ -152,6 +256,11 @@ PROMPT;
             'lead_id' => $leadId,
             'category' => $categoryLabel,
             'days_old' => $daysOld,
+            'salon_history' => [
+                'completed_visits' => $salonHistory['completed_visits'] ?? 0,
+                'last_service' => $salonHistory['last_service'] ?? null,
+                'last_visit_date' => $salonHistory['last_visit_date'] ?? null,
+            ],
         ]);
     }
 
@@ -161,7 +270,9 @@ PROMPT;
         string $customerName,
         string $serviceInterest,
         string $categoryLabel,
-        string $remarks
+        string $remarks,
+        int $daysOld = 0,
+        array $salonHistory = []
     ): array {
         $openAiKey = config('services.openai.key');
         if (!empty($openAiKey)) {
@@ -231,7 +342,7 @@ PROMPT;
         }
 
         return [
-            'script' => $this->fallbackShortScript($selectedAngle, $customerName, $serviceInterest, $categoryLabel),
+            'script' => $this->fallbackShortScript($selectedAngle, $customerName, $serviceInterest, $categoryLabel, $daysOld, $salonHistory),
             'source' => 'fallback',
         ];
     }
@@ -240,10 +351,14 @@ PROMPT;
         string $selectedAngle,
         string $customerName,
         string $serviceInterest,
-        string $categoryLabel
+        string $categoryLabel,
+        int $daysOld = 0,
+        array $salonHistory = []
     ): string {
         $name = ($customerName !== '' && strtolower($customerName) !== 'unnamed') ? $customerName : 'lovely';
         $catNorm = strtolower(trim($categoryLabel));
+        $completedVisits = (int) ($salonHistory['completed_visits'] ?? 0);
+        $lastService = $salonHistory['last_service'] ?? null;
 
         $defaultHooks = [
             "Hi {$name}, thanks for checking out our {$serviceInterest} service!",
@@ -268,14 +383,22 @@ PROMPT;
             default => Arr::random($defaultHooks),
         };
 
-        $valueOptions = [
-            "Our senior specialists use only premium luxury products so your {$serviceInterest} leaves you looking and feeling radiant.",
-            "It's one of our most-loved treatments right now, and our highly-trained team tailors every detail so you get a truly gorgeous result.",
-            "From the relaxing atmosphere to our specialist techniques, we make sure your {$serviceInterest} experience feels like pure luxury.",
-            "Our master stylists and therapists take extra care with premium formulas so you walk out glowing and refreshed.",
-        ];
-        $sentence2 = Arr::random($valueOptions);
-        $sentence3 = "Did you prefer a morning or afternoon appointment to get pampered this week?";
+        if ($completedVisits > 0) {
+            $pastVisitText = $lastService ? "after your last {$lastService} visit" : "as one of our valued returning guests";
+            $sentence2 = "We always love pampering you {$pastVisitText}, and our senior specialists use premium luxury formulas so your {$serviceInterest} leaves you glowing.";
+        } else {
+            $valueOptions = [
+                "As a first-time guest with us, our senior specialists use only premium luxury products so your {$serviceInterest} leaves you looking and feeling radiant.",
+                "It's one of our most-loved treatments right now, and our highly-trained team tailors every detail so your first visit gives you a truly gorgeous result.",
+                "From our relaxing atmosphere to our specialist techniques, we make sure your first {$serviceInterest} experience with us feels like pure luxury.",
+                "Our master stylists and therapists take extra care with premium formulas so you walk out of your first session glowing and refreshed.",
+            ];
+            $sentence2 = Arr::random($valueOptions);
+        }
+
+        $sentence3 = $daysOld > 3
+            ? "We still have a few lovely openings this week—did you prefer a morning or afternoon appointment to get pampered?"
+            : "Did you prefer a morning or afternoon appointment to get pampered this week?";
 
         return "{$sentence1} {$sentence2} {$sentence3}";
     }

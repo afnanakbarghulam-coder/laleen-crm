@@ -80,18 +80,106 @@
     .lead-badge.cat-cancel { background: rgba(168,82,74,.15); color: #a8524a; }
 
     .needful-done-select {
-        border: none;
+        border: 1px solid rgba(138,125,118,.28);
         border-radius: 999px;
-        padding: 3px 24px 3px 10px;
+        padding: 4px 26px 4px 12px;
         font-size: 11.5px;
         font-weight: 600;
         cursor: pointer;
         background-color: rgba(138,125,118,.18);
         color: #8a7d76;
+        transition: all 0.2s ease;
     }
 
-    .needful-done-select.needful-yes { background-color: rgba(142,168,138,.15); color: #8ea88a; }
-    .needful-done-select.needful-no { background-color: rgba(168,82,74,.12); color: #a8524a; }
+    .needful-done-select.needful-booked,
+    .needful-done-badge.needful-booked {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 999px;
+        padding: 4px 12px;
+        font-size: 11.5px;
+        font-weight: 600;
+        background-color: rgba(74, 222, 128, .15);
+        color: #4ade80;
+        border: 1px solid rgba(74, 222, 128, .4);
+        box-shadow: 0 0 12px rgba(74, 222, 128, .18);
+        cursor: default;
+        white-space: nowrap;
+    }
+    .needful-done-select.needful-yes {
+        background-color: rgba(234, 179, 8, .16);
+        color: #eab308;
+        border-color: rgba(234, 179, 8, .35);
+    }
+    .needful-done-select.needful-no {
+        background-color: rgba(168, 82, 74, .14);
+        color: #a8524a;
+        border-color: rgba(168, 82, 74, .3);
+    }
+
+    .lead-quick-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 13px;
+        border-radius: 999px;
+        font-size: 12.5px;
+        font-weight: 600;
+        text-decoration: none;
+        border: 1px solid rgba(217, 143, 131, 0.2);
+        background: rgba(36, 30, 28, 0.72);
+        color: #cbb8b0;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+
+    .lead-quick-pill:hover {
+        border-color: rgba(217, 143, 131, 0.45);
+        color: #f2e6e2;
+        transform: translateY(-1px);
+    }
+
+    .lead-quick-pill.is-active {
+        background: rgba(217, 143, 131, 0.18);
+        border-color: #d98f83;
+        color: #e79a91;
+        box-shadow: 0 0 12px rgba(217, 143, 131, 0.15);
+    }
+
+    .lead-quick-pill.pill-overdue.is-active,
+    .lead-quick-pill.pill-overdue:hover {
+        border-color: #ef4444;
+        color: #fca5a5;
+        background: rgba(239, 68, 68, 0.14);
+    }
+
+    .lead-quick-pill.pill-unscheduled.is-active,
+    .lead-quick-pill.pill-unscheduled:hover {
+        border-color: #f59e0b;
+        color: #fcd34d;
+        background: rgba(245, 158, 11, 0.14);
+    }
+
+    .lead-quick-pill.pill-booked.is-active,
+    .lead-quick-pill.pill-booked:hover {
+        border-color: #4ade80;
+        color: #4ade80;
+        background: rgba(74, 222, 128, 0.14);
+    }
+
+    .lead-pill-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        background: rgba(255, 255, 255, 0.08);
+    }
 
     .lead-client-link {
         display: inline-flex;
@@ -118,78 +206,55 @@
         </div>
     </div>
 
-    @if ($overdueLeads->count())
-        <div class="kpi-alert kpi-alert-red kpi-alert-accordion">
-            <div class="kpi-alert-header" onclick="toggleLeadAlertAccordion(this)">
-                <div class="kpi-alert-header-main">
-                    <i class="bx bx-error-circle"></i>
-                    <div>
-                        <strong>{{ $overdueLeads->count() }} {{ Str::plural('lead', $overdueLeads->count()) }} overdue for follow-up!</strong>
-                        <div class="text-muted small">Next Follow-up Date has passed and Needful Done isn't marked Yes.</div>
-                    </div>
-                </div>
-                <svg class="kpi-alert-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-            </div>
-            <div class="kpi-alert-body" style="display: none; max-height: 170px; overflow-y: auto;">
-                @foreach ($overdueLeads as $lead)
-                    <div class="d-flex justify-content-between small mb-1 pe-2">
-                        <span>{{ $lead->customer->name ?? 'Unnamed' }} &middot; {{ $lead->phone }}</span>
-                        <span class="text-muted">Was due {{ $lead->next_followup_date->format('d M Y') }}</span>
-                    </div>
-                @endforeach
-            </div>
-        </div>
-    @endif
-
-    @if ($unscheduledLeads->count())
-        <div class="kpi-alert kpi-alert-amber kpi-alert-accordion">
-            <div class="kpi-alert-header" onclick="toggleLeadAlertAccordion(this)">
-                <div class="kpi-alert-header-main">
-                    <i class="bx bx-calendar-x"></i>
-                    <div>
-                        <strong>{{ $unscheduledLeads->count() }} Cancelled/No-show {{ Str::plural('lead', $unscheduledLeads->count()) }} need a follow-up date!</strong>
-                        <div class="text-muted small">Contact the client, agree a rebooking timeline, and set Next Follow-up Date.</div>
-                    </div>
-                </div>
-                <svg class="kpi-alert-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-            </div>
-            <div class="kpi-alert-body" style="display: none; max-height: 170px; overflow-y: auto;">
-                @foreach ($unscheduledLeads as $lead)
-                    <div class="d-flex justify-content-between align-items-center small mb-1 pe-2">
-                        <span>
-                            {{ $lead->customer->name ?? 'Unnamed' }} &middot; {{ $lead->phone }}
-                            <span class="lead-badge cat-{{ $lead->category }} ms-1">{{ \App\Models\Lead::CATEGORIES[$lead->category] }}</span>
-                            <span class="text-muted">{{ implode(', ', $lead->service_interest ?? []) }}</span>
-                        </span>
-                        @moduleEdit('leads')
-                            <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#editLeadModal{{ $lead->id }}">Set date</button>
-                        @endmoduleEdit
-                    </div>
-                @endforeach
-            </div>
-        </div>
-    @endif
-
-    <!-- Filter Section -->
+    <!-- Action Filter Bar & Filter Section -->
     <div class="mb-4">
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse"
-                aria-expanded="false" aria-controls="filterCollapse">
-                <i class="bx bx-filter-alt me-1"></i> Filters
-            </button>
+        <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+            <!-- Quick Action Filter Pills -->
+            <div class="d-flex align-items-center gap-2 flex-wrap" id="leadQuickFilterBar"
+                data-overdue-ids='@json($overdueLeads->pluck("id")->values())'
+                data-unscheduled-ids='@json($unscheduledLeads->pluck("id")->values())'>
+                <a href="{{ route('leads.index') }}"
+                    class="lead-quick-pill {{ empty($alertFilter) ? 'is-active' : '' }}">
+                    <span>All Leads</span>
+                </a>
+                <a href="{{ route('leads.index', ['alert_filter' => 'overdue']) }}"
+                    class="lead-quick-pill pill-overdue {{ ($alertFilter ?? null) === 'overdue' ? 'is-active' : '' }}"
+                    id="overdueLeadsPill">
+                    <span>🔴 Overdue Follow-ups</span>
+                    <span class="lead-pill-count" id="overdueLeadsPillCount">{{ $overdueCount ?? $overdueLeads->count() }}</span>
+                </a>
+                <a href="{{ route('leads.index', ['alert_filter' => 'unscheduled']) }}"
+                    class="lead-quick-pill pill-unscheduled {{ ($alertFilter ?? null) === 'unscheduled' ? 'is-active' : '' }}"
+                    id="unscheduledLeadsPill">
+                    <span>🟠 Needs Follow-up Date</span>
+                    <span class="lead-pill-count" id="unscheduledLeadsPillCount">{{ $unscheduledCount ?? $unscheduledLeads->count() }}</span>
+                </a>
+                <a href="{{ route('leads.index', ['alert_filter' => 'booked']) }}"
+                    class="lead-quick-pill pill-booked {{ ($alertFilter ?? null) === 'booked' ? 'is-active' : '' }}"
+                    id="bookedLeadsPill">
+                    <span>🟢 Booked</span>
+                    <span class="lead-pill-count" id="bookedLeadsPillCount">{{ $bookedCount ?? 0 }}</span>
+                </a>
+            </div>
 
-            <form method="GET" action="{{ route('leads.index') }}" id="followupDateForm" class="d-flex align-items-center gap-2">
-                <label class="form-label mb-0 small text-muted">Next Follow-up Date</label>
-                <input type="date" name="followup_date" class="form-control form-control-sm" style="width: auto;"
-                    value="{{ request('followup_date') }}" onchange="this.form.submit()">
-                @if (request('followup_date'))
-                    <a href="{{ route('leads.index') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
-                @endif
-            </form>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse"
+                    aria-expanded="false" aria-controls="filterCollapse">
+                    <i class="bx bx-filter-alt me-1"></i> Filters
+                </button>
+
+                <form method="GET" action="{{ route('leads.index') }}" id="followupDateForm" class="d-flex align-items-center gap-2 mb-0">
+                    @if (!empty($alertFilter))
+                        <input type="hidden" name="alert_filter" value="{{ $alertFilter }}">
+                    @endif
+                    <label class="form-label mb-0 small text-muted">Next Follow-up Date</label>
+                    <input type="date" name="followup_date" class="form-control form-control-sm" style="width: auto;"
+                        value="{{ request('followup_date') }}" onchange="this.form.submit()">
+                    @if (request('followup_date'))
+                        <a href="{{ route('leads.index') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+                    @endif
+                </form>
+            </div>
         </div>
 
         <div class="collapse mt-3 {{ request()->hasAny(['category', 'phone_number', 'start_date', 'end_date', 'agent_id']) ? 'show' : '' }}" id="filterCollapse">
@@ -291,9 +356,13 @@
                 </thead>
                 @forelse($leads as $lead)
                     @php
-                        $isBookedOrClosed = ($lead->needful_done === 'yes')
+                        $isBookedOrClosed = in_array($lead->needful_done, \App\Models\Lead::CLOSED_STATUSES, true)
                             || in_array(strtolower((string) ($lead->status ?? '')), ['booked', 'closed'], true);
-                        $leadCatLabel = $lead->category ? (\App\Models\Lead::CATEGORIES[$lead->category] ?? $lead->category) : 'Inquiry';
+                        $leadCategories = $lead->categories ?? ($lead->category ? [$lead->category] : []);
+                        $leadCategories = \App\Models\Lead::normalizeCategories($leadCategories);
+                        $leadCatLabel = !empty($leadCategories)
+                            ? implode(' + ', array_map(fn($c) => \App\Models\Lead::CATEGORIES[$c] ?? $c, $leadCategories))
+                            : 'Inquiry';
                         $leadAgeDays = max(0, (int) floor(($lead->created_at ?? now())->diffInDays(now())));
                     @endphp
                     <tbody class="table-border-bottom-0" x-data="{
@@ -321,7 +390,7 @@
                                     module: 'lead_management',
                                     name: @js($lead->customer->name ?? $lead->name ?? ''),
                                     customer_name: @js($lead->customer->name ?? $lead->name ?? ''),
-                                    category: @js($lead->category ?: 'inquiry'),
+                                    categories: @js($leadCategories ?: ['inquiry']),
                                     service_interest: @js(!empty($lead->service_interest) ? implode(', ', (array) $lead->service_interest) : ''),
                                     remarks: @js($lead->customer_remarks ?? '')
                                 })
@@ -367,8 +436,12 @@
                                 @endif
                             </td>
                             <td>
-                                @if ($lead->category)
-                                    <span class="lead-badge cat-{{ $lead->category }}">{{ \App\Models\Lead::CATEGORIES[$lead->category] ?? $lead->category }}</span>
+                                @if (!empty($leadCategories))
+                                    <div class="d-flex flex-wrap gap-1 justify-content-center align-items-center flex gap-1.5">
+                                        @foreach ($leadCategories as $catKey)
+                                            <span class="lead-badge cat-{{ $catKey }}">{{ \App\Models\Lead::CATEGORIES[$catKey] ?? $catKey }}</span>
+                                        @endforeach
+                                    </div>
                                 @else
                                     <span class="text-muted">—</span>
                                 @endif
@@ -377,24 +450,31 @@
                             <td style="max-width: 200px; white-space: normal;">{{ !empty($lead->service_interest) ? implode(', ', $lead->service_interest) : '—' }}</td>
                             <td>{{ $lead->agent->name ?? '—' }}</td>
                             <td @click.stop>
-                                @moduleEdit('leads')
-                                    <select class="needful-done-select {{ $lead->needful_done ? 'needful-' . $lead->needful_done : '' }}"
-                                        data-lead-id="{{ $lead->id }}"
-                                        data-previous="{{ $lead->needful_done }}"
-                                        data-url="{{ route('leads.needful-done', $lead->id) }}"
-                                        @change="isClosed = ($event.target.value === 'yes'); if (isClosed) showAiPanel = false;">
-                                        <option value="" {{ !$lead->needful_done ? 'selected' : '' }}>—</option>
-                                        @foreach (\App\Models\Lead::NEEDFUL_STATUSES as $key => $label)
-                                            <option value="{{ $key }}" {{ $lead->needful_done === $key ? 'selected' : '' }}>{{ $label }}</option>
-                                        @endforeach
-                                    </select>
-                                @else
-                                    <span class="needful-done-select {{ $lead->needful_done ? 'needful-' . $lead->needful_done : '' }}">
-                                        {{ $lead->needful_done ? (\App\Models\Lead::NEEDFUL_STATUSES[$lead->needful_done] ?? $lead->needful_done) : '—' }}
+                                @if ($lead->needful_done === 'booked')
+                                    <span class="needful-done-badge needful-booked" title="Auto-verified via Calendar Booking">
+                                        <span>✅ Booked Appointment</span>
+                                        <i class="bx bx-lock-alt" style="font-size: 11.5px; opacity: 0.85;"></i>
                                     </span>
-                                @endmoduleEdit
+                                @else
+                                    @moduleEdit('leads')
+                                        <select class="needful-done-select {{ $lead->needful_done ? 'needful-' . $lead->needful_done : '' }}"
+                                            data-lead-id="{{ $lead->id }}"
+                                            data-previous="{{ $lead->needful_done }}"
+                                            data-url="{{ route('leads.needful-done', $lead->id) }}"
+                                            @change="isClosed = ($event.target.value === 'no'); if (isClosed) showAiPanel = false;">
+                                            <option value="" {{ !$lead->needful_done ? 'selected' : '' }}>— Pending</option>
+                                            @foreach (\App\Models\Lead::MANUAL_NEEDFUL_STATUSES as $key => $label)
+                                                <option value="{{ $key }}" {{ $lead->needful_done === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                            @endforeach
+                                        </select>
+                                    @else
+                                        <span class="needful-done-select {{ $lead->needful_done ? 'needful-' . $lead->needful_done : '' }}">
+                                            {{ $lead->needful_done ? (\App\Models\Lead::NEEDFUL_STATUSES[$lead->needful_done] ?? $lead->needful_done) : '— Pending' }}
+                                        </span>
+                                    @endmoduleEdit
+                                @endif
                             </td>
-                            <td>{{ $lead->next_followup_date ? $lead->next_followup_date->format('d M Y') : '—' }}</td>
+                            <td>{{ (!in_array($lead->needful_done, \App\Models\Lead::CLOSED_STATUSES, true) && $lead->next_followup_date) ? $lead->next_followup_date->format('d M Y') : '—' }}</td>
                             <td @click.stop>
                                 <div class="d-flex gap-2 justify-content-center align-items-center">
                                     @if (!$isBookedOrClosed)
@@ -477,12 +557,6 @@
                                                     <i class="bx bxl-whatsapp me-1"></i>
                                                     <span x-text="copied ? 'Copied to Clipboard!' : 'Copy to WhatsApp'"></span>
                                                 </button>
-                                                <a :href="'https://wa.me/{{ preg_replace('/[^0-9]/', '', $lead->phone) }}?text=' + encodeURIComponent(script)"
-                                                   target="_blank"
-                                                   rel="noopener"
-                                                   class="btn btn-sm btn-outline-success">
-                                                    <i class="bx bx-link-external me-1"></i> Open WhatsApp Chat
-                                                </a>
                                             </div>
                                         </div>
 
@@ -607,12 +681,50 @@
             }
         });
 
+        window.updateQuickFilterPillCounts = function(leadId, oldStatus, newStatus) {
+            const bar = document.getElementById('leadQuickFilterBar');
+            if (!bar) return;
+
+            const idNum = Number(leadId);
+            const closedStatuses = ['booked', 'no'];
+            const wasClosed = closedStatuses.includes(oldStatus);
+            const isNowClosed = closedStatuses.includes(newStatus);
+
+            let overdueIds = [];
+            let unscheduledIds = [];
+            try { overdueIds = JSON.parse(bar.dataset.overdueIds || '[]'); } catch (e) {}
+            try { unscheduledIds = JSON.parse(bar.dataset.unscheduledIds || '[]'); } catch (e) {}
+
+            const overdueEl = document.getElementById('overdueLeadsPillCount');
+            if (overdueEl && overdueIds.includes(idNum) && wasClosed !== isNowClosed) {
+                const cur = Math.max(0, (parseInt(overdueEl.textContent, 10) || 0) + (isNowClosed ? -1 : 1));
+                overdueEl.textContent = cur;
+            }
+
+            const unscheduledEl = document.getElementById('unscheduledLeadsPillCount');
+            if (unscheduledEl && unscheduledIds.includes(idNum) && wasClosed !== isNowClosed) {
+                const cur = Math.max(0, (parseInt(unscheduledEl.textContent, 10) || 0) + (isNowClosed ? -1 : 1));
+                unscheduledEl.textContent = cur;
+            }
+
+            const bookedEl = document.getElementById('bookedLeadsPillCount');
+            if (bookedEl) {
+                const wasBooked = oldStatus === 'booked';
+                const isNowBooked = newStatus === 'booked';
+                if (wasBooked !== isNowBooked) {
+                    const cur = Math.max(0, (parseInt(bookedEl.textContent, 10) || 0) + (isNowBooked ? 1 : -1));
+                    bookedEl.textContent = cur;
+                }
+            }
+        };
+
         // Inline "Needful Done" toggle straight from the leads table.
         document.addEventListener('change', function(e) {
             if (!e.target.matches('.needful-done-select')) return;
 
             const select = e.target;
             const previous = select.dataset.previous ?? '';
+            const nextVal = select.value;
 
             fetch(select.dataset.url, {
                 method: 'PATCH',
@@ -621,13 +733,16 @@
                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
                     'Accept': 'application/json',
                 },
-                body: JSON.stringify({ needful_done: select.value }),
+                body: JSON.stringify({ needful_done: nextVal }),
             })
                 .then(res => {
                     if (!res.ok) throw new Error();
-                    select.classList.remove('needful-yes', 'needful-no');
-                    if (select.value) select.classList.add('needful-' + select.value);
-                    select.dataset.previous = select.value;
+                    select.classList.remove('needful-booked', 'needful-yes', 'needful-no');
+                    if (nextVal) select.classList.add('needful-' + nextVal);
+                    select.dataset.previous = nextVal;
+                    if (select.dataset.leadId && typeof window.updateQuickFilterPillCounts === 'function') {
+                        window.updateQuickFilterPillCounts(select.dataset.leadId, previous, nextVal);
+                    }
                 })
                 .catch(() => {
                     select.value = previous;

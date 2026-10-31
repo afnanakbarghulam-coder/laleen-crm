@@ -110,6 +110,35 @@
 
     .la-chart-card h6 { font-weight: 700; margin-bottom: 2px; }
     .la-chart-card .la-chart-sub { font-size: 12.5px; color: var(--la-muted); margin-bottom: 10px; }
+
+    .la-filter-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--la-muted);
+    }
+
+    .la-rate-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .la-rate-badge.rate-good {
+        background: rgba(74, 222, 128, 0.15);
+        color: #4ade80;
+        border: 1px solid rgba(74, 222, 128, 0.35);
+    }
+
+    .la-rate-badge.rate-warn {
+        background: rgba(234, 179, 8, 0.15);
+        color: #eab308;
+        border: 1px solid rgba(234, 179, 8, 0.35);
+    }
 </style>
 
 @section('content')
@@ -117,20 +146,48 @@
     <div class="la-header">
         <div>
             <h4>Leads Analytics</h4>
-            <p>Category mix, Needful Done status, and live follow-up health.</p>
+            <p>Conversion outcomes, win-back performance, live follow-up health, and agent closing leaderboard.</p>
         </div>
         <a href="{{ route('leads.index') }}" class="btn btn-outline-secondary">
             <i class="bx bx-arrow-back me-1"></i> Back to Leads
         </a>
     </div>
 
-    <div class="la-filter-card">
-        <form method="GET" action="{{ route('leads.analytics') }}" id="laFilterForm">
-            <select name="period" class="la-date-input" onchange="document.getElementById('laFilterForm').submit()">
-                @foreach (\App\Http\Controllers\LeadController::PERIOD_LABELS as $key => $label)
-                    <option value="{{ $key }}" {{ $period === $key ? 'selected' : '' }}>{{ $label }}</option>
-                @endforeach
-            </select>
+    <div class="la-filter-card justify-content-between">
+        <form method="GET" action="{{ route('leads.analytics') }}" id="laFilterForm" class="d-flex align-items-center gap-3 flex-wrap mb-0">
+            <div class="d-flex align-items-center gap-2">
+                <label class="la-filter-label mb-0">Preset</label>
+                <select name="period" class="la-date-input"
+                    onchange="const f = document.getElementById('laFilterForm'); f.querySelector('[name=start_date]').value=''; f.querySelector('[name=end_date]').value=''; f.submit();">
+                    @if (!empty($isCustomRange))
+                        <option value="custom" selected disabled>Custom Date Range</option>
+                    @endif
+                    @foreach (\App\Http\Controllers\LeadController::PERIOD_LABELS as $key => $label)
+                        <option value="{{ $key }}" {{ $period === $key ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <label class="la-filter-label mb-0" for="laStartDate">From</label>
+                <input type="date" id="laStartDate" name="start_date" class="la-date-input" value="{{ $startDate ?? '' }}">
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <label class="la-filter-label mb-0" for="laEndDate">To</label>
+                <input type="date" id="laEndDate" name="end_date" class="la-date-input" value="{{ $endDate ?? '' }}">
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <button type="submit" class="btn btn-sm btn-primary px-3" style="height: 36px;">
+                    <i class="bx bx-filter-alt me-1"></i> Apply Filter
+                </button>
+                @if (!empty($isCustomRange))
+                    <a href="{{ route('leads.analytics') }}" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" style="height: 36px;">
+                        Reset
+                    </a>
+                @endif
+            </div>
         </form>
         <span class="text-muted small">{{ $from->format('d M Y') }} &ndash; {{ $to->format('d M Y') }} &middot; leads created in this range</span>
     </div>
@@ -150,21 +207,24 @@
         <div class="col-md-6 col-xl-3">
             <div class="la-kpi-card">
                 <div class="la-kpi-top">
-                    <span class="la-kpi-label">Needful Done</span>
-                    <span class="la-kpi-icon" style="background:rgba(142,168,138,.12); color:#7fa876;"><i class="bx bx-check-circle"></i></span>
+                    <span class="la-kpi-label">Booked Appointments (Conversion Rate)</span>
+                    <span class="la-kpi-icon" style="background:rgba(74,222,128,.12); color:#4ade80;"><i class="bx bx-calendar-check"></i></span>
                 </div>
-                <div class="la-kpi-value">{{ number_format($needfulCounts['yes']) }}</div>
-                <div class="la-kpi-sub">Marked Yes in this period</div>
+                <div class="d-flex align-items-baseline gap-2">
+                    <div class="la-kpi-value" style="color:#4ade80;">{{ number_format($conversionRate ?? 0, 1) }}%</div>
+                    <span class="small text-muted">({{ number_format($bookedLeadsCount ?? 0) }} booked)</span>
+                </div>
+                <div class="la-kpi-sub">Target: &ge; 30%</div>
             </div>
         </div>
         <div class="col-md-6 col-xl-3">
             <div class="la-kpi-card">
                 <div class="la-kpi-top">
-                    <span class="la-kpi-label">Cancelled</span>
-                    <span class="la-kpi-icon" style="background:rgba(168,82,74,.1); color:#a8524a;"><i class="bx bx-x-circle"></i></span>
+                    <span class="la-kpi-label">Win-Back Rate (Cancel / No-Show)</span>
+                    <span class="la-kpi-icon" style="background:rgba(201,166,107,.14); color:#c9a66b;"><i class="bx bx-revision"></i></span>
                 </div>
-                <div class="la-kpi-value">{{ number_format($categoryCounts['cancel'] ?? 0) }}</div>
-                <div class="la-kpi-sub">Cancelled leads this period</div>
+                <div class="la-kpi-value">{{ $winBackBooked ?? 0 }} / {{ $winBackTotal ?? 0 }} <span class="fs-6 fw-semibold text-muted">recovered ({{ number_format($winBackRate ?? 0, 1) }}%)</span></div>
+                <div class="la-kpi-sub">Cancelled &amp; No-show leads converted to Booked</div>
             </div>
         </div>
         <div class="col-md-6 col-xl-3">
@@ -174,7 +234,7 @@
                     <span class="la-kpi-icon" style="background:rgba(168,82,74,.1); color:#a8524a;"><i class="bx bx-error-circle"></i></span>
                 </div>
                 <div class="la-kpi-value" style="color:#a8524a;">{{ number_format($followupPerformance['overdue']) }}</div>
-                <div class="la-kpi-sub">Live snapshot &middot; all-time, not period-limited</div>
+                <div class="la-kpi-sub">Live snapshot &middot; requires immediate action</div>
             </div>
         </div>
     </div>
@@ -190,7 +250,7 @@
         </div>
         <div class="col-xl-4">
             <div class="la-chart-card">
-                <h6>Needful Done Status</h6>
+                <h6>Lead Conversion Outcomes</h6>
                 <div class="la-chart-sub">Selected period</div>
                 <div id="laNeedfulChart"></div>
             </div>
@@ -201,6 +261,58 @@
                 <div class="la-chart-sub">Live, all-time snapshot</div>
                 <div id="laFollowupChart"></div>
             </div>
+        </div>
+    </div>
+
+    <!-- AGENT CLOSING LEADERBOARD -->
+    <div class="la-chart-card mb-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div>
+                <h6 class="mb-1">Agent Closing Leaderboard</h6>
+                <div class="la-chart-sub mb-0">Conversion performance for leads created in {{ $from->format('d M Y') }} &ndash; {{ $to->format('d M Y') }}</div>
+            </div>
+        </div>
+        <div class="table-responsive text-nowrap">
+            <table class="table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Agent</th>
+                        <th class="text-center">Leads Assigned (Period)</th>
+                        <th class="text-center">Booked (Won)</th>
+                        <th class="text-center">Conversion Rate %</th>
+                        <th class="text-center">Current Overdue Leads</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($agentLeaderboard ?? [] as $row)
+                        <tr>
+                            <td class="fw-semibold">{{ $row['name'] }}</td>
+                            <td class="text-center">{{ number_format($row['assigned']) }}</td>
+                            <td class="text-center">
+                                <span class="fw-bold" style="color: #4ade80;">{{ number_format($row['booked']) }}</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="la-rate-badge {{ $row['conversion_rate'] >= 30 ? 'rate-good' : 'rate-warn' }}">
+                                    {{ number_format($row['conversion_rate'], 1) }}%
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                @if ($row['overdue'] > 0)
+                                    <span class="badge rounded-pill" style="background: rgba(168,82,74,.18); color: #ef4444;">
+                                        {{ number_format($row['overdue']) }} overdue
+                                    </span>
+                                @else
+                                    <span class="text-muted">0</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-3">No agents found</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -241,16 +353,16 @@
 
     new ApexCharts(document.querySelector('#laNeedfulChart'), {
         ...laDonutBase,
-        series: [{{ $needfulCounts['yes'] }}, {{ $needfulCounts['no'] }}, {{ $needfulCounts['unset'] }}],
-        labels: ['Yes', 'No', 'Not Set'],
-        colors: ['#8ea88a', '#a8524a', '#8a7d76'],
+        series: [{{ $needfulCounts['booked'] ?? 0 }}, {{ $needfulCounts['yes'] ?? 0 }}, {{ $needfulCounts['no'] ?? 0 }}, {{ $needfulCounts['unset'] ?? 0 }}],
+        labels: ['Booked Appointment', 'In Progress / Contacted', 'Lost / Not Interested', 'Unworked / Pending'],
+        colors: ['#4ade80', '#eab308', '#a8524a', '#8a7d76'],
     }).render();
 
     new ApexCharts(document.querySelector('#laFollowupChart'), {
         ...laDonutBase,
         series: [{{ $followupPerformance['completed'] }}, {{ $followupPerformance['overdue'] }}, {{ $followupPerformance['upcoming'] }}, {{ $followupPerformance['no_date'] }}],
-        labels: ['Completed', 'Overdue', 'Upcoming', 'No Date Set'],
-        colors: ['#8ea88a', '#a8524a', '#c9a66b', '#8a7d76'],
+        labels: ['Completed (Booked)', 'Overdue', 'Upcoming', 'No Date Set'],
+        colors: ['#4ade80', '#a8524a', '#c9a66b', '#8a7d76'],
     }).render();
 </script>
 @endsection

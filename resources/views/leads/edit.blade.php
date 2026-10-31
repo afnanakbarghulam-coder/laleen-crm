@@ -41,8 +41,8 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label">Agent Assign <span class="text-danger">*</span></label>
-                            <select name="assigned_agent_id" class="form-select" required>
+                            <label class="form-label">Agent Assign</label>
+                            <select name="assigned_agent_id" class="form-select">
                                 <option value="">-- Select Agent --</option>
                                 @foreach ($agents as $agent)
                                     <option value="{{ $agent->id }}"
@@ -53,21 +53,23 @@
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Category <span class="text-danger">*</span></label>
-                            @if ($lead->category && !array_key_exists($lead->category, \App\Models\Lead::MANUAL_CATEGORIES))
-                                <div>
-                                    <span class="lead-badge cat-{{ $lead->category }}">{{ \App\Models\Lead::CATEGORIES[$lead->category] }}</span>
-                                </div>
-                                <div class="form-text">Set automatically from the Enhanced Calendar &mdash; not manually editable.</div>
-                                <input type="hidden" name="category" value="{{ $lead->category }}">
-                            @else
-                                <select name="category" class="form-select" required>
-                                    <option value="">-- Select Category --</option>
-                                    @foreach (\App\Models\Lead::MANUAL_CATEGORIES as $key => $label)
-                                        <option value="{{ $key }}" {{ $lead->category === $key ? 'selected' : '' }}>{{ $label }}</option>
-                                    @endforeach
-                                </select>
-                            @endif
+                            <label class="form-label">Category Statuses <span class="text-danger">*</span></label>
+                            @php
+                                $activeLeadCategories = $lead->categories_list;
+                            @endphp
+                            <div class="d-flex flex-wrap gap-2 p-2 rounded border" style="background: rgba(255, 255, 255, 0.02); border-color: rgba(217, 143, 131, 0.22) !important;">
+                                @foreach (\App\Models\Lead::CATEGORIES as $key => $label)
+                                    <label class="d-inline-flex align-items-center gap-1 mb-0" style="cursor: pointer;">
+                                        <input type="checkbox"
+                                            name="categories[]"
+                                            value="{{ $key }}"
+                                            class="form-check-input m-0"
+                                            {{ in_array($key, $activeLeadCategories, true) ? 'checked' : '' }}>
+                                        <span class="lead-badge cat-{{ $key }}">{{ $label }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                            <div class="form-text">Multiple statuses can stay active simultaneously (priority: No Show &gt; Cancelled &gt; Follow up &gt; Inquiry).</div>
                         </div>
 
                         <div class="col-md-6">

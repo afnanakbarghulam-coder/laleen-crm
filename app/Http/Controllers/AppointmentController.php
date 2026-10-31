@@ -441,6 +441,10 @@ class AppointmentController extends Controller
                 }
             }
 
+            if (!in_array(strtolower((string) ($appointment->status ?? 'pending')), ['cancelled', 'no_show'], true)) {
+                $this->autoCloseOpenLeadsForBooking($appointment, $customer, $phone);
+            }
+
             return $appointment;
         });
 
@@ -457,13 +461,102 @@ class AppointmentController extends Controller
      */
     private function findOrCreateCustomer(string $phone, ?string $name): Customer
     {
-        $customer = Customer::firstOrNew(['phone' => $phone]);
+        [$countryCode, $localNumber] = Lead::splitPhone($phone);
+        $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
+        $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $phone])));
+
+        $customer = Customer::whereIn('phone', $phoneCandidates)->first()
+            ?: new Customer(['phone' => $normalizedPhone !== '' ? $normalizedPhone : $phone]);
+
         if ($name) {
             $customer->name = $name;
         }
         $customer->save();
 
         return $customer;
+    }
+
+    /**
+     * Automatically close any open leads for a client once they book a
+     * valid salon appointment, linking customer_id and appointment_id and
+     * appending an audit note to customer_remarks. Enforces 1 open lead per
+     * phone by merging any duplicate open rows into the latest lead.
+     */
+    private function autoCloseOpenLeadsForBooking(Appointment $appointment, Customer $customer, string $phone): void
+    {
+        [$countryCode, $localNumber] = Lead::splitPhone($phone);
+        $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
+        $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $phone])));
+        $resolvedCustomerId = $appointment->customer_id ?: $customer->id;
+
+        $openLeads = Lead::where(function ($q) use ($resolvedCustomerId, $phoneCandidates) {
+            if ($resolvedCustomerId) {
+                $q->where('customer_id', $resolvedCustomerId);
+            }
+            if (!empty($phoneCandidates)) {
+                $q->orWhereIn('phone', $phoneCandidates);
+            }
+        })
+            ->where(function ($q) {
+                $q->whereNull('needful_done')->orWhereNotIn('needful_done', ['booked', 'no']);
+            })
+            ->orderByDesc('id')
+            ->get();
+
+        if ($openLeads->isEmpty()) {
+            return;
+        }
+
+        /** @var Lead $primaryLead */
+        $primaryLead = $openLeads->first();
+        $mergedServices = is_array($primaryLead->service_interest) ? $primaryLead->service_interest : [];
+        $mergedCategories = $primaryLead->categories_list;
+        $remarksParts = [];
+        $resolvedAgentId = $primaryLead->assigned_agent_id ?: $appointment->booking_agent_id;
+
+        foreach ($openLeads as $row) {
+            if (is_array($row->service_interest)) {
+                $mergedServices = array_merge($mergedServices, $row->service_interest);
+            }
+            $mergedCategories = array_merge($mergedCategories, $row->categories_list);
+            $r = trim((string) $row->customer_remarks);
+            if ($r !== '' && !in_array($r, $remarksParts, true)) {
+                $remarksParts[] = $r;
+            }
+            if (!$resolvedAgentId && $row->assigned_agent_id) {
+                $resolvedAgentId = $row->assigned_agent_id;
+            }
+        }
+
+        // Defensively merge and remove any older duplicate open rows so 1 booking = 1 conversion
+        foreach ($openLeads->slice(1) as $duplicateLead) {
+            $duplicateLead->delete();
+        }
+
+        $mergedServices = array_values(array_unique(array_filter(array_map('trim', $mergedServices))));
+        $normalizedCategories = Lead::normalizeCategories($mergedCategories);
+        $primaryCategory = Lead::resolvePrimaryCategory($normalizedCategories) ?: $primaryLead->category;
+        $existingRemarks = implode(' | ', $remarksParts);
+        $autoCloseNote = '[Auto-closed: Booked on ' . now()->format('d M Y') . ']';
+        $newRemarks = $existingRemarks !== ''
+            ? (str_contains($existingRemarks, $autoCloseNote) ? $existingRemarks : $existingRemarks . ' ' . $autoCloseNote)
+            : $autoCloseNote;
+
+        if (!$appointment->booking_agent_id && $resolvedAgentId) {
+            $appointment->update(['booking_agent_id' => $resolvedAgentId]);
+        }
+
+        $primaryLead->update([
+            'needful_done' => 'booked',
+            'category' => $primaryCategory,
+            'categories' => !empty($normalizedCategories) ? $normalizedCategories : $primaryLead->categories,
+            'customer_id' => $resolvedCustomerId ?: $primaryLead->customer_id,
+            'appointment_id' => $appointment->id,
+            'assigned_agent_id' => $resolvedAgentId,
+            'next_followup_date' => null,
+            'service_interest' => !empty($mergedServices) ? $mergedServices : $primaryLead->service_interest,
+            'customer_remarks' => $newRemarks,
+        ]);
     }
 
     public function update(Request $request, Appointment $appointment)
@@ -526,7 +619,7 @@ class AppointmentController extends Controller
                 ->with('error', 'Appointment must be within branch working hours: ' . $startBranch->format('H:i') . ' - ' . $endBranch->format('H:i'))->withInput();
         }
 
-        $customerId = null;
+        $customerId = $appointment->customer_id;
         if ($phone !== '') {
             $customer = $this->findOrCreateCustomer($phone, $request->customer_name);
             $customerId = $customer->id;
@@ -545,12 +638,40 @@ class AppointmentController extends Controller
             ]
         ));
 
+        $appointment->refresh();
+
+        if (in_array($appointment->status, ['cancelled', 'no_show'], true)) {
+            $leadCategory = $appointment->status === 'cancelled' ? 'cancel' : 'no_show';
+            $this->syncLeadCategoryFromAppointment($appointment, $leadCategory);
+        } elseif (in_array($appointment->status, ['pending', 'confirmed', 'scheduled', 'arrived', 'in_progress', 'completed'], true)) {
+            $this->markAppointmentLeadsAsBooked($appointment);
+        }
+
         return redirect()->back()->with('success', 'Appointment updated successfully.');
     }
 
 
     public function destroy(Appointment $appointment)
     {
+        $reopenNote = '[Reopened: Booking deleted on ' . now()->format('d M Y') . ']';
+        $linkedBookedLeads = Lead::where('appointment_id', $appointment->id)
+            ->where('needful_done', 'booked')
+            ->get();
+
+        foreach ($linkedBookedLeads as $lead) {
+            $cleanedRemarks = trim((string) preg_replace('/\s*\[Auto-closed:[^\]]*\]/i', '', (string) $lead->customer_remarks));
+            $newRemarks = $cleanedRemarks !== ''
+                ? (str_contains($cleanedRemarks, $reopenNote) ? $cleanedRemarks : $cleanedRemarks . ' ' . $reopenNote)
+                : $reopenNote;
+
+            $lead->update([
+                'needful_done' => null,
+                'appointment_id' => null,
+                'next_followup_date' => null,
+                'customer_remarks' => $newRemarks,
+            ]);
+        }
+
         // Safe to hard-delete: appointment_services/upsells/price_overrides
         // cascade at the DB level (their only value is tied to this
         // appointment), while sales/leads/client_packages referencing this
@@ -1421,11 +1542,15 @@ class AppointmentController extends Controller
 
     public function updateStatus(Request $request, Appointment $appointment)
     {
-        $request->validate(['status' => 'required|in:arrived,in_progress,completed,no_show,cancelled',]);
-        $appointment->update(['status' => $request->status,]);
+        $request->validate([
+            'status' => 'required|in:pending,confirmed,scheduled,arrived,in_progress,completed,no_show,cancelled',
+        ]);
+        $appointment->update(['status' => $request->status]);
 
-        if (in_array($request->status, ['no_show', 'cancelled'])) {
+        if (in_array($request->status, ['no_show', 'cancelled'], true)) {
             $this->syncLeadCategoryFromAppointment($appointment, $request->status === 'no_show' ? 'no_show' : 'cancel');
+        } else {
+            $this->markAppointmentLeadsAsBooked($appointment);
         }
 
         if ($request->status === 'completed') {
@@ -1442,23 +1567,230 @@ class AppointmentController extends Controller
     }
 
     /**
-     * No-show and Cancel are no longer manually selectable when adding a
-     * lead - they're driven entirely by staff marking an appointment that
-     * way on the Enhanced Calendar. This always logs a lead scoped to THIS
-     * specific appointment (via leads.appointment_id), never one shared with
-     * or matched against the client's other leads: a client can have an
-     * independently-active Hair Color follow-up and a Haircut
-     * no-show/cancellation lead side by side, and this action must never
-     * touch the former. Re-toggling the same appointment's status (e.g.
-     * correcting No Show to Cancelled) updates that one dedicated lead
-     * in place rather than spawning a duplicate.
+     * When an appointment that was previously cancelled or no-show is moved
+     * back to an active/completed status (confirmed, scheduled, arrived,
+     * in_progress, completed), transition its linked or open Lead to 'booked'
+     * and ensure customer_id is populated.
+     */
+    private function markAppointmentLeadsAsBooked(Appointment $appointment): void
+    {
+        $rawPhone = preg_replace('/\D/', '', (string) $appointment->phone);
+        [$countryCode, $localNumber] = Lead::splitPhone($rawPhone);
+        $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
+        $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $rawPhone])));
+
+        if (!$appointment->customer_id && $rawPhone !== '') {
+            $customer = $this->findOrCreateCustomer($rawPhone, $appointment->customer_name);
+            $appointment->update(['customer_id' => $customer->id]);
+        }
+
+        $leads = Lead::where('appointment_id', $appointment->id)
+            ->orWhere(function ($q) use ($appointment, $phoneCandidates) {
+                $q->where(function ($sub) {
+                    $sub->whereNull('needful_done')->orWhereNotIn('needful_done', ['booked', 'no']);
+                })->where(function ($match) use ($appointment, $phoneCandidates) {
+                    if ($appointment->customer_id) {
+                        $match->where('customer_id', $appointment->customer_id);
+                    }
+                    if (!empty($phoneCandidates)) {
+                        $match->orWhereIn('phone', $phoneCandidates);
+                    }
+                });
+            })
+            ->orderByDesc('id')
+            ->get()
+            ->filter(fn(Lead $l) => !($l->needful_done === 'no' && $l->appointment_id !== $appointment->id))
+            ->values();
+
+        if ($leads->isEmpty()) {
+            return;
+        }
+
+        // Prefer the lead explicitly linked to this appointment if one exists, otherwise the latest open lead
+        /** @var Lead $primaryLead */
+        $primaryLead = $leads->firstWhere('appointment_id', $appointment->id) ?: $leads->first();
+        $mergedServices = is_array($primaryLead->service_interest) ? $primaryLead->service_interest : [];
+        $mergedCategories = $primaryLead->categories_list;
+        $remarksParts = [];
+        $resolvedAgentId = $primaryLead->assigned_agent_id ?: $appointment->booking_agent_id;
+
+        foreach ($leads as $row) {
+            if (is_array($row->service_interest)) {
+                $mergedServices = array_merge($mergedServices, $row->service_interest);
+            }
+            $mergedCategories = array_merge($mergedCategories, $row->categories_list);
+            $r = trim((string) $row->customer_remarks);
+            if ($r !== '' && !in_array($r, $remarksParts, true)) {
+                $remarksParts[] = $r;
+            }
+            if (!$resolvedAgentId && $row->assigned_agent_id) {
+                $resolvedAgentId = $row->assigned_agent_id;
+            }
+        }
+
+        foreach ($leads as $row) {
+            if ($row->id !== $primaryLead->id && !in_array($row->needful_done, Lead::CLOSED_STATUSES, true)) {
+                $row->delete();
+            }
+        }
+
+        $mergedServices = array_values(array_unique(array_filter(array_map('trim', $mergedServices))));
+        $normalizedCategories = Lead::normalizeCategories($mergedCategories);
+        $primaryCategory = Lead::resolvePrimaryCategory($normalizedCategories) ?: $primaryLead->category;
+        $existingRemarks = implode(' | ', $remarksParts);
+        $autoCloseNote = '[Auto-closed: Booked on ' . now()->format('d M Y') . ']';
+        $newRemarks = $existingRemarks !== ''
+            ? (str_contains($existingRemarks, $autoCloseNote) ? $existingRemarks : $existingRemarks . ' ' . $autoCloseNote)
+            : $autoCloseNote;
+
+        if (!$appointment->booking_agent_id && $resolvedAgentId) {
+            $appointment->update(['booking_agent_id' => $resolvedAgentId]);
+        }
+
+        $primaryLead->update([
+            'needful_done' => 'booked',
+            'category' => $primaryCategory,
+            'categories' => !empty($normalizedCategories) ? $normalizedCategories : $primaryLead->categories,
+            'customer_id' => $appointment->customer_id ?: $primaryLead->customer_id,
+            'appointment_id' => $appointment->id,
+            'assigned_agent_id' => $resolvedAgentId,
+            'next_followup_date' => null,
+            'service_interest' => !empty($mergedServices) ? $mergedServices : $primaryLead->service_interest,
+            'customer_remarks' => $newRemarks,
+        ]);
+    }
+
+    /**
+     * Synchronize or reopen a Lead when an appointment is marked Cancelled or
+     * No-show. Checks appointment_id FIRST so a previously 'booked' lead for
+     * this exact appointment is reopened and reset cleanly.
      */
     private function syncLeadCategoryFromAppointment(Appointment $appointment, string $category): void
     {
+        $rawPhone = preg_replace('/\D/', '', (string) $appointment->phone);
+        [$countryCode, $localNumber] = Lead::splitPhone($rawPhone);
+        $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
+        $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $rawPhone])));
+
+        if (!$appointment->customer_id && $rawPhone !== '') {
+            $customer = $this->findOrCreateCustomer($rawPhone, $appointment->customer_name);
+            $appointment->update(['customer_id' => $customer->id]);
+        }
+
+        $incomingServices = $appointment->service_name
+            ? array_values(array_filter(array_map('trim', explode(',', $appointment->service_name))))
+            : [];
+
+        // 1. Always check appointment_id FIRST so a 'booked' lead tied to this appointment is reopened
         $lead = Lead::where('appointment_id', $appointment->id)->first();
 
+        // 2. Otherwise find any existing open lead for this phone/customer
+        if (!$lead && ($normalizedPhone !== '' || $appointment->customer_id)) {
+            $lead = Lead::where(function ($q) use ($appointment, $phoneCandidates) {
+                if ($appointment->customer_id) {
+                    $q->where('customer_id', $appointment->customer_id);
+                }
+                if (!empty($phoneCandidates)) {
+                    $q->orWhereIn('phone', $phoneCandidates);
+                }
+            })
+                ->where(function ($q) {
+                    $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
+                })
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        // Resolve agent attribution (Bidirectional sync + inheritance from previous leads)
+        $inheritedAgentId = $lead?->assigned_agent_id ?: $appointment->booking_agent_id;
+        if (!$inheritedAgentId && ($appointment->customer_id || !empty($phoneCandidates))) {
+            $inheritedAgentId = Lead::where(function ($q) use ($appointment, $phoneCandidates) {
+                if ($appointment->customer_id) {
+                    $q->where('customer_id', $appointment->customer_id);
+                }
+                if (!empty($phoneCandidates)) {
+                    $q->orWhereIn('phone', $phoneCandidates);
+                }
+            })
+                ->whereNotNull('assigned_agent_id')
+                ->orderByDesc('id')
+                ->value('assigned_agent_id');
+        }
+
+        if (!$appointment->booking_agent_id && $inheritedAgentId) {
+            $appointment->update(['booking_agent_id' => $inheritedAgentId]);
+        }
+
         if ($lead) {
-            $lead->update(['category' => $category]);
+            // If reopening a 'booked' lead while another open lead exists for the same phone, merge them so only 1 open lead remains
+            $extraOpenLeads = collect();
+            if ($normalizedPhone !== '' || $appointment->customer_id) {
+                $extraOpenLeads = Lead::where('id', '!=', $lead->id)
+                    ->where(function ($q) use ($appointment, $phoneCandidates) {
+                        if ($appointment->customer_id) {
+                            $q->where('customer_id', $appointment->customer_id);
+                        }
+                        if (!empty($phoneCandidates)) {
+                            $q->orWhereIn('phone', $phoneCandidates);
+                        }
+                    })
+                    ->where(function ($q) {
+                        $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
+                    })
+                    ->get();
+            }
+
+            $existingServices = is_array($lead->service_interest) ? $lead->service_interest : [];
+            $mergedCategories = $lead->categories_list;
+            // If toggling the SAME appointment between 'cancel' and 'no_show', replace the previous missed-appointment status
+            if ($lead->appointment_id === $appointment->id && in_array($category, ['cancel', 'no_show'], true)) {
+                $oppositeMissed = $category === 'cancel' ? 'no_show' : 'cancel';
+                if (count($mergedCategories) === 1 && $mergedCategories[0] === $oppositeMissed) {
+                    $mergedCategories = [];
+                }
+            }
+            $mergedCategories[] = $category;
+
+            $remarksParts = [];
+            $baseRemark = trim((string) preg_replace('/\s*\[Auto-closed:[^\]]*\]/i', '', (string) $lead->customer_remarks));
+            if ($baseRemark !== '') {
+                $remarksParts[] = $baseRemark;
+            }
+
+            foreach ($extraOpenLeads as $extra) {
+                if (is_array($extra->service_interest)) {
+                    $existingServices = array_merge($existingServices, $extra->service_interest);
+                }
+                $mergedCategories = array_merge($mergedCategories, $extra->categories_list);
+                $extraRemark = trim((string) preg_replace('/\s*\[Auto-closed:[^\]]*\]/i', '', (string) $extra->customer_remarks));
+                if ($extraRemark !== '' && !in_array($extraRemark, $remarksParts, true)) {
+                    $remarksParts[] = $extraRemark;
+                }
+                $extra->delete();
+            }
+
+            $mergedServices = array_values(array_unique(array_filter(array_map('trim', array_merge($existingServices, $incomingServices)))));
+            $normalizedCategories = Lead::normalizeCategories($mergedCategories);
+            $primaryCategory = Lead::resolvePrimaryCategory($normalizedCategories) ?: $category;
+
+            $reopenNote = '[Reopened: ' . ucfirst($category) . ' on ' . now()->format('d M Y') . ']';
+            $cleanedRemarks = implode(' | ', $remarksParts);
+            $newRemarks = $cleanedRemarks !== ''
+                ? (str_contains($cleanedRemarks, $reopenNote) ? $cleanedRemarks : $cleanedRemarks . ' ' . $reopenNote)
+                : $reopenNote;
+
+            $lead->update([
+                'category' => $primaryCategory,
+                'categories' => $normalizedCategories,
+                'needful_done' => null,
+                'next_followup_date' => null,
+                'service_interest' => !empty($mergedServices) ? $mergedServices : $lead->service_interest,
+                'appointment_id' => $appointment->id,
+                'customer_id' => $lead->customer_id ?: $appointment->customer_id,
+                'assigned_agent_id' => $inheritedAgentId,
+                'customer_remarks' => $newRemarks,
+            ]);
+            $lead->touch();
 
             return;
         }
@@ -1469,14 +1801,13 @@ class AppointmentController extends Controller
         // date" warning on the Leads page instead of a guessed date quietly
         // going stale.
         Lead::create([
-            'phone' => $appointment->phone,
+            'phone' => $normalizedPhone !== '' ? $normalizedPhone : $appointment->phone,
             'customer_id' => $appointment->customer_id,
             'appointment_id' => $appointment->id,
-            'assigned_agent_id' => $appointment->booking_agent_id,
+            'assigned_agent_id' => $inheritedAgentId,
             'category' => $category,
-            'service_interest' => $appointment->service_name
-                ? array_map('trim', explode(',', $appointment->service_name))
-                : null,
+            'categories' => [$category],
+            'service_interest' => !empty($incomingServices) ? $incomingServices : null,
             'next_followup_date' => null,
         ]);
     }
@@ -1641,6 +1972,8 @@ class AppointmentController extends Controller
 
             $cursor = $lineStart->copy()->addMinutes($line->duration ?: 30);
         });
+
+        $this->markAppointmentLeadsAsBooked($appointment);
 
         return response()->json([
             'success' => true,
@@ -2326,6 +2659,8 @@ class AppointmentController extends Controller
                 'payment_method' => $dominantMethod,
                 'paid_at' => now(),
             ]);
+
+            $this->markAppointmentLeadsAsBooked($appointment);
 
             $pointsEarned = $customer->earnPointsForSale($sale);
         });
