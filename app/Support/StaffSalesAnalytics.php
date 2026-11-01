@@ -23,7 +23,6 @@ class StaffSalesAnalytics
     const BRANCHES = [
         'old_airport' => 'Old Airport',
         'wakrah' => 'Al Wakrah',
-        'home_service' => 'Home Service',
     ];
 
     public function __construct(

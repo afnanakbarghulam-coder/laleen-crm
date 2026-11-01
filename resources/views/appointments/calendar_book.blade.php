@@ -641,7 +641,6 @@
                             <option value="">-- Select Branch --</option>
                             <option value="old_airport">Old Airport</option>
                             <option value="wakrah">Wakrah</option>
-                            <option value="home_service">Home Service</option>
                         </select>
                     </div>
 

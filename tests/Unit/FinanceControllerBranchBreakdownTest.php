@@ -62,7 +62,7 @@ class FinanceControllerBranchBreakdownTest extends TestCase
         $result = FinanceController::branchBreakdown(now()->startOfMonth(), now()->endOfDay());
 
         $this->assertIsArray($result);
-        $this->assertCount(3, $result); // Old Airport, Al Wakrah, Home Service
+        $this->assertCount(2, $result); // Old Airport, Al Wakrah
 
         foreach ($result as $row) {
             foreach (['key', 'label', 'sales', 'expenses', 'profit'] as $requiredKey) {
@@ -98,7 +98,7 @@ class FinanceControllerBranchBreakdownTest extends TestCase
     {
         $result = FinanceController::branchBreakdown(now()->startOfMonth(), now()->endOfDay());
 
-        $this->assertSame(['old_airport', 'wakrah', 'home_service'], array_column($result, 'key'));
-        $this->assertSame(['Old Airport', 'Al Wakrah', 'Home Service'], array_column($result, 'label'));
+        $this->assertSame(['old_airport', 'wakrah'], array_column($result, 'key'));
+        $this->assertSame(['Old Airport', 'Al Wakrah'], array_column($result, 'label'));
     }
 }

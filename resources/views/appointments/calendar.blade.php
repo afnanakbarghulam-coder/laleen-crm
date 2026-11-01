@@ -1410,7 +1410,6 @@
                             <select id="filterBranch" class="cal-filter-select">
                                 <option value="old_airport">Old Airport</option>
                                 <option value="wakrah">Al Wakrah</option>
-                                <option value="home_service">Home Service</option>
                             </select>
                         </div>
 
@@ -1695,7 +1694,6 @@
                     <select id="drawerRescheduleBranch" class="form-select form-select-sm mb-2">
                         <option value="old_airport">Old Airport</option>
                         <option value="wakrah">Al Wakrah</option>
-                        <option value="home_service">Home Service</option>
                     </select>
                     <div class="row g-2">
                         <div class="col-6">
@@ -1810,7 +1808,7 @@
                 staff_id: '',
                 zoom: 56
             }, saved);
-            if (!state.branch) state.branch = DEFAULT_BRANCH;
+            if (!state.branch || !['old_airport', 'wakrah'].includes(state.branch)) state.branch = DEFAULT_BRANCH;
             return state;
         }
 
@@ -1819,7 +1817,7 @@
         }
 
         let state = loadFilters();
-        const CAL_BRANCH_LABELS = { old_airport: 'Old Airport', wakrah: 'Al Wakrah', home_service: 'Home Service' };
+        const CAL_BRANCH_LABELS = { old_airport: 'Old Airport', wakrah: 'Al Wakrah' };
         let latestData = null;
         let nowLineTimer = null;
         const DRAWER_SERVICES_CATALOG = @json($servicesCatalog);

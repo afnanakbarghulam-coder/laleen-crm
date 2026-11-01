@@ -28,7 +28,6 @@ class AppointmentController extends Controller
     const BRANCH_LABELS = [
         'old_airport' => 'Old Airport',
         'wakrah' => 'Al Wakrah',
-        'home_service' => 'Home Service',
     ];
 
     const PERIOD_LABELS = [
@@ -207,7 +206,7 @@ class AppointmentController extends Controller
             'service_price.*' => 'nullable|numeric|min:0',
             'service_discount_reason' => 'nullable|array',
             'service_discount_reason.*' => 'nullable|string|max:255',
-            'branch' => 'required|in:old_airport,wakrah,home_service',
+            'branch' => 'required|in:old_airport,wakrah',
             'price' => 'nullable|numeric',
             'booking_agent_id' => 'nullable|exists:users,id',
             'staff_id' => $isUnscheduled ? 'nullable|exists:staff,id' : 'required|exists:staff,id',
@@ -643,7 +642,7 @@ class AppointmentController extends Controller
             'appointment_datetime' => 'required|date',
             'service_name' => 'required|array',
             'service_name.*' => 'string|max:255',
-            'branch' => 'required|in:old_airport,wakrah,home_service',
+            'branch' => 'required|in:old_airport,wakrah',
             'price' => 'nullable|numeric',
             'booking_agent_id' => 'nullable|exists:users,id',
             'staff_id' => 'nullable|exists:staff,id',
@@ -1539,9 +1538,8 @@ class AppointmentController extends Controller
         $isFriday = $date->isFriday();
 
         return match ($branch) {
-            'old_airport' => $isFriday ? ['start' => '12:00', 'end' => '22:00'] : ['start' => '10:00', 'end' => '22:00'],
             'wakrah' => $isFriday ? ['start' => '12:00', 'end' => '22:00'] : ['start' => '11:00', 'end' => '21:00'],
-            default => ['start' => '00:00', 'end' => '23:59'],
+            default => $isFriday ? ['start' => '12:00', 'end' => '22:00'] : ['start' => '10:00', 'end' => '22:00'],
         };
     }
 
@@ -2330,7 +2328,7 @@ class AppointmentController extends Controller
             'start_time' => 'required_without:appointment_datetime|nullable|string',
             'booking_date' => 'nullable|date',
             'staff_id' => 'nullable|exists:staff,id',
-            'branch' => 'nullable|in:old_airport,wakrah,home_service',
+            'branch' => 'nullable|in:old_airport,wakrah',
         ]);
 
         $wasUnscheduled = $appointment->start_time === null;

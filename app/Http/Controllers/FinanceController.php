@@ -14,7 +14,6 @@ class FinanceController extends Controller
     const BRANCHES = [
         'old_airport' => 'Old Airport',
         'wakrah' => 'Al Wakrah',
-        'home_service' => 'Home Service',
     ];
 
     public function index(Request $request)
@@ -116,7 +115,7 @@ class FinanceController extends Controller
     public function storeExpense(Request $request)
     {
         $validated = $request->validate([
-            'branch' => 'nullable|in:old_airport,wakrah,home_service',
+            'branch' => 'nullable|in:old_airport,wakrah',
             'category' => 'required|string|max:100',
             'amount' => 'required|numeric|min:0.01',
             'expense_date' => 'required|date',

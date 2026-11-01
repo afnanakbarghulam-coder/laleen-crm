@@ -107,17 +107,33 @@ class BookingsCalendarFinanceWave1Test extends TestCase
             ->assertSee('850.00');
     }
 
-    public function test_patch_2_general_expenses_and_home_service_branch_included_across_finance_and_bookings(): void
+    public function test_patch_2_general_expenses_and_strict_two_branch_enforcement_across_finance_and_bookings(): void
     {
         $user = $this->createAdminUser();
 
-        $this->assertArrayHasKey('home_service', FinanceController::BRANCHES);
-        $this->assertArrayHasKey('home_service', AppointmentController::BRANCH_LABELS);
+        $this->assertSame(['old_airport', 'wakrah'], array_keys(FinanceController::BRANCHES));
+        $this->assertSame(['old_airport', 'wakrah'], array_keys(AppointmentController::BRANCH_LABELS));
+        $this->assertArrayNotHasKey('home_service', FinanceController::BRANCHES);
+        $this->assertArrayNotHasKey('home_service', AppointmentController::BRANCH_LABELS);
 
-        // Create a Home Service sale (400 QAR)
+        // Submitting 'home_service' to expenses, appointments, or POS sales is rejected with a validation error
+        $this->actingAs($user)->postJson(route('expenses.store'), [
+            'branch' => 'home_service',
+            'category' => 'Other',
+            'amount' => 50,
+            'expense_date' => now()->toDateString(),
+        ])->assertStatus(422)->assertJsonValidationErrors('branch');
+
+        $this->actingAs($user)->postJson(route('appointments.store'), [
+            'branch' => 'home_service',
+            'appointment_datetime' => now()->addDay()->setTime(14, 0)->toDateTimeString(),
+            'decide_in_salon' => true,
+        ])->assertStatus(422)->assertJsonValidationErrors('branch');
+
+        // Create an Al Wakrah sale (400 QAR) and expense (50 QAR)
         Sale::create([
             'created_by' => $user->id,
-            'branch' => 'home_service',
+            'branch' => 'wakrah',
             'services_total' => 400,
             'products_total' => 0,
             'packages_total' => 0,
@@ -126,13 +142,12 @@ class BookingsCalendarFinanceWave1Test extends TestCase
             'total_amount' => 400,
         ]);
 
-        // Store a Home Service expense via controller endpoint
         $this->actingAs($user)->post(route('expenses.store'), [
-            'branch' => 'home_service',
+            'branch' => 'wakrah',
             'category' => 'Other',
             'amount' => 50,
             'expense_date' => now()->toDateString(),
-            'description' => 'Driver fuel for home service',
+            'description' => 'Salon supplies for Al Wakrah',
         ])->assertRedirect();
 
         // Store a General / Shared expense (branch = null)
@@ -147,10 +162,11 @@ class BookingsCalendarFinanceWave1Test extends TestCase
         $breakdown = collect(FinanceController::branchBreakdown(now()->startOfMonth(), now()->endOfDay()))
             ->keyBy('key');
 
-        $this->assertTrue($breakdown->has('home_service'));
-        $this->assertEquals(400.0, $breakdown['home_service']['sales']);
-        $this->assertEquals(50.0, $breakdown['home_service']['expenses']);
-        $this->assertEquals(350.0, $breakdown['home_service']['profit']);
+        $this->assertFalse($breakdown->has('home_service'));
+        $this->assertTrue($breakdown->has('wakrah'));
+        $this->assertEquals(400.0, $breakdown['wakrah']['sales']);
+        $this->assertEquals(50.0, $breakdown['wakrah']['expenses']);
+        $this->assertEquals(350.0, $breakdown['wakrah']['profit']);
 
         $this->assertTrue($breakdown->has('general'));
         $this->assertEquals('General / Shared', $breakdown['general']['label']);

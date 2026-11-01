@@ -26,7 +26,7 @@ class SaleController extends Controller
             'customer_phone' => 'nullable|string|max:20',
             'customer_name' => 'nullable|string|max:255',
             'staff_id' => 'nullable|exists:staff,id',
-            'branch' => 'required|in:old_airport,wakrah,home_service',
+            'branch' => 'required|in:old_airport,wakrah',
             'products' => 'required|array|min:1',
             'products.*.product_id' => 'required|exists:products,id',
             'products.*.quantity' => 'required|integer|min:1',

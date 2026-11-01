@@ -26,7 +26,6 @@ class AdLeadEntry extends Model
     const BRANCHES = [
         'old_airport' => 'Old Airport',
         'wakrah' => 'Al Wakrah',
-        'home_service' => 'Home Service',
     ];
 
     protected $fillable = [
@@ -62,7 +61,7 @@ class AdLeadEntry extends Model
      */
     public function isBooked(): bool
     {
-        return !is_null($this->branch);
+        return in_array($this->branch, array_keys(self::BRANCHES), true);
     }
 
     /**

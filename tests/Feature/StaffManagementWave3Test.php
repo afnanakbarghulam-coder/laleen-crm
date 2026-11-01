@@ -230,8 +230,9 @@ class StaffManagementWave3Test extends TestCase
         $rosterStaffIds = collect($shiftsResp->viewData('roster'))->pluck('staff.id')->all();
         $this->assertContains($bookableStylist->id, $rosterStaffIds, 'Dual-branch staff (both) must appear when filtering shifts by Old Airport');
 
-        // 5. StaffSalesAnalytics::BRANCHES includes home_service
-        $this->assertArrayHasKey('home_service', StaffSalesAnalytics::BRANCHES);
+        // 5. StaffSalesAnalytics::BRANCHES strictly contains old_airport and wakrah
+        $this->assertSame(['old_airport', 'wakrah'], array_keys(StaffSalesAnalytics::BRANCHES));
+        $this->assertArrayNotHasKey('home_service', StaffSalesAnalytics::BRANCHES);
     }
 
     public function test_payroll_calculator_is_commission_free_deducts_unpaid_leave_respects_hourly_overtime_and_posts_to_finance(): void
