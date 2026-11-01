@@ -843,9 +843,20 @@
                     <p class="text-muted small mb-0">Net Salary = Base Salary + Overtime Pay &minus; Deductions. Click any staff row to expand their overtime entries and deductions for the selected date range.</p>
                 </div>
                 @moduleEdit('staff_management')
-                    <button type="button" class="btn btn-primary btn-sm" onclick="openLogOvertimeModal()">
-                        <i class="bx bx-plus me-1"></i> Log Overtime
-                    </button>
+                    <div class="d-flex gap-2 align-items-center">
+                        <form method="POST" action="{{ route('staff.payroll.post-to-finance') }}" class="m-0">
+                            @csrf
+                            <input type="hidden" name="payroll_branch" value="{{ $payrollBranch }}">
+                            <input type="hidden" name="payroll_from" value="{{ $payrollFrom->format('Y-m-d') }}">
+                            <input type="hidden" name="payroll_to" value="{{ $payrollTo->format('Y-m-d') }}">
+                            <button type="submit" class="btn btn-outline-success btn-sm">
+                                💳 Post Payroll to Finance
+                            </button>
+                        </form>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="openLogOvertimeModal()">
+                            <i class="bx bx-plus me-1"></i> Log Overtime
+                        </button>
+                    </div>
                 @endmoduleEdit
             </div>
 
@@ -915,7 +926,12 @@
                                 </td>
                                 <td class="text-end">{{ number_format($row['overtime_hours'], 2) }}</td>
                                 <td class="text-end">QAR {{ number_format($row['overtime_pay'], 2) }}</td>
-                                <td class="text-end text-danger">- QAR {{ number_format($row['deductions'], 2) }}</td>
+                                <td class="text-end text-danger">
+                                    - QAR {{ number_format($row['deductions'], 2) }}
+                                    @if (!empty($row['unpaid_leave_days']) && $row['unpaid_leave_days'] > 0)
+                                        <div class="text-muted" style="font-size: 11px;">incl. {{ $row['unpaid_leave_days'] }}d unpaid leave</div>
+                                    @endif
+                                </td>
                                 <td class="text-end fw-bold">QAR {{ number_format($row['net_salary'], 2) }}</td>
                             </tr>
                             <tr class="collapse payroll-detail-row" id="payroll-details-{{ $row['staff_id'] }}">
@@ -1970,7 +1986,10 @@
             const dateStr = dateInput?.value || '';
             const daysInMonth = getDaysInMonthFromDateStr(dateStr);
             const shiftHours = 9;
-            const dynamicRate = staffId ? ((baseSalary / daysInMonth) / shiftHours) : 0;
+            const hourlyWage = staffObj !== undefined ? Number(staffObj.hourly_wage || 0) : 0;
+            const dynamicRate = staffId
+                ? (baseSalary > 0 ? ((baseSalary / daysInMonth) / shiftHours) : hourlyWage)
+                : 0;
 
             rateInput.value = staffId ? dynamicRate.toFixed(2) : '';
 

@@ -67,28 +67,235 @@
     .lead-badge {
         display: inline-flex;
         align-items: center;
-        padding: 3px 10px;
+        padding: 2px 7px;
         border-radius: 999px;
-        font-size: 11.5px;
+        font-size: 11px;
         font-weight: 600;
         white-space: nowrap;
+        line-height: 1.3;
     }
 
     .lead-badge.cat-follow_up { background: rgba(142,168,138,.15); color: #8ea88a; }
     .lead-badge.cat-inquiry { background: rgba(138,166,171,.15); color: #8aa6ab; }
     .lead-badge.cat-no_show { background: rgba(201,166,107,.15); color: #c9a66b; }
     .lead-badge.cat-cancel { background: rgba(168,82,74,.15); color: #a8524a; }
+    .lead-badge.cat-more { background: rgba(201,166,107,.18); color: #f3d9a4; padding: 2px 6px; }
+
+    .leads-compact-table {
+        width: 100% !important;
+        table-layout: auto !important;
+        margin-bottom: 0;
+    }
+
+    .leads-compact-table th {
+        white-space: nowrap !important;
+        vertical-align: middle !important;
+        padding: 9px 8px !important;
+        font-size: 11px !important;
+        letter-spacing: 0.04em !important;
+    }
+
+    .leads-compact-table td {
+        white-space: nowrap !important;
+        vertical-align: middle !important;
+        padding: 8px 8px !important;
+        font-size: 12.5px !important;
+    }
+
+    .lead-contact-phone {
+        font-weight: 700;
+        font-size: 12.5px;
+        color: #f2e6e2;
+        line-height: 1.25;
+        white-space: nowrap;
+    }
+
+    .lead-client-link {
+        display: block;
+        max-width: 135px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.6);
+        text-decoration: none;
+        margin-top: 2px;
+        line-height: 1.2;
+    }
+
+    .lead-client-link:hover {
+        color: #8ea88a;
+    }
+
+    .lead-remarks-truncate {
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.5);
+        margin-top: 3px;
+        line-height: 1.25;
+    }
+
+    .lead-service-tag {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 11px;
+        font-weight: 500;
+        color: #e2d5cf;
+        white-space: nowrap;
+        line-height: 1.3;
+    }
+
+    .lead-service-more {
+        background: rgba(201, 166, 107, 0.14);
+        border-color: rgba(201, 166, 107, 0.32);
+        color: #f3d9a4;
+        font-weight: 600;
+    }
+
+    .btn-ai-script {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 4px !important;
+        padding: 4px 9px !important;
+        border-radius: 7px !important;
+        font-size: 11.5px !important;
+        font-weight: 600 !important;
+        white-space: nowrap !important;
+        width: auto !important;
+        height: auto !important;
+        line-height: 1.3 !important;
+    }
+
+    .btn-action-icon {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 28px !important;
+        height: 28px !important;
+        padding: 0 !important;
+        border-radius: 7px !important;
+        flex-shrink: 0 !important;
+    }
+
+    .ai-closer-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: 6px;
+        background: rgba(201, 166, 107, 0.14);
+        border: 1px solid rgba(201, 166, 107, 0.3);
+        color: #f3d9a4;
+        font-size: 11.5px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .ai-drawer-grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 12px;
+        align-items: stretch;
+    }
+
+    .ai-drawer-left {
+        grid-column: span 12 / span 12;
+    }
+
+    .ai-drawer-right {
+        grid-column: span 12 / span 12;
+    }
+
+    @media (min-width: 992px) {
+        .ai-drawer-left {
+            grid-column: span 7 / span 7;
+        }
+
+        .ai-drawer-right {
+            grid-column: span 5 / span 5;
+        }
+    }
+
+    .ai-script-box {
+        position: relative;
+        min-height: 54px;
+        padding: 10px 135px 10px 14px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-left: 3px solid var(--bs-primary, #c98a7b) !important;
+        font-size: 13.5px;
+        line-height: 1.5;
+        color: #f5ebe7;
+        display: flex;
+        align-items: center;
+    }
+
+    .ai-script-box[dir="rtl"] {
+        padding: 10px 14px 10px 135px;
+        border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-right: 3px solid var(--bs-primary, #c98a7b) !important;
+    }
+
+    .ai-copy-inside-btn {
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        padding: 4px 10px !important;
+        border-radius: 999px !important;
+        font-size: 11.5px !important;
+        font-weight: 600 !important;
+        white-space: nowrap !important;
+    }
+
+    .ai-script-box[dir="rtl"] .ai-copy-inside-btn {
+        right: auto;
+        left: 8px;
+    }
+
+    .ai-icon-tool-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 9px;
+        border-radius: 6px;
+        font-size: 11.5px;
+        font-weight: 600;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.04);
+        color: #cbb8b0;
+        cursor: pointer;
+        transition: all 0.18s ease;
+        white-space: nowrap;
+    }
+
+    .ai-icon-tool-btn:hover:not(:disabled) {
+        border-color: rgba(217, 143, 131, 0.5);
+        color: #fff;
+        background: rgba(217, 143, 131, 0.12);
+    }
 
     .needful-done-select {
         border: 1px solid rgba(138,125,118,.28);
         border-radius: 999px;
-        padding: 4px 26px 4px 12px;
-        font-size: 11.5px;
+        padding: 3px 22px 3px 8px;
+        width: 155px;
+        max-width: 155px;
+        font-size: 11px;
         font-weight: 600;
         cursor: pointer;
         background-color: rgba(138,125,118,.18);
         color: #8a7d76;
         transition: all 0.2s ease;
+        text-overflow: ellipsis;
     }
 
     .needful-done-select.needful-booked,
@@ -97,8 +304,8 @@
         align-items: center;
         gap: 4px;
         border-radius: 999px;
-        padding: 4px 12px;
-        font-size: 11.5px;
+        padding: 3px 9px;
+        font-size: 11px;
         font-weight: 600;
         background-color: rgba(74, 222, 128, .15);
         color: #4ade80;
@@ -189,11 +396,125 @@
         color: #8ea88a;
         margin-top: 3px;
     }
+
+    .ai-lang-toggle {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(36, 30, 28, 0.85);
+        border: 1px solid rgba(201, 166, 107, 0.28);
+        border-radius: 999px;
+        padding: 2px;
+        gap: 2px;
+    }
+
+    .ai-lang-btn {
+        border: none;
+        background: transparent;
+        color: #b8a69e;
+        font-size: 11.5px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: all 0.18s ease;
+        line-height: 1.3;
+    }
+
+    .ai-lang-btn:hover {
+        color: #f2e6e2;
+    }
+
+    .ai-lang-btn.is-active {
+        background: rgba(201, 166, 107, 0.22);
+        color: #f3d9a4;
+        box-shadow: 0 0 8px rgba(201, 166, 107, 0.18);
+    }
+
+    .ai-objection-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        border: 1px solid rgba(217, 143, 131, 0.22);
+        background: rgba(36, 30, 28, 0.75);
+        color: #d6c5be;
+        cursor: pointer;
+        transition: all 0.18s ease;
+        white-space: nowrap;
+    }
+
+    .ai-objection-chip:hover:not(:disabled) {
+        border-color: rgba(217, 143, 131, 0.55);
+        background: rgba(217, 143, 131, 0.12);
+        color: #fff;
+        transform: translateY(-1px);
+    }
+
+    .ai-objection-chip.is-active {
+        background: rgba(217, 143, 131, 0.22);
+        border-color: #d98f83;
+        color: #f7c7be;
+        box-shadow: 0 0 12px rgba(217, 143, 131, 0.2);
+    }
+
+    .ai-objection-chip:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .ai-reply-input {
+        background: rgba(24, 19, 18, 0.78) !important;
+        border: 1px solid rgba(201, 166, 107, 0.25) !important;
+        color: #f2e6e2 !important;
+        font-size: 12.5px !important;
+    }
+
+    .ai-reply-input::placeholder {
+        color: #8f7e77 !important;
+    }
+
+    .ai-reply-input:focus {
+        border-color: #d98f83 !important;
+        box-shadow: 0 0 0 2px rgba(217, 143, 131, 0.15) !important;
+    }
+
+    .morning-money-brief {
+        background: linear-gradient(135deg, rgba(36, 28, 25, 0.88) 0%, rgba(28, 22, 20, 0.92) 100%);
+        border: 1px solid rgba(201, 166, 107, 0.32);
+        border-left: 4px solid #c9a66b;
+        border-radius: 12px;
+        padding: 10px 16px;
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        font-size: 12px;
+        color: #f2e6e2;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    }
+
+    .morning-brief-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        white-space: nowrap;
+    }
 </style>
 @section('content')
     <!-- Page Navbar with Add Button -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="fw-bold">Lead Management</h4>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="fw-bold mb-0">Lead Management</h4>
         <div class="d-flex gap-2">
             <a href="{{ route('leads.analytics') }}" class="btn btn-outline-secondary">
                 <i class="bx bx-bar-chart-alt-2 me-1"></i> Analytics
@@ -203,6 +524,73 @@
                     <i class="bx bx-plus me-1"></i> Add Lead
                 </button>
             @endmoduleEdit
+        </div>
+    </div>
+
+    <!-- Morning Money Brief Executive Banner -->
+    <div class="morning-money-brief py-2.5 px-4 text-xs" id="morningMoneyBriefBanner" x-data="{
+        briefText: @js($morningBriefText ?? ''),
+        dueToday: {{ (int) ($dueTodayCount ?? 0) }},
+        overdue: {{ (int) ($overdueCount ?? 0) }},
+        unscheduled: {{ (int) ($unscheduledCount ?? 0) }},
+        isRefreshing: false,
+        refreshBrief() {
+            if (this.isRefreshing) return;
+            this.isRefreshing = true;
+            fetch('{{ route('leads.ai-morning-brief') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.brief_text) {
+                    this.briefText = data.brief_text;
+                    if (typeof data.due_today_count !== 'undefined') this.dueToday = data.due_today_count;
+                    if (typeof data.overdue_count !== 'undefined') this.overdue = data.overdue_count;
+                    if (typeof data.unscheduled_count !== 'undefined') this.unscheduled = data.unscheduled_count;
+                }
+            })
+            .catch(() => {})
+            .finally(() => {
+                this.isRefreshing = false;
+            });
+        }
+    }">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="fw-bold text-uppercase" style="color: #f3d9a4; letter-spacing: 0.03em; font-size: 11px;">
+                ⚡ Morning Money Brief
+            </span>
+            <span class="morning-brief-chip" style="color: #93c5fd; border-color: rgba(147, 197, 253, 0.28);">
+                📅 Due Today: <strong x-text="dueToday">{{ $dueTodayCount ?? 0 }}</strong>
+            </span>
+            <span class="morning-brief-chip" style="color: #fca5a5; border-color: rgba(252, 165, 165, 0.28);">
+                🔴 Overdue: <strong x-text="overdue">{{ $overdueCount ?? 0 }}</strong>
+            </span>
+            <span class="morning-brief-chip" style="color: #fcd34d; border-color: rgba(252, 211, 77, 0.28);">
+                🟠 Needs Follow-up Date: <strong x-text="unscheduled">{{ $unscheduledCount ?? 0 }}</strong>
+            </span>
+        </div>
+
+        <div class="d-flex align-items-center gap-2 flex-grow-1 justify-content-between">
+            <div class="fw-medium" style="color: #f5ebe7; line-height: 1.4;" x-text="briefText">
+                {{ $morningBriefText ?? '' }}
+            </div>
+            <button type="button"
+                class="ai-icon-tool-btn flex-shrink-0"
+                @click="refreshBrief()"
+                :disabled="isRefreshing"
+                title="Refresh AI Morning Brief">
+                <span x-show="!isRefreshing">✨ Refresh AI Brief</span>
+                <span x-show="isRefreshing" x-cloak>
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    Refreshing...
+                </span>
+            </button>
         </div>
     </div>
 
@@ -339,19 +727,18 @@
     <!-- Lead Table -->
     <div class="card">
         <h5 class="card-header">All Leads</h5>
-        <div class="table-responsive text-nowrap">
-            <table class="table">
+        <div class="table-responsive">
+            <table class="table leads-compact-table w-full table-auto">
                 <thead>
                     <tr>
-                        <th>Date</th>
-                        <th>Contact</th>
-                        <th>Category</th>
-                        <th>Customer Remarks</th>
-                        <th>Service Interest</th>
-                        <th>Agent Assign</th>
-                        <th>Needful Done</th>
-                        <th>Next Follow-up Date</th>
-                        <th>Actions</th>
+                        <th class="px-2.5 py-2.5 whitespace-nowrap">DATE</th>
+                        <th class="px-2.5 py-2.5 whitespace-nowrap">CONTACT</th>
+                        <th class="px-2.5 py-2.5 whitespace-nowrap">CATEGORY</th>
+                        <th class="px-2.5 py-2.5 whitespace-nowrap">SERVICES &amp; NOTES</th>
+                        <th class="px-2.5 py-2.5 whitespace-nowrap">AGENT</th>
+                        <th class="px-2.5 py-2.5 whitespace-nowrap">STATUS</th>
+                        <th class="px-2.5 py-2.5 whitespace-nowrap">FOLLOW-UP</th>
+                        <th class="px-2.5 py-2.5 whitespace-nowrap">ACTIONS</th>
                     </tr>
                 </thead>
                 @forelse($leads as $lead)
@@ -360,10 +747,16 @@
                             || in_array(strtolower((string) ($lead->status ?? '')), ['booked', 'closed'], true);
                         $leadCategories = $lead->categories ?? ($lead->category ? [$lead->category] : []);
                         $leadCategories = \App\Models\Lead::normalizeCategories($leadCategories);
+                        $visibleCategories = array_slice($leadCategories, 0, 2);
+                        $extraCategoriesCount = max(0, count($leadCategories) - 2);
                         $leadCatLabel = !empty($leadCategories)
                             ? implode(' + ', array_map(fn($c) => \App\Models\Lead::CATEGORIES[$c] ?? $c, $leadCategories))
                             : 'Inquiry';
                         $leadAgeDays = max(0, (int) floor(($lead->created_at ?? now())->diffInDays(now())));
+                        $servicesList = is_array($lead->service_interest) ? array_values(array_filter($lead->service_interest)) : [];
+                        $visibleServices = array_slice($servicesList, 0, 2);
+                        $extraServicesCount = max(0, count($servicesList) - 2);
+                        $allServicesTooltip = implode(', ', $servicesList);
                     @endphp
                     <tbody class="table-border-bottom-0" x-data="{
                         showAiPanel: false,
@@ -372,12 +765,35 @@
                         script: '',
                         copied: false,
                         errorMsg: '',
+                        language: 'en',
+                        activeMode: 'opener',
+                        activeObjection: '',
+                        clientReply: '',
+                        setLanguage(lang) {
+                            this.language = lang;
+                            if (this.script && !this.isLoading) {
+                                if (this.activeMode === 'objection' && this.activeObjection) {
+                                    this.generateObjection(this.activeObjection);
+                                } else {
+                                    this.generateScript();
+                                }
+                            }
+                        },
+                        regenerateCurrent() {
+                            if (this.activeMode === 'objection' && this.activeObjection) {
+                                this.generateObjection(this.activeObjection);
+                            } else {
+                                this.generateScript();
+                            }
+                        },
                         generateScript() {
                             if (this.isClosed) return;
                             this.showAiPanel = true;
                             this.isLoading = true;
                             this.errorMsg = '';
                             this.copied = false;
+                            this.activeMode = 'opener';
+                            this.activeObjection = '';
                             fetch('{{ route('leads.ai-script', $lead) }}', {
                                 method: 'POST',
                                 headers: {
@@ -388,6 +804,8 @@
                                 body: JSON.stringify({
                                     lead_id: {{ $lead->id }},
                                     module: 'lead_management',
+                                    mode: 'opener',
+                                    language: this.language,
                                     name: @js($lead->customer->name ?? $lead->name ?? ''),
                                     customer_name: @js($lead->customer->name ?? $lead->name ?? ''),
                                     categories: @js($leadCategories ?: ['inquiry']),
@@ -399,6 +817,7 @@
                             .then(data => {
                                 if (data && data.script) {
                                     this.script = data.script;
+                                    if (data.language) this.language = data.language;
                                 } else {
                                     this.errorMsg = 'Could not generate script. Please try again.';
                                 }
@@ -406,6 +825,53 @@
                             })
                             .catch(() => {
                                 this.errorMsg = 'Network error while generating AI script.';
+                                this.isLoading = false;
+                            })
+                            .finally(() => {
+                                this.isLoading = false;
+                            });
+                        },
+                        generateObjection(type) {
+                            if (this.isClosed) return;
+                            this.showAiPanel = true;
+                            this.isLoading = true;
+                            this.errorMsg = '';
+                            this.copied = false;
+                            this.activeMode = 'objection';
+                            this.activeObjection = type;
+                            fetch('{{ route('leads.ai-script', $lead) }}', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                },
+                                body: JSON.stringify({
+                                    lead_id: {{ $lead->id }},
+                                    module: 'lead_management',
+                                    mode: 'objection',
+                                    objection_type: type,
+                                    client_reply: this.clientReply,
+                                    language: this.language,
+                                    name: @js($lead->customer->name ?? $lead->name ?? ''),
+                                    customer_name: @js($lead->customer->name ?? $lead->name ?? ''),
+                                    categories: @js($leadCategories ?: ['inquiry']),
+                                    service_interest: @js(!empty($lead->service_interest) ? implode(', ', (array) $lead->service_interest) : ''),
+                                    remarks: @js($lead->customer_remarks ?? '')
+                                })
+                            })
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data && data.script) {
+                                    this.script = data.script;
+                                    if (data.language) this.language = data.language;
+                                } else {
+                                    this.errorMsg = 'Could not generate objection reply. Please try again.';
+                                }
+                                this.isLoading = false;
+                            })
+                            .catch(() => {
+                                this.errorMsg = 'Network error while generating AI reply.';
                                 this.isLoading = false;
                             })
                             .finally(() => {
@@ -421,43 +887,83 @@
                         }
                     }" style="border-top: none;">
                         <tr @if (!$isBookedOrClosed) @click="if (!isClosed) showAiPanel = !showAiPanel" style="cursor: pointer;" @endif>
-                            <td>
-                                @if (!$isBookedOrClosed)
-                                    <i class="bx me-1 text-muted" x-show="!isClosed" :class="showAiPanel ? 'bx-chevron-down' : 'bx-chevron-right'"></i>
-                                @endif
-                                {{ $lead->created_at->format('d M Y') }}
+                            <!-- 1. DATE -->
+                            <td class="px-2.5 py-2.5 whitespace-nowrap">
+                                <div class="d-inline-flex align-items-center gap-1 whitespace-nowrap">
+                                    @if (!$isBookedOrClosed)
+                                        <i class="bx text-muted" x-show="!isClosed" :class="showAiPanel ? 'bx-chevron-down' : 'bx-chevron-right'"></i>
+                                    @endif
+                                    <span>{{ $lead->created_at->format('d M y') }}</span>
+                                </div>
                             </td>
-                            <td @click.stop>
-                                {{ $lead->phone }}
+
+                            <!-- 2. CONTACT -->
+                            <td class="px-2.5 py-2.5 whitespace-nowrap" @click.stop>
+                                <div class="lead-contact-phone">{{ $lead->phone }}</div>
                                 @if ($lead->customer)
-                                    <a href="{{ route('customers.show', $lead->customer_id) }}" target="_blank" class="lead-client-link">
+                                    <a href="{{ route('customers.show', $lead->customer_id) }}" target="_blank"
+                                        class="lead-client-link text-xs text-white/60 truncate max-w-[135px]"
+                                        title="{{ $lead->customer->name ?: 'Linked client' }}">
                                         <i class="bx bx-check-circle"></i> {{ $lead->customer->name ?: 'Linked client' }}
                                     </a>
                                 @endif
                             </td>
-                            <td>
-                                @if (!empty($leadCategories))
-                                    <div class="d-flex flex-wrap gap-1 justify-content-center align-items-center flex gap-1.5">
-                                        @foreach ($leadCategories as $catKey)
+
+                            <!-- 3. CATEGORY -->
+                            <td class="px-2.5 py-2.5 whitespace-nowrap" title="{{ $leadCatLabel }}">
+                                @if (!empty($visibleCategories))
+                                    <div class="d-inline-flex align-items-center gap-1 flex-nowrap">
+                                        @foreach ($visibleCategories as $catKey)
                                             <span class="lead-badge cat-{{ $catKey }}">{{ \App\Models\Lead::CATEGORIES[$catKey] ?? $catKey }}</span>
                                         @endforeach
+                                        @if ($extraCategoriesCount > 0)
+                                            <span class="lead-badge cat-more" title="{{ $leadCatLabel }}">+{{ $extraCategoriesCount }}</span>
+                                        @endif
                                     </div>
                                 @else
                                     <span class="text-muted">—</span>
                                 @endif
                             </td>
-                            <td style="max-width: 220px; white-space: normal;">{{ $lead->customer_remarks ?? '—' }}</td>
-                            <td style="max-width: 200px; white-space: normal;">{{ !empty($lead->service_interest) ? implode(', ', $lead->service_interest) : '—' }}</td>
-                            <td>{{ $lead->agent->name ?? '—' }}</td>
-                            <td @click.stop>
+
+                            <!-- 4. SERVICES & NOTES -->
+                            <td class="px-2.5 py-2.5 whitespace-nowrap">
+                                @if (!empty($visibleServices))
+                                    <div class="d-flex align-items-center gap-1 flex-nowrap" title="{{ $allServicesTooltip }}">
+                                        @foreach ($visibleServices as $srv)
+                                            <span class="lead-service-tag bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[11px]">{{ $srv }}</span>
+                                        @endforeach
+                                        @if ($extraServicesCount > 0)
+                                            <span class="lead-service-tag lead-service-more bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[11px]"
+                                                title="{{ $allServicesTooltip }}">
+                                                +{{ $extraServicesCount }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                @elseif (empty($lead->customer_remarks))
+                                    <span class="text-muted">—</span>
+                                @endif
+
+                                @if (!empty($lead->customer_remarks))
+                                    <div class="lead-remarks-truncate text-[11px] text-white/50 truncate max-w-[180px]"
+                                        title="{{ $lead->customer_remarks }}">
+                                        <i class="bx bx-message-square-detail me-1" style="font-size: 10px;"></i>{{ $lead->customer_remarks }}
+                                    </div>
+                                @endif
+                            </td>
+
+                            <!-- 5. AGENT -->
+                            <td class="px-2.5 py-2.5 whitespace-nowrap">{{ $lead->agent->name ?? '—' }}</td>
+
+                            <!-- 6. STATUS -->
+                            <td class="px-2.5 py-2.5 whitespace-nowrap" @click.stop>
                                 @if ($lead->needful_done === 'booked')
                                     <span class="needful-done-badge needful-booked" title="Auto-verified via Calendar Booking">
-                                        <span>✅ Booked Appointment</span>
-                                        <i class="bx bx-lock-alt" style="font-size: 11.5px; opacity: 0.85;"></i>
+                                        <span>✅ Booked</span>
+                                        <i class="bx bx-lock-alt" style="font-size: 11px; opacity: 0.85;"></i>
                                     </span>
                                 @else
                                     @moduleEdit('leads')
-                                        <select class="needful-done-select {{ $lead->needful_done ? 'needful-' . $lead->needful_done : '' }}"
+                                        <select class="needful-done-select w-[155px] text-xs py-1 px-2 {{ $lead->needful_done ? 'needful-' . $lead->needful_done : '' }}"
                                             data-lead-id="{{ $lead->id }}"
                                             data-previous="{{ $lead->needful_done }}"
                                             data-url="{{ route('leads.needful-done', $lead->id) }}"
@@ -474,37 +980,41 @@
                                     @endmoduleEdit
                                 @endif
                             </td>
-                            <td>{{ (!in_array($lead->needful_done, \App\Models\Lead::CLOSED_STATUSES, true) && $lead->next_followup_date) ? $lead->next_followup_date->format('d M Y') : '—' }}</td>
-                            <td @click.stop>
-                                <div class="d-flex gap-2 justify-content-center align-items-center">
+
+                            <!-- 7. FOLLOW-UP -->
+                            <td class="px-2.5 py-2.5 whitespace-nowrap">{{ (!in_array($lead->needful_done, \App\Models\Lead::CLOSED_STATUSES, true) && $lead->next_followup_date) ? $lead->next_followup_date->format('d M y') : '—' }}</td>
+
+                            <!-- 8. ACTIONS -->
+                            <td class="px-2.5 py-2.5 whitespace-nowrap" @click.stop>
+                                <div class="d-inline-flex gap-1.5 align-items-center flex-nowrap whitespace-nowrap">
                                     @if (!$isBookedOrClosed)
                                         <button type="button"
-                                            class="btn btn-sm btn-primary"
+                                            class="btn btn-sm btn-primary btn-ai-script px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap"
                                             x-show="!isClosed"
                                             @click="generateScript()"
                                             :disabled="isLoading"
                                             title="Generate AI Closing Script">
-                                            <span x-show="!isLoading">🧠 Generate AI Closing Script</span>
+                                            <span x-show="!isLoading">✨ AI Script</span>
                                             <span x-show="isLoading" x-cloak>
                                                 <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                                                Generating...
+                                                ...
                                             </span>
                                         </button>
                                     @endif
 
                                     @moduleEdit('leads')
                                         <!-- Edit Button -->
-                                        <button type="button" class="btn btn-sm btn-outline-primary" title="Edit Lead"
+                                        <button type="button" class="btn btn-sm btn-outline-primary btn-action-icon" title="Edit Lead"
                                             data-bs-toggle="modal" data-bs-target="#editLeadModal{{ $lead->id }}">
                                             <i class="bx bx-edit-alt"></i>
                                         </button>
 
                                         <!-- Delete Button -->
-                                        <form action="{{ route('leads.destroy', $lead->id) }}" method="POST"
+                                        <form action="{{ route('leads.destroy', $lead->id) }}" method="POST" class="d-inline m-0"
                                             onsubmit="return confirm('Are you sure you want to delete this lead?');">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Lead">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger btn-action-icon" title="Delete Lead">
                                                 <i class="bx bx-trash"></i>
                                             </button>
                                         </form>
@@ -514,54 +1024,126 @@
                         </tr>
                         @if (!$isBookedOrClosed)
                             <tr x-show="showAiPanel && !isClosed" x-cloak class="bg-dark bg-opacity-10">
-                                <td colspan="9" class="p-3" style="white-space: normal;">
-                                    <div class="d-flex flex-column gap-2 p-3 rounded border border-secondary border-opacity-25" style="background: rgba(20, 16, 14, 0.45);">
+                                <td colspan="8" class="p-2" style="white-space: normal !important;">
+                                    <div class="d-flex flex-column gap-2 p-3 rounded border border-secondary border-opacity-25" style="background: rgba(20, 16, 14, 0.55);">
+                                        <!-- Top Toolbar (1 single flex row) -->
                                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                            <div class="small fw-bold text-uppercase text-muted" style="letter-spacing: 0.04em;">
-                                                🧠 Sales Consultant &mdash; {{ $leadCatLabel }} ({{ $leadAgeDays }}d old)
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <span class="ai-closer-badge">
+                                                    ✨ AI Closer &middot; {{ $leadCatLabel }} ({{ $leadAgeDays }}d)
+                                                </span>
+
+                                                <div class="ai-lang-toggle" role="group" aria-label="Script Language">
+                                                    <button type="button"
+                                                        class="ai-lang-btn"
+                                                        :class="{ 'is-active': language === 'en' }"
+                                                        @click="setLanguage('en')">
+                                                        EN
+                                                    </button>
+                                                    <button type="button"
+                                                        class="ai-lang-btn"
+                                                        :class="{ 'is-active': language === 'ar' }"
+                                                        @click="setLanguage('ar')">
+                                                        عربي
+                                                    </button>
+                                                </div>
+
+                                                <div class="d-inline-flex align-items-center gap-1 flex-wrap">
+                                                    <button type="button"
+                                                        class="ai-objection-chip text-xs"
+                                                        :class="{ 'is-active': activeMode === 'objection' && activeObjection === 'price_high' }"
+                                                        :disabled="isLoading"
+                                                        @click="generateObjection('price_high')">
+                                                        💰 Price
+                                                    </button>
+                                                    <button type="button"
+                                                        class="ai-objection-chip text-xs"
+                                                        :class="{ 'is-active': activeMode === 'objection' && activeObjection === 'busy_later' }"
+                                                        :disabled="isLoading"
+                                                        @click="generateObjection('busy_later')">
+                                                        ⏳ Busy
+                                                    </button>
+                                                    <button type="button"
+                                                        class="ai-objection-chip text-xs"
+                                                        :class="{ 'is-active': activeMode === 'objection' && activeObjection === 'price_inquiry' }"
+                                                        :disabled="isLoading"
+                                                        @click="generateObjection('price_inquiry')">
+                                                        🤔 Price Info
+                                                    </button>
+                                                    <button type="button"
+                                                        class="ai-objection-chip text-xs"
+                                                        :class="{ 'is-active': activeMode === 'objection' && activeObjection === 'ghosted' }"
+                                                        :disabled="isLoading"
+                                                        @click="generateObjection('ghosted')">
+                                                        👻 Follow-up
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div class="d-flex align-items-center gap-2">
+
+                                            <div class="d-flex align-items-center gap-1">
                                                 <button type="button"
-                                                    class="btn btn-sm btn-primary"
-                                                    @click="generateScript()"
-                                                    :disabled="isLoading">
-                                                    <span x-show="!isLoading">🧠 Generate AI Closing Script</span>
-                                                    <span x-show="isLoading" x-cloak>
-                                                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                                                        Thinking...
-                                                    </span>
+                                                    class="ai-icon-tool-btn"
+                                                    @click="regenerateCurrent()"
+                                                    :disabled="isLoading"
+                                                    title="Regenerate script">
+                                                    <span>↻ Regenerate</span>
                                                 </button>
                                                 <button type="button"
-                                                    class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                                                    class="ai-icon-tool-btn"
                                                     x-on:click="showAiPanel = false"
                                                     title="Close AI panel">
-                                                    <i class="bi bi-x-lg"></i>
-                                                    <span>Close</span>
+                                                    <span>✕</span>
                                                 </button>
                                             </div>
                                         </div>
 
-                                        <div x-show="isLoading" x-cloak class="py-2 text-muted small">
-                                            <div class="d-flex align-items-center gap-2">
-                                                <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
-                                                <span>Crafting high-converting 2-sentence WhatsApp closing script...</span>
+                                        <!-- Bottom Content Split (7 cols script box / 5 cols custom reply input) -->
+                                        <div class="ai-drawer-grid grid-cols-12 gap-3">
+                                            <!-- Left (7 cols): Generated WhatsApp script box with tucked Copy to WhatsApp button -->
+                                            <div class="ai-drawer-left">
+                                                <div x-show="isLoading" x-cloak class="ai-script-box text-muted small">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+                                                        <span>Writing short WhatsApp message...</span>
+                                                    </div>
+                                                </div>
+
+                                                <div x-show="errorMsg && !isLoading" x-cloak class="ai-script-box text-danger small" x-text="errorMsg"></div>
+
+                                                <div x-show="script && !isLoading" x-cloak
+                                                    class="ai-script-box text-sm leading-relaxed"
+                                                    :dir="language === 'ar' ? 'rtl' : 'ltr'">
+                                                    <span x-text="script"></span>
+                                                    <button type="button"
+                                                        class="btn btn-sm btn-success ai-copy-inside-btn"
+                                                        @click="copyToWhatsApp()">
+                                                        <i class="bx bxl-whatsapp me-1"></i>
+                                                        <span x-text="copied ? 'Copied!' : 'Copy to WhatsApp'"></span>
+                                                    </button>
+                                                </div>
+
+                                                <div x-show="!script && !isLoading && !errorMsg" x-cloak class="ai-script-box text-muted small">
+                                                    <span>Click <strong>✨ AI Script</strong> or pick an objection pill (`💰 Price`, `⏳ Busy`, `🤔 Price Info`, `👻 Follow-up`) to generate a 1–2 sentence reply.</span>
+                                                </div>
                                             </div>
-                                        </div>
 
-                                        <div x-show="errorMsg && !isLoading" x-cloak class="text-danger small" x-text="errorMsg"></div>
-
-                                        <div x-show="script && !isLoading" x-cloak>
-                                            <div class="p-3 rounded mb-2 border border-secondary border-opacity-25" style="background: rgba(255, 255, 255, 0.04); border-left: 3px solid var(--bs-primary, #c98a7b) !important; font-size: 0.92rem; line-height: 1.5;" x-text="script"></div>
-                                            <div class="d-flex align-items-center gap-2">
-                                                <button type="button" class="btn btn-sm btn-success fw-semibold" @click="copyToWhatsApp()">
-                                                    <i class="bx bxl-whatsapp me-1"></i>
-                                                    <span x-text="copied ? 'Copied to Clipboard!' : 'Copy to WhatsApp'"></span>
-                                                </button>
+                                            <!-- Right (5 cols): Custom reply input with inline ⚡ Reply button -->
+                                            <div class="ai-drawer-right d-flex align-items-center">
+                                                <div class="input-group input-group-sm w-100">
+                                                    <input type="text"
+                                                        class="form-control ai-reply-input"
+                                                        placeholder="Paste client WhatsApp reply..."
+                                                        x-model="clientReply"
+                                                        @keydown.enter.prevent="generateObjection('custom_reply')">
+                                                    <button type="button"
+                                                        class="btn btn-primary fw-semibold whitespace-nowrap"
+                                                        style="border-radius: 0 6px 6px 0 !important; padding: 5px 12px !important; font-size: 12px !important;"
+                                                        :disabled="isLoading"
+                                                        @click="generateObjection('custom_reply')">
+                                                        ⚡ Reply
+                                                    </button>
+                                                </div>
                                             </div>
-                                        </div>
-
-                                        <div x-show="!script && !isLoading && !errorMsg" x-cloak class="text-muted small">
-                                            Click <strong>🧠 Generate AI Closing Script</strong> to create an ultra-short AIDA WhatsApp script tailored to this lead.
                                         </div>
                                     </div>
                                 </td>
@@ -571,7 +1153,7 @@
                 @empty
                     <tbody class="table-border-bottom-0">
                         <tr>
-                            <td colspan="9" class="text-center text-muted">No leads found</td>
+                            <td colspan="8" class="text-center text-muted">No leads found</td>
                         </tr>
                     </tbody>
                 @endforelse

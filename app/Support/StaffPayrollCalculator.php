@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\Staff;
 use App\Models\StaffDeduction;
 use App\Models\StaffOvertimeEntry;
+use App\Models\StaffTimeOff;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -45,6 +46,57 @@ class StaffPayrollCalculator
             ->get();
     }
 
+    private function unpaidTimeOffsFor(Staff $staff): Collection
+    {
+        $fromStr = $this->dateFrom->toDateString();
+        $toStr = $this->dateTo->toDateString();
+
+        return StaffTimeOff::where('staff_id', $staff->id)
+            ->where('reason', 'unpaid')
+            ->whereDate('start_date', '<=', $toStr)
+            ->whereDate('end_date', '>=', $fromStr)
+            ->get();
+    }
+
+    public function unpaidLeaveDays(Staff $staff): int
+    {
+        $rangeStart = $this->dateFrom->copy()->startOfDay();
+        $rangeEnd = $this->dateTo->copy()->startOfDay();
+        $days = 0;
+
+        foreach ($this->unpaidTimeOffsFor($staff) as $timeOff) {
+            $start = Carbon::parse($timeOff->start_date)->startOfDay();
+            $end = Carbon::parse($timeOff->end_date)->startOfDay();
+
+            if ($start->lt($rangeStart)) {
+                $start = $rangeStart->copy();
+            }
+            if ($end->gt($rangeEnd)) {
+                $end = $rangeEnd->copy();
+            }
+
+            if ($end->gte($start)) {
+                $days += (int) $start->diffInDays($end) + 1;
+            }
+        }
+
+        return $days;
+    }
+
+    public function unpaidLeaveDeduction(Staff $staff): float
+    {
+        $baseSalary = $this->baseSalary($staff);
+        $unpaidDays = $this->unpaidLeaveDays($staff);
+        if ($baseSalary <= 0 || $unpaidDays <= 0) {
+            return 0.0;
+        }
+
+        $daysInMonth = max((int) $this->dateFrom->daysInMonth, 1);
+        $deduction = round(($baseSalary / $daysInMonth) * $unpaidDays, 2);
+
+        return min($baseSalary, $deduction);
+    }
+
     public function overtimeHours(Staff $staff): float
     {
         return (float) $this->overtimeEntriesFor($staff)->sum('hours');
@@ -61,7 +113,9 @@ class StaffPayrollCalculator
 
     public function deductionsTotal(Staff $staff): float
     {
-        return round((float) $this->deductionsFor($staff)->sum('amount'), 2);
+        $loggedDeductions = (float) $this->deductionsFor($staff)->sum('amount');
+
+        return round($loggedDeductions + $this->unpaidLeaveDeduction($staff), 2);
     }
 
     public function baseSalary(Staff $staff): float
@@ -89,6 +143,8 @@ class StaffPayrollCalculator
             'commission_rate' => (float) ($staff->commission_rate ?? 0),
             'overtime_hours' => $this->overtimeHours($staff),
             'overtime_pay' => $this->overtimePay($staff),
+            'unpaid_leave_days' => $this->unpaidLeaveDays($staff),
+            'unpaid_leave_deduction' => $this->unpaidLeaveDeduction($staff),
             'deductions' => $this->deductionsTotal($staff),
             'net_salary' => $this->netSalary($staff),
             'overtime_entries' => $overtimeEntries,

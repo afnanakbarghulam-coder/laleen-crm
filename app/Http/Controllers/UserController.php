@@ -35,10 +35,16 @@ class UserController extends Controller
                     default => 'red',
                 };
 
-                // Daily gross-sales trend this month, for the card's sparkline.
-                $row['trend'] = Sale::where('branch', $row['key'])
-                    ->whereBetween('created_at', [$dashFrom, $dashTo])
-                    ->selectRaw('DATE(created_at) as d, SUM(services_total) + SUM(products_total) as total')
+                // Daily net-sales trend this month, for the card's sparkline.
+                $trendQuery = Sale::whereBetween('created_at', [$dashFrom, $dashTo]);
+                if ($row['key'] === 'general') {
+                    $trendQuery->whereNull('branch');
+                } else {
+                    $trendQuery->where('branch', $row['key']);
+                }
+
+                $row['trend'] = $trendQuery
+                    ->selectRaw('DATE(created_at) as d, SUM(CASE WHEN (services_total + products_total + packages_total - discount_amount) > 0 THEN (services_total + products_total + packages_total - discount_amount) ELSE 0 END) as total')
                     ->groupBy('d')
                     ->orderBy('d')
                     ->pluck('total')

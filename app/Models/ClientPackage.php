@@ -88,11 +88,20 @@ class ClientPackage extends Model
      * A package can only be redeemed from while it's both within the 7-day
      * (or combo-configured) validity window and still has an unused slot -
      * this is the one place that decision is made, called from every
-     * redemption path so the rule can't be bypassed.
+     * redemption path so the rule can't be bypassed. Unpaid booking packages
+     * (sale_id === null) can only be redeemed on their originating
+     * appointment ($forAppointmentId) and never across unrelated bookings.
      */
-    public function canRedeem(): bool
+    public function canRedeem(?int $forAppointmentId = null): bool
     {
-        return $this->status !== 'expired' && !$this->is_expired && $this->remaining_count > 0;
+        $isPaidOrOriginatingAppointment = $this->sale_id !== null
+            || $this->appointment_id === null
+            || ($forAppointmentId !== null && (int) $this->appointment_id === (int) $forAppointmentId);
+
+        return $isPaidOrOriginatingAppointment
+            && $this->status !== 'expired'
+            && !$this->is_expired
+            && $this->remaining_count > 0;
     }
 
     /**
@@ -137,6 +146,9 @@ class ClientPackage extends Model
 
         if (!$this->is_expired && $this->status === 'active' && $this->remaining_count <= 0) {
             $this->status = 'completed';
+            $this->save();
+        } elseif (!$this->is_expired && $this->status === 'completed' && $this->remaining_count > 0) {
+            $this->status = 'active';
             $this->save();
         }
     }

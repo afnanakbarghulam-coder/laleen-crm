@@ -28,7 +28,7 @@ class ShiftController extends Controller
         ]);
 
         if ($request->filled('branch')) {
-            $query->where('branch', $request->branch);
+            $query->whereIn('branch', [$request->branch, 'both']);
         }
 
         $staff = $query->orderBy('name')->get();

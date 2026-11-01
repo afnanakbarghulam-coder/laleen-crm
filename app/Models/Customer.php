@@ -41,15 +41,43 @@ class Customer extends Model
     }
 
     /**
+     * Normalize any phone input into the standard digits-only format via
+     * Lead::splitPhone() and Lead::normalizePhone() so local 8-digit Qatar
+     * numbers ('55123456') and international variants ('+974 5512 3456',
+     * '97455123456') resolve to the exact same canonical phone string.
+     */
+    public static function normalizePhone(?string $phone): string
+    {
+        $raw = preg_replace('/\D+/', '', (string) $phone);
+        if ($raw === '') {
+            return '';
+        }
+
+        [$countryCode, $localNumber] = Lead::splitPhone($raw);
+
+        return Lead::normalizePhone($countryCode, $localNumber);
+    }
+
+    /**
      * Packages that can still have services redeemed from them right now -
      * excludes anything already expired, even if a scheduled job hasn't
      * flipped its status column yet (real time is the source of truth).
+     * Unpaid booking packages (sale_id is null) are only active for their
+     * originating appointment ($forAppointmentId) and never across other
+     * separate appointments until paid at checkout.
      */
-    public function activeClientPackages()
+    public function activeClientPackages(?int $forAppointmentId = null)
     {
         return $this->clientPackages()
             ->where('status', '!=', 'expired')
-            ->where('expires_at', '>=', now());
+            ->where('expires_at', '>=', now())
+            ->where(function ($q) use ($forAppointmentId) {
+                $q->whereNotNull('sale_id')
+                    ->orWhereNull('appointment_id');
+                if ($forAppointmentId !== null) {
+                    $q->orWhere('appointment_id', $forAppointmentId);
+                }
+            });
     }
 
     /**
@@ -73,14 +101,14 @@ class Customer extends Model
      * package whose validity window has quietly lapsed never shows up here
      * even if a scheduled sweep hasn't caught it yet.
      */
-    public function redeemablePackageServices()
+    public function redeemablePackageServices(?int $forAppointmentId = null)
     {
         ClientPackage::expireDue($this->id);
 
-        return $this->activeClientPackages()
+        return $this->activeClientPackages($forAppointmentId)
             ->with(['combo.services', 'redeemedServices'])
             ->get()
-            ->filter(fn($pkg) => $pkg->remaining_count > 0 && $pkg->combo)
+            ->filter(fn($pkg) => $pkg->canRedeem($forAppointmentId) && $pkg->combo)
             ->flatMap(function ($pkg) {
                 $usedServiceIds = $pkg->redeemedServices->pluck('service_id')->all();
 

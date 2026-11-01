@@ -6,6 +6,7 @@ use App\Models\AdLeadEntry;
 use App\Models\Appointment;
 use App\Models\Customer;
 use App\Models\Lead;
+use App\Models\Service;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
@@ -14,6 +15,14 @@ use Illuminate\Support\Facades\Log;
 
 class AiScriptController extends Controller
 {
+    public const OBJECTION_TYPES = [
+        'price_high',
+        'busy_later',
+        'price_inquiry',
+        'ghosted',
+        'custom_reply',
+    ];
+
     public function generateForLead(Request $request, Lead $lead)
     {
         $lead->loadMissing('customer');
@@ -37,14 +46,38 @@ class AiScriptController extends Controller
             ?: ($lead->phone ? Customer::where('phone', $lead->phone)->value('name') : null)
             ?: 'lovely'
         ));
+
+        $rawServicesList = is_array($lead->service_interest) && count($lead->service_interest)
+            ? $lead->service_interest
+            : ($request->filled('service_interest') ? $request->input('service_interest') : []);
+
         $services = $request->filled('service_interest')
-            ? trim((string) $request->input('service_interest'))
+            ? trim((string) (is_array($request->input('service_interest')) ? implode(', ', $request->input('service_interest')) : $request->input('service_interest')))
             : (is_array($lead->service_interest) && count($lead->service_interest)
                 ? implode(', ', $lead->service_interest)
                 : ($categoryLabel ?: 'our salon service'));
         $remarks = trim((string) ($request->input('remarks') ?: $lead->customer_remarks ?: 'None'));
 
         $salonHistory = $this->resolveSalonClientHistory($lead->customer, $lead->phone);
+        $servicePricing = $this->resolveServicePricing($rawServicesList ?: $services);
+
+        $clientReply = trim((string) $request->input('client_reply', ''));
+        $objectionType = strtolower(trim((string) $request->input('objection_type', '')));
+        $requestedMode = strtolower(trim((string) $request->input('mode', 'opener')));
+
+        if ($requestedMode === 'objection' || $objectionType !== '' || $clientReply !== '') {
+            $mode = 'objection';
+            if ($objectionType === '' && $clientReply !== '') {
+                $objectionType = 'custom_reply';
+            } elseif (!in_array($objectionType, self::OBJECTION_TYPES, true)) {
+                $objectionType = $clientReply !== '' ? 'custom_reply' : 'price_high';
+            }
+        } else {
+            $mode = 'opener';
+            $objectionType = null;
+        }
+
+        $language = $this->resolveLanguage($request->input('language'), $clientReply);
 
         return $this->buildAndRespond(
             leadId: $lead->id,
@@ -55,6 +88,11 @@ class AiScriptController extends Controller
             contextModifier: $contextModifier,
             daysOld: max(0, (int) floor(($lead->created_at ?? now())->diffInDays(now()))),
             salonHistory: $salonHistory,
+            mode: $mode,
+            objectionType: $objectionType,
+            clientReply: $clientReply !== '' ? $clientReply : null,
+            language: $language,
+            servicePricing: $servicePricing,
         );
     }
 
@@ -94,6 +132,25 @@ class AiScriptController extends Controller
         ));
         $contextModifier = $this->resolveContextModifier($request->input('lead_category') ?: $category);
         $salonHistory = $this->resolveSalonClientHistory($adLead?->customer, $adLead?->phone ?? $request->input('phone'));
+        $servicePricing = $this->resolveServicePricing($request->input('service_interest') ?: $category);
+
+        $clientReply = trim((string) $request->input('client_reply', ''));
+        $objectionType = strtolower(trim((string) $request->input('objection_type', '')));
+        $requestedMode = strtolower(trim((string) $request->input('mode', 'opener')));
+
+        if ($requestedMode === 'objection' || $objectionType !== '' || $clientReply !== '') {
+            $mode = 'objection';
+            if ($objectionType === '' && $clientReply !== '') {
+                $objectionType = 'custom_reply';
+            } elseif (!in_array($objectionType, self::OBJECTION_TYPES, true)) {
+                $objectionType = $clientReply !== '' ? 'custom_reply' : 'price_high';
+            }
+        } else {
+            $mode = 'opener';
+            $objectionType = null;
+        }
+
+        $language = $this->resolveLanguage($request->input('language'), $clientReply);
 
         return $this->buildAndRespond(
             leadId: $adLead?->id,
@@ -104,7 +161,116 @@ class AiScriptController extends Controller
             contextModifier: $contextModifier,
             daysOld: $daysOld,
             salonHistory: $salonHistory,
+            mode: $mode,
+            objectionType: $objectionType,
+            clientReply: $clientReply !== '' ? $clientReply : null,
+            language: $language,
+            servicePricing: $servicePricing,
         );
+    }
+
+    /**
+     * Determine target script language ('en' or 'ar').
+     * Defaults to 'ar' if explicitly requested OR if client_reply is written in Arabic script.
+     */
+    private function resolveLanguage(?string $requestedLanguage, ?string $clientReply): string
+    {
+        $lang = strtolower(trim((string) $requestedLanguage));
+        if ($lang === 'ar' || $lang === 'arabic') {
+            return 'ar';
+        }
+
+        if ($clientReply !== null && $clientReply !== '' && preg_match('/\p{Arabic}/u', $clientReply) === 1) {
+            return 'ar';
+        }
+
+        return 'en';
+    }
+
+    /**
+     * Read-only lookup of Salon Service pricing and durations for the lead's service_interest.
+     */
+    private function resolveServicePricing(array|string|null $serviceInterest): array
+    {
+        $names = is_array($serviceInterest)
+            ? $serviceInterest
+            : explode(',', (string) $serviceInterest);
+
+        $normalizedNames = array_values(array_unique(array_filter(array_map(
+            fn($n) => strtolower(trim((string) $n)),
+            $names
+        ))));
+
+        if (empty($normalizedNames)) {
+            return [
+                'matched_services' => [],
+                'primary_price_qar' => null,
+                'prompt_summary' => 'No specific service price on file — quote starting rates or invite them for a complimentary consultation.',
+            ];
+        }
+
+        $allServices = Service::query()->get(['id', 'name', 'price', 'price_type', 'duration', 'description']);
+        $matched = [];
+
+        foreach ($allServices as $service) {
+            $sNameLower = strtolower(trim((string) $service->name));
+            if ($sNameLower === '') {
+                continue;
+            }
+
+            foreach ($normalizedNames as $wanted) {
+                if ($sNameLower === $wanted || str_contains($sNameLower, $wanted) || str_contains($wanted, $sNameLower)) {
+                    $priceNumeric = $service->price !== null ? (float) $service->price : null;
+                    $priceClean = $priceNumeric !== null
+                        ? rtrim(rtrim(number_format($priceNumeric, 2, '.', ''), '0'), '.')
+                        : null;
+                    $isStartingFrom = in_array(strtolower((string) $service->price_type), ['starting', 'starting_from', 'from', 'variable'], true);
+                    $priceFormatted = $priceClean !== null
+                        ? ($isStartingFrom ? "starting from {$priceClean} QAR" : "{$priceClean} QAR")
+                        : null;
+
+                    $matched[$service->id] = [
+                        'name' => $service->name,
+                        'price' => $priceNumeric,
+                        'price_clean' => $priceClean,
+                        'price_formatted' => $priceFormatted,
+                        'price_type' => $service->price_type,
+                        'duration' => $service->duration ? (int) $service->duration : null,
+                    ];
+                    break;
+                }
+            }
+        }
+
+        $matchedList = array_values($matched);
+
+        if (empty($matchedList)) {
+            return [
+                'matched_services' => [],
+                'primary_price_qar' => null,
+                'prompt_summary' => 'No exact service price found in salon catalog — mention that pricing is tailored to their hair/skin needs and offer a complimentary assessment.',
+            ];
+        }
+
+        $parts = [];
+        foreach ($matchedList as $item) {
+            $line = $item['name'];
+            if ($item['price_formatted']) {
+                $line .= ": {$item['price_formatted']}";
+            }
+            if ($item['duration']) {
+                $line .= " ({$item['duration']} mins)";
+            }
+            $parts[] = $line;
+        }
+
+        $primaryPrice = $matchedList[0]['price_formatted'] ?? null;
+
+        return [
+            'matched_services' => $matchedList,
+            'primary_price_qar' => $primaryPrice,
+            'prompt_summary' => 'Salon Service Menu Pricing: ' . implode(' | ', $parts) . '.',
+        ];
     }
 
     /**
@@ -193,10 +359,53 @@ class AiScriptController extends Controller
         }
 
         if (count($descriptions) > 1) {
-            return implode(' Additionally: ', $descriptions) . ' Acknowledge their missed/cancelled appointment AND address their active inquiry/follow-up in one cohesive 3-sentence script.';
+            return implode(' Additionally: ', $descriptions) . ' Acknowledge their missed/cancelled appointment AND address their active inquiry/follow-up in 1 to 2 short sentences (max 30 words).';
         }
 
         return $descriptions[0] ?? 'They just asked a general question about a service.';
+    }
+
+    private function buildObjectionPlaybookInstruction(
+        string $objectionType,
+        string $serviceInterest,
+        ?string $clientReply,
+        array $servicePricing = []
+    ): string {
+        $primaryPrice = $servicePricing['primary_price_qar'] ?? null;
+        $priceClause = $primaryPrice
+            ? "Use our actual salon menu price ({$primaryPrice} for {$serviceInterest})"
+            : "Mention that our {$serviceInterest} pricing starts from a tailored rate based on consultation";
+
+        return match ($objectionType) {
+            'price_high' => <<<PLAYBOOK
+OBJECTION PLAYBOOK — "PRICE IS TOO HIGH" (1-2 Punchy Sentences, Max 30 Words):
+- Sentence 1: Warmly validate their feeling and anchor the value ({$priceClause} with senior specialists & safe formulas that last).
+- Sentence 2: Offer a tailored starter option or a quick free 10-min consultation this morning or afternoon.
+PLAYBOOK,
+            'busy_later' => <<<PLAYBOOK
+OBJECTION PLAYBOOK — "I'LL LET YOU KNOW / BUSY" (1-2 Punchy Sentences, Max 30 Words):
+- Sentence 1: Take the pressure off ("No rush at all!") and note that weekend and evening slots for {$serviceInterest} fill up days in advance.
+- Sentence 2: Ask if holding a tentative slot next week or checking back on a specific day works better.
+PLAYBOOK,
+            'price_inquiry' => <<<PLAYBOOK
+OBJECTION PLAYBOOK — "ASKING FOR PRICE ONLY" (1-2 Punchy Sentences, Max 30 Words):
+- Sentence 1: State the price clearly ({$priceClause}) along with what's included (senior specialist consultation + full treatment).
+- Sentence 2: Ask a low-pressure A/B time check (e.g., morning or afternoon this week).
+PLAYBOOK,
+            'ghosted' => <<<PLAYBOOK
+OBJECTION PLAYBOOK — "GHOSTED FIRST MESSAGE / FOLLOW-UP #2" (1-2 Punchy Sentences, Max 30 Words):
+- Zero guilt-tripping. Warmly check in and mention we still have a spot open for their {$serviceInterest} this week before the schedule locks—morning or evening?
+PLAYBOOK,
+            'custom_reply' => <<<PLAYBOOK
+OBJECTION PLAYBOOK — "CLIENT CUSTOM WHATSAPP REPLY" (1-2 Punchy Sentences, Max 30 Words):
+- Client replied: "{$clientReply}"
+- Sentence 1: Direct, warm 1-sentence answer to their exact question/concern ({$priceClause} if relevant).
+- Sentence 2: 1-sentence low-pressure morning or afternoon time check.
+PLAYBOOK,
+            default => <<<PLAYBOOK
+OBJECTION PLAYBOOK — Direct 1-sentence answer regarding {$serviceInterest} ({$priceClause}) + 1-sentence low-pressure time check.
+PLAYBOOK,
+        };
     }
 
     private function buildAndRespond(
@@ -207,46 +416,93 @@ class AiScriptController extends Controller
         string $categoryLabel,
         string $contextModifier,
         int $daysOld,
-        array $salonHistory = []
+        array $salonHistory = [],
+        string $mode = 'opener',
+        ?string $objectionType = null,
+        ?string $clientReply = null,
+        string $language = 'en',
+        array $servicePricing = []
     ) {
         $angles = [
             'Scarcity & Exclusivity (Only X spots left)',
-            'Risk-Reversal (Crazy guarantee, no risk to them)',
-            'Assumptive Frame (Assume they are already buying, give A/B choice)',
-            'Pain-Point Agitation (Focus on the problem they want fixed)',
+            'Risk-Reversal (Zero-pressure consultation)',
+            'Assumptive Frame (Simple morning or afternoon choice)',
+            'Value & Specialist Care (Senior stylists, lasting results)',
         ];
 
         $selectedAngle = Arr::random($angles);
         $salonHistoryPrompt = $salonHistory['prompt_summary']
             ?? 'First-time salon guest (0 past completed visits). Treat them as a first-time salon guest and make them feel warmly welcomed.';
+        $servicePricingPrompt = $servicePricing['prompt_summary']
+            ?? 'No specific service price on file — quote starting rates or invite them for a complimentary consultation.';
         $leadAgeContext = $daysOld === 0
-            ? 'Fresh lead (0 days old — reached out today; respond with warm, immediate attentiveness).'
-            : "Lead is {$daysOld} day(s) old — adapt your urgency and follow-up warmth based on this {$daysOld}-day elapsed time.";
+            ? 'Fresh lead (0 days old — reached out today).'
+            : "Lead is {$daysOld} day(s) old.";
 
-        $systemPrompt = <<<PROMPT
-You are a warm, luxurious front desk manager at a premium beauty salon. Your goal is to text a lead and help them feel confident about booking.
+        $languageDirective = $language === 'ar'
+            ? "LANGUAGE REQUIREMENT: Write the ENTIRE 1-to-2 sentence WhatsApp message in natural, warm Qatari / Gulf White Arabic (لهجة خليجية قطرية بيضاء راقية ولطيفة — using 'يا هلا حبيبتي' or 'حبيبتي') suitable for a Qatar ladies' salon."
+            : "LANGUAGE REQUIREMENT: Write the entire 1-to-2 sentence WhatsApp message in warm, natural, conversational English.";
+
+        if ($mode === 'objection') {
+            $effectiveObjection = $objectionType ?: ($clientReply ? 'custom_reply' : 'price_high');
+            $playbookInstruction = $this->buildObjectionPlaybookInstruction(
+                $effectiveObjection,
+                $serviceInterest,
+                $clientReply,
+                $servicePricing
+            );
+            $clientReplyContext = $clientReply ? "Client WhatsApp Reply: \"{$clientReply}\"." : 'Client Objection Type: ' . $effectiveObjection . '.';
+
+            $systemPrompt = <<<PROMPT
+You are a real, warm salon manager texting a client on WhatsApp at a ladies' salon in Qatar.
 
 CRITICAL RULES:
-1. LENGTH: Exactly 3 sentences. No massive paragraphs, but allow enough room to sound genuinely caring.
-2. TONE: Empathetic, luxurious, and consultative. Speak like a friend who wants them to look their best. Never use aggressive sales tactics.
-3. PSYCHOLOGICAL ANGLE: Subtly weave in this closing angle: [ {$selectedAngle} ].
-4. LEAD AGE & URGENCY: {$leadAgeContext}
+1. LENGTH: Strictly 1 to 2 short, natural WhatsApp sentences (MAXIMUM 25 to 35 words total).
+2. NO BROCHURE FLUFF: Ban robotic marketing language like "deeply nourishing luxury products", "restore your skin's glowing radiance", or "indulge in this pampering treatment". Sound like a real human texting on WhatsApp.
+3. FORMAT: Direct 1-sentence answer + 1-sentence low-pressure time check.
+4. {$languageDirective}
 5. SALON CLIENT HISTORY: {$salonHistoryPrompt}
-6. FRAMEWORK:
+6. SERVICE PRICING & MENU: {$servicePricingPrompt}
+7. {$playbookInstruction}
 
-Sentence 1 (The Hook): You must adapt your opening based on this context: [ {$contextModifier} ]. 
-- IF CANCELLED OR NO-SHOW: Do not pitch immediately. Start by empathetically checking in, acknowledging we missed them at their appointment, and saying we hope everything is okay.
-- IF INQUIRY OR NEW LEAD: Warmly acknowledge their interest. CRITICAL: Vary the opening dynamically every single time (e.g., "Thanks for checking out our...", "We'd love to treat you to..."). NEVER start every message with "I saw you were looking into...".
-- IF RETURNING CLIENT: You may warmly reference their loyalty or past visits in Sentence 1 or Sentence 2.
-
-Sentence 2 (Desire & Value): Highlight the beautiful result they deserve using the [ {$selectedAngle} ] angle. If they have past completed salon visits, warmly reference their loyalty/past visits in Sentence 1 or 2; if they have 0 past completed visits, treat them as a first-time salon guest. DO NOT repeat the same guarantee every time. Instead, dynamically vary the value proposition based on the service: mention our highly-trained staff, the premium luxury products we use, how relaxing the experience is, or how popular the treatment is right now. Never use the phrases "adjust it on us" or "happiness guarantee".
-
-Sentence 3 (Action): A polite A/B choice for booking adapted to the lead's age ({$daysOld}d old) (e.g., "Did you prefer a morning or afternoon appointment to get pampered?").
-
-CONTEXT: Lead Name: {$customerName}. Service: {$serviceInterest}. Category: {$categoryLabel}. Lead Age: {$daysOld} day(s) old. Psychological Angle: {$selectedAngle}. Salon Client History: {$salonHistoryPrompt}. Remarks: {$remarks}. Write the script now.
+CONTEXT: Lead Name: {$customerName}. Service: {$serviceInterest}. Category: {$categoryLabel}. Lead Age: {$daysOld} day(s) old. {$clientReplyContext} Salon Client History: {$salonHistoryPrompt}. {$servicePricingPrompt} Remarks: {$remarks}. Write the 1-2 sentence WhatsApp reply now.
 PROMPT;
+        } else {
+            $systemPrompt = <<<PROMPT
+You are a real, warm salon manager texting a client on WhatsApp at a ladies' salon in Qatar.
 
-        $result = $this->callLlm($systemPrompt, $selectedAngle, $customerName, $serviceInterest, $categoryLabel, $remarks, $daysOld, $salonHistory);
+CRITICAL RULES:
+1. LENGTH: Strictly 1 to 2 short, natural WhatsApp sentences (MAXIMUM 25 to 35 words total).
+2. NO BROCHURE FLUFF: Ban robotic marketing language like "deeply nourishing luxury products", "restore your skin's glowing radiance", or "indulge in this pampering treatment". Write like a real person texting on WhatsApp.
+3. EXAMPLE OPENER: "Hi Amal! We missed you at your last visit and saw you were asking about our 60-min Facial (150 QAR). Would a morning or afternoon slot work better for you this week?"
+4. {$languageDirective}
+5. PSYCHOLOGICAL ANGLE: [ {$selectedAngle} ].
+6. LEAD AGE: {$leadAgeContext}
+7. SALON CLIENT HISTORY: {$salonHistoryPrompt}
+8. SERVICE PRICING & MENU: {$servicePricingPrompt}
+9. STRUCTURE:
+- Sentence 1: Warmly greet {$customerName}, adapt to context [ {$contextModifier} ], reference their interest in {$serviceInterest} (and price/duration if known, or past visit if returning client).
+- Sentence 2: Simple, low-pressure A/B time question (e.g., "Would a morning or afternoon slot work better for you this week?").
+
+CONTEXT: Lead Name: {$customerName}. Service: {$serviceInterest}. Category: {$categoryLabel}. Lead Age: {$daysOld} day(s) old. Psychological Angle: {$selectedAngle}. Salon Client History: {$salonHistoryPrompt}. {$servicePricingPrompt} Remarks: {$remarks}. Write the 1-2 sentence WhatsApp script now.
+PROMPT;
+        }
+
+        $result = $this->callLlm(
+            systemPrompt: $systemPrompt,
+            selectedAngle: $selectedAngle,
+            customerName: $customerName,
+            serviceInterest: $serviceInterest,
+            categoryLabel: $categoryLabel,
+            remarks: $remarks,
+            daysOld: $daysOld,
+            salonHistory: $salonHistory,
+            mode: $mode,
+            objectionType: $objectionType,
+            clientReply: $clientReply,
+            language: $language,
+            servicePricing: $servicePricing
+        );
 
         return response()->json([
             'success' => true,
@@ -256,6 +512,13 @@ PROMPT;
             'lead_id' => $leadId,
             'category' => $categoryLabel,
             'days_old' => $daysOld,
+            'mode' => $mode,
+            'objection_type' => $objectionType,
+            'language' => $language,
+            'service_pricing' => [
+                'matched_services' => $servicePricing['matched_services'] ?? [],
+                'primary_price_qar' => $servicePricing['primary_price_qar'] ?? null,
+            ],
             'salon_history' => [
                 'completed_visits' => $salonHistory['completed_visits'] ?? 0,
                 'last_service' => $salonHistory['last_service'] ?? null,
@@ -272,8 +535,17 @@ PROMPT;
         string $categoryLabel,
         string $remarks,
         int $daysOld = 0,
-        array $salonHistory = []
+        array $salonHistory = [],
+        string $mode = 'opener',
+        ?string $objectionType = null,
+        ?string $clientReply = null,
+        string $language = 'en',
+        array $servicePricing = []
     ): array {
+        $userInstruction = $language === 'ar'
+            ? 'Write the 1-to-2 sentence WhatsApp message (max 30 words) in warm Qatari/Gulf White Arabic now. Output only raw text without quotes.'
+            : 'Write the 1-to-2 sentence WhatsApp message (max 30 words) now. Output only raw text without quotes.';
+
         $openAiKey = config('services.openai.key');
         if (!empty($openAiKey)) {
             try {
@@ -284,10 +556,10 @@ PROMPT;
                         'model' => $model,
                         'messages' => [
                             ['role' => 'system', 'content' => $systemPrompt],
-                            ['role' => 'user', 'content' => 'Write the 3-sentence WhatsApp script now. Output only the raw script text without surrounding quotes.'],
+                            ['role' => 'user', 'content' => $userInstruction],
                         ],
-                        'temperature' => 0.8,
-                        'max_tokens' => 160,
+                        'temperature' => 0.7,
+                        'max_tokens' => 90,
                     ]);
 
                 if ($response->successful()) {
@@ -315,11 +587,11 @@ PROMPT;
                     "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$geminiKey}",
                     [
                         'contents' => [
-                            ['parts' => [['text' => $systemPrompt . "\n\nOutput ONLY the raw WhatsApp script text without surrounding quotation marks."]]],
+                            ['parts' => [['text' => $systemPrompt . "\n\n" . $userInstruction]]],
                         ],
                         'generationConfig' => [
-                            'temperature' => 0.8,
-                            'maxOutputTokens' => 160,
+                            'temperature' => 0.7,
+                            'maxOutputTokens' => 90,
                         ],
                     ]
                 );
@@ -342,7 +614,19 @@ PROMPT;
         }
 
         return [
-            'script' => $this->fallbackShortScript($selectedAngle, $customerName, $serviceInterest, $categoryLabel, $daysOld, $salonHistory),
+            'script' => $this->fallbackShortScript(
+                selectedAngle: $selectedAngle,
+                customerName: $customerName,
+                serviceInterest: $serviceInterest,
+                categoryLabel: $categoryLabel,
+                daysOld: $daysOld,
+                salonHistory: $salonHistory,
+                mode: $mode,
+                objectionType: $objectionType,
+                clientReply: $clientReply,
+                language: $language,
+                servicePricing: $servicePricing
+            ),
             'source' => 'fallback',
         ];
     }
@@ -353,53 +637,206 @@ PROMPT;
         string $serviceInterest,
         string $categoryLabel,
         int $daysOld = 0,
-        array $salonHistory = []
+        array $salonHistory = [],
+        string $mode = 'opener',
+        ?string $objectionType = null,
+        ?string $clientReply = null,
+        string $language = 'en',
+        array $servicePricing = []
     ): string {
-        $name = ($customerName !== '' && strtolower($customerName) !== 'unnamed') ? $customerName : 'lovely';
+        $isDefaultName = ($customerName === '' || in_array(strtolower($customerName), ['unnamed', 'lovely'], true));
+        $nameEn = !$isDefaultName ? $customerName : 'lovely';
+        $nameAr = !$isDefaultName ? $customerName : 'حبيبتي';
+        $primaryPrice = $servicePricing['primary_price_qar'] ?? null;
+        $firstMatched = $servicePricing['matched_services'][0] ?? null;
+        $durationText = !empty($firstMatched['duration']) ? " ({$firstMatched['duration']} mins)" : '';
+
+        if ($language === 'ar') {
+            $priceAr = !empty($firstMatched['price_clean'])
+                ? "{$firstMatched['price_clean']} ريال ({$firstMatched['price_clean']} QAR)"
+                : 'سعر مخصص حسب التقييم';
+
+            if ($mode === 'objection') {
+                return match ($objectionType) {
+                    'price_high' => "يا هلا حبيبتي {$nameAr}، جلسة {$serviceInterest} ({$priceAr}) تتم مع أخصائياتنا بمواد أصلية آمنة ونتيجتها تدوم. تحبين نرتب استشارة مجانية سريعة الصباح أو المساء؟",
+                    'busy_later' => "ولا يهمك حبيبتي {$nameAr}، بس مواعيد الويكند والمساء لخدمة {$serviceInterest} تكتمل بسرعة. نحجز لك موعد مبدئي الأسبوع الجاي أو نذكرك بيوم يناسبك؟",
+                    'price_inquiry' => "يا هلا حبيبتي {$nameAr}، سعر {$serviceInterest} هو {$priceAr}{$durationText} شامل الفحص والجلسة كاملة مع الأخصائية. يناسبك موعد الصباح أو المساء هالأسبوع؟",
+                    'ghosted' => "يا هلا حبيبتي {$nameAr}، باقي عندنا موعد متاح لخدمة {$serviceInterest} هالأسبوع قبل لا يقفل الجدول. يناسبك الصباح أو المساء؟",
+                    'custom_reply' => "يا هلا حبيبتي {$nameAr}، بخصوص {$serviceInterest} ({$priceAr}) أخصائياتنا يضمنون لك نتيجة آمنة ومناسبة لك تماماً. تفضلين موعد الصباح أو المساء هالأسبوع؟",
+                    default => "يا هلا حبيبتي {$nameAr}، يسعدنا نحجز لك {$serviceInterest} ({$priceAr}). يناسبك الصباح أو المساء هالأسبوع؟",
+                };
+            }
+
+            return "يا هلا حبيبتي {$nameAr}، شفنا استفسارك عن {$serviceInterest} ({$priceAr}). يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟";
+        }
+
+        $priceTagEn = $primaryPrice ? " ({$primaryPrice}{$durationText})" : '';
+
+        if ($mode === 'objection') {
+            $priceStateEn = $primaryPrice
+                ? "our {$serviceInterest} is {$primaryPrice}{$durationText}"
+                : "our {$serviceInterest} starts from a tailored rate";
+
+            return match ($objectionType) {
+                'price_high' => "Hi {$nameEn}! Our {$serviceInterest}{$priceTagEn} is done by senior specialists with safe, long-lasting formulas—would you like a quick free consultation this morning or afternoon?",
+                'busy_later' => "No rush at all {$nameEn}—our weekend and evening slots for {$serviceInterest} fill up fast, so should I hold a tentative slot next week or check back later?",
+                'price_inquiry' => "Hi {$nameEn}! Currently {$priceStateEn}, including a full specialist assessment—would a morning or afternoon slot work better for you this week?",
+                'ghosted' => "Hi {$nameEn}! Just checking in—we still have one spot open for your {$serviceInterest} this week before our schedule locks, does morning or evening suit you?",
+                'custom_reply' => "Hi {$nameEn}! For our {$serviceInterest}{$priceTagEn}, our senior specialists tailor every step safely to your needs—would a morning or afternoon slot work this week?",
+                default => "Hi {$nameEn}! We'd love to book your {$serviceInterest}{$priceTagEn}—would a morning or afternoon slot work better this week?",
+            };
+        }
+
         $catNorm = strtolower(trim($categoryLabel));
         $completedVisits = (int) ($salonHistory['completed_visits'] ?? 0);
         $lastService = $salonHistory['last_service'] ?? null;
 
-        $defaultHooks = [
-            "Hi {$name}, thanks for checking out our {$serviceInterest} service!",
-            "Hi {$name}, we'd love to treat you to a relaxing {$serviceInterest} session at the salon.",
-            "Hi {$name}, just following up on your interest in our {$serviceInterest} treatment.",
-            "Hi {$name}, our {$serviceInterest} treatment is such a wonderful choice for a fresh, radiant look.",
-        ];
-
-        $sentence1 = match ($catNorm) {
-            'no show', 'no-show', 'no_show' => Arr::random([
-                "Hi {$name}, we missed seeing you for your {$serviceInterest} appointment and wanted to warmly check in.",
-                "Hi {$name}, hope everything is going well—we'd love to reschedule your {$serviceInterest} session whenever you're ready.",
-            ]),
-            'cancelled', 'cancel', 'canceled' => Arr::random([
-                "Hi {$name}, we'd love to welcome you back in for the {$serviceInterest} appointment you cancelled whenever the timing feels right.",
-                "Hi {$name}, just checking in after your cancelled {$serviceInterest} booking to see when you'd like to get pampered.",
-            ]),
-            'follow up', 'follow_up' => Arr::random([
-                "Hi {$name}, just following up on your interest in our {$serviceInterest} service to see how we can help.",
-                "Hi {$name}, thanks again for reaching out about {$serviceInterest}—we'd love to treat you soon.",
-            ]),
-            default => Arr::random($defaultHooks),
-        };
-
-        if ($completedVisits > 0) {
-            $pastVisitText = $lastService ? "after your last {$lastService} visit" : "as one of our valued returning guests";
-            $sentence2 = "We always love pampering you {$pastVisitText}, and our senior specialists use premium luxury formulas so your {$serviceInterest} leaves you glowing.";
-        } else {
-            $valueOptions = [
-                "As a first-time guest with us, our senior specialists use only premium luxury products so your {$serviceInterest} leaves you looking and feeling radiant.",
-                "It's one of our most-loved treatments right now, and our highly-trained team tailors every detail so your first visit gives you a truly gorgeous result.",
-                "From our relaxing atmosphere to our specialist techniques, we make sure your first {$serviceInterest} experience with us feels like pure luxury.",
-                "Our master stylists and therapists take extra care with premium formulas so you walk out of your first session glowing and refreshed.",
-            ];
-            $sentence2 = Arr::random($valueOptions);
+        if (in_array($catNorm, ['no show', 'no-show', 'no_show', 'cancelled', 'cancel', 'canceled'], true)) {
+            return "Hi {$nameEn}! We missed you at your last visit and saw you were asking about our {$serviceInterest}{$priceTagEn}. Would a morning or afternoon slot work better for you this week?";
         }
 
-        $sentence3 = $daysOld > 3
-            ? "We still have a few lovely openings this week—did you prefer a morning or afternoon appointment to get pampered?"
-            : "Did you prefer a morning or afternoon appointment to get pampered this week?";
+        if ($completedVisits > 0 && $lastService) {
+            return "Hi {$nameEn}! Loved seeing you for your {$lastService} and saw you asked about our {$serviceInterest}{$priceTagEn}. Would a morning or afternoon slot work better this week?";
+        }
 
-        return "{$sentence1} {$sentence2} {$sentence3}";
+        return "Hi {$nameEn}! Saw you were asking about our {$serviceInterest}{$priceTagEn}. Would a morning or afternoon slot work better for you this week?";
+    }
+
+    /**
+     * POST /leads/ai-morning-brief
+     * Generates the Morning Money Brief executive coaching summary for open Salon leads.
+     */
+    public function generateMorningBrief(Request $request)
+    {
+        $leadController = app(LeadController::class);
+        $briefData = $leadController->buildMorningMoneyBrief();
+        $briefText = $briefData['brief_text'];
+        $source = 'fallback';
+
+        $openAiKey = config('services.openai.key');
+        if (!empty($openAiKey) && !empty($briefData['top_money_leads'])) {
+            try {
+                $topJson = json_encode($briefData['top_money_leads']);
+                $systemPrompt = <<<PROMPT
+You are an executive salon sales coach. Write a 2-sentence "Morning Money Brief" (max 40 words) telling the front-desk team which top priority leads to call first today and the total QAR they will recover.
+Strictly Salon services only (never mention retail/ecommerce products).
+Queue stats: Due Today: {$briefData['due_today_count']}, Overdue: {$briefData['overdue_count']}, Needs Follow-up Date: {$briefData['unscheduled_count']}.
+Top 3 Priority Leads: {$topJson}. Combined Potential Revenue: {$briefData['top_three_potential_qar']} QAR.
+Start with "🧠 Today's Top Money Moves:".
+PROMPT;
+                $model = config('services.openai.model', 'gpt-4o-mini');
+                $response = Http::withToken($openAiKey)
+                    ->timeout(15)
+                    ->post('https://api.openai.com/v1/chat/completions', [
+                        'model' => $model,
+                        'messages' => [
+                            ['role' => 'system', 'content' => $systemPrompt],
+                            ['role' => 'user', 'content' => 'Output only the raw 2-sentence Morning Money Brief text.'],
+                        ],
+                        'temperature' => 0.6,
+                        'max_tokens' => 110,
+                    ]);
+
+                if ($response->successful()) {
+                    $text = trim((string) data_get($response->json(), 'choices.0.message.content', ''));
+                    $text = trim($text, "\"' \t\n\r\0\x0B");
+                    if ($text !== '') {
+                        $briefText = $text;
+                        $source = 'openai';
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('OpenAI morning brief errored', ['message' => $e->getMessage()]);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'source' => $source,
+            'brief_text' => $briefText,
+            'due_today_count' => $briefData['due_today_count'],
+            'overdue_count' => $briefData['overdue_count'],
+            'unscheduled_count' => $briefData['unscheduled_count'],
+            'top_money_leads' => $briefData['top_money_leads'],
+            'top_three_potential_qar' => $briefData['top_three_potential_qar'],
+        ]);
+    }
+
+    /**
+     * POST /leads/analytics/ai-diagnosis
+     * Generates the 3-bullet "Why Are We Losing Leads?" Hormozi funnel diagnosis.
+     */
+    public function generateAnalyticsDiagnosis(Request $request)
+    {
+        $leadController = app(LeadController::class);
+        [$period, $from, $to, $startDate, $endDate] = $leadController->resolveDateRangeFromRequest($request);
+        $diagnosis = $leadController->buildAnalyticsDiagnosis($from, $to);
+
+        $bottleneck = $diagnosis['bottleneck'];
+        $speedAlert = $diagnosis['speed_alert'];
+        $recoveryPlay = $diagnosis['recovery_play'];
+        $metrics = $diagnosis['metrics'];
+        $source = 'fallback';
+
+        $openAiKey = config('services.openai.key');
+        if (!empty($openAiKey)) {
+            try {
+                $metricsJson = json_encode($metrics);
+                $systemPrompt = <<<PROMPT
+You are an elite beauty salon revenue strategist (Alex Hormozi style) analyzing a Qatar ladies' salon CRM lead funnel for {$startDate} to {$endDate}.
+Strictly Salon services only (Lead, Customer, Appointment, Service). NEVER mention ecommerce or retail products.
+
+Funnel Metrics JSON: {$metricsJson}
+
+Return ONLY valid JSON with these exact 3 keys (1-2 punchy sentences per key, citing the exact numbers/services/QAR from the metrics):
+- "bottleneck": Identify the #1 unbooked service by count/percentage and price in QAR, cite patterns from remarks_sample, and suggest a concrete salon value-anchor (e.g., complimentary 10-min specialist hair/skin consultation, scalp ritual, or blowdry finish).
+- "speed_alert": Call out exact numbers on live_overdue_count, unscheduled_cancel_noshow_count, and avg_unbooked_age_days, plus the exact rule to fix it.
+- "recovery_play": State total recoverable_qar across recoverable_lead_count leads and give the #1 action for the team today.
+PROMPT;
+                $model = config('services.openai.model', 'gpt-4o-mini');
+                $response = Http::withToken($openAiKey)
+                    ->timeout(20)
+                    ->post('https://api.openai.com/v1/chat/completions', [
+                        'model' => $model,
+                        'messages' => [
+                            ['role' => 'system', 'content' => $systemPrompt],
+                            ['role' => 'user', 'content' => 'Output only raw JSON with keys "bottleneck", "speed_alert", and "recovery_play".'],
+                        ],
+                        'temperature' => 0.6,
+                        'max_tokens' => 300,
+                    ]);
+
+                if ($response->successful()) {
+                    $rawContent = trim((string) data_get($response->json(), 'choices.0.message.content', ''));
+                    $rawContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', $rawContent);
+                    $decoded = json_decode((string) $rawContent, true);
+                    if (is_array($decoded) && !empty($decoded['bottleneck']) && !empty($decoded['speed_alert']) && !empty($decoded['recovery_play'])) {
+                        $bottleneck = trim((string) $decoded['bottleneck']);
+                        $speedAlert = trim((string) $decoded['speed_alert']);
+                        $recoveryPlay = trim((string) $decoded['recovery_play']);
+                        $source = 'openai';
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('OpenAI analytics diagnosis errored', ['message' => $e->getMessage()]);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'source' => $source,
+            'period' => $period,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'bottleneck' => $bottleneck,
+            'speed_alert' => $speedAlert,
+            'recovery_play' => $recoveryPlay,
+            'diagnosis' => [
+                'bottleneck' => $bottleneck,
+                'speed_alert' => $speedAlert,
+                'recovery_play' => $recoveryPlay,
+            ],
+            'metrics' => $metrics,
+        ]);
     }
 }

@@ -354,7 +354,7 @@
                 <!-- RIGHT: payment methods, discount, tip -->
                 <div class="checkout-col-right">
                     <h6>Discount &amp; Tip</h6>
-                    <div class="row g-2 align-items-end mb-4">
+                    <div class="row g-2 align-items-end mb-3">
                         <div class="col-5">
                             <label class="form-label small mb-1">Discount Type</label>
                             <select name="discount_type" id="discountType" class="form-select form-select-sm">
@@ -372,6 +372,20 @@
                             <input type="number" name="tip_amount" id="tipAmount" class="form-control form-control-sm" min="0" step="0.01" value="0">
                         </div>
                     </div>
+
+                    @if ($appointment->customer && $appointment->customer->loyalty_points > 0)
+                        <div class="loyalty-note mb-4 mt-0">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span><i class="bx bx-diamond"></i> <strong>Loyalty Balance: {{ $appointment->customer->loyalty_points }} pts</strong></span>
+                                <span class="small text-muted">1 pt = 1 QAR</span>
+                            </div>
+                            <label class="form-label small mb-1" for="redeemPoints">Redeem Loyalty Points</label>
+                            <div class="d-flex gap-2 align-items-center">
+                                <input type="number" name="redeem_points" id="redeemPoints" class="form-control form-control-sm" min="0" max="{{ (int) $appointment->customer->loyalty_points }}" step="1" value="0">
+                                <button type="button" class="btn btn-sm btn-outline-warning text-nowrap" id="useMaxLoyaltyBtn">Use Max</button>
+                            </div>
+                        </div>
+                    @endif
 
                     <h6>Payment Method</h6>
                     <div class="row g-2 mb-2">
@@ -408,6 +422,7 @@
         // about, so it's added to the packages total as a fixed base amount.
         const existingPackagesTotal = {{ $unpaidPackagesTotal }};
         const loyaltyRate = {{ \App\Models\Customer::POINTS_PER_QAR }};
+        const maxLoyaltyPoints = {{ (int) ($appointment->customer->loyalty_points ?? 0) }};
         const ALL_COMBOS = @json($combos);
         let productRows = [];
         let rowSeq = 0;
@@ -574,6 +589,11 @@
                 discountAmount = Math.min(discountValue, subtotal);
             }
 
+            const redeemInput = document.getElementById('redeemPoints');
+            const rawRedeemPoints = redeemInput ? Math.max(0, Math.min(parseInt(redeemInput.value || 0, 10) || 0, maxLoyaltyPoints)) : 0;
+            const effectiveRedeemDiscount = Math.min(rawRedeemPoints, Math.floor(Math.max(0, subtotal - discountAmount)));
+            discountAmount = Math.min(subtotal, discountAmount + effectiveRedeemDiscount);
+
             const tip = parseFloat(document.getElementById('tipAmount').value || 0);
             const total = Math.max(0, subtotal - discountAmount) + tip;
 
@@ -618,9 +638,18 @@
             updateRemaining();
         });
 
-        ['discountType', 'discountValue', 'tipAmount'].forEach(id => {
-            document.getElementById(id).addEventListener('input', recalc);
-            document.getElementById(id).addEventListener('change', recalc);
+        ['discountType', 'discountValue', 'tipAmount', 'redeemPoints'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('input', recalc);
+            el.addEventListener('change', recalc);
+        });
+
+        document.getElementById('useMaxLoyaltyBtn')?.addEventListener('click', () => {
+            const redeemInput = document.getElementById('redeemPoints');
+            if (!redeemInput) return;
+            redeemInput.value = maxLoyaltyPoints;
+            recalc();
         });
 
         document.querySelectorAll('.pay-input').forEach(el => {

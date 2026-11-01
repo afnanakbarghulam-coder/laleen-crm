@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Appointment;
 use App\Models\Customer;
 use App\Models\Lead;
 use App\Models\Service;
@@ -83,6 +84,12 @@ class LeadController extends Controller
         $unscheduledCount = $unscheduledLeads->count();
         $bookedCount = Lead::where('needful_done', 'booked')->count();
 
+        $morningBrief = $this->buildMorningMoneyBrief($overdueCount, $unscheduledCount);
+        $dueTodayCount = $morningBrief['due_today_count'];
+        $topMoneyLeads = $morningBrief['top_money_leads'];
+        $topThreePotentialQar = $morningBrief['top_three_potential_qar'];
+        $morningBriefText = $morningBrief['brief_text'];
+
         return view('leads.index', compact(
             'leads',
             'agents',
@@ -91,6 +98,11 @@ class LeadController extends Controller
             'unscheduledLeads',
             'overdueCount',
             'unscheduledCount',
+            'dueTodayCount',
+            'topMoneyLeads',
+            'topThreePotentialQar',
+            'morningBriefText',
+            'morningBrief',
             'bookedCount',
             'alertFilter'
         ));
@@ -427,6 +439,10 @@ class LeadController extends Controller
             ]);
         }
 
+        $aiDiagnosis = $this->buildAnalyticsDiagnosis($from, $to, $leads, $agentLeaderboard, $overdueLeadsLive);
+        $overdueCount = (int) ($followupPerformance['overdue'] ?? 0);
+        $openPipelineQar = (int) ($aiDiagnosis['metrics']['recoverable_qar'] ?? 0);
+
         return view('leads.analytics', compact(
             'period',
             'from',
@@ -446,8 +462,304 @@ class LeadController extends Controller
             'winBackBooked',
             'winBackRate',
             'followupPerformance',
-            'agentLeaderboard'
+            'agentLeaderboard',
+            'aiDiagnosis',
+            'overdueCount',
+            'openPipelineQar'
         ));
+    }
+
+    public function resolveDateRangeFromRequest(Request $request): array
+    {
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+        $isCustomRange = $request->filled('start_date') || $request->filled('end_date');
+
+        if ($isCustomRange) {
+            $from = $request->filled('start_date')
+                ? Carbon::parse($startDate)->startOfDay()
+                : (($earliest = Lead::min('created_at')) ? Carbon::parse($earliest)->startOfDay() : now()->startOfMonth());
+            $to = $request->filled('end_date')
+                ? Carbon::parse($endDate)->endOfDay()
+                : now()->endOfDay();
+
+            if ($from->gt($to)) {
+                [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
+            }
+
+            $period = 'custom';
+            $startDate = $from->format('Y-m-d');
+            $endDate = $to->format('Y-m-d');
+        } else {
+            $period = $request->filled('period') && array_key_exists($request->period, self::PERIOD_LABELS)
+                ? $request->period
+                : 'this_month';
+            [$from, $to] = $this->resolvePeriod($period);
+            $startDate = $from->format('Y-m-d');
+            $endDate = $to->format('Y-m-d');
+        }
+
+        return [$period, $from, $to, $startDate, $endDate, $isCustomRange];
+    }
+
+    public static function buildServicePriceMap(): array
+    {
+        $map = [];
+        foreach (Service::query()->get(['name', 'price']) as $service) {
+            $key = strtolower(trim((string) $service->name));
+            if ($key !== '') {
+                $map[$key] = $service->price !== null && (float) $service->price > 0
+                    ? (int) round((float) $service->price)
+                    : 150;
+            }
+        }
+
+        return $map;
+    }
+
+    public static function resolveServicePrice(string $serviceName, array $servicePriceMap): int
+    {
+        $norm = strtolower(trim($serviceName));
+        if ($norm === '') {
+            return 150;
+        }
+
+        if (isset($servicePriceMap[$norm])) {
+            return $servicePriceMap[$norm];
+        }
+
+        foreach ($servicePriceMap as $nameKey => $price) {
+            if (str_contains($nameKey, $norm) || str_contains($norm, $nameKey)) {
+                return $price;
+            }
+        }
+
+        return 150;
+    }
+
+    public static function estimateLeadQar(Lead $lead, array $servicePriceMap): int
+    {
+        $services = is_array($lead->service_interest) ? array_values(array_filter($lead->service_interest)) : [];
+        if (empty($services)) {
+            return 150;
+        }
+
+        $total = 0;
+        foreach ($services as $srv) {
+            $total += self::resolveServicePrice((string) $srv, $servicePriceMap);
+        }
+
+        return max(150, $total);
+    }
+
+    public function buildMorningMoneyBrief(?int $overdueCount = null, ?int $unscheduledCount = null): array
+    {
+        $today = today();
+        $openLeads = Lead::with('customer')
+            ->where(function ($q) {
+                $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
+            })
+            ->get();
+
+        $dueTodayCount = $openLeads
+            ->filter(fn(Lead $l) => $l->next_followup_date && $l->next_followup_date->isSameDay($today))
+            ->count();
+
+        if ($overdueCount === null) {
+            $overdueCount = $this->overdueLeadsQuery()->count();
+        }
+        if ($unscheduledCount === null) {
+            $unscheduledCount = $this->unscheduledLeadsQuery()->count();
+        }
+
+        $servicePriceMap = self::buildServicePriceMap();
+        $returningCustomerIds = Appointment::where('status', 'completed')
+            ->whereNotNull('customer_id')
+            ->pluck('customer_id')
+            ->unique()
+            ->flip()
+            ->all();
+
+        $scoredLeads = $openLeads->map(function (Lead $lead) use ($servicePriceMap, $today, $returningCustomerIds) {
+            $estimatedQar = self::estimateLeadQar($lead, $servicePriceMap);
+            $bonus = 0;
+
+            if ($lead->hasCategory(['cancel', 'no_show'])) {
+                $bonus += 60;
+            }
+            if ($lead->next_followup_date && $lead->next_followup_date->lt($today)) {
+                $bonus += 50;
+            } elseif ($lead->next_followup_date && $lead->next_followup_date->isSameDay($today)) {
+                $bonus += 40;
+            }
+            if ($lead->customer_id && isset($returningCustomerIds[$lead->customer_id])) {
+                $bonus += 30;
+            }
+
+            $services = is_array($lead->service_interest) && count($lead->service_interest)
+                ? implode(', ', array_slice($lead->service_interest, 0, 2))
+                : ($lead->category ? (Lead::CATEGORIES[$lead->category] ?? $lead->category) : 'Salon Service');
+
+            $categories = $lead->categories_list;
+            $catLabel = !empty($categories)
+                ? implode(' + ', array_map(fn($c) => Lead::CATEGORIES[$c] ?? $c, $categories))
+                : 'Inquiry';
+
+            $clientName = trim((string) ($lead->customer?->name ?: 'Guest'));
+
+            return [
+                'id' => $lead->id,
+                'name' => $clientName,
+                'phone' => $lead->phone,
+                'services' => $services,
+                'category_label' => $catLabel,
+                'estimated_qar' => $estimatedQar,
+                'priority_score' => $estimatedQar + $bonus,
+            ];
+        })
+            ->sortByDesc(fn(array $item) => [$item['estimated_qar'], $item['priority_score'], $item['id']])
+            ->values();
+
+        $topMoneyLeads = $scoredLeads->take(3)->values();
+        $topThreePotentialQar = (int) $topMoneyLeads->sum('estimated_qar');
+
+        if ($topMoneyLeads->isNotEmpty()) {
+            $callParts = [];
+            foreach ($topMoneyLeads as $idx => $item) {
+                $rank = $idx + 1;
+                $callParts[] = "#{$rank} {$item['name']} ({$item['phone']} — {$item['services']}, ~{$item['estimated_qar']} QAR)";
+            }
+
+            $count = $topMoneyLeads->count();
+            $joinedCalls = count($callParts) > 1
+                ? implode(', ', array_slice($callParts, 0, -1)) . ' and ' . end($callParts)
+                : $callParts[0];
+            $priorityWord = $count === 1 ? 'priority' : 'priorities';
+            $briefText = "🧠 Today's Top Money Moves: Call {$joinedCalls}. Closing your top {$count} {$priorityWord} today recovers ~" . number_format($topThreePotentialQar) . " QAR.";
+        } else {
+            $briefText = "🧠 Today's Top Money Moves: All active leads are booked or closed—zero pending revenue sitting in the queue today.";
+        }
+
+        return [
+            'due_today_count' => $dueTodayCount,
+            'overdue_count' => $overdueCount,
+            'unscheduled_count' => $unscheduledCount,
+            'open_leads_count' => $openLeads->count(),
+            'top_money_leads' => $topMoneyLeads->all(),
+            'top_three_potential_qar' => $topThreePotentialQar,
+            'brief_text' => $briefText,
+        ];
+    }
+
+    public function buildAnalyticsDiagnosis(
+        Carbon $from,
+        Carbon $to,
+        $leads = null,
+        $agentLeaderboard = null,
+        $overdueLeadsLive = null
+    ): array {
+        if ($leads === null) {
+            $leads = Lead::with(['agent', 'customer'])->whereBetween('created_at', [$from, $to])->get();
+        }
+        if ($overdueLeadsLive === null) {
+            $overdueLeadsLive = $this->overdueLeadsQuery()->get();
+        }
+
+        $servicePriceMap = self::buildServicePriceMap();
+        $totalLeads = $leads->count();
+        $unbookedLeads = $leads->filter(fn(Lead $l) => $l->needful_done !== 'booked')->values();
+        $unbookedCount = $unbookedLeads->count();
+
+        // 1. Service Bottleneck Math
+        $serviceUnbookedCounts = [];
+        foreach ($unbookedLeads as $lead) {
+            $services = is_array($lead->service_interest) ? array_filter($lead->service_interest) : [];
+            if (empty($services)) {
+                $services = ['General Inquiry'];
+            }
+            foreach ($services as $srv) {
+                $cleanSrv = trim((string) $srv);
+                if ($cleanSrv !== '') {
+                    $serviceUnbookedCounts[$cleanSrv] = ($serviceUnbookedCounts[$cleanSrv] ?? 0) + 1;
+                }
+            }
+        }
+        arsort($serviceUnbookedCounts);
+
+        $topBottleneckService = !empty($serviceUnbookedCounts) ? (string) array_key_first($serviceUnbookedCounts) : 'Salon Treatment';
+        $topBottleneckCount = !empty($serviceUnbookedCounts) ? (int) reset($serviceUnbookedCounts) : 0;
+        $topBottleneckPct = $unbookedCount > 0 ? round(($topBottleneckCount / $unbookedCount) * 100, 1) : 0.0;
+        $topBottleneckPriceQar = self::resolveServicePrice($topBottleneckService, $servicePriceMap);
+
+        // 2. Customer Remarks & Lost Reasons
+        $remarksList = $unbookedLeads
+            ->map(function (Lead $l) {
+                $raw = trim((string) $l->customer_remarks);
+                $cleaned = trim((string) preg_replace('/\[(Auto-closed|Reopened):[^\]]*\]/i', '', $raw));
+                return $cleaned;
+            })
+            ->filter(fn(string $r) => $r !== '')
+            ->unique()
+            ->take(6)
+            ->values()
+            ->all();
+
+        $remarksSnippet = !empty($remarksList)
+            ? 'Client notes cite: "' . implode('", "', array_slice($remarksList, 0, 2)) . '".'
+            : 'Most unbooked leads have no objection note logged.';
+
+        // 3. Speed & Follow-up Discipline Leak
+        $unscheduledCancelNoShowCount = $this->unscheduledLeadsQuery()->count();
+        $liveOverdueCount = $overdueLeadsLive->count();
+        $avgUnbookedAgeDays = $unbookedCount > 0
+            ? round($unbookedLeads->avg(fn(Lead $l) => max(0, (int) floor(($l->created_at ?? now())->diffInDays(now())))), 1)
+            : 0.0;
+
+        // 4. Cash Recovery Math (open/unbooked leads in period + live overdue/unscheduled queue)
+        $openRecoverableLeads = Lead::query()
+            ->where(function ($q) {
+                $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
+            })
+            ->get();
+
+        $recoverablePool = $openRecoverableLeads->isNotEmpty() ? $openRecoverableLeads : $unbookedLeads;
+        $recoverableQar = (int) $recoverablePool->sum(fn(Lead $l) => self::estimateLeadQar($l, $servicePriceMap));
+        $recoverableLeadCount = $recoverablePool->count();
+
+        // Build the 3 deterministic Hormozi Executive Diagnostic Bullets
+        $bottleneckText = $unbookedCount > 0
+            ? "{$topBottleneckService} ({$topBottleneckPriceQar} QAR) accounts for {$topBottleneckCount} of {$unbookedCount} unbooked leads ({$topBottleneckPct}%). {$remarksSnippet} Value-Anchor Fix: Pair every {$topBottleneckService} quote with a complimentary 10-min senior specialist consultation or express blowdry/scalp finish so clients feel the luxury value before comparing price."
+            : "0 unbooked service bottlenecks in this period ({$totalLeads} total leads). Keep pairing price quotes with a complimentary 10-min specialist consultation.";
+
+        $speedAlertText = ($liveOverdueCount > 0 || $unscheduledCancelNoShowCount > 0 || $unbookedCount > 0)
+            ? "{$liveOverdueCount} follow-up(s) are currently overdue, {$unscheduledCancelNoShowCount} cancelled/no-show lead(s) have no follow-up date set, and unbooked leads sit an average of {$avgUnbookedAgeDays} day(s). Fix Rule: Enforce a mandatory follow-up date within 2 hours of every cancellation or inquiry."
+            : "0 overdue leads and 0 unscheduled cancellations right now (average unbooked age: {$avgUnbookedAgeDays}d). Maintain the 2-hour follow-up rule on all new inquiries.";
+
+        $recoveryPlayText = $recoverableLeadCount > 0
+            ? "~" . number_format($recoverableQar) . " QAR in salon revenue is sitting across {$recoverableLeadCount} unbooked/open lead(s) right now (led by {$topBottleneckService} at {$topBottleneckPriceQar} QAR). #1 Action Today: Have agents work the Overdue & Cancelled queue first using the Objection Crusher scripts to lock in morning/afternoon consultations."
+            : "~0 QAR sitting in unbooked leads right now. #1 Action Today: Review completed appointments for rebooking opportunities.";
+
+        return [
+            'bottleneck' => $bottleneckText,
+            'speed_alert' => $speedAlertText,
+            'recovery_play' => $recoveryPlayText,
+            'source' => 'deterministic',
+            'metrics' => [
+                'total_leads' => $totalLeads,
+                'unbooked_count' => $unbookedCount,
+                'top_bottleneck_service' => $topBottleneckService,
+                'top_bottleneck_count' => $topBottleneckCount,
+                'top_bottleneck_pct' => $topBottleneckPct,
+                'top_bottleneck_price_qar' => $topBottleneckPriceQar,
+                'service_unbooked_counts' => $serviceUnbookedCounts,
+                'remarks_sample' => $remarksList,
+                'live_overdue_count' => $liveOverdueCount,
+                'unscheduled_cancel_noshow_count' => $unscheduledCancelNoShowCount,
+                'avg_unbooked_age_days' => $avgUnbookedAgeDays,
+                'recoverable_qar' => $recoverableQar,
+                'recoverable_lead_count' => $recoverableLeadCount,
+            ],
+        ];
     }
 
     private function resolvePeriod(string $period): array

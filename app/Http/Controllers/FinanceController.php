@@ -14,6 +14,7 @@ class FinanceController extends Controller
     const BRANCHES = [
         'old_airport' => 'Old Airport',
         'wakrah' => 'Al Wakrah',
+        'home_service' => 'Home Service',
     ];
 
     public function index(Request $request)
@@ -30,7 +31,7 @@ class FinanceController extends Controller
             [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
         }
 
-        $branch = $request->filled('branch') && array_key_exists($request->branch, self::BRANCHES)
+        $branch = $request->filled('branch') && (array_key_exists($request->branch, self::BRANCHES) || $request->branch === 'general')
             ? $request->branch
             : null;
 
@@ -41,19 +42,26 @@ class FinanceController extends Controller
         $salesQuery = Sale::with(['customer', 'staff', 'payments', 'items'])
             ->whereBetween('created_at', [$from, $to]);
 
-        if ($branch) {
+        if ($branch === 'general') {
+            $salesQuery->whereNull('branch');
+        } elseif ($branch) {
             $salesQuery->where('branch', $branch);
         }
 
         if ($staffId) {
-            $salesQuery->where('staff_id', $staffId);
+            $salesQuery->where(function ($q) use ($staffId) {
+                $q->where('staff_id', $staffId)
+                    ->orWhereHas('items', fn ($iq) => $iq->where('staff_id', $staffId));
+            });
         }
 
         $expensesQuery = Expense::with('creator')
             ->whereDate('expense_date', '>=', $from->toDateString())
             ->whereDate('expense_date', '<=', $to->toDateString());
 
-        if ($branch) {
+        if ($branch === 'general') {
+            $expensesQuery->whereNull('branch');
+        } elseif ($branch) {
             $expensesQuery->where('branch', $branch);
         }
 
@@ -62,9 +70,10 @@ class FinanceController extends Controller
 
         $grossServices = (float) $sales->sum('services_total');
         $grossProducts = (float) $sales->sum('products_total');
-        $grossSales = $grossServices + $grossProducts;
+        $grossPackages = (float) $sales->sum('packages_total');
         $totalDiscounts = (float) $sales->sum('discount_amount');
         $totalTips = (float) $sales->sum('tip_amount');
+        $grossSales = (float) $sales->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount));
         $totalExpenses = (float) $expenses->sum('amount');
         $netProfit = $grossSales - $totalExpenses;
         $profitMargin = $grossSales > 0 ? ($netProfit / $grossSales) * 100 : 0;
@@ -89,6 +98,7 @@ class FinanceController extends Controller
             'expenses' => $expenses,
             'grossServices' => $grossServices,
             'grossProducts' => $grossProducts,
+            'grossPackages' => $grossPackages,
             'grossSales' => $grossSales,
             'totalDiscounts' => $totalDiscounts,
             'totalTips' => $totalTips,
@@ -106,7 +116,7 @@ class FinanceController extends Controller
     public function storeExpense(Request $request)
     {
         $validated = $request->validate([
-            'branch' => 'nullable|in:old_airport,wakrah',
+            'branch' => 'nullable|in:old_airport,wakrah,home_service',
             'category' => 'required|string|max:100',
             'amount' => 'required|numeric|min:0.01',
             'expense_date' => 'required|date',
@@ -126,28 +136,28 @@ class FinanceController extends Controller
     }
 
     /**
-     * Gross sales, expenses and net profit per branch for the given date range,
+     * Net sales (including packages and after discounts), expenses and net profit
+     * per branch (plus General / Shared expenses) for the given date range,
      * independent of any branch filter — powers the branch comparison chart
      * and the Dashboard's P&L cards (UserController::dashboard()).
      */
     public static function branchBreakdown(Carbon $from, Carbon $to): array
     {
-        $salesByBranch = Sale::whereBetween('created_at', [$from, $to])
-            ->selectRaw('branch, SUM(services_total) as services_total, SUM(products_total) as products_total')
-            ->groupBy('branch')
-            ->get()
-            ->keyBy('branch');
+        $sales = Sale::whereBetween('created_at', [$from, $to])
+            ->get(['branch', 'services_total', 'products_total', 'packages_total', 'discount_amount']);
+
+        $salesByBranch = $sales->groupBy(fn ($s) => $s->branch ?: 'general')
+            ->map(fn ($group) => (float) $group->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount)));
 
         $expensesByBranch = Expense::whereDate('expense_date', '>=', $from->toDateString())
             ->whereDate('expense_date', '<=', $to->toDateString())
-            ->selectRaw('branch, SUM(amount) as total')
-            ->groupBy('branch')
-            ->pluck('total', 'branch');
+            ->get(['branch', 'amount'])
+            ->groupBy(fn ($e) => $e->branch ?: 'general')
+            ->map(fn ($group) => (float) $group->sum('amount'));
 
         $breakdown = [];
         foreach (self::BRANCHES as $key => $label) {
-            $row = $salesByBranch->get($key);
-            $branchSales = $row ? (float) $row->services_total + (float) $row->products_total : 0;
+            $branchSales = (float) ($salesByBranch[$key] ?? 0);
             $branchExpenses = (float) ($expensesByBranch[$key] ?? 0);
 
             $breakdown[] = [
@@ -156,6 +166,19 @@ class FinanceController extends Controller
                 'sales' => $branchSales,
                 'expenses' => $branchExpenses,
                 'profit' => $branchSales - $branchExpenses,
+            ];
+        }
+
+        $generalSales = (float) ($salesByBranch['general'] ?? 0);
+        $generalExpenses = (float) ($expensesByBranch['general'] ?? 0);
+
+        if ($generalSales > 0 || $generalExpenses > 0) {
+            $breakdown[] = [
+                'key' => 'general',
+                'label' => 'General / Shared',
+                'sales' => $generalSales,
+                'expenses' => $generalExpenses,
+                'profit' => $generalSales - $generalExpenses,
             ];
         }
 
@@ -190,7 +213,7 @@ class FinanceController extends Controller
         foreach ($sales as $sale) {
             $key = $weekly ? $sale->created_at->format('o-W') : $sale->created_at->format('Y-m-d');
             if (isset($buckets[$key])) {
-                $buckets[$key]['revenue'] += (float) $sale->services_total + (float) $sale->products_total;
+                $buckets[$key]['revenue'] += max(0, (float) $sale->services_total + (float) $sale->products_total + (float) $sale->packages_total - (float) $sale->discount_amount);
             }
         }
 

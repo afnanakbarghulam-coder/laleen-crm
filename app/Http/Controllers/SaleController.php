@@ -91,12 +91,17 @@ class SaleController extends Controller
         }
 
         if (!$customer && $request->filled('customer_phone')) {
-            $phone = preg_replace('/\D/', '', $request->customer_phone);
-            $customer = \App\Models\Customer::firstOrNew(['phone' => $phone]);
-            if ($request->customer_name) {
-                $customer->name = $request->customer_name;
+            $rawPhone = preg_replace('/\D/', '', $request->customer_phone);
+            $normalizedPhone = \App\Models\Customer::normalizePhone($request->customer_phone);
+            $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $rawPhone])));
+            if (!empty($phoneCandidates)) {
+                $customer = \App\Models\Customer::whereIn('phone', $phoneCandidates)->first()
+                    ?: new \App\Models\Customer(['phone' => $normalizedPhone !== '' ? $normalizedPhone : $rawPhone]);
+                if ($request->customer_name) {
+                    $customer->name = $request->customer_name;
+                }
+                $customer->save();
             }
-            $customer->save();
         }
 
         $sale = Sale::create([

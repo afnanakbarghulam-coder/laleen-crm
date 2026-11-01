@@ -198,6 +198,7 @@ class StaffComplaintController extends Controller
     public function destroy(Request $request, StaffComplaint $staffComplaint)
     {
         $staffComplaint->deductions()->delete();
+        $staffComplaint->notices()->delete();
         $staffComplaint->delete();
 
         if ($request->wantsJson()) {
@@ -277,11 +278,25 @@ class StaffComplaintController extends Controller
             return $validated;
         }
 
-        $customer = Customer::firstOrCreate(
-            ['phone' => $validated['customer_phone']],
-            ['name' => $validated['customer_name']]
-        );
+        $rawPhone = preg_replace('/\D+/', '', (string) $validated['customer_phone']);
+        $normalizedPhone = Customer::normalizePhone($validated['customer_phone']);
+        $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $rawPhone, $validated['customer_phone']])));
 
+        if (empty($phoneCandidates)) {
+            $validated['customer_id'] = null;
+            return $validated;
+        }
+
+        $canonicalPhone = $normalizedPhone !== '' ? $normalizedPhone : ($rawPhone !== '' ? $rawPhone : $validated['customer_phone']);
+        $customer = Customer::whereIn('phone', $phoneCandidates)->first();
+        if (!$customer) {
+            $customer = Customer::create([
+                'phone' => $canonicalPhone,
+                'name' => $validated['customer_name'],
+            ]);
+        }
+
+        $validated['customer_phone'] = $customer->phone;
         $validated['customer_id'] = $customer->id;
 
         return $validated;

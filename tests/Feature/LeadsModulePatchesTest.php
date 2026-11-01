@@ -682,4 +682,342 @@ class LeadsModulePatchesTest extends TestCase
             ->assertViewHas('winBackBooked', 1)
             ->assertViewHas('winBackRate', 100.0);
     }
+
+    public function test_ai_objection_crusher_playbooks_inject_salon_service_pricing_and_never_mutate_followup_date(): void
+    {
+        config(['services.openai.key' => null, 'services.gemini.key' => null]);
+
+        $user = $this->createAdminUser();
+        $customer = Customer::create(['name' => 'Maryam Al-Thani', 'phone' => '55998877']);
+
+        Service::create([
+            'name' => 'Balayage',
+            'price' => 650,
+            'duration' => 120,
+        ]);
+
+        $lead = Lead::create([
+            'phone' => '55998877',
+            'customer_id' => $customer->id,
+            'category' => 'inquiry',
+            'service_interest' => ['Balayage'],
+            'customer_remarks' => 'Asked about blonde balayage',
+            'next_followup_date' => null,
+        ]);
+
+        $objectionExpectations = [
+            'price_high' => '650 QAR',
+            'busy_later' => 'weekend and evening slots',
+            'price_inquiry' => '650 QAR',
+            'ghosted' => 'schedule locks',
+            'custom_reply' => '650 QAR',
+        ];
+
+        foreach ($objectionExpectations as $objectionType => $expectedSubstring) {
+            $payload = [
+                'lead_id' => $lead->id,
+                'module' => 'lead_management',
+                'mode' => 'objection',
+                'objection_type' => $objectionType,
+                'language' => 'en',
+            ];
+
+            if ($objectionType === 'custom_reply') {
+                $payload['client_reply'] = 'Is the bleach harsh on damaged hair?';
+            }
+
+            $response = $this->actingAs($user)->postJson(route('leads.ai-script', $lead), $payload);
+
+            $response->assertOk()
+                ->assertJsonPath('success', true)
+                ->assertJsonPath('mode', 'objection')
+                ->assertJsonPath('objection_type', $objectionType)
+                ->assertJsonPath('language', 'en')
+                ->assertJsonPath('service_pricing.primary_price_qar', '650 QAR');
+
+            $script = (string) $response->json('script');
+            $this->assertNotEmpty($script);
+            $this->assertStringContainsString('Maryam Al-Thani', $script);
+            $this->assertStringContainsString($expectedSubstring, $script);
+
+            // Generating scripts must NEVER mutate next_followup_date
+            $this->assertNull($lead->fresh()->next_followup_date);
+        }
+
+        // Also verify LLM system prompt receives the Hormozi playbook + matched Service price when OpenAI is active
+        config(['services.openai.key' => 'test-openai-key']);
+        $capturedPrompts = [];
+        Http::fake(function ($request) use (&$capturedPrompts) {
+            $capturedPrompts[] = data_get($request->data(), 'messages.0.content');
+            return Http::response([
+                'choices' => [
+                    ['message' => ['content' => 'Custom LLM response sentence 1. Sentence 2. Sentence 3?']],
+                ],
+            ], 200);
+        });
+
+        $llmResponse = $this->actingAs($user)->postJson(route('leads.ai-script', $lead), [
+            'lead_id' => $lead->id,
+            'module' => 'lead_management',
+            'mode' => 'objection',
+            'objection_type' => 'price_inquiry',
+            'language' => 'en',
+        ]);
+
+        $llmResponse->assertOk()
+            ->assertJsonPath('mode', 'objection')
+            ->assertJsonPath('objection_type', 'price_inquiry')
+            ->assertJsonPath('service_pricing.primary_price_qar', '650 QAR');
+
+        $this->assertNotEmpty($capturedPrompts[0] ?? '');
+        $this->assertStringContainsString('OBJECTION PLAYBOOK — "ASKING FOR PRICE ONLY"', $capturedPrompts[0]);
+        $this->assertStringContainsString('Balayage: 650 QAR (120 mins)', $capturedPrompts[0]);
+    }
+
+    public function test_ai_objection_crusher_bilingual_arabic_toggle_and_arabic_client_reply_auto_detection(): void
+    {
+        config(['services.openai.key' => null, 'services.gemini.key' => null]);
+
+        $user = $this->createAdminUser();
+        $customer = Customer::create(['name' => 'نورة الكواري', 'phone' => '55443322']);
+
+        Service::create([
+            'name' => 'HydraFacial',
+            'price' => 450,
+            'duration' => 60,
+        ]);
+
+        $lead = Lead::create([
+            'phone' => '55443322',
+            'customer_id' => $customer->id,
+            'category' => 'follow_up',
+            'service_interest' => ['HydraFacial'],
+            'next_followup_date' => null,
+        ]);
+
+        // 1. Explicit language = 'ar' returns Qatari/Gulf White Arabic script with matched Service price
+        $arResponse = $this->actingAs($user)->postJson(route('leads.ai-script', $lead), [
+            'lead_id' => $lead->id,
+            'module' => 'lead_management',
+            'mode' => 'objection',
+            'objection_type' => 'price_high',
+            'language' => 'ar',
+        ]);
+
+        $arResponse->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('language', 'ar')
+            ->assertJsonPath('objection_type', 'price_high')
+            ->assertJsonPath('service_pricing.primary_price_qar', '450 QAR');
+
+        $arScript = (string) $arResponse->json('script');
+        $this->assertStringContainsString('حبيبتي', $arScript);
+        $this->assertStringContainsString('450', $arScript);
+
+        // 2. Pasting an Arabic client_reply automatically switches response language to 'ar' even if language='en'
+        $autoArResponse = $this->actingAs($user)->postJson(route('leads.ai-script', $lead), [
+            'lead_id' => $lead->id,
+            'module' => 'lead_management',
+            'mode' => 'objection',
+            'objection_type' => 'custom_reply',
+            'client_reply' => 'السعر غالي شوي، فيه خصم أو استشارة قبل الجلسة؟',
+            'language' => 'en',
+        ]);
+
+        $autoArResponse->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('language', 'ar')
+            ->assertJsonPath('objection_type', 'custom_reply');
+
+        $autoArScript = (string) $autoArResponse->json('script');
+        $this->assertStringContainsString('حبيبتي', $autoArScript);
+        $this->assertNull($lead->fresh()->next_followup_date);
+    }
+
+    public function test_leads_index_renders_objection_crusher_chips_custom_reply_bar_and_bilingual_toggle(): void
+    {
+        $user = $this->createAdminUser();
+        $customer = Customer::create(['name' => 'Lulwa Al-Attiyah', 'phone' => '55123456']);
+
+        Lead::create([
+            'phone' => '55123456',
+            'customer_id' => $customer->id,
+            'category' => 'inquiry',
+            'service_interest' => ['Facial', 'Balayage', 'Manicure'],
+            'needful_done' => null,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('leads.index'));
+
+        $response->assertOk()
+            ->assertSee('SERVICES &amp; NOTES', false)
+            ->assertSee('STATUS')
+            ->assertSee('FOLLOW-UP')
+            ->assertSee('✨ AI Script')
+            ->assertSee('✨ AI Closer')
+            ->assertSee('💰 Price')
+            ->assertSee('⏳ Busy')
+            ->assertSee('🤔 Price Info')
+            ->assertSee('👻 Follow-up')
+            ->assertSee('↻ Regenerate')
+            ->assertSee('Paste client WhatsApp reply...', false)
+            ->assertSee('⚡ Reply')
+            ->assertSee('عربي')
+            ->assertSee('+1')
+            ->assertSee("generateObjection('price_high')", false)
+            ->assertSee("generateObjection('busy_later')", false)
+            ->assertSee("generateObjection('price_inquiry')", false)
+            ->assertSee("generateObjection('ghosted')", false)
+            ->assertSee("generateObjection('custom_reply')", false);
+    }
+
+    public function test_morning_money_brief_banner_calculates_daily_queue_and_top_3_high_value_leads_in_qar(): void
+    {
+        config(['services.openai.key' => null, 'services.gemini.key' => null]);
+
+        $user = $this->createAdminUser();
+
+        Service::create(['name' => 'Balayage', 'price' => 700, 'duration' => 120]);
+        Service::create(['name' => 'HydraFacial', 'price' => 450, 'duration' => 60]);
+        Service::create(['name' => 'Keratin', 'price' => 600, 'duration' => 90]);
+
+        $c1 = Customer::create(['name' => 'Sheikha Al-Thani', 'phone' => '55110001']);
+        $c2 = Customer::create(['name' => 'Dana Al-Kuwari', 'phone' => '55110002']);
+        $c3 = Customer::create(['name' => 'Hissa Al-Sulaiti', 'phone' => '55110003']);
+
+        // Lead 1: Due today, Balayage (700 QAR)
+        Lead::create([
+            'phone' => '55110001',
+            'customer_id' => $c1->id,
+            'category' => 'follow_up',
+            'service_interest' => ['Balayage'],
+            'needful_done' => null,
+            'next_followup_date' => today(),
+        ]);
+
+        // Lead 2: Overdue, Keratin (600 QAR)
+        Lead::create([
+            'phone' => '55110002',
+            'customer_id' => $c2->id,
+            'category' => 'inquiry',
+            'service_interest' => ['Keratin'],
+            'needful_done' => 'yes',
+            'next_followup_date' => today()->subDays(2),
+        ]);
+
+        // Lead 3: Unscheduled Cancel, HydraFacial (450 QAR)
+        Lead::create([
+            'phone' => '55110003',
+            'customer_id' => $c3->id,
+            'category' => 'cancel',
+            'categories' => ['cancel'],
+            'service_interest' => ['HydraFacial'],
+            'needful_done' => null,
+            'next_followup_date' => null,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('leads.index'));
+
+        // Total top 3 potential QAR = 700 + 600 + 450 = 1,750 QAR
+        $response->assertOk()
+            ->assertViewHas('dueTodayCount', 1)
+            ->assertViewHas('overdueCount', 1)
+            ->assertViewHas('unscheduledCount', 1)
+            ->assertViewHas('topThreePotentialQar', 1750)
+            ->assertSee('Morning Money Brief')
+            ->assertSee('Due Today:')
+            ->assertSee('Sheikha Al-Thani')
+            ->assertSee('Dana Al-Kuwari')
+            ->assertSee('Hissa Al-Sulaiti')
+            ->assertSee('1,750 QAR');
+
+        // Also test POST /leads/ai-morning-brief endpoint
+        $briefApi = $this->actingAs($user)->postJson(route('leads.ai-morning-brief'));
+        $briefApi->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('due_today_count', 1)
+            ->assertJsonPath('overdue_count', 1)
+            ->assertJsonPath('unscheduled_count', 1)
+            ->assertJsonPath('top_three_potential_qar', 1750);
+    }
+
+    public function test_ai_analytics_diagnosis_identifies_service_bottleneck_remarks_speed_alert_and_recovery_qar(): void
+    {
+        config(['services.openai.key' => null, 'services.gemini.key' => null]);
+
+        $user = $this->createAdminUser();
+        $c1 = Customer::create(['name' => 'Aisha Al-Misnad', 'phone' => '55220001']);
+        $c2 = Customer::create(['name' => 'Mariam Al-Thani', 'phone' => '55220002']);
+
+        Service::create(['name' => 'Balayage', 'price' => 650, 'duration' => 120]);
+        Service::create(['name' => 'Facial', 'price' => 250, 'duration' => 60]);
+
+        $lead1 = new Lead([
+            'phone' => '55220001',
+            'customer_id' => $c1->id,
+            'category' => 'cancel',
+            'categories' => ['cancel'],
+            'service_interest' => ['Balayage'],
+            'customer_remarks' => 'Said 650 QAR is too expensive right now',
+            'needful_done' => null,
+            'next_followup_date' => null,
+        ]);
+        $lead1->created_at = now()->subDays(6);
+        $lead1->save();
+
+        $lead2 = new Lead([
+            'phone' => '55220002',
+            'customer_id' => $c2->id,
+            'category' => 'follow_up',
+            'categories' => ['follow_up'],
+            'service_interest' => ['Balayage', 'Facial'],
+            'customer_remarks' => 'Wanted evening slot next week',
+            'needful_done' => 'yes',
+            'next_followup_date' => today()->subDays(2),
+        ]);
+        $lead2->created_at = now()->subDays(4);
+        $lead2->save();
+
+        $startDate = now()->subDays(10)->format('Y-m-d');
+        $endDate = now()->format('Y-m-d');
+
+        // 1. GET /leads/analytics renders the AI Funnel Diagnosis card with real metrics
+        $pageResponse = $this->actingAs($user)->get('/leads/analytics?start_date=' . $startDate . '&end_date=' . $endDate);
+        $pageResponse->assertOk()
+            ->assertViewHas('overdueCount', 1)
+            ->assertViewHas('openPipelineQar', 1550)
+            ->assertSee('isOpen: false', false)
+            ->assertSee('@click.stop="isOpen = true; refreshDiagnosis()"', false)
+            ->assertSee('id="diagBottleneckText"', false)
+            ->assertSee('id="diagSpeedAlertText"', false)
+            ->assertSee('id="diagRecoveryPlayText"', false)
+            ->assertSee('⚡ 1 Overdue')
+            ->assertSee('💰 ~1,550 QAR Open Pipeline')
+            ->assertSee('AI Funnel Diagnosis')
+            ->assertSee('Why Are We Losing Leads?')
+            ->assertSee('🎯 Bottleneck Detected')
+            ->assertSee('⚡ Agent Speed Alert')
+            ->assertSee('💰 Cash Recovery Play')
+            ->assertSee('Balayage')
+            ->assertSee('Said 650 QAR is too expensive right now')
+            ->assertSee('1,550 QAR'); // 650 + (650 + 250) = 1,550 QAR
+
+        // 2. POST /leads/analytics/ai-diagnosis returns HTTP 200 with structured sections
+        $apiResponse = $this->actingAs($user)->postJson(route('leads.analytics.ai-diagnosis'), [
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+        ]);
+
+        $apiResponse->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('metrics.top_bottleneck_service', 'Balayage')
+            ->assertJsonPath('metrics.top_bottleneck_count', 2)
+            ->assertJsonPath('metrics.live_overdue_count', 1)
+            ->assertJsonPath('metrics.unscheduled_cancel_noshow_count', 1)
+            ->assertJsonPath('metrics.recoverable_qar', 1550);
+
+        $this->assertStringContainsString('Balayage', (string) $apiResponse->json('bottleneck'));
+        $this->assertStringContainsString('overdue', (string) $apiResponse->json('speed_alert'));
+        $this->assertStringContainsString('1,550 QAR', (string) $apiResponse->json('recovery_play'));
+    }
 }

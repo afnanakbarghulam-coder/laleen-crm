@@ -279,6 +279,11 @@
         color: #8aa6ab;
     }
 
+    .fin-item-chip.package {
+        background: rgba(201,166,107, .12);
+        color: #c9a66b;
+    }
+
     .fin-pay-chip {
         display: inline-flex;
         align-items: center;
@@ -362,8 +367,11 @@
         $activeTab = in_array($rawTab, ['overview', 'sales-ledger', 'expenses'], true)
             ? $rawTab
             : 'overview';
-        $activeBranchLabel = $branch ? ($branches[$branch] ?? $branch) : 'All Branches';
+        $activeBranchLabel = $branch ? ($branches[$branch] ?? ($branch === 'general' ? 'General / Shared' : $branch)) : 'All Branches';
         $activeStaffName = $staffId ? $staffList->firstWhere('id', $staffId)?->name : null;
+        $cashTotal = (float) ($paymentTotals['cash'] ?? 0);
+        $cardTotal = (float) ($paymentTotals['card'] ?? 0);
+        $onlineTransferTotal = (float) ($paymentTotals['online_transfer'] ?? 0);
     @endphp
 
     <div class="fin-header">
@@ -373,7 +381,7 @@
             @if ($branch || $staffId)
                 <div class="mt-1">
                     @if ($branch)
-                        <span class="fin-pay-chip">Branch: {{ $branches[$branch] }}</span>
+                        <span class="fin-pay-chip">Branch: {{ $activeBranchLabel }}</span>
                     @endif
                     @if ($staffId)
                         <span class="fin-pay-chip {{ $activeTab === 'sales-ledger' ? '' : 'd-none' }}" id="finHeaderStaffChip">Staff: {{ $activeStaffName }}</span>
@@ -469,9 +477,10 @@
                     </span>
                 </div>
                 <div class="fin-kpi-value">{{ number_format($grossSales, 2) }} <small class="fs-6 fw-semibold text-muted">QAR</small></div>
-                <div class="fin-kpi-sub">
+                <div class="fin-kpi-sub flex-wrap">
                     <span>Services <b>{{ number_format($grossServices, 2) }}</b></span>
                     <span>Products <b>{{ number_format($grossProducts, 2) }}</b></span>
+                    <span>Packages <b>{{ number_format($grossPackages ?? 0, 2) }}</b></span>
                 </div>
             </div>
         </div>
@@ -525,6 +534,28 @@
         </div>
     </div>
 
+    <!-- PAYMENT METHOD SPLITS SUMMARY BAR -->
+    <div class="fin-filter-card py-2 px-3 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2" id="finPaymentSplitsBar">
+        <div class="d-flex align-items-center gap-2">
+            <span class="fin-kpi-label mb-0"><i class="bx bx-credit-card-front me-1"></i> Collected by Payment Method</span>
+            <span class="text-muted small">(Includes Tips)</span>
+        </div>
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <span class="fin-pay-chip px-3 py-1">
+                <i class="bx bx-money" style="color:#8ea88a;"></i>
+                Cash: <b class="ms-1 text-white">{{ number_format($cashTotal, 2) }} QAR</b>
+            </span>
+            <span class="fin-pay-chip px-3 py-1">
+                <i class="bx bx-credit-card" style="color:#d98f83;"></i>
+                Card: <b class="ms-1 text-white">{{ number_format($cardTotal, 2) }} QAR</b>
+            </span>
+            <span class="fin-pay-chip px-3 py-1">
+                <i class="bx bx-transfer" style="color:#8aa6ab;"></i>
+                Online Transfer: <b class="ms-1 text-white">{{ number_format($onlineTransferTotal, 2) }} QAR</b>
+            </span>
+        </div>
+    </div>
+
     <!-- CHARTS ROW 1 -->
     <div class="row g-3 mb-3">
         <div class="col-xl-8">
@@ -537,7 +568,7 @@
         <div class="col-xl-4">
             <div class="fin-chart-card">
                 <h6>Revenue Breakdown</h6>
-                <div class="fin-chart-sub">Services vs. Retail Products</div>
+                <div class="fin-chart-sub">Services, Retail Products &amp; Packages</div>
                 <div id="finDonutChart"></div>
             </div>
         </div>
@@ -588,9 +619,16 @@
     <div id="fin-tab-sales-ledger" class="fin-tab-pane {{ $activeTab === 'sales-ledger' ? '' : 'd-none' }}">
     <!-- DAILY SALES LEDGER -->
     <div class="fin-section-card">
-        <div class="fin-section-head">
-            <h6><i class="bx bx-list-ul me-1"></i> Daily Sales Ledger</h6>
-            <span class="text-muted small">{{ $sales->count() }} {{ Str::plural('transaction', $sales->count()) }}</span>
+        <div class="fin-section-head flex-wrap gap-2">
+            <div>
+                <h6><i class="bx bx-list-ul me-1"></i> Daily Sales Ledger</h6>
+                <span class="text-muted small">{{ $sales->count() }} {{ Str::plural('transaction', $sales->count()) }}</span>
+            </div>
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <span class="fin-pay-chip"><i class="bx bx-money"></i> Cash: {{ number_format($cashTotal, 2) }} QAR</span>
+                <span class="fin-pay-chip"><i class="bx bx-credit-card"></i> Card: {{ number_format($cardTotal, 2) }} QAR</span>
+                <span class="fin-pay-chip"><i class="bx bx-transfer"></i> Online Transfer: {{ number_format($onlineTransferTotal, 2) }} QAR</span>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="table fin-table">
@@ -830,9 +868,9 @@
         // Revenue breakdown donut
         new ApexCharts(document.querySelector('#finDonutChart'), {
             chart: { type: 'donut', height: 320, fontFamily: 'inherit' },
-            series: [{{ $grossServices }}, {{ $grossProducts }}],
-            labels: ['Services', 'Products'],
-            colors: ['#d98f83', '#8aa6ab'],
+            series: [{{ $grossServices }}, {{ $grossProducts }}, {{ $grossPackages ?? 0 }}],
+            labels: ['Services', 'Products', 'Packages'],
+            colors: ['#d98f83', '#8aa6ab', '#c9a66b'],
             dataLabels: { enabled: true, formatter: (val) => val.toFixed(1) + '%' },
             legend: { position: 'bottom' },
             tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },

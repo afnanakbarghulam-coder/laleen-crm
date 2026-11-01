@@ -1410,6 +1410,7 @@
                             <select id="filterBranch" class="cal-filter-select">
                                 <option value="old_airport">Old Airport</option>
                                 <option value="wakrah">Al Wakrah</option>
+                                <option value="home_service">Home Service</option>
                             </select>
                         </div>
 
@@ -1694,6 +1695,7 @@
                     <select id="drawerRescheduleBranch" class="form-select form-select-sm mb-2">
                         <option value="old_airport">Old Airport</option>
                         <option value="wakrah">Al Wakrah</option>
+                        <option value="home_service">Home Service</option>
                     </select>
                     <div class="row g-2">
                         <div class="col-6">
@@ -1817,7 +1819,7 @@
         }
 
         let state = loadFilters();
-        const CAL_BRANCH_LABELS = { old_airport: 'Old Airport', wakrah: 'Al Wakrah' };
+        const CAL_BRANCH_LABELS = { old_airport: 'Old Airport', wakrah: 'Al Wakrah', home_service: 'Home Service' };
         let latestData = null;
         let nowLineTimer = null;
         const DRAWER_SERVICES_CATALOG = @json($servicesCatalog);
@@ -2414,7 +2416,9 @@
         function renderDrawer(a) {
             lastDrawerData = a;
             const color = (latestData && latestData.status_colors[a.status]) || '#c9a39a';
-            const isFinal = ['completed', 'cancelled', 'no_show'].includes(a.status);
+            const isPaid = Boolean(a.is_paid);
+            const isCancelledOrNoShow = ['cancelled', 'no_show'].includes(a.status);
+            const isFinal = isCancelledOrNoShow || (a.status === 'completed' && isPaid);
 
             document.getElementById('drawerCustomer').textContent = a.customer_name || 'Walk-in';
             document.getElementById('drawerPhone').textContent = a.phone;
@@ -2484,10 +2488,10 @@
             document.getElementById('drawerNoShowBtn').classList.toggle('disabled', isFinal);
             document.getElementById('drawerCancelBtn').classList.toggle('disabled', isFinal);
 
-            // Checkout
+            // Checkout — stays visible whenever the appointment is not cancelled/no_show and not yet paid
             const checkoutBtn = document.getElementById('drawerCheckoutBtn');
             checkoutBtn.href = a.payment_url;
-            checkoutBtn.classList.toggle('d-none', isFinal || !CAN_EDIT_FINANCE);
+            checkoutBtn.classList.toggle('d-none', isCancelledOrNoShow || isPaid || !CAN_EDIT_FINANCE);
 
             // Reschedule form prefill
             document.getElementById('drawerRescheduleBranch').value = a.branch_raw;

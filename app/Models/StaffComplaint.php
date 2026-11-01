@@ -61,9 +61,16 @@ class StaffComplaint extends Model
     public static function generateReferenceNumber($date): string
     {
         $year = Carbon::parse($date)->year;
-        $count = static::where('reference_number', 'like', "CMP-{$year}-%")->count();
+        $prefix = "CMP-{$year}-";
+        $maxSeq = static::where('reference_number', 'like', $prefix . '%')
+            ->pluck('reference_number')
+            ->map(function ($ref) use ($prefix) {
+                $suffix = substr((string) $ref, strlen($prefix));
+                return is_numeric($suffix) ? (int) $suffix : 0;
+            })
+            ->max() ?? 0;
 
-        return sprintf('CMP-%d-%03d', $year, $count + 1);
+        return sprintf('CMP-%d-%03d', $year, $maxSeq + 1);
     }
 
     /** Staff members involved — a complaint may name more than one. */

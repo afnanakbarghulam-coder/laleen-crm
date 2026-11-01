@@ -58,6 +58,11 @@ class User extends Authenticatable
         return $this->hasMany(Lead::class, 'assigned_agent_id');
     }
 
+    public function staff()
+    {
+        return $this->hasOne(Staff::class, 'user_id');
+    }
+
     /**
      * Only this specific admin account may manage Staff Access (provisioning
      * other staff logins/roles) — a narrower gate than the general 'admin' role.

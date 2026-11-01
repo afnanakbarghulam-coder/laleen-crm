@@ -96,8 +96,8 @@
         <div class="card-body">
             @forelse ($queue as $row)
                 @php
-                    $statusColors = ['overdue' => '#a8524a', 'due_soon' => '#c9a66b', 'upcoming' => '#8aa6ab'];
-                    $statusLabels = ['overdue' => 'Overdue', 'due_soon' => 'Due Soon', 'upcoming' => 'Upcoming'];
+                    $statusColors = ['overdue' => '#a8524a', 'due_soon' => '#c9a66b', 'upcoming' => '#8aa6ab', 'scheduled' => '#8ea88a'];
+                    $statusLabels = ['overdue' => 'Overdue', 'due_soon' => 'Due Soon', 'upcoming' => 'Upcoming', 'scheduled' => 'Scheduled'];
                     $rowClass = $row->urgency === 'overdue' ? 'is-overdue' : ($row->urgency === 'due_soon' ? 'is-due-soon' : '');
                 @endphp
                 <div class="bp-row {{ $rowClass }}">

@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Appointment;
 use App\Models\AppointmentService;
 use App\Models\Customer;
 use Illuminate\Support\Carbon;
@@ -30,7 +31,7 @@ class ClientMaintenancePlanner
             ->join('services', 'services.id', '=', 'appointment_services.service_id')
             ->whereNotNull('services.rebooking_interval_days')
             ->whereNotNull('appointments.customer_id')
-            ->whereNotIn('appointments.status', ['cancelled', 'no_show'])
+            ->where('appointments.status', 'completed')
             ->where('appointment_services.start_time', '<=', now());
 
         if ($customerId) {
@@ -44,7 +45,19 @@ class ClientMaintenancePlanner
 
         $today = now()->startOfDay();
 
-        return $rows->map(function ($row) use ($today) {
+        // Check if the customer already has an upcoming active appointment (pending, confirmed, arrived, in_progress)
+        // on or after today so we don't flag them as overdue when they're already booked!
+        $upcomingAppointments = Appointment::query()
+            ->with('appointmentServices:id,appointment_id,service_id,name')
+            ->whereNotNull('customer_id')
+            ->whereNotIn('status', ['cancelled', 'no_show', 'completed'])
+            ->whereDate('appointment_datetime', '>=', $today->toDateString())
+            ->when($customerId, fn ($q) => $q->where('customer_id', $customerId))
+            ->orderBy('appointment_datetime')
+            ->get()
+            ->groupBy('customer_id');
+
+        return $rows->map(function ($row) use ($today, $upcomingAppointments) {
             $lastVisit = Carbon::parse($row->last_visit);
             $nextDue = $lastVisit->copy()->startOfDay()->addDays((int) $row->interval_days);
 
@@ -52,6 +65,25 @@ class ClientMaintenancePlanner
             // 0 = due today, positive = still days away. Avoids relying on
             // Carbon::diffInDays()'s sign convention, which varies by version.
             $daysUntil = (int) floor(($nextDue->timestamp - $today->timestamp) / 86400);
+
+            $clientUpcoming = $upcomingAppointments->get((int) $row->customer_id, collect());
+            $matchingUpcoming = $clientUpcoming->first(function (Appointment $appt) use ($row) {
+                foreach ($appt->appointmentServices as $line) {
+                    if ((int) $line->service_id === (int) $row->service_id || strcasecmp(trim((string) $line->name), trim((string) $row->service_name)) === 0) {
+                        return true;
+                    }
+                }
+                $flatNames = array_filter(array_map('trim', explode(',', (string) $appt->service_name)));
+                foreach ($flatNames as $flatName) {
+                    if (strcasecmp($flatName, trim((string) $row->service_name)) === 0) {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+
+            $upcomingDate = $matchingUpcoming ? Carbon::parse($matchingUpcoming->appointment_datetime) : null;
 
             return (object) [
                 'customer_id' => (int) $row->customer_id,
@@ -62,7 +94,9 @@ class ClientMaintenancePlanner
                 'next_due' => $nextDue,
                 'days_until' => $daysUntil,
                 'days_since_visit' => (int) floor(($today->timestamp - $lastVisit->copy()->startOfDay()->timestamp) / 86400),
+                'upcoming_appointment_date' => $upcomingDate,
                 'urgency' => match (true) {
+                    $upcomingDate !== null => 'scheduled',
                     $daysUntil < 0 => 'overdue',
                     $daysUntil <= self::DUE_SOON_WINDOW_DAYS => 'due_soon',
                     default => 'upcoming',
@@ -81,11 +115,13 @@ class ClientMaintenancePlanner
      * Front-desk task queue: every (customer, service) pair that's overdue
      * or due within the look-ahead window, across all clients, with the
      * customer eager-loaded for name/phone/loyalty display. Sorted most
-     * overdue first.
+     * overdue first. Excludes services where the client already has an
+     * upcoming appointment scheduled.
      */
     public function dueQueue(int $lookaheadDays = self::DUE_SOON_WINDOW_DAYS): Collection
     {
-        $schedule = $this->buildSchedule()->filter(fn ($row) => $row->days_until <= $lookaheadDays);
+        $schedule = $this->buildSchedule()
+            ->filter(fn ($row) => $row->urgency !== 'scheduled' && $row->days_until <= $lookaheadDays);
 
         $customers = Customer::whereIn('id', $schedule->pluck('customer_id')->unique())
             ->get()

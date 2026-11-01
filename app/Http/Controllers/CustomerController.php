@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Appointment;
 use App\Models\ClientPackage;
 use App\Models\Customer;
+use App\Models\Lead;
 use App\Models\Sale;
+use App\Models\StaffComplaint;
 use App\Support\ClientMaintenancePlanner;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -13,7 +16,9 @@ class CustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Customer::query()->withCount('appointments');
+        $query = Customer::query()->withCount([
+            'appointments' => fn ($q) => $q->where('status', 'completed'),
+        ]);
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -33,11 +38,12 @@ class CustomerController extends Controller
         $customerIds = $customers->pluck('id');
 
         $ltv = Sale::whereIn('customer_id', $customerIds)
-            ->selectRaw('customer_id, SUM(total_amount) as total')
+            ->get(['customer_id', 'services_total', 'products_total', 'packages_total', 'discount_amount'])
             ->groupBy('customer_id')
-            ->pluck('total', 'customer_id');
+            ->map(fn ($sales) => round((float) $sales->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount)), 2));
 
-        $lastVisit = \App\Models\Appointment::whereIn('customer_id', $customerIds)
+        $lastVisit = Appointment::whereIn('customer_id', $customerIds)
+            ->where('status', 'completed')
             ->selectRaw('customer_id, MAX(appointment_datetime) as last_visit')
             ->groupBy('customer_id')
             ->pluck('last_visit', 'customer_id');
@@ -61,7 +67,9 @@ class CustomerController extends Controller
 
     public function show(Customer $customer)
     {
-        $customer->loadCount('appointments');
+        $customer->loadCount([
+            'appointments' => fn ($q) => $q->where('status', 'completed'),
+        ]);
 
         $appointments = $customer->appointments()
             ->with('staff')
@@ -71,11 +79,14 @@ class CustomerController extends Controller
         $upcoming = $appointments->filter(fn($a) => $a->appointment_datetime->isFuture() && $a->status === 'pending')->sortBy('appointment_datetime');
         $past = $appointments->filter(fn($a) => !$a->appointment_datetime->isFuture() || $a->status !== 'pending');
 
-        $lifetimeValue = Sale::where('customer_id', $customer->id)->sum('total_amount');
+        $lifetimeValue = round((float) Sale::where('customer_id', $customer->id)
+            ->get(['services_total', 'products_total', 'packages_total', 'discount_amount'])
+            ->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount)), 2);
 
         $favoriteServices = $appointments
-            ->flatMap(fn($a) => array_map('trim', explode(',', $a->service_name)))
-            ->filter()
+            ->where('status', 'completed')
+            ->flatMap(fn($a) => array_map('trim', explode(',', (string) $a->service_name)))
+            ->filter(fn($name) => $name !== '' && strcasecmp($name, 'Decide in Salon') !== 0)
             ->countBy()
             ->sortDesc()
             ->take(5);
@@ -92,14 +103,72 @@ class CustomerController extends Controller
         return view('customers.show', compact('customer', 'appointments', 'upcoming', 'past', 'lifetimeValue', 'favoriteServices', 'loyaltyHistory', 'maintenanceSchedule', 'clientPackages'));
     }
 
+    public function store(Request $request)
+    {
+        if ($request->filled('phone')) {
+            $normalizedPhone = Customer::normalizePhone($request->input('phone'));
+            if ($normalizedPhone !== '') {
+                $request->merge(['phone' => $normalizedPhone]);
+            }
+        }
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['required', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+        ]);
+
+        $rawDigits = preg_replace('/\D+/', '', (string) $validated['phone']);
+        $phoneCandidates = array_values(array_unique(array_filter([$validated['phone'], $rawDigits])));
+
+        $customer = Customer::whereIn('phone', $phoneCandidates)->first();
+        if ($customer) {
+            $customer->update([
+                'name' => $validated['name'],
+                'phone' => $validated['phone'],
+                'email' => $validated['email'] ?? $customer->email,
+            ]);
+        } else {
+            $customer = Customer::create($validated);
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'customer' => $customer]);
+        }
+
+        return redirect()->route('customers.show', $customer)->with('success', 'Client profile saved.');
+    }
+
     public function update(Request $request, Customer $customer)
     {
+        if ($request->filled('phone')) {
+            $normalizedPhone = Customer::normalizePhone($request->input('phone'));
+            if ($normalizedPhone !== '') {
+                $request->merge(['phone' => $normalizedPhone]);
+            }
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:255', Rule::unique('customers', 'phone')->ignore($customer->id)],
         ]);
 
         $customer->update($validated);
+
+        // Propagate updated client name and normalized phone to linked Appointments, Leads, and Complaints
+        Appointment::where('customer_id', $customer->id)->update([
+            'customer_name' => $customer->name,
+            'phone' => $customer->phone,
+        ]);
+
+        Lead::where('customer_id', $customer->id)->update([
+            'phone' => $customer->phone,
+        ]);
+
+        StaffComplaint::where('customer_id', $customer->id)->update([
+            'customer_name' => $customer->name,
+            'customer_phone' => $customer->phone,
+        ]);
 
         return back()->with('success', 'Client profile updated successfully.');
     }
@@ -213,8 +282,11 @@ class CustomerController extends Controller
             return response()->json(['found' => false]);
         }
 
-        $visitCount = $customer->appointments()->count();
-        $lastVisit = $customer->appointments()->orderByDesc('appointment_datetime')->value('appointment_datetime');
+        $visitCount = $customer->appointments()->where('status', 'completed')->count();
+        $lastVisit = $customer->appointments()
+            ->where('status', 'completed')
+            ->orderByDesc('appointment_datetime')
+            ->value('appointment_datetime');
 
         return response()->json([
             'found' => true,

@@ -63,6 +63,9 @@ Route::middleware(['auth'])->group(function () {
     // wildcard (show), or Laravel will match "create" as a lead id.
     Route::middleware('module:leads')->group(function () {
         Route::get('/leads-analytics', [LeadController::class, 'analytics'])->name('leads.analytics');
+        Route::get('/leads/analytics', [LeadController::class, 'analytics']);
+        Route::post('/leads/analytics/ai-diagnosis', [AiScriptController::class, 'generateAnalyticsDiagnosis'])->name('leads.analytics.ai-diagnosis');
+        Route::post('/leads/ai-morning-brief', [AiScriptController::class, 'generateMorningBrief'])->name('leads.ai-morning-brief');
         Route::get('/leads-check-followups', [LeadController::class, 'checkTodaysFollowUps'])->name('leads.check.followups');
         Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
     });
@@ -109,6 +112,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/revenue', [FinanceController::class, 'index'])->name('appointments.revenue.index');
     });
     Route::middleware('module:finance,edit')->group(function () {
+        Route::get('/appointments/{appointment}/payment', [AppointmentController::class, 'payment'])->name('appointments.payment');
         Route::get('/appointments/{appointment}/payment', [AppointmentController::class, 'payment'])->name('appointments.revenue.payment');
         Route::post('/appointments/{appointment}/payment', [AppointmentController::class, 'storePayment'])->name('appointments.revenue.storePayment');
         Route::post('/expenses', [FinanceController::class, 'storeExpense'])->name('expenses.store');
@@ -128,6 +132,7 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/staffs/{staff}/wages', [StaffController::class, 'updateWages'])->name('staffs.wages.update');
         Route::put('/staffs/{staff}/workspace', [StaffController::class, 'updateWorkspace'])->name('staffs.workspace.update');
         Route::delete('/staffs/{staff}', [StaffController::class, 'destroy'])->name('staffs.destroy');
+        Route::post('/staff-payroll/post-to-finance', [StaffController::class, 'postPayrollToFinance'])->name('staff.payroll.post-to-finance');
         Route::post('/scheduled-shifts/{staff}/pattern', [ShiftController::class, 'savePattern'])->name('shifts.pattern.store');
         Route::post('/scheduled-shifts/{staff}/time-off', [ShiftController::class, 'storeTimeOff'])->name('shifts.timeoff.store');
         Route::delete('/scheduled-shifts/time-off/{timeOff}', [ShiftController::class, 'destroyTimeOff'])->name('shifts.timeoff.destroy');
@@ -190,6 +195,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
     });
     Route::middleware('module:clients,edit')->group(function () {
+        Route::post('/customers', [CustomerController::class, 'store'])->name('customers.store');
         Route::put('/customers/{customer}', [CustomerController::class, 'update'])->name('customers.update');
         Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])->name('customers.destroy');
         Route::patch('/customers/{customer}/notes', [CustomerController::class, 'updateNotes'])->name('customers.notes.update');

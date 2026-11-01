@@ -59,6 +59,21 @@ class Staff extends Model
         return $this->hasMany(Appointment::class, 'staff_id');
     }
 
+    public function appointmentServices()
+    {
+        return $this->hasMany(AppointmentService::class, 'staff_id');
+    }
+
+    public function saleItems()
+    {
+        return $this->hasMany(SaleItem::class, 'staff_id');
+    }
+
+    public function staffBlocks()
+    {
+        return $this->hasMany(StaffBlock::class, 'staff_id');
+    }
+
     public function upsells()
     {
         return $this->hasMany(AppointmentUpsell::class);
@@ -71,9 +86,14 @@ class Staff extends Model
      */
     public function scopeActive($query)
     {
+        $today = now()->toDateString();
+
         return $query->where('bookable', true)
-            ->where(function ($q) {
-                $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+            ->where(function ($q) use ($today) {
+                $q->whereNull('start_date')->orWhereDate('start_date', '<=', $today);
+            })
+            ->where(function ($q) use ($today) {
+                $q->whereNull('end_date')->orWhereDate('end_date', '>=', $today);
             });
     }
 

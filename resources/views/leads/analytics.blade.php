@@ -139,6 +139,86 @@
         color: #eab308;
         border: 1px solid rgba(234, 179, 8, 0.35);
     }
+
+    .la-diagnosis-card {
+        background: linear-gradient(135deg, rgba(36, 28, 25, 0.85) 0%, rgba(26, 20, 18, 0.92) 100%);
+        border: 1px solid rgba(201, 166, 107, 0.32);
+        border-left: 4px solid #c9a66b;
+        border-radius: 14px;
+        margin-bottom: 16px;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.2);
+    }
+
+    .la-diag-header {
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.15s ease;
+        border-radius: 10px;
+    }
+
+    .la-diag-header:hover {
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    .la-diag-preview-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 9px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: #f2e6e2;
+        white-space: nowrap;
+    }
+
+    .la-diag-item {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 12px 14px;
+        height: 100%;
+    }
+
+    .la-diag-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 8px;
+    }
+
+    .la-diag-badge.diag-bottleneck {
+        background: rgba(217, 143, 131, 0.18);
+        color: #f4b2a7;
+        border: 1px solid rgba(217, 143, 131, 0.35);
+    }
+
+    .la-diag-badge.diag-speed {
+        background: rgba(245, 158, 11, 0.16);
+        color: #fcd34d;
+        border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    .la-diag-badge.diag-recovery {
+        background: rgba(74, 222, 128, 0.15);
+        color: #86efac;
+        border: 1px solid rgba(74, 222, 128, 0.35);
+    }
+
+    .la-diag-text {
+        font-size: 13px;
+        line-height: 1.5;
+        color: #f2e6e2;
+        margin: 0;
+    }
 </style>
 
 @section('content')
@@ -235,6 +315,105 @@
                 </div>
                 <div class="la-kpi-value" style="color:#a8524a;">{{ number_format($followupPerformance['overdue']) }}</div>
                 <div class="la-kpi-sub">Live snapshot &middot; requires immediate action</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI FUNNEL DIAGNOSIS CARD -->
+    <div class="la-diagnosis-card py-2.5 px-4" id="aiFunnelDiagnosisCard" style="padding: 10px 16px;" x-data="{
+        isOpen: false,
+        bottleneck: @js($aiDiagnosis['bottleneck'] ?? ''),
+        speedAlert: @js($aiDiagnosis['speed_alert'] ?? ''),
+        recoveryPlay: @js($aiDiagnosis['recovery_play'] ?? ''),
+        isLoading: false,
+        errorMsg: '',
+        refreshDiagnosis() {
+            if (this.isLoading) return;
+            this.isLoading = true;
+            this.errorMsg = '';
+            fetch('{{ route('leads.analytics.ai-diagnosis') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    period: @js($period ?? 'this_month'),
+                    start_date: @js($startDate ?? ''),
+                    end_date: @js($endDate ?? '')
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.success) {
+                    this.bottleneck = data.bottleneck || (data.diagnosis && data.diagnosis.bottleneck) || this.bottleneck;
+                    this.speedAlert = data.speed_alert || (data.diagnosis && data.diagnosis.speed_alert) || this.speedAlert;
+                    this.recoveryPlay = data.recovery_play || (data.diagnosis && data.diagnosis.recovery_play) || this.recoveryPlay;
+                } else {
+                    this.errorMsg = 'Could not refresh diagnosis. Please try again.';
+                }
+            })
+            .catch(() => {
+                this.errorMsg = 'Network error while running AI diagnosis.';
+            })
+            .finally(() => {
+                this.isLoading = false;
+            });
+        }
+    }">
+        <div class="la-diag-header d-flex justify-content-between align-items-center flex-wrap gap-2 cursor-pointer" @click="isOpen = !isOpen">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <i class="bx fs-5" :class="isOpen ? 'bx-chevron-down' : 'bx-chevron-right'" style="color: #f3d9a4; transition: transform 0.2s ease;"></i>
+                <h6 class="fw-bold mb-0" style="color: #f3d9a4; font-size: 14px;">
+                    🧠 AI Funnel Diagnosis &mdash; &ldquo;Why Are We Losing Leads?&rdquo;
+                </h6>
+                <div class="d-inline-flex align-items-center flex-wrap gap-2 ms-1" x-show="!isOpen">
+                    <span class="la-diag-preview-pill">
+                        ⚡ {{ $overdueCount ?? ($followupPerformance['overdue'] ?? 0) }} Overdue
+                    </span>
+                    <span class="la-diag-preview-pill">
+                        💰 ~{{ number_format($openPipelineQar ?? ($aiDiagnosis['metrics']['recoverable_qar'] ?? 0)) }} QAR Open Pipeline
+                    </span>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button"
+                    class="btn btn-sm btn-primary px-3 py-1"
+                    @click.stop="isOpen = true; refreshDiagnosis()"
+                    :disabled="isLoading">
+                    <span x-show="!isLoading">✨ Refresh AI Diagnosis</span>
+                    <span x-show="isLoading" x-cloak>
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        Analyzing Funnel...
+                    </span>
+                </button>
+                <span class="small fw-semibold" style="color: var(--la-muted); font-size: 12px;" x-text="isOpen ? 'Hide' : 'Show'">Show / Hide</span>
+            </div>
+        </div>
+
+        <div x-show="isOpen" x-transition.opacity.duration.200ms x-cloak class="mt-3 pt-2" style="border-top: 1px solid rgba(255, 255, 255, 0.08);">
+            <div x-show="errorMsg" x-cloak class="text-danger small mb-2" x-text="errorMsg"></div>
+
+            <div class="row g-3">
+                <div class="col-lg-4">
+                    <div class="la-diag-item">
+                        <span class="la-diag-badge diag-bottleneck">🎯 Bottleneck Detected</span>
+                        <p id="diagBottleneckText" class="la-diag-text" x-text="bottleneck">{{ $aiDiagnosis['bottleneck'] ?? '' }}</p>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="la-diag-item">
+                        <span class="la-diag-badge diag-speed">⚡ Agent Speed Alert</span>
+                        <p id="diagSpeedAlertText" class="la-diag-text" x-text="speedAlert">{{ $aiDiagnosis['speed_alert'] ?? '' }}</p>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="la-diag-item">
+                        <span class="la-diag-badge diag-recovery">💰 Cash Recovery Play</span>
+                        <p id="diagRecoveryPlayText" class="la-diag-text" x-text="recoveryPlay">{{ $aiDiagnosis['recovery_play'] ?? '' }}</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

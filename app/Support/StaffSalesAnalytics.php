@@ -22,6 +22,7 @@ class StaffSalesAnalytics
     const BRANCHES = [
         'old_airport' => 'Old Airport',
         'wakrah' => 'Al Wakrah',
+        'home_service' => 'Home Service',
     ];
 
     public function __construct(
@@ -68,6 +69,7 @@ class StaffSalesAnalytics
             ->join('appointments', 'appointments.id', '=', 'appointment_upsells.appointment_id')
             ->whereNotNull('appointment_upsells.staff_id')
             ->where('appointments.branch', $branch)
+            ->whereNotIn('appointments.status', ['cancelled', 'no_show'])
             ->whereBetween('appointments.appointment_datetime', [$from, $to])
             ->groupBy('appointment_upsells.staff_id')
             ->selectRaw('appointment_upsells.staff_id, SUM(appointment_upsells.amount) as total')
@@ -82,6 +84,7 @@ class StaffSalesAnalytics
         return AppointmentUpsell::query()
             ->join('appointments', 'appointments.id', '=', 'appointment_upsells.appointment_id')
             ->whereNotNull('appointment_upsells.staff_id')
+            ->whereNotIn('appointments.status', ['cancelled', 'no_show'])
             ->whereBetween('appointments.appointment_datetime', [$from, $to])
             ->groupBy('appointment_upsells.staff_id')
             ->selectRaw('appointment_upsells.staff_id, SUM(appointment_upsells.amount) as total')

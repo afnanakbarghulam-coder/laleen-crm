@@ -339,14 +339,15 @@
         <div class="col-md-6 col-xl-3">
             <div class="bk-kpi-card">
                 <div class="bk-kpi-top">
-                    <span class="bk-kpi-label">Total Revenue</span>
+                    <span class="bk-kpi-label">Scheduled Pipeline</span>
                     <span class="bk-kpi-icon" style="background:rgba(142,168,138,.12); color:#7fa876;">
                         <i class="bx bx-money"></i>
                     </span>
                 </div>
-                <div class="bk-kpi-value">{{ number_format($totalRevenue, 2) }} <small class="fs-6 fw-semibold text-muted">QAR</small></div>
-                <div class="bk-kpi-sub">
-                    <span>Across all booking statuses</span>
+                <div class="bk-kpi-value">{{ number_format($projectedRevenue ?? $totalRevenue, 2) }} <small class="fs-6 fw-semibold text-muted">QAR</small></div>
+                <div class="bk-kpi-sub flex-wrap">
+                    <span>Collected (Paid): <b>{{ number_format($collectedRevenue ?? 0, 2) }} QAR</b></span>
+                    <span>Excludes cancelled &amp; no-show</span>
                 </div>
             </div>
         </div>
@@ -361,7 +362,7 @@
                 </div>
                 <div class="bk-kpi-value">{{ number_format($avgBookingValue, 2) }} <small class="fs-6 fw-semibold text-muted">QAR</small></div>
                 <div class="bk-kpi-sub">
-                    <span>Revenue &divide; total bookings</span>
+                    <span>Active pipeline &divide; {{ number_format($activeBookingsCount ?? $totalBookings) }} active bookings</span>
                 </div>
             </div>
         </div>
@@ -472,9 +473,13 @@
                     @forelse($appointments as $appointment)
                         <tr>
                             <td>
-                                <button type="button" class="btn btn-link p-0" onclick="showCustomerProfile('{{ $appointment->phone }}')">
-                                    {{ $appointment->customer_name }}
-                                </button>
+                                @if (!empty($appointment->phone))
+                                    <button type="button" class="btn btn-link p-0" onclick="showCustomerProfile('{{ $appointment->phone }}')">
+                                        {{ $appointment->customer_name }}
+                                    </button>
+                                @else
+                                    <span>{{ $appointment->customer_name ?: 'Walk-in' }}</span>
+                                @endif
                             </td>
                             <td>{{ $appointment->phone }}</td>
                             <td>{{ $appointment->service_name }}</td>
@@ -490,8 +495,9 @@
                             </td>
                             <td>{{ $appointment->agent->name ?? '—' }}</td>
                             <td>
-                                @if (auth()->user()->canEdit('bookings'))
+                                @if (auth()->user()->canEdit('bookings') || auth()->user()->canEdit('finance'))
                                     @php
+                                        $isPaidBooking = (bool) ($appointment->paid_at || $appointment->sale);
                                         $apptData = [
                                             'id' => $appointment->id,
                                             'customer_name' => $appointment->customer_name,
@@ -503,25 +509,36 @@
                                             'staff_id' => $appointment->staff_id,
                                             'staff_name' => $appointment->staff->name ?? null,
                                             'status' => $appointment->status,
+                                            'is_paid' => $isPaidBooking,
+                                            'payment_url' => route('appointments.revenue.payment', $appointment->id),
                                             'price' => (float) $appointment->price,
                                         ];
                                     @endphp
                                     <div class="d-flex gap-2 justify-content-center">
-                                        <button type="button" class="btn btn-sm btn-outline-primary"
-                                            data-appt="{{ json_encode($apptData) }}"
-                                            onclick="openBookingEditModal(this)">
-                                            <i class="bx bx-edit-alt"></i>
-                                            {{ in_array($appointment->status, ['cancelled', 'no_show']) ? 'Reschedule' : 'Edit' }}
-                                        </button>
+                                        @if (auth()->user()->canEdit('finance') && !$isPaidBooking && !in_array($appointment->status, ['cancelled', 'no_show']))
+                                            <a href="{{ route('appointments.revenue.payment', $appointment->id) }}"
+                                                class="btn btn-sm btn-outline-success" title="Checkout &amp; Record Payment">
+                                                💳 Checkout
+                                            </a>
+                                        @endif
 
-                                        <form action="{{ route('appointments.destroy', $appointment->id) }}" method="POST"
-                                            onsubmit="return confirm('Are you sure you want to delete this booking? This action cannot be undone.');">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Booking">
-                                                <i class="bx bx-trash"></i>
+                                        @if (auth()->user()->canEdit('bookings'))
+                                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                                data-appt="{{ json_encode($apptData) }}"
+                                                onclick="openBookingEditModal(this)">
+                                                <i class="bx bx-edit-alt"></i>
+                                                {{ in_array($appointment->status, ['cancelled', 'no_show']) ? 'Reschedule' : 'Edit' }}
                                             </button>
-                                        </form>
+
+                                            <form action="{{ route('appointments.destroy', $appointment->id) }}" method="POST"
+                                                onsubmit="return confirm('Are you sure you want to delete this booking? This action cannot be undone.');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Booking">
+                                                    <i class="bx bx-trash"></i>
+                                                </button>
+                                            </form>
+                                        @endif
                                     </div>
                                 @endif
                             </td>
@@ -579,10 +596,13 @@
                                     <option value="pending">Pending</option>
                                     <option value="arrived">Arrived</option>
                                     <option value="in_progress">In Progress</option>
-                                    <option value="completed">Completed</option>
+                                    <option value="completed" id="editStatusCompletedOpt">Completed (Checkout Required)</option>
                                     <option value="no_show">No Show</option>
                                     <option value="cancelled">Cancelled</option>
                                 </select>
+                                <small class="text-warning d-none" id="editStatusCheckoutHint">
+                                    Selecting Completed on an unpaid booking will redirect you to Checkout.
+                                </small>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Date</label>
@@ -638,7 +658,8 @@
 @section('scripts')
     <script>
         function showCustomerProfile(phone) {
-            fetch(`/appointments/customer-profile/${phone}`)
+            if (!phone || !String(phone).trim()) return;
+            fetch(`/appointments/customer-profile/${encodeURIComponent(phone)}`)
                 .then(res => {
                     if (!res.ok) throw new Error();
                     return res.json();

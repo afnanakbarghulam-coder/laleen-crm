@@ -84,10 +84,18 @@ class StaffOvertimeController extends Controller
         $staff = Staff::findOrFail($data['staff_id']);
         $baseSalary = (float) ($staff->base_salary ?? 0);
         $daysInMonth = Carbon::parse($data['entry_date'])->daysInMonth;
-        $dynamicHourlyRate = round(($baseSalary / $daysInMonth) / StaffOvertimeEntry::SHIFT_HOURS, 2);
+        $dynamicHourlyRate = $daysInMonth > 0 ? round(($baseSalary / $daysInMonth) / StaffOvertimeEntry::SHIFT_HOURS, 2) : 0;
 
         $data['hours'] = $totalDecimalHours;
-        $data['rate'] = $dynamicHourlyRate;
+        if (isset($data['rate']) && $data['rate'] !== null && (float) $data['rate'] > 0) {
+            $data['rate'] = round((float) $data['rate'], 2);
+        } elseif ($baseSalary > 0) {
+            $data['rate'] = $dynamicHourlyRate;
+        } else {
+            $data['rate'] = $staff->hourly_wage !== null && (float) $staff->hourly_wage > 0
+                ? round((float) $staff->hourly_wage, 2)
+                : null;
+        }
 
         return $data;
     }

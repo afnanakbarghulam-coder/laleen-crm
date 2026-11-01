@@ -6,12 +6,16 @@ use App\Models\User;
 use App\Models\Staff;
 use App\Models\Service;
 use App\Models\ServiceCategory;
+use App\Models\Appointment;
+use App\Models\AppointmentService;
+use App\Models\Expense;
 use App\Models\StaffComplaint;
 use App\Models\StaffDeduction;
 use App\Models\StaffNotice;
 use App\Models\StaffOvertimeEntry;
 use App\Support\StaffPayrollCalculator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -204,9 +208,17 @@ class StaffController extends Controller
             'profile_picture' => $profilePath,
         ]));
 
-        // Branch and services are managed on the Staff Workspace tab, not
-        // this form - a new member starts with the branch column's own
-        // default ('both') and no services until set up there.
+        if ($request->filled('service_ids') || $request->filled('skills')) {
+            $rawSkills = collect($request->input('service_ids', $request->input('skills', [])))->filter();
+            $numericIds = $rawSkills->filter(fn ($v) => is_numeric($v))->map(fn ($v) => (int) $v);
+            $stringNames = $rawSkills->reject(fn ($v) => is_numeric($v))->values();
+            $resolvedIds = $numericIds;
+            if ($stringNames->isNotEmpty()) {
+                $resolvedIds = $resolvedIds->merge(Service::whereIn('name', $stringNames)->pluck('id'));
+            }
+            $staff->services()->sync($resolvedIds->unique()->values()->all());
+        }
+
         $this->syncAccess($request, $staff);
 
         return redirect()->back()->with('success', 'Staff member added.');
@@ -276,8 +288,122 @@ class StaffController extends Controller
 
     public function destroy(Staff $staff)
     {
+        if ($staff->user_id) {
+            User::where('id', $staff->user_id)->update(['is_active' => false]);
+        }
+
+        // Move any open/upcoming appointments assigned to this staff member
+        // into the Unscheduled Queue (start_time = null) so deleting a staff
+        // member never leaves invisible ghost bookings on the Calendar.
+        $openAppointments = Appointment::with('appointmentServices')
+            ->whereNotIn('status', ['completed', 'cancelled', 'no_show'])
+            ->where(function ($q) use ($staff) {
+                $q->where('staff_id', $staff->id)
+                    ->orWhereHas('appointmentServices', fn ($sq) => $sq->where('staff_id', $staff->id));
+            })
+            ->get();
+
+        foreach ($openAppointments as $appointment) {
+            AppointmentService::where('appointment_id', $appointment->id)
+                ->where('staff_id', $staff->id)
+                ->update(['staff_id' => null]);
+
+            $remainingStaffId = AppointmentService::where('appointment_id', $appointment->id)
+                ->whereNotNull('staff_id')
+                ->value('staff_id');
+
+            if ($remainingStaffId) {
+                $appointment->update(['staff_id' => $remainingStaffId]);
+            } else {
+                $bookingDate = $appointment->booking_date
+                    ?: ($appointment->appointment_datetime ? Carbon::parse($appointment->appointment_datetime)->toDateString() : now()->toDateString());
+
+                $appointment->update([
+                    'staff_id' => null,
+                    'start_time' => null,
+                    'booking_date' => $bookingDate,
+                ]);
+            }
+        }
+
         $staff->delete();
         return redirect()->back()->with('success', 'Staff removed.');
+    }
+
+    /**
+     * Post calculated Net Payroll for the selected period & branch into the
+     * Finance Expenses table ('Salaries & Wages') idempotently using a
+     * deterministic period tag so repeat clicks update the existing record.
+     */
+    public function postPayrollToFinance(Request $request)
+    {
+        $from = $request->date('payroll_from') ?? $request->date('from') ?? now()->startOfMonth();
+        $to = $request->date('payroll_to') ?? $request->date('to') ?? now()->endOfMonth();
+        if ($from->gt($to)) {
+            [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
+        }
+
+        $rawBranch = $request->input('payroll_branch') ?? $request->input('branch');
+        $payrollBranch = in_array($rawBranch, ['old_airport', 'wakrah'], true) ? $rawBranch : null;
+
+        $calculator = new StaffPayrollCalculator($from, $to);
+        $staffQuery = Staff::active()->orderBy('name');
+        if ($payrollBranch) {
+            $staffQuery->where(fn ($q) => $q->where('branch', $payrollBranch)->orWhere('branch', 'both'));
+        }
+
+        $rows = $calculator->payrollFor($staffQuery->get());
+        $totalNetPayroll = round((float) $rows->sum('net_salary'), 2);
+
+        $tag = sprintf('[Payroll: %s to %s]', $from->format('Y-m-d'), $to->format('Y-m-d'));
+        $branchLabel = $payrollBranch === 'old_airport'
+            ? 'Old Airport'
+            : ($payrollBranch === 'wakrah' ? 'Al Wakrah' : 'All Branches');
+        $description = sprintf('%s Staff Payroll (%d staff) %s', $branchLabel, $rows->count(), $tag);
+
+        $existingQuery = Expense::where('category', 'Salaries & Wages')
+            ->where('description', 'like', '%' . $tag . '%');
+
+        if ($payrollBranch) {
+            $existingQuery->where('branch', $payrollBranch);
+        } else {
+            $existingQuery->whereNull('branch');
+        }
+
+        $expense = $existingQuery->first();
+
+        if ($expense) {
+            $expense->update([
+                'amount' => $totalNetPayroll,
+                'expense_date' => $to->toDateString(),
+                'description' => $description,
+            ]);
+        } else {
+            $expense = Expense::create([
+                'branch' => $payrollBranch,
+                'category' => 'Salaries & Wages',
+                'amount' => $totalNetPayroll,
+                'expense_date' => $to->toDateString(),
+                'description' => $description,
+                'created_by' => auth()->id(),
+            ]);
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Posted QAR " . number_format($totalNetPayroll, 2) . " payroll to Finance Expenses.",
+                'expense_id' => $expense->id,
+                'amount' => (float) $expense->amount,
+            ]);
+        }
+
+        return redirect()->route('staffs.index', array_filter([
+            'tab' => 'payroll',
+            'payroll_branch' => $payrollBranch,
+            'payroll_from' => $from->format('Y-m-d'),
+            'payroll_to' => $to->format('Y-m-d'),
+        ]))->with('success', "Posted QAR " . number_format($totalNetPayroll, 2) . " payroll to Finance Expenses.");
     }
 
     private function fullName(array $validated): string
@@ -348,8 +474,11 @@ class StaffController extends Controller
      */
     private function syncAccess(Request $request, Staff $staff): void
     {
-        if (!$request->boolean('has_access')) {
+        $hasAccess = $request->boolean('has_access') || $request->boolean('login_access');
+
+        if (!$hasAccess) {
             if ($staff->user_id) {
+                User::where('id', $staff->user_id)->update(['is_active' => false]);
                 $staff->update(['user_id' => null]);
             }
             return;
@@ -370,16 +499,19 @@ class StaffController extends Controller
         ]);
 
         if ($existingUserId) {
-            $user = $staff->user;
-            $user->role = $request->access_role;
-            if ($request->filled('access_email')) {
-                $user->email = $request->access_email;
+            $user = $staff->user ?? User::find($existingUserId);
+            if ($user) {
+                $user->role = $request->access_role;
+                $user->is_active = true;
+                if ($request->filled('access_email')) {
+                    $user->email = $request->access_email;
+                }
+                if ($request->filled('access_password')) {
+                    $user->password = Hash::make($request->access_password);
+                }
+                $user->save();
+                return;
             }
-            if ($request->filled('access_password')) {
-                $user->password = Hash::make($request->access_password);
-            }
-            $user->save();
-            return;
         }
 
         $user = User::create([
@@ -387,6 +519,7 @@ class StaffController extends Controller
             'email' => $request->access_email,
             'password' => Hash::make($request->access_password ?: str()->random(12)),
             'role' => $request->access_role,
+            'is_active' => true,
         ]);
 
         $staff->update(['user_id' => $user->id]);

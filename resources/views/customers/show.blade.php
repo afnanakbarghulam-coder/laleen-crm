@@ -205,8 +205,11 @@
         </div>
         <div class="col-6 col-md-3">
             <div class="profile-stat">
+                @php
+                    $lastCompletedVisit = $appointments->firstWhere('status', 'completed');
+                @endphp
                 <div class="value">
-                    {{ $past->isNotEmpty() ? $past->first()->appointment_datetime->format('d M Y') : '—' }}
+                    {{ $lastCompletedVisit ? $lastCompletedVisit->appointment_datetime->format('d M Y') : '—' }}
                 </div>
                 <div class="label">Last Visit</div>
             </div>
@@ -232,8 +235,8 @@
         </div>
         <div class="card-body">
             @php
-                $plannerColors = ['overdue' => '#a8524a', 'due_soon' => '#c9a66b', 'upcoming' => '#8aa6ab'];
-                $plannerLabels = ['overdue' => 'Overdue', 'due_soon' => 'Due Soon', 'upcoming' => 'On Track'];
+                $plannerColors = ['overdue' => '#a8524a', 'due_soon' => '#c9a66b', 'upcoming' => '#8aa6ab', 'scheduled' => '#8ea88a'];
+                $plannerLabels = ['overdue' => 'Overdue', 'due_soon' => 'Due Soon', 'upcoming' => 'On Track', 'scheduled' => 'Upcoming Booking'];
             @endphp
             @forelse ($maintenanceSchedule as $row)
                 <div class="planner-row">
@@ -245,9 +248,13 @@
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2">
-                        <span class="planner-status" style="background:{{ $plannerColors[$row->urgency] }}">
-                            {{ $plannerLabels[$row->urgency] }}
-                            {{ $row->days_until < 0 ? '· ' . abs($row->days_until) . 'd ago' : ($row->days_until === 0 ? '· today' : '· in ' . $row->days_until . 'd') }}
+                        <span class="planner-status" style="background:{{ $plannerColors[$row->urgency] ?? '#8aa6ab' }}">
+                            @if ($row->urgency === 'scheduled' && !empty($row->upcoming_appointment_date))
+                                Upcoming Booking on {{ $row->upcoming_appointment_date->format('d M') }}
+                            @else
+                                {{ $plannerLabels[$row->urgency] ?? 'On Track' }}
+                                {{ $row->days_until < 0 ? '· ' . abs($row->days_until) . 'd ago' : ($row->days_until === 0 ? '· today' : '· in ' . $row->days_until . 'd') }}
+                            @endif
                         </span>
                         <button type="button" class="btn btn-sm btn-outline-success wa-trigger"
                             data-name="{{ $customer->name ?? 'there' }}"
