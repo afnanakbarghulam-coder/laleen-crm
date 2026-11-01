@@ -2,27 +2,86 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
-use App\Models\Sale;
+use App\Models\Appointment;
+use App\Models\Customer;
 use App\Models\KpiAdsConversionReport;
 use App\Models\KpiAgentTargetReport;
 use App\Models\KpiChatEvaluation;
 use App\Models\KpiContentReport;
+use App\Models\Lead;
+use App\Models\Sale;
+use App\Models\SocialContentPlan;
+use App\Models\Staff;
+use App\Models\User;
 use App\Support\StaffSalesAnalytics;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
 
-    public function dashboard()
+    public function dashboard(Request $request)
     {
-        // ---- This month's branch P&L + KPI highlights ----
-        $dashFrom = now()->startOfMonth();
-        $dashTo = now()->endOfDay();
+        // ---- Date range filter (defaults to start of current month -> today) ----
+        $dashFrom = $request->filled('date_from')
+            ? Carbon::parse($request->input('date_from'))->startOfDay()
+            : now()->startOfMonth();
+        $dashTo = $request->filled('date_to')
+            ? Carbon::parse($request->input('date_to'))->endOfDay()
+            : now()->endOfDay();
+
+        if ($dashFrom->gt($dashTo)) {
+            [$dashFrom, $dashTo] = [$dashTo->copy()->startOfDay(), $dashFrom->copy()->endOfDay()];
+        }
+
         $user = Auth::user();
+
+        // ---- Live Today Operational Salon Pulse ----
+        $todayStr = today()->toDateString();
+        $todayAppointments = Appointment::whereNotIn('status', ['cancelled', 'no_show'])
+            ->where(function ($q) use ($todayStr) {
+                $q->whereDate('booking_date', $todayStr)
+                    ->orWhere(function ($sub) use ($todayStr) {
+                        $sub->whereNull('booking_date')
+                            ->whereDate('appointment_datetime', $todayStr);
+                    });
+            })
+            ->count();
+
+        $todayCompletedAppointments = Appointment::where('status', 'completed')
+            ->where(function ($q) use ($todayStr) {
+                $q->whereDate('booking_date', $todayStr)
+                    ->orWhere(function ($sub) use ($todayStr) {
+                        $sub->whereNull('booking_date')
+                            ->whereDate('appointment_datetime', $todayStr);
+                    });
+            })
+            ->count();
+
+        $leadsDueToday = Lead::open()->whereDate('next_followup_date', $todayStr)->count();
+        $leadsOverdue = Lead::open()->whereNotNull('next_followup_date')->whereDate('next_followup_date', '<', $todayStr)->count();
+        $leadsUnscheduled = Lead::open()->whereNull('next_followup_date')->count();
+        $totalLeads = Lead::open()->count();
+        $pendingFollowups = $leadsDueToday + $leadsOverdue;
+
+        $availableStaff = Staff::active()->count();
+        $presentStaffCount = Staff::active()->where('availability_status', 'present')->count();
+        $totalClientsCount = Customer::count();
+
+        $operationalPulse = [
+            'today_appointments' => $todayAppointments,
+            'today_completed' => $todayCompletedAppointments,
+            'leads_due_today' => $leadsDueToday,
+            'leads_overdue' => $leadsOverdue,
+            'leads_unscheduled' => $leadsUnscheduled,
+            'total_open_leads' => $totalLeads,
+            'active_staff' => $availableStaff,
+            'present_staff' => $presentStaffCount,
+            'total_clients' => $totalClientsCount,
+        ];
 
         $branchPnl = null;
         if ($user->canView('finance')) {
@@ -89,7 +148,7 @@ class UserController extends Controller
                 },
             ];
 
-            $contentMetrics = KpiContentReport::overallMetrics($dashFrom, $dashTo);
+            $contentMetrics = $this->resolveDashboardContentMetrics($dashFrom, $dashTo);
             $contentColor = match ($contentMetrics['grade']) {
                 'Excellent', 'Pass' => 'green',
                 'Warning' => 'amber',
@@ -100,6 +159,13 @@ class UserController extends Controller
         return view('dashboard', compact(
             'dashFrom',
             'dashTo',
+            'operationalPulse',
+            'todayAppointments',
+            'todayCompletedAppointments',
+            'totalLeads',
+            'pendingFollowups',
+            'availableStaff',
+            'totalClientsCount',
             'branchPnl',
             'adsTotals',
             'adsColor',
@@ -109,6 +175,45 @@ class UserController extends Controller
             'contentMetrics',
             'contentColor'
         ));
+    }
+
+    /**
+     * Computes Content KPI compliance from the active Weekly Content Calendar
+     * (SocialContentPlan / social_content_plans) overlapping [$from, $to],
+     * falling back to legacy KpiContentReport::overallMetrics() only when no
+     * SocialContentPlan rows exist for the period.
+     */
+    private function resolveDashboardContentMetrics(\Illuminate\Support\Carbon|Carbon $from, \Illuminate\Support\Carbon|Carbon $to): array
+    {
+        $startWeek = Carbon::instance($from)->startOfWeek(Carbon::MONDAY)->toDateString();
+        $endWeek = Carbon::instance($to)->startOfWeek(Carbon::MONDAY)->toDateString();
+
+        $socialPlans = SocialContentPlan::query()
+            ->whereBetween('week_start_date', [$startWeek, $endWeek])
+            ->get();
+
+        if ($socialPlans->isNotEmpty()) {
+            $weeksCount = max(1, $socialPlans->pluck('week_start_date')->unique()->count());
+            $reelsPosted = $socialPlans->where('is_reel_posted', true)->where('is_reel_skipped', false)->count();
+            $storiesPosted = $socialPlans->where('are_stories_posted', true)->count();
+
+            $reelsTarget = $weeksCount * SocialContentPlan::WEEKLY_REEL_TARGET;
+            $storiesTarget = $weeksCount * SocialContentPlan::WEEKLY_STORIES_TARGET;
+            $totalTarget = $reelsTarget + $storiesTarget;
+
+            $completed = min($reelsPosted, $reelsTarget) + min($storiesPosted, $storiesTarget);
+            $overall = $totalTarget > 0 ? min(100.0, round(($completed / $totalTarget) * 100, 1)) : 0.0;
+
+            return [
+                'overall' => $overall,
+                'grade' => KpiContentReport::gradeFor($overall),
+                'entry_count' => $socialPlans->count(),
+                'reels_posted' => $reelsPosted,
+                'stories_posted' => $storiesPosted,
+            ];
+        }
+
+        return KpiContentReport::overallMetrics(Carbon::instance($from), Carbon::instance($to));
     }
 
     public function index(Request $request)

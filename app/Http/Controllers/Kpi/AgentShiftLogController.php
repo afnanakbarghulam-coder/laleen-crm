@@ -41,6 +41,7 @@ class AgentShiftLogController extends Controller
                 Rule::exists('users', 'id')->where('role', 'agent'),
                 Rule::unique('agent_shift_logs', 'user_id')
                     ->where('date', $request->date)
+                    ->where('shift', $request->shift)
                     ->ignore($agentShiftLog?->id),
             ],
             'shift' => ['required', Rule::in(array_keys(AgentShiftLog::SHIFTS))],
@@ -49,7 +50,7 @@ class AgentShiftLogController extends Controller
             // have the check-out time added later via edit once their shift ends.
             'check_out_time' => 'nullable|date_format:H:i|after:check_in_time',
         ], [
-            'user_id.unique' => 'This agent already has a shift logged for that date.',
+            'user_id.unique' => 'This agent already has this shift logged for that date.',
             'check_out_time.after' => 'Check-out time must be after check-in time.',
         ]);
     }

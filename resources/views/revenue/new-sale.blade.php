@@ -287,13 +287,26 @@
                 </div>
 
                 <div class="checkout-section">
-                    <h6>Branch</h6>
-                    <select name="branch" class="form-select form-select-sm" required>
-                        <option value="">-- Select Branch --</option>
-                        <option value="old_airport">Old Airport</option>
-                        <option value="wakrah">Wakrah</option>
-                        <option value="home_service">Home Service</option>
-                    </select>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <h6>Branch</h6>
+                            <select name="branch" class="form-select form-select-sm" required>
+                                <option value="">-- Select Branch --</option>
+                                <option value="old_airport">Old Airport</option>
+                                <option value="wakrah">Wakrah</option>
+                                <option value="home_service">Home Service</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <h6>Sold By (Optional)</h6>
+                            <select name="staff_id" class="form-select form-select-sm">
+                                <option value="">-- Unassigned --</option>
+                                @foreach ($staffList ?? [] as $member)
+                                    <option value="{{ $member->id }}">{{ $member->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="checkout-section">

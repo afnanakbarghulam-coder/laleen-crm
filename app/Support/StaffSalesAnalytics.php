@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\AppointmentUpsell;
+use App\Models\SaleItem;
 use App\Models\Staff;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -60,35 +61,68 @@ class StaffSalesAnalytics
         return [$this->dateFrom->copy()->startOfDay(), $this->dateTo->copy()->endOfDay()];
     }
 
-    /** Every staff member's upsell total for a branch within the range, keyed by staff_id. */
+    /** Every staff member's paid upsell + retail product sales total for a branch within the range, keyed by staff_id. */
     private function upsellTotalsForBranch(string $branch): Collection
     {
         [$from, $to] = $this->dateRangeBounds();
 
-        return AppointmentUpsell::query()
+        $upsells = AppointmentUpsell::query()
             ->join('appointments', 'appointments.id', '=', 'appointment_upsells.appointment_id')
             ->whereNotNull('appointment_upsells.staff_id')
             ->where('appointments.branch', $branch)
-            ->whereNotIn('appointments.status', ['cancelled', 'no_show'])
+            ->where('appointments.status', 'completed')
             ->whereBetween('appointments.appointment_datetime', [$from, $to])
             ->groupBy('appointment_upsells.staff_id')
             ->selectRaw('appointment_upsells.staff_id, SUM(appointment_upsells.amount) as total')
             ->pluck('total', 'staff_id');
+
+        $productSales = SaleItem::query()
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->where('sale_items.type', 'product')
+            ->whereNotNull('sale_items.staff_id')
+            ->where('sales.branch', $branch)
+            ->where('sale_items.name', 'not like', '%(Upsell)')
+            ->whereBetween('sales.created_at', [$from, $to])
+            ->groupBy('sale_items.staff_id')
+            ->selectRaw('sale_items.staff_id, SUM(sale_items.total) as total')
+            ->pluck('total', 'staff_id');
+
+        $allStaffIds = $upsells->keys()->merge($productSales->keys())->unique();
+
+        return $allStaffIds->mapWithKeys(fn ($staffId) => [
+            $staffId => round((float) $upsells->get($staffId, 0) + (float) $productSales->get($staffId, 0), 2),
+        ]);
     }
 
-    /** Every staff member's upsell total across ALL branches within the range. */
+    /** Every staff member's paid upsell + retail product sales total across ALL branches within the range. */
     private function upsellTotalsOverall(): Collection
     {
         [$from, $to] = $this->dateRangeBounds();
 
-        return AppointmentUpsell::query()
+        $upsells = AppointmentUpsell::query()
             ->join('appointments', 'appointments.id', '=', 'appointment_upsells.appointment_id')
             ->whereNotNull('appointment_upsells.staff_id')
-            ->whereNotIn('appointments.status', ['cancelled', 'no_show'])
+            ->where('appointments.status', 'completed')
             ->whereBetween('appointments.appointment_datetime', [$from, $to])
             ->groupBy('appointment_upsells.staff_id')
             ->selectRaw('appointment_upsells.staff_id, SUM(appointment_upsells.amount) as total')
             ->pluck('total', 'staff_id');
+
+        $productSales = SaleItem::query()
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->where('sale_items.type', 'product')
+            ->whereNotNull('sale_items.staff_id')
+            ->where('sale_items.name', 'not like', '%(Upsell)')
+            ->whereBetween('sales.created_at', [$from, $to])
+            ->groupBy('sale_items.staff_id')
+            ->selectRaw('sale_items.staff_id, SUM(sale_items.total) as total')
+            ->pluck('total', 'staff_id');
+
+        $allStaffIds = $upsells->keys()->merge($productSales->keys())->unique();
+
+        return $allStaffIds->mapWithKeys(fn ($staffId) => [
+            $staffId => round((float) $upsells->get($staffId, 0) + (float) $productSales->get($staffId, 0), 2),
+        ]);
     }
 
     /** Active staff who normally work a branch (or 'both'), union'd with anyone who actually earned upsell there. */
@@ -189,13 +223,15 @@ class StaffSalesAnalytics
             return array_merge(['key' => $key, 'label' => $label], $totals);
         })->values();
 
-        $leading = $branches->sortByDesc('team_total')->first();
+        $sorted = $branches->sortByDesc('team_total')->values();
+        $leading = $sorted->first();
+        $runnerUp = $sorted->get(1);
 
         return [
             'branches' => $branches,
             'leading_branch' => $leading && $leading['team_total'] > 0 ? $leading['label'] : null,
-            'gap' => $branches->count() === 2
-                ? round(abs($branches[0]['team_total'] - $branches[1]['team_total']), 2)
+            'gap' => ($leading && $runnerUp)
+                ? round(abs((float) $leading['team_total'] - (float) $runnerUp['team_total']), 2)
                 : 0,
         ];
     }

@@ -463,14 +463,119 @@
 <div class="dash-glass">
 <div class="row g-4">
 
-    <!-- Welcome Card -->
+    <!-- Welcome & Date Range Filter Bar -->
     <div class="col-12">
         <div class="card dashboard-card p-4">
-            <h4 class="fw-bold mb-1">Welcome to Laleen Ops 💇‍♀️</h4>
-            <p class="text-muted mb-0">Manage appointments, leads, staff, performance and customer experience.</p>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div>
+                    <h4 class="fw-bold mb-1">Welcome to Laleen Ops 💇‍♀️</h4>
+                    <p class="text-muted mb-0">Manage appointments, leads, staff, performance and customer experience.</p>
+                </div>
+                <form method="GET" action="{{ route('dashboard') }}" class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="d-flex align-items-center gap-1">
+                        <span class="small text-muted">From</span>
+                        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ $dashFrom->format('Y-m-d') }}">
+                    </div>
+                    <div class="d-flex align-items-center gap-1">
+                        <span class="small text-muted">To</span>
+                        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ $dashTo->format('Y-m-d') }}">
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+                    @if (request()->filled('date_from') || request()->filled('date_to'))
+                        <a href="{{ route('dashboard') }}" class="btn btn-sm btn-outline-secondary">Reset</a>
+                    @endif
+                </form>
+            </div>
         </div>
     </div>
 
+</div>
+
+<!-- Live Today Operational Salon Pulse -->
+<div class="section-heading">
+    <h5 class="fw-bold mb-0"><span class="live-dot"></span>Live Today Salon Pulse</h5>
+    <span class="section-link">{{ now()->format('l, d M Y') }}</span>
+</div>
+<div class="row g-3 mb-3">
+    @moduleView('bookings')
+    <div class="col-md-6 col-xl-3">
+        <a href="{{ route('appointments.calendar') }}" class="text-decoration-none">
+            <div class="card dashboard-card h-100 shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="dashboard-title">📅 Today's Appointments</div>
+                        <div class="dashboard-value">{{ $operationalPulse['today_appointments'] ?? 0 }}</div>
+                        <div class="small text-muted mt-1">{{ $operationalPulse['today_completed'] ?? 0 }} completed today</div>
+                    </div>
+                    <div class="icon-circle bg-primary-light text-primary">
+                        <i class="bx bx-calendar fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    @endmoduleView
+
+    @moduleView('leads')
+    <div class="col-md-6 col-xl-3">
+        <a href="{{ route('leads.index') }}" class="text-decoration-none">
+            <div class="card dashboard-card h-100 shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="dashboard-title">📞 Leads Action Queue</div>
+                        <div class="dashboard-value">{{ ($operationalPulse['leads_due_today'] ?? 0) + ($operationalPulse['leads_overdue'] ?? 0) }}</div>
+                        <div class="small text-muted mt-1">
+                            {{ $operationalPulse['leads_due_today'] ?? 0 }} due today ·
+                            {{ $operationalPulse['leads_overdue'] ?? 0 }} overdue ·
+                            {{ $operationalPulse['leads_unscheduled'] ?? 0 }} unscheduled
+                        </div>
+                    </div>
+                    <div class="icon-circle bg-warning-light text-warning">
+                        <i class="bx bx-phone-call fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    @endmoduleView
+
+    @moduleView('staff_management')
+    <div class="col-md-6 col-xl-3">
+        <a href="{{ route('staffs.index') }}" class="text-decoration-none">
+            <div class="card dashboard-card h-100 shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="dashboard-title">👩‍💼 Active Staff on Duty</div>
+                        <div class="dashboard-value">{{ $operationalPulse['active_staff'] ?? 0 }}</div>
+                        <div class="small text-muted mt-1">{{ $operationalPulse['present_staff'] ?? 0 }} marked present</div>
+                    </div>
+                    <div class="icon-circle bg-purple-light text-purple">
+                        <i class="bx bx-group fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    @endmoduleView
+
+    @moduleView('clients')
+    <div class="col-md-6 col-xl-3">
+        <a href="{{ route('customers.index') }}" class="text-decoration-none">
+            <div class="card dashboard-card h-100 shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="dashboard-title">💎 Total Active Clients</div>
+                        <div class="dashboard-value">{{ $operationalPulse['total_clients'] ?? 0 }}</div>
+                        <div class="small text-muted mt-1">View client profiles &amp; packages</div>
+                    </div>
+                    <div class="icon-circle bg-success-light text-success">
+                        <i class="bx bx-diamond fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    @endmoduleView
 </div>
 
 @moduleView('finance')
@@ -610,7 +715,7 @@
 
         <!-- Content KPI compliance -->
         <div class="col-md-6 col-lg-4">
-            <a href="{{ route('kpi.content.index') }}" class="text-decoration-none">
+            <a href="{{ route('kpi.content-calendar.index') }}" class="text-decoration-none">
                 <div class="card dashboard-card h-100 shadow-sm">
                     <div class="card-body d-flex justify-content-between align-items-center">
                         <div>

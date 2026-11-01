@@ -10,12 +10,13 @@
         @endmoduleEdit
     </div>
 
-    <table class="table table-bordered">
+    <table class="table table-bordered align-middle">
         <thead>
             <tr>
                 <th>Name</th>
                 <th>SKU</th>
                 <th>Price (QAR)</th>
+                <th>Stock</th>
                 <th width="120">Actions</th>
             </tr>
         </thead>
@@ -25,6 +26,19 @@
                     <td>{{ $product->name }}</td>
                     <td>{{ $product->sku ?? '—' }}</td>
                     <td>{{ number_format($product->price, 2) }}</td>
+                    <td>
+                        @php
+                            $stockQty = (int) ($product->stock_quantity ?? 0);
+                            $lowThresh = (int) ($product->low_stock_threshold ?? 3);
+                        @endphp
+                        @if ($stockQty <= 0)
+                            <span class="badge bg-danger">{{ $stockQty }} · Out of Stock</span>
+                        @elseif ($stockQty <= $lowThresh)
+                            <span class="badge bg-warning text-dark">{{ $stockQty }} · Low Stock</span>
+                        @else
+                            <span class="badge bg-success">{{ $stockQty }} in stock</span>
+                        @endif
+                    </td>
                     <td class="text-nowrap">
                         @moduleEdit('products')
                             <button type="button" class="btn btn-sm btn-outline-warning edit-btn" data-product='@json($product)' title="Edit">
@@ -42,7 +56,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="4" class="text-center">No products yet</td>
+                    <td colspan="5" class="text-center">No products yet</td>
                 </tr>
             @endforelse
         </tbody>
@@ -68,6 +82,12 @@
                 document.getElementById('productName').value = product.name;
                 document.getElementById('productSku').value = product.sku ?? '';
                 document.getElementById('productPrice').value = product.price;
+                if (document.getElementById('productStock')) {
+                    document.getElementById('productStock').value = product.stock_quantity ?? 0;
+                }
+                if (document.getElementById('productLowStockThreshold')) {
+                    document.getElementById('productLowStockThreshold').value = product.low_stock_threshold ?? 3;
+                }
 
                 modal.show();
             }

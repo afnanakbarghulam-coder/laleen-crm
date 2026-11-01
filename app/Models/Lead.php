@@ -197,6 +197,14 @@ class Lead extends Model
         });
     }
 
+    public function scopeOpen($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('needful_done')
+                ->orWhereNotIn('needful_done', self::CLOSED_STATUSES);
+        });
+    }
+
     public function agent()
     {
         return $this->belongsTo(User::class, 'assigned_agent_id');

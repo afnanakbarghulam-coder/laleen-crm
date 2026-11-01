@@ -940,6 +940,21 @@ class AppointmentController extends Controller
 
             LoyaltyTransaction::where('sale_id', $sale->id)->delete();
 
+            // Restore inventory stock for any retail products sold on this appointment sale
+            $productSaleItems = $sale->items()
+                ->where('type', 'product')
+                ->whereNotNull('product_id')
+                ->get();
+
+            foreach ($productSaleItems as $item) {
+                $product = Product::find($item->product_id);
+                if ($product) {
+                    $product->update([
+                        'stock_quantity' => max(0, (int) $product->stock_quantity) + max(1, (int) $item->quantity),
+                    ]);
+                }
+            }
+
             $sale->items()->delete();
             $sale->payments()->delete();
             $sale->delete();
@@ -2943,6 +2958,7 @@ class AppointmentController extends Controller
             'products' => 'nullable|array',
             'products.*.product_id' => 'required_with:products|exists:products,id',
             'products.*.quantity' => 'required_with:products|integer|min:1',
+            'products.*.staff_id' => 'nullable|exists:staff,id',
             'payments.cash' => 'nullable|numeric|min:0',
             'payments.card' => 'nullable|numeric|min:0',
             'payments.online_transfer' => 'nullable|numeric|min:0',
@@ -3019,8 +3035,11 @@ class AppointmentController extends Controller
             $qty = (int) $line['quantity'];
             $lineTotal = $product->price * $qty;
             $productsTotal += $lineTotal;
+            $lineStaffId = !empty($line['staff_id']) ? (int) $line['staff_id'] : $appointment->staff_id;
             $productLines[] = [
+                'product' => $product,
                 'product_id' => $product->id,
+                'staff_id' => $lineStaffId,
                 'name' => $product->name,
                 'price' => $product->price,
                 'quantity' => $qty,
@@ -3190,10 +3209,17 @@ class AppointmentController extends Controller
                     'sale_id' => $sale->id,
                     'type' => 'product',
                     'product_id' => $line['product_id'],
+                    'staff_id' => $line['staff_id'] ?? $appointment->staff_id,
                     'name' => $line['name'],
                     'price' => $line['price'],
                     'quantity' => $line['quantity'],
                     'total' => $line['total'],
+                ]);
+
+                /** @var Product $productModel */
+                $productModel = $line['product'];
+                $productModel->update([
+                    'stock_quantity' => max(0, (int) $productModel->stock_quantity - (int) $line['quantity']),
                 ]);
             }
 
@@ -3202,12 +3228,21 @@ class AppointmentController extends Controller
                     'sale_id' => $sale->id,
                     'type' => $upsell->type,
                     'product_id' => $upsell->product_id,
-                    'staff_id' => $upsell->staff_id,
+                    'staff_id' => $upsell->staff_id ?? $appointment->staff_id,
                     'name' => $upsell->name . ' (Upsell)',
                     'price' => $upsell->amount,
                     'quantity' => 1,
                     'total' => $upsell->amount,
                 ]);
+
+                if ($upsell->type === 'product' && $upsell->product_id) {
+                    $upsellProduct = Product::find($upsell->product_id);
+                    if ($upsellProduct) {
+                        $upsellProduct->update([
+                            'stock_quantity' => max(0, (int) $upsellProduct->stock_quantity - 1),
+                        ]);
+                    }
+                }
             }
 
             foreach ($purchasedPackages as $pkg) {

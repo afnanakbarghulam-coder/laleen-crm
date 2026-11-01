@@ -63,9 +63,10 @@ class KpiAgentTargetReport extends Model
             return ['morning' => 0, 'evening' => 0];
         }
 
-        // "agentId|Y-m-d" => AgentShiftLog, so each booking can be matched to
-        // the specific shift its creating agent signed in for that day.
-        $logsByAgentAndDate = $logs->keyBy(fn ($log) => $log->user_id . '|' . $log->date->format('Y-m-d'));
+        // "agentId|Y-m-d" => Collection<AgentShiftLog>, so an agent who worked
+        // both morning and evening shifts on the same day has both shift windows
+        // evaluated without the second shift overwriting the first.
+        $logsByAgentAndDate = $logs->groupBy(fn ($log) => $log->user_id . '|' . $log->date->format('Y-m-d'));
         $agentIds = $logs->pluck('user_id')->unique();
 
         // Only bookings the agent account itself created (never a manager/
@@ -82,10 +83,13 @@ class KpiAgentTargetReport extends Model
 
         foreach ($appointments as $appointment) {
             $key = $appointment->created_by . '|' . $appointment->created_at->format('Y-m-d');
-            $log = $logsByAgentAndDate->get($key);
+            $dayLogs = $logsByAgentAndDate->get($key, collect());
 
-            if ($log && $appointment->created_at->between($log->windowStart(), $log->windowEnd())) {
-                $counts[$log->shift]++;
+            foreach ($dayLogs as $log) {
+                if (isset($counts[$log->shift]) && $appointment->created_at->between($log->windowStart(), $log->windowEnd())) {
+                    $counts[$log->shift]++;
+                    break;
+                }
             }
         }
 

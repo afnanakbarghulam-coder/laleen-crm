@@ -27,4 +27,29 @@ class Service extends Model
     {
         return $this->belongsToMany(Staff::class, 'service_staff');
     }
+
+    public function combos()
+    {
+        return $this->belongsToMany(Combo::class, 'combo_services');
+    }
+
+    public function appointmentServices()
+    {
+        return $this->hasMany(AppointmentService::class, 'service_id');
+    }
+
+    public function upsells()
+    {
+        return $this->hasMany(AppointmentUpsell::class, 'service_id');
+    }
+
+    public function complaints()
+    {
+        return $this->hasMany(StaffComplaint::class, 'service_id');
+    }
+
+    public function clientPackageServices()
+    {
+        return $this->hasMany(ClientPackageService::class, 'service_id');
+    }
 }

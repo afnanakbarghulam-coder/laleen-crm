@@ -26,6 +26,7 @@ class AdLeadEntry extends Model
     const BRANCHES = [
         'old_airport' => 'Old Airport',
         'wakrah' => 'Al Wakrah',
+        'home_service' => 'Home Service',
     ];
 
     protected $fillable = [

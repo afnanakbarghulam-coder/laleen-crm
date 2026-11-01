@@ -25,6 +25,17 @@
                         <label>Price (QAR)</label>
                         <input type="number" name="price" id="productPrice" class="form-control" step="0.01" min="0" required>
                     </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label>Stock Quantity</label>
+                            <input type="number" name="stock_quantity" id="productStock" class="form-control" min="0" step="1" value="0">
+                        </div>
+                        <div class="col-6">
+                            <label>Low Stock Alert At</label>
+                            <input type="number" name="low_stock_threshold" id="productLowStockThreshold" class="form-control" min="0" step="1" value="3">
+                        </div>
+                    </div>
                 </div>
 
                 <div class="modal-footer">

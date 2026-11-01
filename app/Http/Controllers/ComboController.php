@@ -40,8 +40,26 @@ class ComboController extends Controller
     public function update(Request $request, Combo $combo)
     {
         $data = $this->validated($request);
-        $serviceIds = $data['service_ids'];
+        $serviceIds = array_map('intval', $data['service_ids']);
         unset($data['service_ids']);
+
+        if ($combo->clientPackages()->where('status', 'active')->exists()) {
+            $existingServiceIds = $combo->services()->pluck('services.id')->map(fn ($id) => (int) $id)->all();
+            $removedServiceIds = array_diff($existingServiceIds, $serviceIds);
+
+            if (!empty($removedServiceIds)) {
+                throw ValidationException::withMessages([
+                    'service_ids' => 'Cannot remove services from this combo pool while clients hold active packages.',
+                ]);
+            }
+
+            $existingQtyIncluded = (int) ($combo->quantity_included ?? count($existingServiceIds));
+            if ((int) $data['quantity_included'] < $existingQtyIncluded) {
+                throw ValidationException::withMessages([
+                    'quantity_included' => 'Cannot lower the included service count while clients hold active packages.',
+                ]);
+            }
+        }
 
         $combo->update($data);
         $combo->services()->sync($serviceIds);

@@ -17,7 +17,8 @@ class AdLeadEntryController extends Controller
     {
         $validated = $this->validated($request);
 
-        AdLeadEntry::create($validated + ['created_by' => auth()->id()]);
+        $entry = AdLeadEntry::create($validated + ['created_by' => auth()->id()]);
+        $this->syncLeadFromAdEntry($entry);
 
         return redirect()->route('kpi.ads.index')->with('success', 'Ad lead logged.');
     }
@@ -25,6 +26,7 @@ class AdLeadEntryController extends Controller
     public function update(Request $request, AdLeadEntry $adLeadEntry)
     {
         $adLeadEntry->update($this->validated($request));
+        $this->syncLeadFromAdEntry($adLeadEntry->fresh());
 
         return redirect()->route('kpi.ads.index')->with('success', 'Ad lead updated.');
     }
@@ -73,16 +75,25 @@ class AdLeadEntryController extends Controller
             unset($validated['new_category']);
         }
 
-        $phone = Lead::normalizePhone($validated['country_code'], $validated['phone_number']);
+        $rawCombined = Lead::normalizePhone($validated['country_code'], $validated['phone_number']);
+        $phone = Customer::normalizePhone($rawCombined);
+        if ($phone === '') {
+            $phone = $rawCombined;
+        }
         unset($validated['country_code'], $validated['phone_number']);
         $validated['phone'] = $phone;
 
         $customerName = trim($validated['customer_name']);
-        $customer = Customer::firstOrCreate(
-            ['phone' => $phone],
-            ['name' => $customerName]
-        );
-        if (empty($customer->name) && $customerName !== '') {
+        $rawDigits = preg_replace('/\D/', '', $phone);
+        $candidates = array_values(array_unique(array_filter([$phone, $rawCombined, $rawDigits])));
+
+        $customer = Customer::whereIn('phone', $candidates)->first();
+        if (!$customer) {
+            $customer = Customer::create([
+                'phone' => $phone,
+                'name' => $customerName,
+            ]);
+        } elseif ((empty($customer->name) || strtolower($customer->name) === 'walk-in') && $customerName !== '') {
             $customer->update(['name' => $customerName]);
         }
 
@@ -97,5 +108,54 @@ class AdLeadEntryController extends Controller
         $validated['ticket_amount'] = $validated['ticket_amount'] ?? 0;
 
         return $validated;
+    }
+
+    private function syncLeadFromAdEntry(AdLeadEntry $entry): void
+    {
+        if (empty($entry->phone) || !Schema::hasTable('leads')) {
+            return;
+        }
+
+        $rawDigits = preg_replace('/\D/', '', (string) $entry->phone);
+        $candidates = array_values(array_unique(array_filter([$entry->phone, $rawDigits])));
+
+        $existingLead = Lead::open()->whereIn('phone', $candidates)->first()
+            ?: Lead::whereIn('phone', $candidates)->latest('id')->first();
+
+        $interestList = $entry->category ? [$entry->category] : [];
+
+        if (!$existingLead) {
+            Lead::create([
+                'phone' => $entry->phone,
+                'customer_id' => $entry->customer_id,
+                'category' => 'inquiry',
+                'categories' => ['inquiry'],
+                'service_interest' => $interestList,
+                'customer_remarks' => $entry->remarks,
+                'needful_done' => $entry->isBooked() ? 'booked' : null,
+                'assigned_agent_id' => $entry->created_by ?? auth()->id(),
+            ]);
+            return;
+        }
+
+        $updates = [];
+        if ($entry->customer_id && !$existingLead->customer_id) {
+            $updates['customer_id'] = $entry->customer_id;
+        }
+        if ($entry->isBooked() && $existingLead->needful_done !== 'booked') {
+            $updates['needful_done'] = 'booked';
+            $updates['next_followup_date'] = null;
+        }
+        if (!empty($interestList)) {
+            $currentInterests = is_array($existingLead->service_interest) ? $existingLead->service_interest : [];
+            $mergedInterests = array_values(array_unique(array_merge($currentInterests, $interestList)));
+            if ($mergedInterests !== $currentInterests) {
+                $updates['service_interest'] = $mergedInterests;
+            }
+        }
+
+        if (!empty($updates)) {
+            $existingLead->update($updates);
+        }
     }
 }
