@@ -215,6 +215,12 @@
         border: 1px solid rgba(138, 166, 171, 0.34);
     }
 
+    .status-pill-refill {
+        background: rgba(217, 143, 131, 0.18);
+        color: #f4c4bc;
+        border: 1px solid rgba(231, 154, 145, 0.38);
+    }
+
     .status-dot-active {
         display: inline-flex;
         align-items: center;
@@ -396,15 +402,6 @@
                     <span>Send Overdue to Leads</span>
                 </button>
             </form>
-            <a href="{{ route('customers.beauty-planning') }}"
-                class="btn-header-subtle tooltip-bottom"
-                data-tooltip="Track when clients are due for roots, nails, or facials">
-                <i class="bx bx-bell"></i>
-                <span>Beauty Planning</span>
-                @if ($dueCustomerIds->count())
-                    <span class="badge rounded-pill bg-danger ms-1">{{ $dueCustomerIds->count() }}</span>
-                @endif
-            </a>
             <a href="{{ route('appointments.calendar') }}" class="btn btn-primary">
                 <i class="bx bx-plus me-1"></i> Book Appointment
             </a>
@@ -415,24 +412,25 @@
         $currentSegment = $activeSegment ?? request('segment', 'all');
         $counts = $segmentCounts ?? [
             'all' => $customers->total(),
-            'second_visit_zone' => 0,
-            'bleeding_vips' => 0,
+            'ltv' => $customers->total(),
+            'due_for_refill' => 0,
             'package_renewal' => 0,
-            'idle_points' => 0,
+            'bleeding_vips' => 0,
+            'second_visit_zone' => 0,
         ];
-        $retentionSegments = ['second_visit_zone', 'bleeding_vips', 'package_renewal', 'idle_points'];
+        $retentionSegments = ['due_for_refill', 'package_renewal', 'bleeding_vips', 'second_visit_zone'];
         $isRetentionSegment = in_array($currentSegment, $retentionSegments, true);
         $segmentToAiMode = [
-            'second_visit_zone' => 'second_visit',
-            'bleeding_vips' => 'vip_winback',
+            'due_for_refill' => 'maintenance',
             'package_renewal' => 'package_expiry',
-            'idle_points' => 'idle_points',
+            'bleeding_vips' => 'vip_winback',
+            'second_visit_zone' => 'second_visit',
         ];
         $segmentLabels = [
-            'second_visit_zone' => 'Need 2nd Visit',
-            'bleeding_vips' => 'Missing VIP',
+            'due_for_refill' => 'Due for Refill',
             'package_renewal' => 'Package Ending',
-            'idle_points' => 'Unused Points',
+            'bleeding_vips' => 'Missing VIP',
+            'second_visit_zone' => 'Need 2nd Visit',
         ];
         $activeAiMode = $segmentToAiMode[$currentSegment] ?? 'maintenance';
         $activeBucketLabel = $segmentLabels[$currentSegment] ?? 'Client Retention';
@@ -453,17 +451,11 @@
                 <span>Top LTV</span>
                 <span class="clients-tab-count">{{ $counts['all'] }}</span>
             </a>
-            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'second_visit_zone'])) }}"
-                class="clients-tab {{ $currentSegment === 'second_visit_zone' ? 'active' : '' }} tooltip-bottom"
-                data-tooltip="Came once over 2 weeks ago and hasn't booked again.">
-                <span>Need 2nd Visit</span>
-                <span class="clients-tab-count">{{ $counts['second_visit_zone'] }}</span>
-            </a>
-            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'bleeding_vips'])) }}"
-                class="clients-tab {{ $currentSegment === 'bleeding_vips' ? 'active' : '' }} tooltip-bottom"
-                data-tooltip="Regular clients who haven't visited in over 45 days.">
-                <span>Missing VIPs</span>
-                <span class="clients-tab-count">{{ $counts['bleeding_vips'] }}</span>
+            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'due_for_refill'])) }}"
+                class="clients-tab {{ $currentSegment === 'due_for_refill' ? 'active' : '' }} tooltip-bottom"
+                data-tooltip="Due or overdue for roots, nails, or facial maintenance.">
+                <span>Due for Refill</span>
+                <span class="clients-tab-count">{{ $counts['due_for_refill'] }}</span>
             </a>
             <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'package_renewal'])) }}"
                 class="clients-tab {{ $currentSegment === 'package_renewal' ? 'active' : '' }} tooltip-bottom"
@@ -471,11 +463,17 @@
                 <span>Packages Ending</span>
                 <span class="clients-tab-count">{{ $counts['package_renewal'] }}</span>
             </a>
-            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'idle_points'])) }}"
-                class="clients-tab {{ $currentSegment === 'idle_points' ? 'active' : '' }} tooltip-bottom"
-                data-tooltip="Has 30+ points (QAR discount) unused for 30+ days.">
-                <span>Unused Points</span>
-                <span class="clients-tab-count">{{ $counts['idle_points'] }}</span>
+            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'bleeding_vips'])) }}"
+                class="clients-tab {{ $currentSegment === 'bleeding_vips' ? 'active' : '' }} tooltip-bottom"
+                data-tooltip="Regular clients who haven't visited in over 45 days.">
+                <span>Missing VIPs</span>
+                <span class="clients-tab-count">{{ $counts['bleeding_vips'] }}</span>
+            </a>
+            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'second_visit_zone'])) }}"
+                class="clients-tab {{ $currentSegment === 'second_visit_zone' ? 'active' : '' }} tooltip-bottom"
+                data-tooltip="Came once over 2 weeks ago and hasn't booked again.">
+                <span>Need 2nd Visit</span>
+                <span class="clients-tab-count">{{ $counts['second_visit_zone'] }}</span>
             </a>
         </div>
 

@@ -147,59 +147,128 @@ class ClientsHormoziRetentionTest extends TestCase
             'status' => 'active',
         ]);
 
-        // 4. 💎 Idle Loyalty Credit: loyalty_points >= 30 and no completed visit in last 30 days
-        $idlePointsClient = Customer::create([
-            'name' => 'Latifa IdlePoints',
+        // 4. 🔄 Due for Refill: tracked service (interval 21 days) visited 50 days ago WITH 2 visits (would also qualify for bleeding_vips, but must ONLY appear in due_for_refill due to strict priority de-duplication!)
+        $refillService = Service::create([
+            'name' => 'Root Touch-Up Color',
+            'price' => 300,
+            'duration' => 60,
+            'rebooking_interval_days' => 21,
+        ]);
+        $dueRefillClient = Customer::create([
+            'name' => 'Latifa DueRefill',
             'phone' => '55100005',
             'loyalty_points' => 85,
         ]);
+        foreach ([80, 50] as $daysAgo) {
+            $visitAt = now()->subDays($daysAgo)->setTime(13, 0);
+            $refillAppt = Appointment::create([
+                'customer_id' => $dueRefillClient->id,
+                'customer_name' => $dueRefillClient->name,
+                'phone' => $dueRefillClient->phone,
+                'service_name' => 'Root Touch-Up Color',
+                'appointment_datetime' => $visitAt,
+                'booking_date' => $visitAt->toDateString(),
+                'start_time' => '13:00:00',
+                'status' => 'completed',
+                'branch' => 'old_airport',
+                'price' => 300,
+            ]);
+            AppointmentService::create([
+                'appointment_id' => $refillAppt->id,
+                'service_id' => $refillService->id,
+                'name' => 'Root Touch-Up Color',
+                'price' => 300,
+                'original_price' => 300,
+                'duration' => 60,
+                'start_time' => $visitAt,
+            ]);
+        }
+
+        // Verify due_for_refill filter & due service badge
+        $respRefill = $this->actingAs($this->admin)
+            ->get(route('customers.index', ['segment' => 'due_for_refill']))
+            ->assertOk();
+        $respRefill->assertSee('Latifa DueRefill');
+        $respRefill->assertSee('Overdue: Root Touch-Up Color', false);
+        $respRefill->assertDontSee('Fatima SlippingVIP');
+        $respRefill->assertDontSee('Aisha SecondVisit');
+
+        // Verify strict priority de-duplication: Latifa DueRefill must NOT double-appear in bleeding_vips or second_visit_zone
+        $respVip = $this->actingAs($this->admin)
+            ->get(route('customers.index', ['segment' => 'bleeding_vips']))
+            ->assertOk();
+        $respVip->assertSee('Fatima SlippingVIP');
+        $respVip->assertDontSee('Latifa DueRefill');
+        $respVip->assertDontSee('Aisha SecondVisit');
+        $respVip->assertDontSee('Booked SecondVisit');
 
         // Verify second_visit_zone filter
         $respSecond = $this->actingAs($this->admin)
             ->get(route('customers.index', ['segment' => 'second_visit_zone']))
             ->assertOk();
         $respSecond->assertSee('Aisha SecondVisit');
+        $respSecond->assertDontSee('Latifa DueRefill');
         $respSecond->assertDontSee('Booked SecondVisit');
         $respSecond->assertDontSee('Fatima SlippingVIP');
-
-        // Verify bleeding_vips filter
-        $respVip = $this->actingAs($this->admin)
-            ->get(route('customers.index', ['segment' => 'bleeding_vips']))
-            ->assertOk();
-        $respVip->assertSee('Fatima SlippingVIP');
-        $respVip->assertDontSee('Aisha SecondVisit');
-        $respVip->assertDontSee('Booked SecondVisit');
 
         // Verify package_renewal filter
         $respPkg = $this->actingAs($this->admin)
             ->get(route('customers.index', ['segment' => 'package_renewal']))
             ->assertOk();
         $respPkg->assertSee('Hessa PackageRenewal');
+        $respPkg->assertDontSee('Latifa DueRefill');
         $respPkg->assertDontSee('Aisha SecondVisit');
 
-        // Verify idle_points filter
-        $respIdle = $this->actingAs($this->admin)
-            ->get(route('customers.index', ['segment' => 'idle_points']))
+        // Verify Unused Points tab and Beauty Planning header button are removed, and Due for Refill is present
+        $respAll = $this->actingAs($this->admin)
+            ->get(route('customers.index', ['segment' => 'all']))
             ->assertOk();
-        $respIdle->assertSee('Latifa IdlePoints');
-        $respIdle->assertDontSee('Booked SecondVisit');
-        $respIdle->assertSee('Every client in your database.', false);
-        $respIdle->assertSee('Has 30+ points (QAR discount) unused for 30+ days.', false);
+        $respAll->assertSee('Due for Refill', false);
+        $respAll->assertSee('Due or overdue for roots, nails, or facial maintenance.', false);
+        $respAll->assertDontSee('Unused Points', false);
+        $respAll->assertDontSee('Beauty Planning', false);
+        $respAll->assertDontSee('✨ AI Script', false);
+        $respAll->assertDontSee('bxl-whatsapp', false);
+        $respAll->assertDontSee('bx-calendar-plus', false);
+        $respAll->assertSee('Clients ranked from highest total spend to lowest.', false);
 
-        // Verify WhatsApp & Rebook buttons are removed, and ✨ AI Script renders ONLY on retention tabs
-        foreach ([$respSecond, $respVip, $respPkg, $respIdle] as $retentionResp) {
+        // Verify old /customers-beauty-planning bookmark redirects cleanly to ?segment=due_for_refill
+        $this->actingAs($this->admin)
+            ->get(route('customers.beauty-planning'))
+            ->assertRedirect(route('customers.index', ['segment' => 'due_for_refill']));
+
+        // Verify WhatsApp & Rebook buttons are removed, and ✨ AI Script renders ONLY on the 4 outreach tabs
+        foreach ([$respRefill, $respPkg, $respVip, $respSecond] as $retentionResp) {
             $retentionResp->assertSee('✨ AI Script', false);
             $retentionResp->assertDontSee('bxl-whatsapp', false);
             $retentionResp->assertDontSee('bx-calendar-plus', false);
         }
 
-        $respAll = $this->actingAs($this->admin)
-            ->get(route('customers.index', ['segment' => 'all']))
+        // Verify 14-day outreach cooldown: generating an AI script stamps last_retention_contacted_at and hides the client from outreach tabs
+        $this->actingAs($this->admin)
+            ->postJson(route('customers.ai-retention-script', $dueRefillClient), [
+                'service_name' => 'Root Touch-Up Color',
+                'days_overdue' => 29,
+                'mode' => 'maintenance',
+                'language' => 'en',
+            ])
             ->assertOk();
-        $respAll->assertDontSee('✨ AI Script', false);
-        $respAll->assertDontSee('bxl-whatsapp', false);
-        $respAll->assertDontSee('bx-calendar-plus', false);
-        $respAll->assertSee('Clients ranked from highest total spend to lowest.', false);
+
+        $dueRefillClient->refresh();
+        $this->assertNotNull($dueRefillClient->last_retention_contacted_at);
+        $this->assertTrue($dueRefillClient->isOnRetentionCooldown());
+
+        $respRefillAfterCooldown = $this->actingAs($this->admin)
+            ->get(route('customers.index', ['segment' => 'due_for_refill']))
+            ->assertOk();
+        $respRefillAfterCooldown->assertDontSee('Latifa DueRefill');
+
+        // Once 15 days have passed (> 14-day cooldown), the client re-enters the outreach tab if still unbooked
+        $dueRefillClient->update(['last_retention_contacted_at' => now()->subDays(15)]);
+        $this->actingAs($this->admin)
+            ->get(route('customers.index', ['segment' => 'due_for_refill']))
+            ->assertOk()
+            ->assertSee('Latifa DueRefill');
     }
 
     public function test_top_ltv_segment_sorts_clients_from_highest_net_spend_to_lowest(): void
@@ -368,6 +437,7 @@ class ClientsHormoziRetentionTest extends TestCase
         $enScript = $enResponse->json('script');
         $this->assertNotEmpty($enScript);
         $this->assertStringContainsString('HydraFacial', $enScript);
+        $this->assertStringContainsString('60 QAR', $enScript);
         $this->assertLessThanOrEqual(35, str_word_count($enScript));
 
         $arResponse = $this->actingAs($this->admin)
@@ -388,6 +458,7 @@ class ClientsHormoziRetentionTest extends TestCase
 
         $arScript = $arResponse->json('script');
         $this->assertNotEmpty($arScript);
+        $this->assertStringContainsString('60', $arScript);
         $this->assertMatchesRegularExpression('/\p{Arabic}/u', $arScript);
 
         $idleEnResponse = $this->actingAs($this->admin)
@@ -521,5 +592,19 @@ class ClientsHormoziRetentionTest extends TestCase
         $this->assertTrue($existingLead->next_followup_date->isToday());
         $this->assertStringContainsString('Asked about weekend slots', (string) $existingLead->customer_remarks);
         $this->assertStringContainsString('[Retention Radar]', (string) $existingLead->customer_remarks);
+
+        // Verify syncing to Leads stamps last_retention_contacted_at and hides both clients from outreach tabs during 14-day cooldown
+        $this->assertNotNull($overdueClient->fresh()->last_retention_contacted_at);
+        $this->assertNotNull($slippingVip->fresh()->last_retention_contacted_at);
+
+        $this->actingAs($this->admin)
+            ->get(route('customers.index', ['segment' => 'due_for_refill']))
+            ->assertOk()
+            ->assertDontSee('Maha Overdue');
+
+        $this->actingAs($this->admin)
+            ->get(route('customers.index', ['segment' => 'bleeding_vips']))
+            ->assertOk()
+            ->assertDontSee('Alia SlippingVIP');
     }
 }

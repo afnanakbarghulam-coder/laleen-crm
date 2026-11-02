@@ -11,6 +11,12 @@ class Customer extends Model
      */
     const POINTS_PER_QAR = 1;
 
+    /**
+     * Cooldown window (in days) after retention outreach so two agents never
+     * message the same client twice.
+     */
+    const RETENTION_COOLDOWN_DAYS = 14;
+
     protected $fillable = [
         'name',
         'phone',
@@ -18,7 +24,32 @@ class Customer extends Model
         'notes',
         'allergies',
         'loyalty_points',
+        'last_retention_contacted_at',
     ];
+
+    protected $casts = [
+        'last_retention_contacted_at' => 'datetime',
+    ];
+
+    /**
+     * Scope to clients who have NOT been contacted for retention within the last $days days.
+     */
+    public function scopeNotRecentlyContacted($query, int $days = self::RETENTION_COOLDOWN_DAYS)
+    {
+        return $query->where(function ($q) use ($days) {
+            $q->whereNull('last_retention_contacted_at')
+                ->orWhere('last_retention_contacted_at', '<', now()->subDays($days));
+        });
+    }
+
+    /**
+     * Check whether this client is currently within the 14-day outreach cooldown window.
+     */
+    public function isOnRetentionCooldown(int $days = self::RETENTION_COOLDOWN_DAYS): bool
+    {
+        return $this->last_retention_contacted_at !== null
+            && $this->last_retention_contacted_at->gte(now()->subDays($days));
+    }
 
     public function appointments()
     {

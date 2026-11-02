@@ -21,7 +21,7 @@ class CustomerController extends Controller
     public function index(Request $request)
     {
         $segments = $this->computeRetentionSegments();
-        $allowedSegments = ['all', 'ltv', 'second_visit_zone', 'bleeding_vips', 'package_renewal', 'idle_points'];
+        $allowedSegments = ['all', 'ltv', 'due_for_refill', 'package_renewal', 'bleeding_vips', 'second_visit_zone'];
         $activeSegment = strtolower(trim((string) $request->query('segment', 'all')));
         if (!in_array($activeSegment, $allowedSegments, true)) {
             $activeSegment = 'all';
@@ -85,21 +85,22 @@ class CustomerController extends Controller
 
         $lastVisit = $lastCompletedAppts->map(fn ($appt) => $appt?->appointment_datetime);
 
-        $dueCustomerIds = (new ClientMaintenancePlanner())->dueQueue()->pluck('customer_id')->unique();
+        $dueCustomerIds = collect($segments['due_for_refill'] ?? []);
+        $dueDetailsMap = $segments['due_for_refill_details'] ?? [];
 
         $segmentCounts = [
             'all' => $segments['all_count'],
             'ltv' => $segments['all_count'],
-            'second_visit_zone' => count($segments['second_visit_zone']),
-            'bleeding_vips' => count($segments['bleeding_vips']),
+            'due_for_refill' => count($segments['due_for_refill']),
             'package_renewal' => count($segments['package_renewal']),
-            'idle_points' => count($segments['idle_points']),
+            'bleeding_vips' => count($segments['bleeding_vips']),
+            'second_visit_zone' => count($segments['second_visit_zone']),
         ];
 
-        $secondVisitLookup = array_flip($segments['second_visit_zone']);
-        $bleedingVipsLookup = array_flip($segments['bleeding_vips']);
+        $dueForRefillLookup = array_flip($segments['due_for_refill']);
         $packageRenewalLookup = array_flip($segments['package_renewal']);
-        $idlePointsLookup = array_flip($segments['idle_points']);
+        $bleedingVipsLookup = array_flip($segments['bleeding_vips']);
+        $secondVisitLookup = array_flip($segments['second_visit_zone']);
 
         $customerTiers = [];
         foreach ($customers as $c) {
@@ -107,6 +108,22 @@ class CustomerController extends Controller
             $cLtv = (float) ($ltv[$cid] ?? 0);
             $isVip = ((int) $c->appointments_count >= 2) || ($cLtv >= 500);
             $badges = [];
+            $dueDetail = $dueDetailsMap[$cid] ?? null;
+
+            if (isset($dueForRefillLookup[$cid]) && $dueDetail) {
+                $isOverdue = ($dueDetail['urgency'] ?? '') === 'overdue';
+                $svcLabel = $dueDetail['service_name'] ?? 'Service';
+                $daysOverdue = (int) ($dueDetail['days_overdue'] ?? 0);
+                $daysUntil = (int) ($dueDetail['days_until'] ?? 0);
+
+                $badges[] = [
+                    'label' => ($isOverdue ? '⏰ Overdue: ' : '🔄 Due: ') . $svcLabel,
+                    'class' => $isOverdue ? 'status-pill-slipping' : 'status-pill-refill',
+                    'tooltip' => $isOverdue
+                        ? "Overdue by {$daysOverdue} day(s) for {$svcLabel}."
+                        : ($daysUntil === 0 ? "Due today for {$svcLabel}." : "Due in {$daysUntil} day(s) for {$svcLabel}."),
+                ];
+            }
 
             if ($isVip) {
                 $badges[] = [
@@ -115,7 +132,14 @@ class CustomerController extends Controller
                     'tooltip' => '2+ completed visits or 500+ QAR spent.',
                 ];
             }
-            if (isset($bleedingVipsLookup[$cid])) {
+
+            if (isset($packageRenewalLookup[$cid])) {
+                $badges[] = [
+                    'label' => '🎟️ Package Low',
+                    'class' => 'status-pill-package',
+                    'tooltip' => '1 session left or package expires within 3 weeks.',
+                ];
+            } elseif (isset($bleedingVipsLookup[$cid])) {
                 $badges[] = [
                     'label' => '⚠️ 45d+ Away',
                     'class' => 'status-pill-slipping',
@@ -126,12 +150,6 @@ class CustomerController extends Controller
                     'label' => '🔥 Needs 2nd Visit',
                     'class' => 'status-pill-second',
                     'tooltip' => 'Came once 14–60 days ago with no next booking.',
-                ];
-            } elseif (isset($packageRenewalLookup[$cid])) {
-                $badges[] = [
-                    'label' => '🎟️ Package Low',
-                    'class' => 'status-pill-package',
-                    'tooltip' => '1 session left or package expires within 3 weeks.',
                 ];
             }
 
@@ -144,21 +162,25 @@ class CustomerController extends Controller
             }
 
             $lastAppt = $lastCompletedAppts->get($cid);
-            $primaryService = $lastAppt && $lastAppt->service_name
-                ? trim(explode(',', (string) $lastAppt->service_name)[0])
-                : 'Signature Salon Service';
-            $daysSince = ($lastAppt && $lastAppt->appointment_datetime)
-                ? max(0, (int) floor((now()->startOfDay()->timestamp - Carbon::parse($lastAppt->appointment_datetime)->startOfDay()->timestamp) / 86400))
-                : 0;
+            $primaryService = $dueDetail['service_name']
+                ?? ($lastAppt && $lastAppt->service_name
+                    ? trim(explode(',', (string) $lastAppt->service_name)[0])
+                    : 'Signature Salon Service');
+            $daysSince = isset($dueDetail['days_overdue']) && $dueDetail['days_overdue'] > 0
+                ? (int) $dueDetail['days_overdue']
+                : (($lastAppt && $lastAppt->appointment_datetime)
+                    ? max(0, (int) floor((now()->startOfDay()->timestamp - Carbon::parse($lastAppt->appointment_datetime)->startOfDay()->timestamp) / 86400))
+                    : 0);
 
             $customerTiers[$cid] = [
                 'is_vip' => $isVip,
                 'badges' => $badges,
                 'wa_phone' => $rawDigits,
                 'last_service' => $primaryService,
-                'last_staff' => $lastAppt?->staff?->name ?? '',
-                'last_branch' => $lastAppt?->branch ?? '',
+                'last_staff' => ($dueDetail['last_staff_name'] ?? '') ?: ($lastAppt?->staff?->name ?? ''),
+                'last_branch' => ($dueDetail['branch'] ?? '') ?: ($lastAppt?->branch ?? ''),
                 'days_since' => $daysSince,
+                'due_detail' => $dueDetail,
             ];
         }
 
@@ -175,15 +197,28 @@ class CustomerController extends Controller
     }
 
     /**
-     * Compute the 4 Hormozi Retention Cash Buckets across all salon clients.
-     * Excludes clients who already have an upcoming active appointment on or after today.
+     * Compute the 4 Zero-Overlap Outreach Tabs across all salon clients:
+     * 1. due_for_refill (highest priority)
+     * 2. package_renewal (excluding due_for_refill)
+     * 3. bleeding_vips (excluding due_for_refill & package_renewal)
+     * 4. second_visit_zone (excluding due_for_refill, package_renewal & bleeding_vips)
+     *
+     * Excludes clients who have an upcoming active appointment on or after today
+     * OR who were contacted within the last 14 days (last_retention_contacted_at).
      */
     public function computeRetentionSegments(): array
     {
         ClientPackage::expireDue();
 
         $todayStart = now()->startOfDay();
-        $allCustomers = Customer::query()->get(['id', 'loyalty_points']);
+        $cooldownCutoff = now()->subDays(Customer::RETENTION_COOLDOWN_DAYS);
+        $allCustomers = Customer::query()->get(['id', 'loyalty_points', 'last_retention_contacted_at']);
+
+        $cooldownCustomerIds = $allCustomers
+            ->filter(fn (Customer $c) => $c->last_retention_contacted_at !== null && $c->last_retention_contacted_at->gte($cooldownCutoff))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->flip();
 
         $upcomingActiveCustomerIds = Appointment::query()
             ->whereNotNull('customer_id')
@@ -193,6 +228,53 @@ class CustomerController extends Controller
             ->map(fn ($id) => (int) $id)
             ->unique()
             ->flip();
+
+        // Priority 1: due_for_refill (Clients flagged as overdue or due_soon by ClientMaintenancePlanner)
+        $dueQueue = (new ClientMaintenancePlanner())->dueQueue();
+        $dueForRefillMap = [];
+        $dueForRefillDetails = [];
+
+        foreach ($dueQueue as $row) {
+            $cid = (int) $row->customer_id;
+            if ($upcomingActiveCustomerIds->has($cid) || $cooldownCustomerIds->has($cid)) {
+                continue;
+            }
+            $dueForRefillMap[$cid] = true;
+            if (!isset($dueForRefillDetails[$cid])) {
+                $daysUntil = (int) $row->days_until;
+                $dueForRefillDetails[$cid] = [
+                    'service_name' => $row->service_name,
+                    'urgency' => $row->urgency,
+                    'days_until' => $daysUntil,
+                    'days_overdue' => $daysUntil < 0 ? abs($daysUntil) : 0,
+                    'last_staff_name' => $row->last_staff_name ?? '',
+                    'branch' => $row->branch ?? '',
+                ];
+            }
+        }
+
+        // Priority 2: package_renewal (excluding due_for_refill)
+        $activePackages = ClientPackage::query()
+            ->withCount(['services as redeemed_services_count' => fn ($q) => $q->where('status', 'redeemed')])
+            ->where('status', 'active')
+            ->where('expires_at', '>=', now())
+            ->where(function ($q) {
+                $q->whereNotNull('sale_id')->orWhereNull('appointment_id');
+            })
+            ->get();
+
+        $packageRenewalMap = [];
+        $expiryWindowEnd = now()->addDays(21)->endOfDay();
+        foreach ($activePackages as $pkg) {
+            $cid = (int) $pkg->customer_id;
+            if ($upcomingActiveCustomerIds->has($cid) || $cooldownCustomerIds->has($cid) || isset($dueForRefillMap[$cid])) {
+                continue;
+            }
+            $remaining = max(0, (int) $pkg->quantity_included - (int) $pkg->redeemed_services_count);
+            if ($remaining <= 1 || ($pkg->expires_at && $pkg->expires_at->lte($expiryWindowEnd))) {
+                $packageRenewalMap[$cid] = true;
+            }
+        }
 
         $completedStats = Appointment::query()
             ->whereNotNull('customer_id')
@@ -208,35 +290,16 @@ class CustomerController extends Controller
             ->groupBy('customer_id')
             ->map(fn ($sales) => round((float) $sales->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount)), 2));
 
-        $activePackages = ClientPackage::query()
-            ->withCount(['services as redeemed_services_count' => fn ($q) => $q->where('status', 'redeemed')])
-            ->where('status', 'active')
-            ->where('expires_at', '>=', now())
-            ->where(function ($q) {
-                $q->whereNotNull('sale_id')->orWhereNull('appointment_id');
-            })
-            ->get();
-
-        $packageRenewalMap = [];
-        $expiryWindowEnd = now()->addDays(21)->endOfDay();
-        foreach ($activePackages as $pkg) {
-            $cid = (int) $pkg->customer_id;
-            if ($upcomingActiveCustomerIds->has($cid)) {
-                continue;
-            }
-            $remaining = max(0, (int) $pkg->quantity_included - (int) $pkg->redeemed_services_count);
-            if ($remaining <= 1 || ($pkg->expires_at && $pkg->expires_at->lte($expiryWindowEnd))) {
-                $packageRenewalMap[$cid] = true;
-            }
-        }
-
-        $secondVisitZone = [];
         $bleedingVips = [];
-        $idlePoints = [];
+        $secondVisitZone = [];
 
         foreach ($allCustomers as $customer) {
             $cid = (int) $customer->id;
-            if ($upcomingActiveCustomerIds->has($cid)) {
+            if ($upcomingActiveCustomerIds->has($cid) || $cooldownCustomerIds->has($cid)) {
+                continue;
+            }
+            // Strict priority de-duplication: skip if already in due_for_refill or package_renewal
+            if (isset($dueForRefillMap[$cid]) || isset($packageRenewalMap[$cid])) {
                 continue;
             }
 
@@ -251,42 +314,36 @@ class CustomerController extends Controller
                 ? (float) $salesLtv->get($cid)
                 : ($stat ? (float) $stat->price_sum : 0.0);
 
-            // 1. 🔥 2nd-Visit Danger Zone: exactly 1 completed visit, 14 to 60 days ago, 0 upcoming active appointments
-            if ($completedCount === 1 && $daysSinceLastVisit !== null && $daysSinceLastVisit >= 14 && $daysSinceLastVisit <= 60) {
-                $secondVisitZone[] = $cid;
-            }
-
-            // 2. ⚠️ Slipping VIPs: 2+ completed visits (or Net LTV >= 500 QAR), last completed visit > 45 days ago, 0 upcoming active appointments
+            // Priority 3: bleeding_vips (2+ completed visits or Net LTV >= 500 QAR, > 45 days ago)
             if (($completedCount >= 2 || $netLtv >= 500) && $daysSinceLastVisit !== null && $daysSinceLastVisit > 45) {
                 $bleedingVips[] = $cid;
+                continue;
             }
 
-            // 3. 💎 Idle Loyalty Credit: loyalty_points >= 30 and no completed visit in the last 30 days (and 0 upcoming active appointments)
-            if ((int) $customer->loyalty_points >= 30 && ($daysSinceLastVisit === null || $daysSinceLastVisit >= 30)) {
-                $idlePoints[] = $cid;
+            // Priority 4: second_visit_zone (1 completed visit, 14–60 days ago)
+            if ($completedCount === 1 && $daysSinceLastVisit !== null && $daysSinceLastVisit >= 14 && $daysSinceLastVisit <= 60) {
+                $secondVisitZone[] = $cid;
             }
         }
 
         return [
             'all_count' => $allCustomers->count(),
-            'second_visit_zone' => array_values(array_unique($secondVisitZone)),
-            'bleeding_vips' => array_values(array_unique($bleedingVips)),
+            'due_for_refill' => array_keys($dueForRefillMap),
+            'due_for_refill_details' => $dueForRefillDetails,
             'package_renewal' => array_keys($packageRenewalMap),
-            'idle_points' => array_values(array_unique($idlePoints)),
+            'bleeding_vips' => array_values(array_unique($bleedingVips)),
+            'second_visit_zone' => array_values(array_unique($secondVisitZone)),
             'upcoming_active_ids' => $upcomingActiveCustomerIds->keys()->all(),
+            'cooldown_ids' => $cooldownCustomerIds->keys()->all(),
         ];
     }
 
     /**
-     * Beauty Planning: front-desk task queue of clients whose re-booking
-     * window is overdue or due soon for a specific treatment, ready to
-     * message right away.
+     * Redirect old Beauty Planning bookmarks directly to the unified Due for Refill tab.
      */
     public function beautyPlanning()
     {
-        $queue = (new ClientMaintenancePlanner())->dueQueue();
-
-        return view('customers.beauty_planning', compact('queue'));
+        return redirect()->route('customers.index', ['segment' => 'due_for_refill']);
     }
 
     public function show(Customer $customer)
@@ -495,6 +552,7 @@ class CustomerController extends Controller
         $segments = $this->computeRetentionSegments();
         $bleedingVipIds = $segments['bleeding_vips'] ?? [];
         $upcomingActiveLookup = array_flip($segments['upcoming_active_ids'] ?? []);
+        $cooldownLookup = array_flip($segments['cooldown_ids'] ?? []);
 
         $targetCustomerIds = array_values(array_unique(array_merge(
             $overdueRowsByCustomer->keys()->map(fn ($id) => (int) $id)->all(),
@@ -503,7 +561,7 @@ class CustomerController extends Controller
 
         $targetCustomerIds = array_values(array_filter(
             $targetCustomerIds,
-            fn (int $cid) => !isset($upcomingActiveLookup[$cid])
+            fn (int $cid) => !isset($upcomingActiveLookup[$cid]) && !isset($cooldownLookup[$cid])
         ));
 
         $customers = Customer::whereIn('id', $targetCustomerIds)->get()->keyBy('id');
@@ -599,6 +657,7 @@ class CustomerController extends Controller
                 ]);
             }
 
+            $customer->update(['last_retention_contacted_at' => now()]);
             $pushedCount++;
         }
 
