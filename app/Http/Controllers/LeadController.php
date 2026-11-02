@@ -70,9 +70,13 @@ class LeadController extends Controller
             $query->where('assigned_agent_id', $request->agent_id);
         }
 
-        // With no filters at all, keep the table to recent leads rather than the full history.
+        // With no filters at all, keep the table to recent or recently synced/scheduled leads rather than ancient history.
         if (!$request->hasAny(['category', 'followup_date', 'phone_number', 'start_date', 'end_date', 'agent_id', 'alert_filter'])) {
-            $query->where('created_at', '>=', now()->subMonth());
+            $query->where(function ($q) {
+                $q->where('created_at', '>=', now()->subMonth())
+                    ->orWhere('updated_at', '>=', now()->subMonth())
+                    ->orWhereDate('next_followup_date', '>=', now()->subMonth()->toDateString());
+            });
         }
 
         $leads = $query->orderBy('created_at', 'desc')->get();
@@ -360,7 +364,7 @@ class LeadController extends Controller
             [$from, $to] = $this->resolvePeriod($period);
         }
 
-        $leads = Lead::with('agent')->whereBetween('created_at', [$from, $to])->get();
+        $leads = $this->leadsForAnalyticsPeriod($from, $to);
 
         $totalLeads = $leads->count();
 
@@ -552,14 +556,49 @@ class LeadController extends Controller
         return max(150, $total);
     }
 
+    public function leadsForAnalyticsPeriod(Carbon $from, Carbon $to)
+    {
+        return Lead::with(['agent', 'customer'])
+            ->where(function ($q) use ($from, $to) {
+                $q->whereBetween('created_at', [$from, $to])
+                    ->orWhere(function ($sub) use ($from, $to) {
+                        $sub->whereBetween('updated_at', [$from, $to])
+                            ->where(function ($rq) {
+                                $rq->where('customer_remarks', 'like', '%[Refill Due]%')
+                                    ->orWhere('customer_remarks', 'like', '%[Package Ending]%')
+                                    ->orWhere('customer_remarks', 'like', '%[Missing VIP]%')
+                                    ->orWhere('customer_remarks', 'like', '%[Retention Radar]%');
+                            });
+                    })
+                    ->orWhere(function ($sub) use ($from, $to) {
+                        $sub->whereBetween('next_followup_date', [$from->toDateString(), $to->toDateString()])
+                            ->where(function ($rq) {
+                                $rq->where('customer_remarks', 'like', '%[Refill Due]%')
+                                    ->orWhere('customer_remarks', 'like', '%[Package Ending]%')
+                                    ->orWhere('customer_remarks', 'like', '%[Missing VIP]%')
+                                    ->orWhere('customer_remarks', 'like', '%[Retention Radar]%');
+                            });
+                    });
+            })
+            ->get();
+    }
+
     public function buildMorningMoneyBrief(?int $overdueCount = null, ?int $unscheduledCount = null): array
     {
         $today = today();
         $openLeads = Lead::with('customer')
+            ->whereNotNull('phone')
+            ->where('phone', '!=', '')
+            ->where('phone', '!=', '-')
             ->where(function ($q) {
                 $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
             })
-            ->get();
+            ->get()
+            ->filter(function (Lead $lead) {
+                $digits = preg_replace('/\D+/', '', (string) $lead->phone);
+                return strlen($digits) >= 7;
+            })
+            ->values();
 
         $dueTodayCount = $openLeads
             ->filter(fn(Lead $l) => $l->next_followup_date && $l->next_followup_date->isSameDay($today))
@@ -580,7 +619,12 @@ class LeadController extends Controller
             ->flip()
             ->all();
 
-        $scoredLeads = $openLeads->map(function (Lead $lead) use ($servicePriceMap, $today, $returningCustomerIds) {
+        $customersByPhone = Customer::whereNotNull('phone')
+            ->where('phone', '!=', '')
+            ->get(['id', 'name', 'phone'])
+            ->keyBy(fn (Customer $c) => preg_replace('/\D+/', '', (string) $c->phone));
+
+        $scoredLeads = $openLeads->map(function (Lead $lead) use ($servicePriceMap, $today, $returningCustomerIds, $customersByPhone) {
             $estimatedQar = self::estimateLeadQar($lead, $servicePriceMap);
             $bonus = 0;
 
@@ -605,7 +649,19 @@ class LeadController extends Controller
                 ? implode(' + ', array_map(fn($c) => Lead::CATEGORIES[$c] ?? $c, $categories))
                 : 'Inquiry';
 
-            $clientName = trim((string) ($lead->customer?->name ?: 'Guest'));
+            $rawName = trim((string) ($lead->customer?->name ?? ''));
+            $isPlaceholder = ($rawName === '' || in_array(strtolower($rawName), ['guest', 'unnamed', 'unnamed client', '-', '—'], true));
+            if ($isPlaceholder) {
+                $phoneDigits = preg_replace('/\D+/', '', (string) $lead->phone);
+                $matchedCustomer = $phoneDigits !== '' ? $customersByPhone->get($phoneDigits) : null;
+                $matchedName = trim((string) ($matchedCustomer?->name ?? ''));
+                if ($matchedName !== '' && !in_array(strtolower($matchedName), ['guest', 'unnamed', 'unnamed client', '-', '—'], true)) {
+                    $rawName = $matchedName;
+                    $isPlaceholder = false;
+                }
+            }
+
+            $clientName = !$isPlaceholder ? $rawName : trim((string) $lead->phone);
 
             return [
                 'id' => $lead->id,
@@ -627,7 +683,11 @@ class LeadController extends Controller
             $callParts = [];
             foreach ($topMoneyLeads as $idx => $item) {
                 $rank = $idx + 1;
-                $callParts[] = "#{$rank} {$item['name']} ({$item['phone']} — {$item['services']}, ~{$item['estimated_qar']} QAR)";
+                if ($item['name'] === $item['phone']) {
+                    $callParts[] = "#{$rank} {$item['phone']} ({$item['services']}, ~{$item['estimated_qar']} QAR)";
+                } else {
+                    $callParts[] = "#{$rank} {$item['name']} ({$item['phone']} — {$item['services']}, ~{$item['estimated_qar']} QAR)";
+                }
             }
 
             $count = $topMoneyLeads->count();
@@ -659,7 +719,7 @@ class LeadController extends Controller
         $overdueLeadsLive = null
     ): array {
         if ($leads === null) {
-            $leads = Lead::with(['agent', 'customer'])->whereBetween('created_at', [$from, $to])->get();
+            $leads = $this->leadsForAnalyticsPeriod($from, $to);
         }
         if ($overdueLeadsLive === null) {
             $overdueLeadsLive = $this->overdueLeadsQuery()->get();

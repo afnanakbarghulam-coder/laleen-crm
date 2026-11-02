@@ -178,7 +178,7 @@
                     <i class="bx bx-edit"></i> Edit Profile
                 </button>
             @endmoduleEdit
-            <a href="{{ route('appointments.calendar') }}" class="btn btn-primary btn-sm">
+            <a href="{{ route('appointments.calendar', array_filter(['open_booking' => 1, 'customer_id' => $customer->id, 'name' => $customer->name, 'phone' => $customer->phone, 'branch' => $lastCompletedVisit?->branch])) }}" class="btn btn-primary btn-sm">
                 <i class="bx bx-plus"></i> Book Appointment
             </a>
         </div>

@@ -1006,7 +1006,70 @@ class AppointmentController extends Controller
         $anchor = $request->date ? Carbon::parse($request->date)->startOfDay() : now()->startOfDay();
         $pendingTimeBookings = $this->pendingTimeBookingsForDate($request, $anchor);
 
-        return view('appointments.calendar', compact('staffs', 'activeStaffs', 'services', 'products', 'agents', 'servicesCatalog', 'productsCatalog', 'combosCatalog', 'pendingTimeBookings'));
+        $prefillCustomer = $request->filled('customer_id') ? Customer::find((int) $request->input('customer_id')) : null;
+        if (!$prefillCustomer && $request->filled('phone')) {
+            $rawPhoneDigits = preg_replace('/\D+/', '', (string) $request->input('phone'));
+            if ($rawPhoneDigits !== '') {
+                $prefillCustomer = Customer::where('phone', $rawPhoneDigits)->first();
+            }
+        }
+
+        $rawServiceIds = $request->input('service_ids', []);
+        if (!is_array($rawServiceIds)) {
+            $rawServiceIds = array_filter(array_map('intval', explode(',', (string) $rawServiceIds)));
+        }
+
+        $rawServiceNames = [];
+        foreach (['services', 'service_name'] as $svcParam) {
+            if ($request->filled($svcParam)) {
+                $val = $request->input($svcParam);
+                $items = is_array($val) ? $val : explode(',', (string) $val);
+                foreach ($items as $item) {
+                    $trimmed = trim((string) $item);
+                    if ($trimmed !== '' && strcasecmp($trimmed, 'Decide in Salon') !== 0) {
+                        $rawServiceNames[] = $trimmed;
+                    }
+                }
+            }
+        }
+        $rawServiceNames = array_values(array_unique($rawServiceNames));
+
+        $matchedServices = $services->filter(function (Service $s) use ($rawServiceIds, $rawServiceNames) {
+            if (in_array((int) $s->id, $rawServiceIds, true)) {
+                return true;
+            }
+            foreach ($rawServiceNames as $wantedName) {
+                if (strcasecmp(trim((string) $s->name), $wantedName) === 0) {
+                    return true;
+                }
+            }
+            return false;
+        })->values();
+
+        $hasPrefillTrigger = $request->boolean('open_booking')
+            || $request->filled('customer_id')
+            || $request->filled('name')
+            || $request->filled('customer_name')
+            || $request->filled('phone')
+            || !empty($rawServiceIds)
+            || !empty($rawServiceNames);
+
+        $bookingPrefill = [
+            'auto_open' => $hasPrefillTrigger,
+            'customer_id' => $prefillCustomer?->id ?: ($request->filled('customer_id') ? (int) $request->input('customer_id') : null),
+            'customer_name' => trim((string) ($request->input('name') ?: $request->input('customer_name') ?: $prefillCustomer?->name ?: '')),
+            'phone' => trim((string) ($request->input('phone') ?: $prefillCustomer?->phone ?: '')),
+            'branch' => $request->filled('branch') && array_key_exists((string) $request->input('branch'), self::BRANCH_LABELS)
+                ? (string) $request->input('branch')
+                : null,
+            'staff_id' => $request->filled('staff_id') ? (int) $request->input('staff_id') : null,
+            'service_ids' => $matchedServices->pluck('id')->values()->all(),
+            'services' => $matchedServices->isNotEmpty()
+                ? $matchedServices->pluck('name')->values()->all()
+                : $rawServiceNames,
+        ];
+
+        return view('appointments.calendar', compact('staffs', 'activeStaffs', 'services', 'products', 'agents', 'servicesCatalog', 'productsCatalog', 'combosCatalog', 'pendingTimeBookings', 'bookingPrefill'));
     }
 
     /**

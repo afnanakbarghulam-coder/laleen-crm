@@ -38,7 +38,7 @@ class ClientMaintenancePlanner
             ->with('appointmentServices')
             ->whereNotNull('customer_id')
             ->where('status', 'completed')
-            ->where('appointment_datetime', '<=', now());
+            ->where('appointment_datetime', '<=', now()->endOfDay());
 
         if ($customerId) {
             $completedQuery->where('customer_id', $customerId);
@@ -59,7 +59,7 @@ class ClientMaintenancePlanner
             if ($appt->appointmentServices && $appt->appointmentServices->isNotEmpty()) {
                 foreach ($appt->appointmentServices as $line) {
                     $lineTime = $line->start_time ? Carbon::parse($line->start_time) : $apptTime;
-                    if ($lineTime->gt(now())) {
+                    if ($lineTime->gt(now()->endOfDay())) {
                         continue;
                     }
                     $svc = $line->service_id ? $servicesById->get((int) $line->service_id) : null;
@@ -127,7 +127,13 @@ class ClientMaintenancePlanner
             ->with('appointmentServices:id,appointment_id,service_id,name')
             ->whereNotNull('customer_id')
             ->whereNotIn('status', ['cancelled', 'no_show', 'completed'])
-            ->whereDate('appointment_datetime', '>=', $today->toDateString())
+            ->where(function ($q) use ($today) {
+                $q->whereDate('appointment_datetime', '>=', $today->toDateString())
+                    ->orWhere(function ($sub) use ($today) {
+                        $sub->whereNull('appointment_datetime')
+                            ->whereDate('booking_date', '>=', $today->toDateString());
+                    });
+            })
             ->when($customerId, fn ($q) => $q->where('customer_id', $customerId))
             ->orderBy('appointment_datetime')
             ->get()
@@ -160,7 +166,9 @@ class ClientMaintenancePlanner
                 return false;
             });
 
-            $upcomingDate = $matchingUpcoming ? Carbon::parse($matchingUpcoming->appointment_datetime) : null;
+            $upcomingDate = $matchingUpcoming
+                ? Carbon::parse($matchingUpcoming->appointment_datetime ?: $matchingUpcoming->booking_date)
+                : null;
 
             return (object) [
                 'customer_id' => $cid,

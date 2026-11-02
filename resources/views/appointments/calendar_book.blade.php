@@ -601,17 +601,23 @@
         <input type="hidden" name="appointment_datetime" id="bookDatetimeHidden">
         <input type="hidden" name="booking_date" id="bookDateHidden">
         <input type="hidden" name="unscheduled" id="bookUnscheduledHidden" value="0">
-        <input type="hidden" name="customer_name" id="bookCustomerNameHidden">
-        <input type="hidden" name="phone" id="bookPhoneHidden">
+        <input type="hidden" name="customer_name" id="bookCustomerNameHidden" value="{{ $bookingPrefill['customer_name'] ?? '' }}">
+        <input type="hidden" name="phone" id="bookPhoneHidden" value="{{ $bookingPrefill['phone'] ?? '' }}">
         <input type="hidden" name="price" id="bookPriceHidden" value="0">
         <div id="svcHiddenInputs"></div>
 
         <div class="fb-body-row">
             <!-- RAIL -->
             <div class="fb-rail" id="fbRail">
-                <div class="client-icon" id="fbRailIcon"><i class="bx bx-user-plus"></i></div>
-                <div class="client-label" id="fbRailLabel">Add client</div>
-                <div class="client-sub" id="fbRailSub">Search or add a new client</div>
+                <div class="client-icon" id="fbRailIcon">
+                    @if (!empty($bookingPrefill['customer_name']))
+                        {{ strtoupper(substr($bookingPrefill['customer_name'], 0, 1)) }}
+                    @else
+                        <i class="bx bx-user-plus"></i>
+                    @endif
+                </div>
+                <div class="client-label" id="fbRailLabel">{{ !empty($bookingPrefill['customer_name']) ? $bookingPrefill['customer_name'] : 'Add client' }}</div>
+                <div class="client-sub" id="fbRailSub">{{ !empty($bookingPrefill['phone']) ? $bookingPrefill['phone'] : 'Search or add a new client' }}</div>
             </div>
 
             <!-- CONTENT -->
@@ -799,8 +805,9 @@
 
 <script>
     (function() {
-        const ALL_SERVICES = @json($services->map(fn($s) => ['name' => $s->name, 'price' => (float) $s->price, 'duration' => (int) $s->duration]));
+        const ALL_SERVICES = @json($servicesCatalog ?? []);
         const ALL_COMBOS = @json($combosCatalog ?? []);
+        const SERVER_BOOKING_PREFILL = @json($bookingPrefill ?? null);
 
         let selectedServices = [];
         let decideInSalon = false;
@@ -839,6 +846,37 @@
             fbResetCountrySearch();
             document.getElementById('fbNewClientPhoneError').classList.add('d-none');
 
+            if (prefill.client && (prefill.client.name || prefill.client.phone || prefill.client.id)) {
+                selectedClient = {
+                    id: prefill.client.id || null,
+                    name: prefill.client.name || 'Client',
+                    phone: prefill.client.phone || ''
+                };
+            } else if (prefill.customerName || prefill.phone || prefill.customerId) {
+                selectedClient = {
+                    id: prefill.customerId || null,
+                    name: prefill.customerName || 'Client',
+                    phone: prefill.phone || ''
+                };
+            }
+
+            const wantedIds = Array.isArray(prefill.serviceIds)
+                ? prefill.serviceIds.map(id => Number(id)).filter(Boolean)
+                : [];
+            const wantedNames = Array.isArray(prefill.services)
+                ? prefill.services.map(s => String(s || '').trim().toLowerCase()).filter(Boolean)
+                : [];
+
+            if (wantedIds.length || wantedNames.length) {
+                ALL_SERVICES.forEach(svc => {
+                    const matchId = svc.id && wantedIds.includes(Number(svc.id));
+                    const matchName = svc.name && wantedNames.includes(svc.name.trim().toLowerCase());
+                    if ((matchId || matchName) && !selectedServices.some(s => s.name === svc.name)) {
+                        selectedServices.push(Object.assign({}, svc, { original_price: svc.price, discount_reason: '' }));
+                    }
+                });
+            }
+
             if (prefill.datetime) {
                 const [d, t] = prefill.datetime.split('T');
                 document.getElementById('bookDateInput').value = d;
@@ -846,6 +884,14 @@
             } else if (prefill.date) {
                 document.getElementById('bookDateInput').value = prefill.date;
                 document.getElementById('bookTimeInput').value = '';
+            } else if (!document.getElementById('bookDateInput').value) {
+                const now = new Date();
+                const yyyy = now.getFullYear();
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                document.getElementById('bookDateInput').value = `${yyyy}-${mm}-${dd}`;
+                const hh = Math.min(20, Math.max(12, now.getHours() + 1));
+                document.getElementById('bookTimeInput').value = `${String(hh).padStart(2, '0')}:00`;
             }
 
             const unscheduledToggle = document.getElementById('bookUnscheduledToggle');
@@ -857,6 +903,8 @@
 
             if (prefill.branch) {
                 document.getElementById('bookBranch').value = prefill.branch;
+            } else if (!document.getElementById('bookBranch').value) {
+                document.getElementById('bookBranch').value = 'old_airport';
             }
 
             fbUpdateRail();
@@ -864,6 +912,9 @@
             fbRenderCombos();
             fbRenderRedemptions();
             fbUpdateRedeemButton();
+            if (selectedClient && selectedClient.id) {
+                fbLoadClientPendingPackages();
+            }
             fbUpdateDateLabel();
             fbUpdateTeamMemberVisibility();
             fbShowPanel('main');
@@ -1708,5 +1759,65 @@
         document.getElementById('fbSaveBtn').addEventListener('click', function() {
             document.getElementById('bookThen').value = '';
         });
+
+        /* ---------------- AUTO-OPEN BOOKING DRAWER FROM URL / SERVER PREFILL ---------------- */
+        (function autoOpenFromQuery() {
+            const qs = new URLSearchParams(window.location.search);
+            const srv = SERVER_BOOKING_PREFILL || {};
+
+            const hasUrlTrigger = qs.get('open_booking') === '1'
+                || qs.has('customer_id')
+                || qs.has('name')
+                || qs.has('customer_name')
+                || qs.has('phone')
+                || qs.has('service_ids')
+                || qs.has('services')
+                || qs.has('service_name');
+
+            if (!srv.auto_open && !hasUrlTrigger) return;
+
+            const customerId = srv.customer_id || (qs.get('customer_id') ? Number(qs.get('customer_id')) : null);
+            const customerName = srv.customer_name || qs.get('name') || qs.get('customer_name') || '';
+            const phone = srv.phone || qs.get('phone') || '';
+            const branch = srv.branch || qs.get('branch') || 'old_airport';
+            const staffId = srv.staff_id || (qs.get('staff_id') ? Number(qs.get('staff_id')) : null);
+
+            const urlServiceIds = (qs.get('service_ids') || '')
+                .split(',')
+                .map(s => Number(s.trim()))
+                .filter(Boolean);
+            const serviceIds = (Array.isArray(srv.service_ids) && srv.service_ids.length)
+                ? srv.service_ids
+                : urlServiceIds;
+
+            const urlServices = [qs.get('services') || '', qs.get('service_name') || '']
+                .join(',')
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean);
+            const services = (Array.isArray(srv.services) && srv.services.length)
+                ? srv.services
+                : urlServices;
+
+            const triggerOpen = () => {
+                window.openCalendarBookModal({
+                    customerId: customerId,
+                    customerName: customerName,
+                    phone: phone,
+                    branch: branch,
+                    staffId: staffId,
+                    serviceIds: serviceIds,
+                    services: services,
+                    date: qs.get('date') || null,
+                    datetime: qs.get('datetime') || null,
+                });
+            };
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', triggerOpen);
+            } else {
+                setTimeout(triggerOpen, 0);
+            }
+        })();
     })();
 </script>

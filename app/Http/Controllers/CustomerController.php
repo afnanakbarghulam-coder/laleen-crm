@@ -223,7 +223,13 @@ class CustomerController extends Controller
         $upcomingActiveCustomerIds = Appointment::query()
             ->whereNotNull('customer_id')
             ->whereIn('status', ['pending', 'confirmed', 'scheduled', 'arrived', 'in_progress'])
-            ->whereDate('appointment_datetime', '>=', $todayStart->toDateString())
+            ->where(function ($q) use ($todayStart) {
+                $q->whereDate('appointment_datetime', '>=', $todayStart->toDateString())
+                    ->orWhere(function ($sub) use ($todayStart) {
+                        $sub->whereNull('appointment_datetime')
+                            ->whereDate('booking_date', '>=', $todayStart->toDateString());
+                    });
+            })
             ->pluck('customer_id')
             ->map(fn ($id) => (int) $id)
             ->unique()
@@ -527,13 +533,24 @@ class CustomerController extends Controller
         }
 
         $lastCompletedVisit = $completedAppointments->first();
+        $favoriteServiceName = $lastCompletedVisit?->service_name ?: ($favoriteServices->keys()->first() ?? null);
+        $favoriteServiceNames = $favoriteServiceName
+            ? array_values(array_filter(array_map('trim', explode(',', (string) $favoriteServiceName)), fn ($s) => $s !== '' && strcasecmp($s, 'Decide in Salon') !== 0))
+            : [];
+        $favoriteServiceIds = !empty($favoriteServiceNames)
+            ? $catalogServices->filter(fn ($s) => in_array(strtolower(trim((string) $s->name)), array_map('strtolower', $favoriteServiceNames), true))->pluck('id')->values()->all()
+            : [];
+
         $rebookFavoriteParams = array_filter([
+            'open_booking' => 1,
             'customer_id' => $customer->id,
             'phone' => $customer->phone,
             'name' => $customer->name,
             'branch' => $lastCompletedVisit?->branch,
             'staff_id' => $lastCompletedVisit?->staff_id,
-            'service_name' => $lastCompletedVisit?->service_name ?: ($favoriteServices->keys()->first() ?? null),
+            'service_name' => $favoriteServiceName,
+            'services' => !empty($favoriteServiceNames) ? implode(',', $favoriteServiceNames) : null,
+            'service_ids' => !empty($favoriteServiceIds) ? implode(',', $favoriteServiceIds) : null,
         ], fn ($v) => $v !== null && $v !== '');
 
         return view('customers.show', compact(
@@ -689,15 +706,8 @@ class CustomerController extends Controller
                 $mergedServices = array_values(array_unique(array_filter(array_map('trim', array_merge($existingServices, $dueServices)))));
                 $mergedCategories = $openLead->mergeCategories('followup');
 
-                $existingRemarks = $this->convertLegacyRemarkString(trim((string) $openLead->customer_remarks));
-                $hasShortTag = str_contains($existingRemarks, '[Refill Due]')
-                    || str_contains($existingRemarks, '[Package Ending]')
-                    || str_contains($existingRemarks, '[Missing VIP]');
-
-                $newRemarks = $existingRemarks;
-                if (!$hasShortTag) {
-                    $newRemarks = $existingRemarks !== '' ? $existingRemarks . ' | ' . $radarNote : $radarNote;
-                }
+                $existingRemarks = $this->convertLegacyRemarkString(trim((string) $openLead->customer_remarks), $customer->id);
+                $newRemarks = $this->upsertRetentionTagInRemarks($existingRemarks, $radarNote);
 
                 // Do not overwrite an existing open lead that already has a follow-up scheduled for today
                 $nextFollowup = $alreadyScheduledForToday
@@ -711,8 +721,10 @@ class CustomerController extends Controller
                     'categories' => $mergedCategories,
                     'service_interest' => !empty($mergedServices) ? $mergedServices : $dueServices,
                     'next_followup_date' => $nextFollowup,
+                    'needful_done' => null,
                     'customer_remarks' => $newRemarks,
                 ]);
+                $openLead->touch();
             } else {
                 Lead::create([
                     'phone' => $normalizedPhone,
@@ -794,6 +806,33 @@ class CustomerController extends Controller
             },
             $remarks
         );
+    }
+
+    /**
+     * Replace any stale [Retention Radar], [Refill Due], [Package Ending], or [Missing VIP]
+     * segment in customer_remarks cleanly while preserving active human notes.
+     */
+    private function upsertRetentionTagInRemarks(string $remarks, string $newTag): string
+    {
+        $segments = array_map('trim', explode('|', $remarks));
+        $preserved = [];
+
+        foreach ($segments as $segment) {
+            if ($segment === '') {
+                continue;
+            }
+            if (preg_match('/^\[(?:Retention Radar|Refill Due|Package Ending|Missing VIP)\]/i', $segment)) {
+                continue;
+            }
+            $stripped = trim((string) preg_replace('/\[(?:Retention Radar|Refill Due|Package Ending|Missing VIP)\][^|]*/i', '', $segment));
+            if ($stripped !== '' && !in_array($stripped, $preserved, true)) {
+                $preserved[] = $stripped;
+            }
+        }
+
+        $preserved[] = $newTag;
+
+        return implode(' | ', $preserved);
     }
 
     public function store(Request $request)
