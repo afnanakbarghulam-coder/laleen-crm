@@ -269,25 +269,16 @@
         line-height: 1.2;
     }
 
-    .btn-row-wa {
-        background: rgba(74, 158, 110, 0.12);
-        border: 1px solid rgba(74, 158, 110, 0.32);
-        color: #93d5ad;
+    .btn-row-ai {
+        background: rgba(217, 143, 131, 0.14);
+        border: 1px solid rgba(231, 154, 145, 0.38);
+        color: #f4c4bc;
+        cursor: pointer;
     }
 
-    .btn-row-wa:hover {
-        background: rgba(74, 158, 110, 0.24);
-        color: #fff;
-    }
-
-    .btn-row-rebook {
-        background: rgba(201, 166, 107, 0.12);
-        border: 1px solid rgba(201, 166, 107, 0.32);
-        color: #ebd09b;
-    }
-
-    .btn-row-rebook:hover {
-        background: rgba(201, 166, 107, 0.24);
+    .btn-row-ai:hover {
+        background: rgba(217, 143, 131, 0.28);
+        border-color: rgba(231, 154, 145, 0.65);
         color: #fff;
     }
 
@@ -300,6 +291,65 @@
     .btn-row-profile:hover {
         background: rgba(255, 255, 255, 0.1);
         color: #fff;
+    }
+
+    /* Leads-style AI Script Modal */
+    .ai-modal-card {
+        background: #1c1615;
+        border: 1px solid rgba(217, 143, 131, 0.28);
+        border-radius: 16px;
+        color: #f4eae6;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+    }
+
+    .ai-context-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 500;
+        background: rgba(217, 143, 131, 0.12);
+        border: 1px solid rgba(217, 143, 131, 0.25);
+        color: #e9c2bb;
+    }
+
+    .ai-lang-toggle {
+        display: inline-flex;
+        border-radius: 9px;
+        padding: 2px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(217, 143, 131, 0.22);
+    }
+
+    .ai-lang-btn {
+        border: none;
+        background: transparent;
+        color: #b8a39d;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 12px;
+        border-radius: 7px;
+        cursor: pointer;
+        transition: all 0.14s ease;
+    }
+
+    .ai-lang-btn.active {
+        background: rgba(217, 143, 131, 0.24);
+        color: #fff;
+    }
+
+    .ai-script-box {
+        background: rgba(14, 11, 10, 0.65);
+        border: 1px solid rgba(217, 143, 131, 0.2);
+        border-radius: 12px;
+        padding: 14px 16px;
+        min-height: 84px;
+        font-size: 14px;
+        line-height: 1.55;
+        color: #f6ece8;
+        white-space: pre-wrap;
     }
 
     .btn-header-subtle {
@@ -370,6 +420,22 @@
             'package_renewal' => 0,
             'idle_points' => 0,
         ];
+        $retentionSegments = ['second_visit_zone', 'bleeding_vips', 'package_renewal', 'idle_points'];
+        $isRetentionSegment = in_array($currentSegment, $retentionSegments, true);
+        $segmentToAiMode = [
+            'second_visit_zone' => 'second_visit',
+            'bleeding_vips' => 'vip_winback',
+            'package_renewal' => 'package_expiry',
+            'idle_points' => 'idle_points',
+        ];
+        $segmentLabels = [
+            'second_visit_zone' => 'Need 2nd Visit',
+            'bleeding_vips' => 'Missing VIP',
+            'package_renewal' => 'Package Ending',
+            'idle_points' => 'Unused Points',
+        ];
+        $activeAiMode = $segmentToAiMode[$currentSegment] ?? 'maintenance';
+        $activeBucketLabel = $segmentLabels[$currentSegment] ?? 'Client Retention';
     @endphp
 
     <!-- Unified Toolbar: Filter Tabs + Integrated Search -->
@@ -379,6 +445,12 @@
                 class="clients-tab {{ $currentSegment === 'all' ? 'active' : '' }} tooltip-bottom tooltip-align-left"
                 data-tooltip="Every client in your database.">
                 <span>All Clients</span>
+                <span class="clients-tab-count">{{ $counts['all'] }}</span>
+            </a>
+            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'ltv'])) }}"
+                class="clients-tab {{ $currentSegment === 'ltv' ? 'active' : '' }} tooltip-bottom"
+                data-tooltip="Clients ranked from highest total spend to lowest.">
+                <span>Top LTV</span>
                 <span class="clients-tab-count">{{ $counts['all'] }}</span>
             </a>
             <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'second_visit_zone'])) }}"
@@ -440,8 +512,10 @@
                     @forelse ($customers as $customer)
                         @php
                             $tierInfo = $customerTiers[$customer->id] ?? ['badges' => [], 'wa_phone' => preg_replace('/\D+/', '', (string) $customer->phone)];
-                            $waPhone = $tierInfo['wa_phone'] ?: preg_replace('/\D+/', '', (string) $customer->phone);
                             $points = (int) ($customer->loyalty_points ?? 0);
+                            $lastVisitFormatted = ($lastVisit[$customer->id] ?? null)
+                                ? \Illuminate\Support\Carbon::parse($lastVisit[$customer->id])->format('d M Y')
+                                : 'No past visit';
                         @endphp
                         <tr>
                             <td>
@@ -492,18 +566,24 @@
                             </td>
                             <td class="text-end text-nowrap">
                                 <div class="row-actions-group">
-                                    @if ($waPhone)
-                                        <a href="https://wa.me/{{ $waPhone }}" target="_blank" rel="noopener"
-                                            class="btn-row-action btn-row-wa"
-                                            data-tooltip="Chat on WhatsApp">
-                                            <i class="bx bxl-whatsapp"></i> WhatsApp
-                                        </a>
+                                    @if ($isRetentionSegment)
+                                        <button type="button"
+                                            class="btn-row-action btn-row-ai js-open-client-ai-script"
+                                            data-endpoint="{{ route('customers.ai-retention-script', $customer->id) }}"
+                                            data-client-name="{{ $customer->name ?? 'Valued Client' }}"
+                                            data-client-phone="{{ $customer->phone }}"
+                                            data-bucket-label="{{ $activeBucketLabel }}"
+                                            data-mode="{{ $activeAiMode }}"
+                                            data-last-visit="{{ $lastVisitFormatted }}"
+                                            data-points="{{ $points }}"
+                                            data-service="{{ $tierInfo['last_service'] ?? 'Signature Salon Ritual' }}"
+                                            data-staff="{{ $tierInfo['last_staff'] ?? 'your stylist' }}"
+                                            data-branch="{{ $tierInfo['last_branch'] ?? 'old_airport' }}"
+                                            data-days-overdue="{{ $tierInfo['days_since'] ?? 30 }}"
+                                            data-tooltip="Generate personalized WhatsApp script">
+                                            ✨ AI Script
+                                        </button>
                                     @endif
-                                    <a href="{{ route('appointments.calendar', ['customer_id' => $customer->id, 'phone' => $customer->phone, 'name' => $customer->name]) }}"
-                                        class="btn-row-action btn-row-rebook"
-                                        data-tooltip="Book on Calendar">
-                                        <i class="bx bx-calendar-plus"></i> Rebook
-                                    </a>
                                     <a href="{{ route('customers.show', $customer->id) }}"
                                         class="btn-row-action btn-row-profile tooltip-align-right"
                                         data-tooltip="Open client profile">
@@ -523,4 +603,157 @@
     </div>
 
     {{ $customers->links() }}
+
+    @if ($isRetentionSegment)
+        <!-- Leads-Style AI Warm Outreach Script Modal -->
+        <div class="modal fade" id="clientAiScriptModal" tabindex="-1" aria-labelledby="clientAiScriptModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content ai-modal-card">
+                    <div class="modal-header border-0 pb-2 d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="modal-title fw-bold mb-1" id="clientAiScriptModalLabel">
+                                ✨ AI Outreach Script — <span id="aiModalClientName">Client</span>
+                            </h6>
+                            <div class="text-muted small" id="aiModalClientPhone"></div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="ai-lang-toggle" role="group" aria-label="Script Language">
+                                <button type="button" class="ai-lang-btn active" data-lang="en">EN</button>
+                                <button type="button" class="ai-lang-btn" data-lang="ar">عربي</button>
+                            </div>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                    </div>
+                    <div class="modal-body pt-2">
+                        <div class="mb-3">
+                            <span class="ai-context-pill" id="aiModalBucketContext"></span>
+                        </div>
+                        <div class="ai-script-box" id="aiModalScriptOutput">Generating personalized script...</div>
+                    </div>
+                    <div class="modal-footer border-0 pt-0 d-flex justify-content-between">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="aiModalRegenerateBtn">
+                            🔄 Regenerate
+                        </button>
+                        <button type="button" class="btn btn-sm btn-primary" id="aiModalCopyBtn">
+                            📋 Copy to WhatsApp
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const modalEl = document.getElementById('clientAiScriptModal');
+                if (!modalEl) return;
+
+                const nameEl = document.getElementById('aiModalClientName');
+                const phoneEl = document.getElementById('aiModalClientPhone');
+                const contextEl = document.getElementById('aiModalBucketContext');
+                const outputEl = document.getElementById('aiModalScriptOutput');
+                const copyBtn = document.getElementById('aiModalCopyBtn');
+                const regenBtn = document.getElementById('aiModalRegenerateBtn');
+                const langBtns = modalEl.querySelectorAll('.ai-lang-btn');
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+
+                let activeState = {
+                    endpoint: '',
+                    mode: 'maintenance',
+                    service: 'Signature Salon Ritual',
+                    staff: 'your stylist',
+                    branch: 'old_airport',
+                    daysOverdue: 30,
+                    language: 'en'
+                };
+
+                function fetchAiScript() {
+                    if (!activeState.endpoint) return;
+                    outputEl.textContent = activeState.language === 'ar'
+                        ? 'جاري كتابة رسالة مخصصة...'
+                        : 'Generating personalized script...';
+                    outputEl.setAttribute('dir', activeState.language === 'ar' ? 'rtl' : 'ltr');
+                    regenBtn.disabled = true;
+
+                    fetch(activeState.endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken
+                        },
+                        body: JSON.stringify({
+                            mode: activeState.mode,
+                            language: activeState.language,
+                            service_name: activeState.service,
+                            last_staff_name: activeState.staff,
+                            branch: activeState.branch,
+                            days_overdue: activeState.daysOverdue
+                        })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        outputEl.textContent = data.script || 'Could not generate script. Please try again.';
+                    })
+                    .catch(() => {
+                        outputEl.textContent = 'Could not generate script right now. Please try again.';
+                    })
+                    .finally(() => {
+                        regenBtn.disabled = false;
+                    });
+                }
+
+                document.querySelectorAll('.js-open-client-ai-script').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        activeState.endpoint = this.dataset.endpoint;
+                        activeState.mode = this.dataset.mode || 'maintenance';
+                        activeState.service = this.dataset.service || 'Signature Salon Ritual';
+                        activeState.staff = this.dataset.staff || 'your stylist';
+                        activeState.branch = this.dataset.branch || 'old_airport';
+                        activeState.daysOverdue = parseInt(this.dataset.daysOverdue || '30', 10);
+
+                        nameEl.textContent = this.dataset.clientName || 'Client';
+                        phoneEl.textContent = this.dataset.clientPhone || '';
+
+                        const parts = [this.dataset.bucketLabel || 'Retention'];
+                        if (this.dataset.lastVisit) {
+                            parts.push('Last visit ' + this.dataset.lastVisit);
+                        }
+                        if (parseInt(this.dataset.points || '0', 10) > 0) {
+                            parts.push(this.dataset.points + ' pts');
+                        }
+                        contextEl.textContent = parts.join(' · ');
+
+                        const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                        bsModal.show();
+                        fetchAiScript();
+                    });
+                });
+
+                langBtns.forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        langBtns.forEach(b => b.classList.remove('active'));
+                        this.classList.add('active');
+                        activeState.language = this.dataset.lang || 'en';
+                        fetchAiScript();
+                    });
+                });
+
+                regenBtn.addEventListener('click', function () {
+                    fetchAiScript();
+                });
+
+                copyBtn.addEventListener('click', function () {
+                    const text = (outputEl.textContent || '').trim();
+                    if (!text) return;
+                    navigator.clipboard.writeText(text).then(() => {
+                        const orig = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '✅ Copied!';
+                        setTimeout(() => {
+                            copyBtn.innerHTML = orig;
+                        }, 1600);
+                    });
+                });
+            });
+        </script>
+    @endif
 @endsection

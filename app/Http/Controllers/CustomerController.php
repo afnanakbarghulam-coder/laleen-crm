@@ -21,16 +21,27 @@ class CustomerController extends Controller
     public function index(Request $request)
     {
         $segments = $this->computeRetentionSegments();
+        $allowedSegments = ['all', 'ltv', 'second_visit_zone', 'bleeding_vips', 'package_renewal', 'idle_points'];
         $activeSegment = strtolower(trim((string) $request->query('segment', 'all')));
-        if (!in_array($activeSegment, ['all', 'second_visit_zone', 'bleeding_vips', 'package_renewal', 'idle_points'], true)) {
+        if (!in_array($activeSegment, $allowedSegments, true)) {
             $activeSegment = 'all';
         }
 
-        $query = Customer::query()->withCount([
-            'appointments' => fn ($q) => $q->where('status', 'completed'),
-        ]);
+        $netSaleExpr = 'CASE WHEN (COALESCE(services_total, 0) + COALESCE(products_total, 0) + COALESCE(packages_total, 0) - COALESCE(discount_amount, 0)) > 0 THEN (COALESCE(services_total, 0) + COALESCE(products_total, 0) + COALESCE(packages_total, 0) - COALESCE(discount_amount, 0)) ELSE 0 END';
 
-        if ($activeSegment !== 'all') {
+        $query = Customer::query()
+            ->select('customers.*')
+            ->selectSub(
+                Sale::query()
+                    ->selectRaw("COALESCE(SUM({$netSaleExpr}), 0)")
+                    ->whereColumn('sales.customer_id', 'customers.id'),
+                'computed_net_ltv'
+            )
+            ->withCount([
+                'appointments' => fn ($q) => $q->where('status', 'completed'),
+            ]);
+
+        if (!in_array($activeSegment, ['all', 'ltv'], true)) {
             $query->whereIn('id', $segments[$activeSegment] ?? []);
         }
 
@@ -46,7 +57,15 @@ class CustomerController extends Controller
             });
         }
 
-        $customers = $query->orderBy('name')->paginate(20)->withQueryString();
+        if ($activeSegment === 'ltv') {
+            $query->orderByDesc('computed_net_ltv')
+                ->orderByDesc('appointments_count')
+                ->orderBy('name');
+        } else {
+            $query->orderBy('name');
+        }
+
+        $customers = $query->paginate(20)->withQueryString();
 
         // LTV + last visit, computed in bulk to avoid N+1 per-row queries.
         $customerIds = $customers->pluck('id');
@@ -56,16 +75,21 @@ class CustomerController extends Controller
             ->groupBy('customer_id')
             ->map(fn ($sales) => round((float) $sales->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount)), 2));
 
-        $lastVisit = Appointment::whereIn('customer_id', $customerIds)
+        $lastCompletedAppts = Appointment::with('staff:id,name')
+            ->whereIn('customer_id', $customerIds)
             ->where('status', 'completed')
-            ->selectRaw('customer_id, MAX(appointment_datetime) as last_visit')
+            ->orderByDesc('appointment_datetime')
+            ->get(['id', 'customer_id', 'staff_id', 'branch', 'service_name', 'appointment_datetime'])
             ->groupBy('customer_id')
-            ->pluck('last_visit', 'customer_id');
+            ->map(fn ($group) => $group->first());
+
+        $lastVisit = $lastCompletedAppts->map(fn ($appt) => $appt?->appointment_datetime);
 
         $dueCustomerIds = (new ClientMaintenancePlanner())->dueQueue()->pluck('customer_id')->unique();
 
         $segmentCounts = [
             'all' => $segments['all_count'],
+            'ltv' => $segments['all_count'],
             'second_visit_zone' => count($segments['second_visit_zone']),
             'bleeding_vips' => count($segments['bleeding_vips']),
             'package_renewal' => count($segments['package_renewal']),
@@ -119,10 +143,22 @@ class CustomerController extends Controller
                 $rawDigits = '974' . $rawDigits;
             }
 
+            $lastAppt = $lastCompletedAppts->get($cid);
+            $primaryService = $lastAppt && $lastAppt->service_name
+                ? trim(explode(',', (string) $lastAppt->service_name)[0])
+                : 'Signature Salon Service';
+            $daysSince = ($lastAppt && $lastAppt->appointment_datetime)
+                ? max(0, (int) floor((now()->startOfDay()->timestamp - Carbon::parse($lastAppt->appointment_datetime)->startOfDay()->timestamp) / 86400))
+                : 0;
+
             $customerTiers[$cid] = [
                 'is_vip' => $isVip,
                 'badges' => $badges,
                 'wa_phone' => $rawDigits,
+                'last_service' => $primaryService,
+                'last_staff' => $lastAppt?->staff?->name ?? '',
+                'last_branch' => $lastAppt?->branch ?? '',
+                'days_since' => $daysSince,
             ];
         }
 

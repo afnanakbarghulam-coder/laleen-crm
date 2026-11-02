@@ -185,6 +185,82 @@ class ClientsHormoziRetentionTest extends TestCase
         $respIdle->assertDontSee('Booked SecondVisit');
         $respIdle->assertSee('Every client in your database.', false);
         $respIdle->assertSee('Has 30+ points (QAR discount) unused for 30+ days.', false);
+
+        // Verify WhatsApp & Rebook buttons are removed, and ✨ AI Script renders ONLY on retention tabs
+        foreach ([$respSecond, $respVip, $respPkg, $respIdle] as $retentionResp) {
+            $retentionResp->assertSee('✨ AI Script', false);
+            $retentionResp->assertDontSee('bxl-whatsapp', false);
+            $retentionResp->assertDontSee('bx-calendar-plus', false);
+        }
+
+        $respAll = $this->actingAs($this->admin)
+            ->get(route('customers.index', ['segment' => 'all']))
+            ->assertOk();
+        $respAll->assertDontSee('✨ AI Script', false);
+        $respAll->assertDontSee('bxl-whatsapp', false);
+        $respAll->assertDontSee('bx-calendar-plus', false);
+        $respAll->assertSee('Clients ranked from highest total spend to lowest.', false);
+    }
+
+    public function test_top_ltv_segment_sorts_clients_from_highest_net_spend_to_lowest(): void
+    {
+        $lowClient = Customer::create([
+            'name' => 'Alpha LowSpend',
+            'phone' => '55900001',
+        ]);
+        Sale::create([
+            'customer_id' => $lowClient->id,
+            'branch' => 'old_airport',
+            'services_total' => 120,
+            'products_total' => 0,
+            'packages_total' => 0,
+            'discount_amount' => 20,
+            'tip_amount' => 15,
+            'total_amount' => 115,
+        ]);
+
+        $highClient = Customer::create([
+            'name' => 'Zara HighSpend',
+            'phone' => '55900002',
+        ]);
+        Sale::create([
+            'customer_id' => $highClient->id,
+            'branch' => 'old_airport',
+            'services_total' => 800,
+            'products_total' => 150,
+            'packages_total' => 0,
+            'discount_amount' => 50,
+            'tip_amount' => 0,
+            'total_amount' => 900,
+        ]);
+
+        $midClient = Customer::create([
+            'name' => 'Mariam MidSpend',
+            'phone' => '55900003',
+        ]);
+        Sale::create([
+            'customer_id' => $midClient->id,
+            'branch' => 'old_airport',
+            'services_total' => 450,
+            'products_total' => 0,
+            'packages_total' => 0,
+            'discount_amount' => 0,
+            'tip_amount' => 0,
+            'total_amount' => 450,
+        ]);
+
+        $respLtv = $this->actingAs($this->admin)
+            ->get(route('customers.index', ['segment' => 'ltv']))
+            ->assertOk();
+
+        $respLtv->assertSeeInOrder([
+            'Zara HighSpend',
+            'Mariam MidSpend',
+            'Alpha LowSpend',
+        ]);
+        $respLtv->assertDontSee('✨ AI Script', false);
+        $respLtv->assertDontSee('bxl-whatsapp', false);
+        $respLtv->assertDontSee('bx-calendar-plus', false);
     }
 
     public function test_customer_show_renders_ascension_and_cross_sell_intelligence_card(): void
@@ -313,6 +389,43 @@ class ClientsHormoziRetentionTest extends TestCase
         $arScript = $arResponse->json('script');
         $this->assertNotEmpty($arScript);
         $this->assertMatchesRegularExpression('/\p{Arabic}/u', $arScript);
+
+        $idleEnResponse = $this->actingAs($this->admin)
+            ->postJson(route('customers.ai-retention-script', $customer), [
+                'service_name' => 'HydraFacial',
+                'days_overdue' => 35,
+                'last_staff_name' => 'Elena',
+                'branch' => 'old_airport',
+                'mode' => 'idle_points',
+                'language' => 'en',
+            ])
+            ->assertOk()
+            ->assertJson([
+                'success' => true,
+                'language' => 'en',
+                'mode' => 'idle_points',
+            ]);
+        $idleEnScript = $idleEnResponse->json('script');
+        $this->assertStringContainsString('60', $idleEnScript);
+
+        $idleArResponse = $this->actingAs($this->admin)
+            ->postJson(route('customers.ai-retention-script', $customer), [
+                'service_name' => 'HydraFacial',
+                'days_overdue' => 35,
+                'last_staff_name' => 'Elena',
+                'branch' => 'old_airport',
+                'mode' => 'idle_points',
+                'language' => 'ar',
+            ])
+            ->assertOk()
+            ->assertJson([
+                'success' => true,
+                'language' => 'ar',
+                'mode' => 'idle_points',
+            ]);
+        $idleArScript = $idleArResponse->json('script');
+        $this->assertStringContainsString('60', $idleArScript);
+        $this->assertMatchesRegularExpression('/\p{Arabic}/u', $idleArScript);
     }
 
     public function test_sync_retention_leads_pushes_overdue_and_slipping_vips_without_duplicating_open_leads(): void

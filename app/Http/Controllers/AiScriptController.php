@@ -847,7 +847,7 @@ PROMPT;
      */
     public function generateForMaintenance(Request $request, Customer $customer)
     {
-        $allowedModes = ['maintenance', 'package_expiry', 'vip_winback', 'second_visit'];
+        $allowedModes = ['maintenance', 'package_expiry', 'vip_winback', 'second_visit', 'idle_points'];
         $requestedMode = strtolower(trim((string) $request->input('mode', 'maintenance')));
         $mode = in_array($requestedMode, $allowedModes, true) ? $requestedMode : 'maintenance';
         $language = $this->resolveLanguage($request->input('language'), null);
@@ -892,8 +892,8 @@ PROMPT;
 You are a warm ladies' salon manager in Qatar texting a returning client on WhatsApp (Alex Hormozi Warm Outreach framework).
 Strictly 1 to 2 sentences (MAX 28 words total). Zero brochure fluff.
 {$languageDirective}
-Client: {$customerName}. Mode: {$mode}. Service: {$serviceName}. Days Overdue: {$daysOverdue}. Last Stylist: {$lastStaffName}. Branch: {$branchLabel}. Loyalty Points: {$loyaltyPoints}. Remaining Package Sessions: {$pendingPackageSessions}.
-Reference their last visit/stylist, loyalty points (if > 0), or remaining package sessions, and end with a low-friction A/B morning or afternoon booking question.
+Client: {$customerName}. Mode: {$mode}. Service: {$serviceName}. Days Overdue: {$daysOverdue}. Last Stylist: {$lastStaffName}. Branch: {$branchLabel}. Loyalty Points: {$loyaltyPoints} (1 pt = 1 QAR discount). Remaining Package Sessions: {$pendingPackageSessions}.
+Reference their last visit/stylist, loyalty points (especially when mode is idle_points), or remaining package sessions, and end with a low-friction A/B morning or afternoon booking question.
 PROMPT;
 
         $openAiKey = config('services.openai.key');
@@ -960,11 +960,13 @@ PROMPT;
         $staffAr = $lastStaffName !== '' ? " مع {$lastStaffName}" : '';
 
         if ($language === 'ar') {
+            $pointsVal = max(30, $loyaltyPoints);
             $perkAr = $pendingPackageSessions > 0
                 ? " وعندك {$pendingPackageSessions} جلسة متبقية في باقتك"
                 : ($loyaltyPoints > 0 ? " وعندك {$loyaltyPoints} نقطة ولاء جاهزة للاستخدام" : '');
 
             return match ($mode) {
+                'idle_points' => "يا هلا حبيبتي {$nameAr}، عندك {$pointsVal} نقطة ولاء ({$pointsVal} ريال خصم) جاهزة في حسابك لجلستك {$serviceName}{$staffAr}. يناسبك موعد الصباح أو المساء هالأسبوع؟",
                 'package_expiry' => "يا هلا حبيبتي {$nameAr}، باقي لك جلسات في باقة {$serviceName}{$staffAr} قبل انتهاء صلاحيتها. يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟",
                 'vip_winback' => "يا هلا حبيبتي {$nameAr}، اشتقنا لك في الصالون لجلستك {$serviceName}{$staffAr}{$perkAr}. يناسبك موعد الصباح أو المساء هالأسبوع؟",
                 'second_visit' => "يا هلا حبيبتي {$nameAr}، نورتينا بزيارتك الأولى لخدمة {$serviceName}{$staffAr}{$perkAr}. تحبين نرتب جلستك الثانية الصباح أو المساء هالأسبوع؟",
@@ -972,11 +974,13 @@ PROMPT;
             };
         }
 
+        $pointsVal = max(30, $loyaltyPoints);
         $perkEn = $pendingPackageSessions > 0
             ? " and you have {$pendingPackageSessions} package session(s) ready"
             : ($loyaltyPoints > 0 ? " plus {$loyaltyPoints} loyalty points waiting" : '');
 
         return match ($mode) {
+            'idle_points' => "Hi {$nameEn}! You have {$pointsVal} loyalty points ({$pointsVal} QAR credit) ready to use toward your {$serviceName}{$staffEn}. Would a morning or afternoon slot work better this week?",
             'package_expiry' => "Hi {$nameEn}! You still have package sessions left for {$serviceName}{$staffEn} before they expire. Would a morning or afternoon slot work better this week?",
             'vip_winback' => "Hi {$nameEn}! We've missed seeing you for your {$serviceName}{$staffEn}{$perkEn}. Would a morning or afternoon slot work better for you this week?",
             'second_visit' => "Hi {$nameEn}! Loved having you for your first {$serviceName}{$staffEn}{$perkEn}. Would a morning or afternoon slot work for your next visit this week?",
