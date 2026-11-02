@@ -867,6 +867,9 @@ PROMPT;
         $branchRaw = trim((string) ($request->input('branch') ?: $lastCompleted?->branch ?: ''));
         $branchLabel = AppointmentController::BRANCH_LABELS[$branchRaw] ?? $branchRaw;
 
+        $completedVisitsCount = $customer->appointments()->where('status', 'completed')->count();
+        $isFirstVisitClient = ($completedVisitsCount === 1);
+
         $loyaltyPoints = (int) $customer->loyalty_points;
         $pendingPackageSessions = (int) $customer->pending_package_service_count;
         $customerName = trim((string) ($customer->name ?: 'lovely'));
@@ -884,11 +887,16 @@ PROMPT;
             language: $language,
             loyaltyPoints: $loyaltyPoints,
             pendingPackageSessions: $pendingPackageSessions,
+            isFirstVisitClient: $isFirstVisitClient,
         );
         $source = 'fallback';
 
         $pointsPromptRule = $loyaltyPoints >= 30
             ? "IMPORTANT BONUS HOOK: The client has {$loyaltyPoints} QAR in loyalty points ready to use—explicitly weave '{$loyaltyPoints} QAR in loyalty points' into the message!"
+            : '';
+
+        $firstVisitPromptRule = ($mode === 'maintenance' && $isFirstVisitClient)
+            ? "FIRST-VISIT RETENTION HOOK: This client has completed only 1 visit so far! Blend the {$serviceName} maintenance refill hook with a warm 'we loved hosting your first visit and would love to welcome you back for your maintenance refresh' angle."
             : '';
 
         $languageDirective = $language === 'ar'
@@ -899,7 +907,8 @@ PROMPT;
 You are a warm ladies' salon manager in Qatar texting a returning client on WhatsApp (Alex Hormozi Warm Outreach framework).
 Strictly 1 to 2 sentences (MAX 28 words total). Zero brochure fluff.
 {$languageDirective}
-Client: {$customerName}. Mode: {$mode}. Service: {$serviceName}. Days Overdue: {$daysOverdue}. Last Stylist: {$lastStaffName}. Branch: {$branchLabel}. Loyalty Points: {$loyaltyPoints} (1 pt = 1 QAR discount). Remaining Package Sessions: {$pendingPackageSessions}.
+Client: {$customerName}. Mode: {$mode}. Completed Visits: {$completedVisitsCount}. Service: {$serviceName}. Days Overdue: {$daysOverdue}. Last Stylist: {$lastStaffName}. Branch: {$branchLabel}. Loyalty Points: {$loyaltyPoints} (1 pt = 1 QAR discount). Remaining Package Sessions: {$pendingPackageSessions}.
+{$firstVisitPromptRule}
 {$pointsPromptRule}
 Reference their last visit/stylist, loyalty points, or remaining package sessions, and end with a low-friction A/B morning or afternoon booking question.
 PROMPT;
@@ -946,6 +955,8 @@ PROMPT;
             'language' => $language,
             'loyalty_points' => $loyaltyPoints,
             'pending_package_sessions' => $pendingPackageSessions,
+            'completed_visits_count' => $completedVisitsCount,
+            'is_first_visit_client' => $isFirstVisitClient,
         ]);
     }
 
@@ -958,7 +969,8 @@ PROMPT;
         string $mode,
         string $language,
         int $loyaltyPoints,
-        int $pendingPackageSessions
+        int $pendingPackageSessions,
+        bool $isFirstVisitClient = false
     ): string {
         $isDefaultName = ($customerName === '' || in_array(strtolower($customerName), ['unnamed', 'unnamed client', 'lovely'], true));
         $nameEn = !$isDefaultName ? $customerName : 'lovely';
@@ -976,6 +988,10 @@ PROMPT;
                 ? $pointsBonusAr
                 : ($pendingPackageSessions > 0 ? " وعندك {$pendingPackageSessions} جلسة متبقية في باقتك" : '');
 
+            if ($mode === 'maintenance' && $isFirstVisitClient) {
+                return "يا هلا حبيبتي {$nameAr}، نورتينا بزيارتك الأولى وحان موعد تجديد جلسة {$serviceName}{$staffAr}{$perkAr}. يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟";
+            }
+
             return match ($mode) {
                 'idle_points' => "يا هلا حبيبتي {$nameAr}، عندك {$pointsVal} نقطة ولاء ({$pointsVal} ريال خصم) جاهزة في حسابك لجلستك {$serviceName}{$staffAr}. يناسبك موعد الصباح أو المساء هالأسبوع؟",
                 'package_expiry' => "يا هلا حبيبتي {$nameAr}، باقي لك جلسات في باقة {$serviceName}{$staffAr} قبل انتهاء صلاحيتها{$pointsBonusAr}. يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟",
@@ -987,18 +1003,22 @@ PROMPT;
 
         $pointsVal = max(30, $loyaltyPoints);
         $pointsBonusEn = $loyaltyPoints >= 30
-            ? ", plus you have {$loyaltyPoints} QAR in loyalty points ready to use"
+            ? " (plus {$loyaltyPoints} QAR in loyalty points ready)"
             : '';
         $perkEn = $loyaltyPoints >= 30
             ? $pointsBonusEn
-            : ($pendingPackageSessions > 0 ? " and you have {$pendingPackageSessions} package session(s) ready" : '');
+            : ($pendingPackageSessions > 0 ? " ({$pendingPackageSessions} package session(s) ready)" : '');
+
+        if ($mode === 'maintenance' && $isFirstVisitClient) {
+            return "Hi {$nameEn}! Loved hosting your first visit—you're due for your {$serviceName} refresh{$staffEn}{$perkEn}. Does morning or afternoon work this week?";
+        }
 
         return match ($mode) {
-            'idle_points' => "Hi {$nameEn}! You have {$pointsVal} loyalty points ({$pointsVal} QAR credit) ready to use toward your {$serviceName}{$staffEn}. Would a morning or afternoon slot work better this week?",
-            'package_expiry' => "Hi {$nameEn}! You still have package sessions left for {$serviceName}{$staffEn} before they expire{$pointsBonusEn}. Would a morning or afternoon slot work better this week?",
-            'vip_winback' => "Hi {$nameEn}! We've missed seeing you for your {$serviceName}{$staffEn}{$perkEn}. Would a morning or afternoon slot work better for you this week?",
-            'second_visit' => "Hi {$nameEn}! Loved having you for your first {$serviceName}{$staffEn}{$perkEn}. Would a morning or afternoon slot work for your next visit this week?",
-            default => "Hi {$nameEn}! You're due for your {$serviceName} refresh{$staffEn}{$perkEn}. Would a morning or afternoon slot work better for you this week?",
+            'idle_points' => "Hi {$nameEn}! You have {$pointsVal} loyalty points ({$pointsVal} QAR credit) ready to use toward your {$serviceName}{$staffEn}. Does morning or afternoon work this week?",
+            'package_expiry' => "Hi {$nameEn}! You still have package sessions left for {$serviceName}{$staffEn} before they expire{$pointsBonusEn}. Does morning or afternoon work this week?",
+            'vip_winback' => "Hi {$nameEn}! We've missed seeing you for your {$serviceName}{$staffEn}{$perkEn}. Does morning or afternoon work better this week?",
+            'second_visit' => "Hi {$nameEn}! Loved having you for your first {$serviceName}{$staffEn}{$perkEn}. Does morning or afternoon work for your next visit this week?",
+            default => "Hi {$nameEn}! You're due for your {$serviceName} refresh{$staffEn}{$perkEn}. Does morning or afternoon work better this week?",
         };
     }
 }

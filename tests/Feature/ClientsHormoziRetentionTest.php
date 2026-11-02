@@ -184,16 +184,21 @@ class ClientsHormoziRetentionTest extends TestCase
             ]);
         }
 
-        // Verify due_for_refill filter & due service badge
+        // Verify due_for_refill filter includes BOTH:
+        // - Latifa DueRefill (explicit rebooking_interval_days = 21)
+        // - Aisha SecondVisit (1st-visit client 25 days ago caught by the 28-day default fallback with 🔥 1st Visit pill!)
         $respRefill = $this->actingAs($this->admin)
             ->get(route('customers.index', ['segment' => 'due_for_refill']))
             ->assertOk();
         $respRefill->assertSee('Latifa DueRefill');
         $respRefill->assertSee('Overdue: Root Touch-Up Color', false);
+        $respRefill->assertSee('Aisha SecondVisit');
+        $respRefill->assertSee('Due: Signature Blowdry', false);
+        $respRefill->assertSee('🔥 1st Visit', false);
+        $respRefill->assertDontSee('Booked SecondVisit');
         $respRefill->assertDontSee('Fatima SlippingVIP');
-        $respRefill->assertDontSee('Aisha SecondVisit');
 
-        // Verify strict priority de-duplication: Latifa DueRefill must NOT double-appear in bleeding_vips or second_visit_zone
+        // Verify strict priority de-duplication: neither Latifa DueRefill nor Aisha SecondVisit double-appear in bleeding_vips
         $respVip = $this->actingAs($this->admin)
             ->get(route('customers.index', ['segment' => 'bleeding_vips']))
             ->assertOk();
@@ -202,14 +207,14 @@ class ClientsHormoziRetentionTest extends TestCase
         $respVip->assertDontSee('Aisha SecondVisit');
         $respVip->assertDontSee('Booked SecondVisit');
 
-        // Verify second_visit_zone filter
-        $respSecond = $this->actingAs($this->admin)
+        // Verify legacy ?segment=second_visit_zone gracefully resolves to due_for_refill
+        $respLegacySecond = $this->actingAs($this->admin)
             ->get(route('customers.index', ['segment' => 'second_visit_zone']))
             ->assertOk();
-        $respSecond->assertSee('Aisha SecondVisit');
-        $respSecond->assertDontSee('Latifa DueRefill');
-        $respSecond->assertDontSee('Booked SecondVisit');
-        $respSecond->assertDontSee('Fatima SlippingVIP');
+        $respLegacySecond->assertSee('Aisha SecondVisit');
+        $respLegacySecond->assertSee('Latifa DueRefill');
+        $respLegacySecond->assertDontSee('Booked SecondVisit');
+        $respLegacySecond->assertDontSee('Fatima SlippingVIP');
 
         // Verify package_renewal filter
         $respPkg = $this->actingAs($this->admin)
@@ -219,12 +224,19 @@ class ClientsHormoziRetentionTest extends TestCase
         $respPkg->assertDontSee('Latifa DueRefill');
         $respPkg->assertDontSee('Aisha SecondVisit');
 
-        // Verify Unused Points tab and Beauty Planning header button are removed, and Due for Refill is present
+        // Verify Need 2nd Visit, Unused Points, and Beauty Planning header button are removed, leaving strictly the 5 clean tabs
         $respAll = $this->actingAs($this->admin)
             ->get(route('customers.index', ['segment' => 'all']))
             ->assertOk();
-        $respAll->assertSee('Due for Refill', false);
+        $respAll->assertSeeInOrder([
+            'All Clients',
+            'Top LTV',
+            'Due for Refill',
+            'Packages Ending',
+            'Missing VIPs',
+        ]);
         $respAll->assertSee('Due or overdue for roots, nails, or facial maintenance.', false);
+        $respAll->assertDontSee('Need 2nd Visit', false);
         $respAll->assertDontSee('Unused Points', false);
         $respAll->assertDontSee('Beauty Planning', false);
         $respAll->assertDontSee('✨ AI Script', false);
@@ -237,8 +249,8 @@ class ClientsHormoziRetentionTest extends TestCase
             ->get(route('customers.beauty-planning'))
             ->assertRedirect(route('customers.index', ['segment' => 'due_for_refill']));
 
-        // Verify WhatsApp & Rebook buttons are removed, and ✨ AI Script renders ONLY on the 4 outreach tabs
-        foreach ([$respRefill, $respPkg, $respVip, $respSecond] as $retentionResp) {
+        // Verify WhatsApp & Rebook buttons are removed, and ✨ AI Script renders ONLY on the 3 outreach tabs
+        foreach ([$respRefill, $respPkg, $respVip] as $retentionResp) {
             $retentionResp->assertSee('✨ AI Script', false);
             $retentionResp->assertDontSee('bxl-whatsapp', false);
             $retentionResp->assertDontSee('bx-calendar-plus', false);
@@ -417,6 +429,18 @@ class ClientsHormoziRetentionTest extends TestCase
             'phone' => '55300001',
             'loyalty_points' => 60,
         ]);
+        Appointment::create([
+            'customer_id' => $customer->id,
+            'customer_name' => $customer->name,
+            'phone' => $customer->phone,
+            'service_name' => 'HydraFacial',
+            'appointment_datetime' => now()->subDays(28),
+            'booking_date' => now()->subDays(28)->toDateString(),
+            'start_time' => '14:00:00',
+            'status' => 'completed',
+            'branch' => 'old_airport',
+            'price' => 300,
+        ]);
 
         $enResponse = $this->actingAs($this->admin)
             ->postJson(route('customers.ai-retention-script', $customer), [
@@ -432,10 +456,13 @@ class ClientsHormoziRetentionTest extends TestCase
                 'success' => true,
                 'language' => 'en',
                 'mode' => 'maintenance',
+                'completed_visits_count' => 1,
+                'is_first_visit_client' => true,
             ]);
 
         $enScript = $enResponse->json('script');
         $this->assertNotEmpty($enScript);
+        $this->assertStringContainsString('first visit', $enScript);
         $this->assertStringContainsString('HydraFacial', $enScript);
         $this->assertStringContainsString('60 QAR', $enScript);
         $this->assertLessThanOrEqual(35, str_word_count($enScript));

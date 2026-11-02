@@ -416,21 +416,18 @@
             'due_for_refill' => 0,
             'package_renewal' => 0,
             'bleeding_vips' => 0,
-            'second_visit_zone' => 0,
         ];
-        $retentionSegments = ['due_for_refill', 'package_renewal', 'bleeding_vips', 'second_visit_zone'];
+        $retentionSegments = ['due_for_refill', 'package_renewal', 'bleeding_vips'];
         $isRetentionSegment = in_array($currentSegment, $retentionSegments, true);
         $segmentToAiMode = [
             'due_for_refill' => 'maintenance',
             'package_renewal' => 'package_expiry',
             'bleeding_vips' => 'vip_winback',
-            'second_visit_zone' => 'second_visit',
         ];
         $segmentLabels = [
             'due_for_refill' => 'Due for Refill',
             'package_renewal' => 'Package Ending',
             'bleeding_vips' => 'Missing VIP',
-            'second_visit_zone' => 'Need 2nd Visit',
         ];
         $activeAiMode = $segmentToAiMode[$currentSegment] ?? 'maintenance';
         $activeBucketLabel = $segmentLabels[$currentSegment] ?? 'Client Retention';
@@ -468,12 +465,6 @@
                 data-tooltip="Regular clients who haven't visited in over 45 days.">
                 <span>Missing VIPs</span>
                 <span class="clients-tab-count">{{ $counts['bleeding_vips'] }}</span>
-            </a>
-            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'second_visit_zone'])) }}"
-                class="clients-tab {{ $currentSegment === 'second_visit_zone' ? 'active' : '' }} tooltip-bottom"
-                data-tooltip="Came once over 2 weeks ago and hasn't booked again.">
-                <span>Need 2nd Visit</span>
-                <span class="clients-tab-count">{{ $counts['second_visit_zone'] }}</span>
             </a>
         </div>
 

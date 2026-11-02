@@ -21,11 +21,12 @@ class CustomerController extends Controller
     public function index(Request $request)
     {
         $segments = $this->computeRetentionSegments();
-        $allowedSegments = ['all', 'ltv', 'due_for_refill', 'package_renewal', 'bleeding_vips', 'second_visit_zone'];
-        $activeSegment = strtolower(trim((string) $request->query('segment', 'all')));
-        if (!in_array($activeSegment, $allowedSegments, true)) {
-            $activeSegment = 'all';
+        $rawSegment = strtolower(trim((string) $request->query('segment', 'all')));
+        if ($rawSegment === 'second_visit_zone') {
+            $rawSegment = 'due_for_refill';
         }
+        $allowedSegments = ['all', 'ltv', 'due_for_refill', 'package_renewal', 'bleeding_vips'];
+        $activeSegment = in_array($rawSegment, $allowedSegments, true) ? $rawSegment : 'all';
 
         $netSaleExpr = 'CASE WHEN (COALESCE(services_total, 0) + COALESCE(products_total, 0) + COALESCE(packages_total, 0) - COALESCE(discount_amount, 0)) > 0 THEN (COALESCE(services_total, 0) + COALESCE(products_total, 0) + COALESCE(packages_total, 0) - COALESCE(discount_amount, 0)) ELSE 0 END';
 
@@ -94,13 +95,11 @@ class CustomerController extends Controller
             'due_for_refill' => count($segments['due_for_refill']),
             'package_renewal' => count($segments['package_renewal']),
             'bleeding_vips' => count($segments['bleeding_vips']),
-            'second_visit_zone' => count($segments['second_visit_zone']),
         ];
 
         $dueForRefillLookup = array_flip($segments['due_for_refill']);
         $packageRenewalLookup = array_flip($segments['package_renewal']);
         $bleedingVipsLookup = array_flip($segments['bleeding_vips']);
-        $secondVisitLookup = array_flip($segments['second_visit_zone']);
 
         $customerTiers = [];
         foreach ($customers as $c) {
@@ -123,6 +122,14 @@ class CustomerController extends Controller
                         ? "Overdue by {$daysOverdue} day(s) for {$svcLabel}."
                         : ($daysUntil === 0 ? "Due today for {$svcLabel}." : "Due in {$daysUntil} day(s) for {$svcLabel}."),
                 ];
+
+                if ((int) ($dueDetail['completed_visits_count'] ?? $c->appointments_count) === 1) {
+                    $badges[] = [
+                        'label' => '🔥 1st Visit',
+                        'class' => 'status-pill-second',
+                        'tooltip' => 'Completed 1st visit — lock in their 2nd visit now.',
+                    ];
+                }
             }
 
             if ($isVip) {
@@ -144,12 +151,6 @@ class CustomerController extends Controller
                     'label' => '⚠️ 45d+ Away',
                     'class' => 'status-pill-slipping',
                     'tooltip' => 'No visit in over 45 days and no upcoming booking.',
-                ];
-            } elseif (isset($secondVisitLookup[$cid])) {
-                $badges[] = [
-                    'label' => '🔥 Needs 2nd Visit',
-                    'class' => 'status-pill-second',
-                    'tooltip' => 'Came once 14–60 days ago with no next booking.',
                 ];
             }
 
@@ -197,11 +198,10 @@ class CustomerController extends Controller
     }
 
     /**
-     * Compute the 4 Zero-Overlap Outreach Tabs across all salon clients:
-     * 1. due_for_refill (highest priority)
+     * Compute the 3 Zero-Overlap Outreach Tabs across all salon clients:
+     * 1. due_for_refill (highest priority — includes explicit service intervals + 28-day fallback for 1st-visit retention)
      * 2. package_renewal (excluding due_for_refill)
      * 3. bleeding_vips (excluding due_for_refill & package_renewal)
-     * 4. second_visit_zone (excluding due_for_refill, package_renewal & bleeding_vips)
      *
      * Excludes clients who have an upcoming active appointment on or after today
      * OR who were contacted within the last 14 days (last_retention_contacted_at).
@@ -229,6 +229,20 @@ class CustomerController extends Controller
             ->unique()
             ->flip();
 
+        $completedStats = Appointment::query()
+            ->whereNotNull('customer_id')
+            ->where('status', 'completed')
+            ->selectRaw('customer_id, COUNT(*) as completed_count, MAX(appointment_datetime) as last_visit, SUM(COALESCE(price, 0)) as price_sum')
+            ->groupBy('customer_id')
+            ->get()
+            ->keyBy('customer_id');
+
+        $salesLtv = Sale::query()
+            ->whereNotNull('customer_id')
+            ->get(['customer_id', 'services_total', 'products_total', 'packages_total', 'discount_amount'])
+            ->groupBy('customer_id')
+            ->map(fn ($sales) => round((float) $sales->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount)), 2));
+
         // Priority 1: due_for_refill (Clients flagged as overdue or due_soon by ClientMaintenancePlanner)
         $dueQueue = (new ClientMaintenancePlanner())->dueQueue();
         $dueForRefillMap = [];
@@ -239,6 +253,24 @@ class CustomerController extends Controller
             if ($upcomingActiveCustomerIds->has($cid) || $cooldownCustomerIds->has($cid)) {
                 continue;
             }
+
+            $stat = $completedStats->get($cid);
+            $completedCount = $stat ? (int) $stat->completed_count : (int) ($row->completed_visits_count ?? 1);
+            $lastVisitAt = ($stat && $stat->last_visit) ? Carbon::parse($stat->last_visit) : null;
+            $daysSinceLastVisit = $lastVisitAt
+                ? (int) floor(($todayStart->timestamp - $lastVisitAt->copy()->startOfDay()->timestamp) / 86400)
+                : (int) ($row->days_since_visit ?? 0);
+            $netLtv = $salesLtv->has($cid)
+                ? (float) $salesLtv->get($cid)
+                : ($stat ? (float) $stat->price_sum : 0.0);
+
+            // If this is a 2+ visit VIP who is > 45 days away AND the service only used the generic 28d fallback
+            // (no explicit rebooking_interval_days configured), let them route to Missing VIPs (bleeding_vips).
+            $hasExplicitInterval = (bool) ($row->has_explicit_interval ?? true);
+            if (!$hasExplicitInterval && ($completedCount >= 2 || $netLtv >= 500) && $daysSinceLastVisit > 45) {
+                continue;
+            }
+
             $dueForRefillMap[$cid] = true;
             if (!isset($dueForRefillDetails[$cid])) {
                 $daysUntil = (int) $row->days_until;
@@ -249,6 +281,7 @@ class CustomerController extends Controller
                     'days_overdue' => $daysUntil < 0 ? abs($daysUntil) : 0,
                     'last_staff_name' => $row->last_staff_name ?? '',
                     'branch' => $row->branch ?? '',
+                    'completed_visits_count' => $completedCount,
                 ];
             }
         }
@@ -276,22 +309,7 @@ class CustomerController extends Controller
             }
         }
 
-        $completedStats = Appointment::query()
-            ->whereNotNull('customer_id')
-            ->where('status', 'completed')
-            ->selectRaw('customer_id, COUNT(*) as completed_count, MAX(appointment_datetime) as last_visit, SUM(COALESCE(price, 0)) as price_sum')
-            ->groupBy('customer_id')
-            ->get()
-            ->keyBy('customer_id');
-
-        $salesLtv = Sale::query()
-            ->whereNotNull('customer_id')
-            ->get(['customer_id', 'services_total', 'products_total', 'packages_total', 'discount_amount'])
-            ->groupBy('customer_id')
-            ->map(fn ($sales) => round((float) $sales->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount)), 2));
-
         $bleedingVips = [];
-        $secondVisitZone = [];
 
         foreach ($allCustomers as $customer) {
             $cid = (int) $customer->id;
@@ -317,12 +335,6 @@ class CustomerController extends Controller
             // Priority 3: bleeding_vips (2+ completed visits or Net LTV >= 500 QAR, > 45 days ago)
             if (($completedCount >= 2 || $netLtv >= 500) && $daysSinceLastVisit !== null && $daysSinceLastVisit > 45) {
                 $bleedingVips[] = $cid;
-                continue;
-            }
-
-            // Priority 4: second_visit_zone (1 completed visit, 14–60 days ago)
-            if ($completedCount === 1 && $daysSinceLastVisit !== null && $daysSinceLastVisit >= 14 && $daysSinceLastVisit <= 60) {
-                $secondVisitZone[] = $cid;
             }
         }
 
@@ -332,7 +344,6 @@ class CustomerController extends Controller
             'due_for_refill_details' => $dueForRefillDetails,
             'package_renewal' => array_keys($packageRenewalMap),
             'bleeding_vips' => array_values(array_unique($bleedingVips)),
-            'second_visit_zone' => array_values(array_unique($secondVisitZone)),
             'upcoming_active_ids' => $upcomingActiveCustomerIds->keys()->all(),
             'cooldown_ids' => $cooldownCustomerIds->keys()->all(),
         ];
