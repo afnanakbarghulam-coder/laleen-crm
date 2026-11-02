@@ -297,6 +297,7 @@ class CustomerController extends Controller
             ->get();
 
         $packageRenewalMap = [];
+        $packageRenewalDetails = [];
         $expiryWindowEnd = now()->addDays(21)->endOfDay();
         foreach ($activePackages as $pkg) {
             $cid = (int) $pkg->customer_id;
@@ -306,6 +307,12 @@ class CustomerController extends Controller
             $remaining = max(0, (int) $pkg->quantity_included - (int) $pkg->redeemed_services_count);
             if ($remaining <= 1 || ($pkg->expires_at && $pkg->expires_at->lte($expiryWindowEnd))) {
                 $packageRenewalMap[$cid] = true;
+                if (!isset($packageRenewalDetails[$cid])) {
+                    $packageRenewalDetails[$cid] = [
+                        'remaining' => $remaining,
+                        'combo_name' => $pkg->combo_name ?: 'Package',
+                    ];
+                }
             }
         }
 
@@ -343,6 +350,7 @@ class CustomerController extends Controller
             'due_for_refill' => array_keys($dueForRefillMap),
             'due_for_refill_details' => $dueForRefillDetails,
             'package_renewal' => array_keys($packageRenewalMap),
+            'package_renewal_details' => $packageRenewalDetails,
             'bleeding_vips' => array_values(array_unique($bleedingVips)),
             'upcoming_active_ids' => $upcomingActiveCustomerIds->keys()->all(),
             'cooldown_ids' => $cooldownCustomerIds->keys()->all(),
@@ -549,25 +557,35 @@ class CustomerController extends Controller
 
     /**
      * POST /customers/sync-retention-leads
-     * Finds all currently Overdue clients from ClientMaintenancePlanner::dueQueue()
-     * + bleeding_vips who have a valid phone number and 0 upcoming active appointments,
-     * and creates or updates their single open Lead row in the Daily Action Queue.
+     * Syncs all 3 retention tabs (Due for Refill, Packages Ending, Missing VIPs)
+     * into the Daily Action Queue with short, front-loaded tags in customer_remarks:
+     * - [Refill Due] {days}d overdue
+     * - [Package Ending] {remaining} left
+     * - [Missing VIP] {days}d away · {ltv} QAR
      */
     public function syncRetentionToLeads(Request $request)
     {
+        $this->normalizeLegacyRetentionRemarks();
+
         $plannerQueue = (new ClientMaintenancePlanner())->dueQueue();
         $overdueRowsByCustomer = $plannerQueue
             ->where('urgency', 'overdue')
             ->groupBy('customer_id');
 
         $segments = $this->computeRetentionSegments();
-        $bleedingVipIds = $segments['bleeding_vips'] ?? [];
+        $dueForRefillIds = array_map('intval', $segments['due_for_refill'] ?? []);
+        $packageRenewalIds = array_map('intval', $segments['package_renewal'] ?? []);
+        $bleedingVipIds = array_map('intval', $segments['bleeding_vips'] ?? []);
+        $dueDetailsMap = $segments['due_for_refill_details'] ?? [];
+        $packageDetailsMap = $segments['package_renewal_details'] ?? [];
         $upcomingActiveLookup = array_flip($segments['upcoming_active_ids'] ?? []);
         $cooldownLookup = array_flip($segments['cooldown_ids'] ?? []);
 
         $targetCustomerIds = array_values(array_unique(array_merge(
             $overdueRowsByCustomer->keys()->map(fn ($id) => (int) $id)->all(),
-            array_map('intval', $bleedingVipIds)
+            $dueForRefillIds,
+            $packageRenewalIds,
+            $bleedingVipIds
         )));
 
         $targetCustomerIds = array_values(array_filter(
@@ -579,12 +597,20 @@ class CustomerController extends Controller
         $lastCompletedByCustomer = Appointment::whereIn('customer_id', $targetCustomerIds)
             ->where('status', 'completed')
             ->orderByDesc('appointment_datetime')
-            ->get(['customer_id', 'service_name', 'appointment_datetime'])
+            ->get(['customer_id', 'service_name', 'appointment_datetime', 'price'])
             ->groupBy('customer_id');
 
-        $bleedingLookup = array_flip(array_map('intval', $bleedingVipIds));
+        $salesLtv = Sale::whereIn('customer_id', $targetCustomerIds)
+            ->get(['customer_id', 'services_total', 'products_total', 'packages_total', 'discount_amount'])
+            ->groupBy('customer_id')
+            ->map(fn ($sales) => round((float) $sales->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount)), 2));
+
+        $dueForRefillLookup = array_flip($dueForRefillIds);
+        $packageRenewalLookup = array_flip($packageRenewalIds);
+        $bleedingLookup = array_flip($bleedingVipIds);
         $pushedCount = 0;
         $today = today();
+        $todayStart = now()->startOfDay();
 
         foreach ($targetCustomerIds as $cid) {
             $customer = $customers->get($cid);
@@ -598,6 +624,9 @@ class CustomerController extends Controller
             }
 
             $overdueRows = $overdueRowsByCustomer->get($cid, collect());
+            $dueDetail = $dueDetailsMap[$cid] ?? null;
+            $pkgDetail = $packageDetailsMap[$cid] ?? null;
+
             $dueServices = $overdueRows->pluck('service_name')
                 ->map(fn ($s) => trim((string) $s))
                 ->filter()
@@ -605,8 +634,16 @@ class CustomerController extends Controller
                 ->values()
                 ->all();
 
+            if (empty($dueServices) && !empty($dueDetail['service_name'])) {
+                $dueServices = [trim((string) $dueDetail['service_name'])];
+            }
+
+            if (empty($dueServices) && !empty($pkgDetail['combo_name'])) {
+                $dueServices = [trim((string) $pkgDetail['combo_name'])];
+            }
+
+            $clientCompleted = $lastCompletedByCustomer->get($cid, collect());
             if (empty($dueServices)) {
-                $clientCompleted = $lastCompletedByCustomer->get($cid, collect());
                 $favServices = $clientCompleted
                     ->flatMap(fn ($a) => array_map('trim', explode(',', (string) $a->service_name)))
                     ->filter(fn ($n) => $n !== '' && strcasecmp($n, 'Decide in Salon') !== 0)
@@ -618,15 +655,31 @@ class CustomerController extends Controller
                     : ['Signature Salon Service'];
             }
 
-            $reasonParts = [];
-            if ($overdueRows->isNotEmpty()) {
-                $maxOverdueDays = abs((int) $overdueRows->min('days_until'));
-                $reasonParts[] = 'Overdue ' . $maxOverdueDays . 'd for ' . implode(', ', $dueServices);
+            if (isset($dueForRefillLookup[$cid]) || ($overdueRows->isNotEmpty() && !isset($bleedingLookup[$cid]) && !isset($packageRenewalLookup[$cid]))) {
+                $daysOverdue = (int) ($dueDetail['days_overdue'] ?? ($overdueRows->isNotEmpty() ? abs((int) $overdueRows->min('days_until')) : 0));
+                if ($daysOverdue > 0) {
+                    $radarNote = "[Refill Due] {$daysOverdue}d overdue";
+                } else {
+                    $daysUntil = max(0, (int) ($dueDetail['days_until'] ?? 0));
+                    $radarNote = $daysUntil === 0 ? '[Refill Due] due today' : "[Refill Due] due in {$daysUntil}d";
+                }
+            } elseif (isset($packageRenewalLookup[$cid])) {
+                $rem = (int) ($pkgDetail['remaining'] ?? 1);
+                $sessionText = $rem === 1 ? '1 session left' : "{$rem} left";
+                $radarNote = "[Package Ending] {$sessionText}";
+            } else {
+                $lastVisitAt = $clientCompleted->first()?->appointment_datetime
+                    ? Carbon::parse($clientCompleted->first()->appointment_datetime)
+                    : null;
+                $daysAway = $lastVisitAt
+                    ? max(46, (int) floor(($todayStart->timestamp - $lastVisitAt->copy()->startOfDay()->timestamp) / 86400))
+                    : 46;
+                $netLtv = $salesLtv->has($cid)
+                    ? (float) $salesLtv->get($cid)
+                    : (float) $clientCompleted->sum(fn ($a) => (float) ($a->price ?? 0));
+                $ltvFormatted = number_format($netLtv, 0, '.', '');
+                $radarNote = "[Missing VIP] {$daysAway}d away · {$ltvFormatted} QAR";
             }
-            if (isset($bleedingLookup[$cid])) {
-                $reasonParts[] = 'Slipping VIP (>45d since last visit)';
-            }
-            $radarNote = '[Retention Radar] ' . implode(' · ', $reasonParts ?: ['Due for ' . implode(', ', $dueServices)]);
 
             $openLead = Lead::findOpenLeadByPhone($normalizedPhone, $customer->id);
 
@@ -636,9 +689,13 @@ class CustomerController extends Controller
                 $mergedServices = array_values(array_unique(array_filter(array_map('trim', array_merge($existingServices, $dueServices)))));
                 $mergedCategories = $openLead->mergeCategories('followup');
 
-                $existingRemarks = trim((string) $openLead->customer_remarks);
+                $existingRemarks = $this->convertLegacyRemarkString(trim((string) $openLead->customer_remarks));
+                $hasShortTag = str_contains($existingRemarks, '[Refill Due]')
+                    || str_contains($existingRemarks, '[Package Ending]')
+                    || str_contains($existingRemarks, '[Missing VIP]');
+
                 $newRemarks = $existingRemarks;
-                if (!str_contains($existingRemarks, '[Retention Radar]')) {
+                if (!$hasShortTag) {
                     $newRemarks = $existingRemarks !== '' ? $existingRemarks . ' | ' . $radarNote : $radarNote;
                 }
 
@@ -683,6 +740,60 @@ class CustomerController extends Controller
         }
 
         return back()->with('success', $message);
+    }
+
+    /**
+     * Normalize any existing leads rows that still have legacy [Retention Radar] remarks
+     * into the short [Refill Due] and [Missing VIP] tags.
+     */
+    public function normalizeLegacyRetentionRemarks(): void
+    {
+        $legacyLeads = Lead::where('customer_remarks', 'like', '%[Retention Radar]%')->get();
+        foreach ($legacyLeads as $lead) {
+            $cleaned = $this->convertLegacyRemarkString((string) $lead->customer_remarks, $lead->customer_id);
+            if ($cleaned !== (string) $lead->customer_remarks) {
+                $lead->update(['customer_remarks' => $cleaned]);
+            }
+        }
+    }
+
+    private function convertLegacyRemarkString(string $remarks, ?int $customerId = null): string
+    {
+        if (!str_contains($remarks, '[Retention Radar]')) {
+            return $remarks;
+        }
+
+        return (string) preg_replace_callback(
+            '/\[Retention Radar\]\s*([^|]+)/i',
+            function (array $matches) use ($customerId) {
+                $body = trim($matches[1]);
+                if (preg_match('/Overdue\s+(\d+d)/i', $body, $m)) {
+                    return "[Refill Due] {$m[1]} overdue";
+                }
+                if (stripos($body, 'Slipping VIP') !== false) {
+                    if ($customerId) {
+                        $lastAppt = Appointment::where('customer_id', $customerId)
+                            ->where('status', 'completed')
+                            ->orderByDesc('appointment_datetime')
+                            ->first(['appointment_datetime']);
+                        $daysAway = ($lastAppt && $lastAppt->appointment_datetime)
+                            ? max(46, (int) floor((now()->startOfDay()->timestamp - Carbon::parse($lastAppt->appointment_datetime)->startOfDay()->timestamp) / 86400))
+                            : 46;
+                        $ltv = round((float) Sale::where('customer_id', $customerId)
+                            ->get(['services_total', 'products_total', 'packages_total', 'discount_amount'])
+                            ->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount)), 0);
+                        if ($ltv <= 0) {
+                            $ltv = round((float) Appointment::where('customer_id', $customerId)->where('status', 'completed')->sum('price'), 0);
+                        }
+                        return "[Missing VIP] {$daysAway}d away · " . number_format($ltv, 0, '.', '') . ' QAR';
+                    }
+                    return '[Missing VIP] 46d away';
+                }
+
+                return '[Refill Due] ' . $body;
+            },
+            $remarks
+        );
     }
 
     public function store(Request $request)

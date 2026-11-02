@@ -293,9 +293,12 @@ class AiScriptController extends Controller
                 'completed_visits' => 0,
                 'last_service' => null,
                 'last_visit_date' => null,
+                'loyalty_points' => 0,
                 'prompt_summary' => 'First-time salon guest (0 past completed visits). Treat them as a first-time salon guest and make them feel warmly welcomed.',
             ];
         }
+
+        $loyaltyPoints = (int) ($customer?->loyalty_points ?? 0);
 
         $completedQuery = Appointment::where('status', 'completed')
             ->where(function ($q) use ($customer, $phoneCandidates) {
@@ -322,12 +325,14 @@ class AiScriptController extends Controller
                 ?: ($lastCompleted?->booking_date ? Carbon::parse($lastCompleted->booking_date) : null);
             $lastVisitDate = $dateObj ? $dateObj->format('d M Y') : null;
             $dateClause = $lastVisitDate ? " on {$lastVisitDate}" : '';
+            $pointsClause = $loyaltyPoints >= 30 ? " Client also has {$loyaltyPoints} QAR in loyalty points ready to use." : '';
 
             return [
                 'completed_visits' => $completedVisitsCount,
                 'last_service' => $lastService,
                 'last_visit_date' => $lastVisitDate,
-                'prompt_summary' => "Returning salon client with {$completedVisitsCount} past completed visit(s). Last completed service: {$lastService}{$dateClause}. Warmly reference their loyalty or past visits in Sentence 1 or Sentence 2.",
+                'loyalty_points' => $loyaltyPoints,
+                'prompt_summary' => "Returning salon client with {$completedVisitsCount} past completed visit(s). Last completed service: {$lastService}{$dateClause}.{$pointsClause} Warmly reference their loyalty or past visits in Sentence 1 or Sentence 2.",
             ];
         }
 
@@ -335,6 +340,7 @@ class AiScriptController extends Controller
             'completed_visits' => 0,
             'last_service' => null,
             'last_visit_date' => null,
+            'loyalty_points' => $loyaltyPoints,
             'prompt_summary' => 'First-time salon guest (0 past completed visits). Treat them as a first-time salon guest and make them feel warmly welcomed.',
         ];
     }
@@ -468,21 +474,47 @@ CRITICAL RULES:
 CONTEXT: Lead Name: {$customerName}. Service: {$serviceInterest}. Category: {$categoryLabel}. Lead Age: {$daysOld} day(s) old. {$clientReplyContext} Salon Client History: {$salonHistoryPrompt}. {$servicePricingPrompt} Remarks: {$remarks}. Write the 1-2 sentence WhatsApp reply now.
 PROMPT;
         } else {
+            $loyaltyPoints = (int) ($salonHistory['loyalty_points'] ?? 0);
+            $pointsDirective = $loyaltyPoints >= 30
+                ? " MUST explicitly mention their {$loyaltyPoints} QAR in loyalty points ({$loyaltyPoints} points)."
+                : '';
+
+            $isRetentionLead = str_contains($remarks, '[Refill Due]')
+                || str_contains($remarks, '[Package Ending]')
+                || str_contains($remarks, '[Missing VIP]');
+
+            if ($isRetentionLead) {
+                $salonHistoryPrompt = "Existing salon client ({$remarks})." . ($loyaltyPoints >= 30 ? " Has {$loyaltyPoints} QAR in loyalty points ready to use." : '');
+            }
+
+            $retentionHookInstruction = '';
+            $structureRule = "- Sentence 1: Warmly greet {$customerName}, adapt to context [ {$contextModifier} ], reference their interest in {$serviceInterest} (and price/duration if known, or past visit if returning client).\n- Sentence 2: Simple, low-pressure A/B time question (e.g., \"Would a morning or afternoon slot work better for you this week?\").";
+
+            if (str_contains($remarks, '[Refill Due]')) {
+                $retentionHookInstruction = "RETENTION HOOK ([Refill Due]): This client is due/overdue for their {$serviceInterest} maintenance refresh ({$remarks}). Invite them back for their {$serviceInterest} refresh.{$pointsDirective}";
+                $structureRule = "- Sentence 1: Warmly greet {$customerName} and remind them they are due for their {$serviceInterest} refresh ({$remarks}).{$pointsDirective}\n- Sentence 2: Simple morning or afternoon booking question this week.";
+            } elseif (str_contains($remarks, '[Package Ending]')) {
+                $retentionHookInstruction = "RETENTION HOOK ([Package Ending]): This existing package client has remaining package sessions ending soon for {$serviceInterest} ({$remarks}). Remind them they have package sessions left ({$remarks}) to use before expiry.{$pointsDirective}";
+                $structureRule = "- Sentence 1: Warmly greet {$customerName} and remind them about their {$serviceInterest} package ({$remarks}) before it expires.{$pointsDirective}\n- Sentence 2: Simple morning or afternoon booking question this week.";
+            } elseif (str_contains($remarks, '[Missing VIP]')) {
+                $retentionHookInstruction = "RETENTION HOOK ([Missing VIP]): This VIP regular hasn't visited recently ({$remarks}). Warmly tell them we've missed seeing them for their {$serviceInterest}.{$pointsDirective}";
+                $structureRule = "- Sentence 1: Warmly greet {$customerName} and mention we've missed seeing them for their {$serviceInterest}.{$pointsDirective}\n- Sentence 2: Simple morning or afternoon booking question this week.";
+            }
+
             $systemPrompt = <<<PROMPT
 You are a real, warm salon manager texting a client on WhatsApp at a ladies' salon in Qatar.
 
 CRITICAL RULES:
 1. LENGTH: Strictly 1 to 2 short, natural WhatsApp sentences (MAXIMUM 25 to 35 words total).
 2. NO BROCHURE FLUFF: Ban robotic marketing language like "deeply nourishing luxury products", "restore your skin's glowing radiance", or "indulge in this pampering treatment". Write like a real person texting on WhatsApp.
-3. EXAMPLE OPENER: "Hi Amal! We missed you at your last visit and saw you were asking about our 60-min Facial (150 QAR). Would a morning or afternoon slot work better for you this week?"
-4. {$languageDirective}
-5. PSYCHOLOGICAL ANGLE: [ {$selectedAngle} ].
-6. LEAD AGE: {$leadAgeContext}
-7. SALON CLIENT HISTORY: {$salonHistoryPrompt}
-8. SERVICE PRICING & MENU: {$servicePricingPrompt}
+3. {$languageDirective}
+4. PSYCHOLOGICAL ANGLE: [ {$selectedAngle} ].
+5. LEAD AGE: {$leadAgeContext}
+6. SALON CLIENT HISTORY: {$salonHistoryPrompt}
+7. SERVICE PRICING & MENU: {$servicePricingPrompt}
+8. {$retentionHookInstruction}
 9. STRUCTURE:
-- Sentence 1: Warmly greet {$customerName}, adapt to context [ {$contextModifier} ], reference their interest in {$serviceInterest} (and price/duration if known, or past visit if returning client).
-- Sentence 2: Simple, low-pressure A/B time question (e.g., "Would a morning or afternoon slot work better for you this week?").
+{$structureRule}
 
 CONTEXT: Lead Name: {$customerName}. Service: {$serviceInterest}. Category: {$categoryLabel}. Lead Age: {$daysOld} day(s) old. Psychological Angle: {$selectedAngle}. Salon Client History: {$salonHistoryPrompt}. {$servicePricingPrompt} Remarks: {$remarks}. Write the 1-2 sentence WhatsApp script now.
 PROMPT;
@@ -625,7 +657,8 @@ PROMPT;
                 objectionType: $objectionType,
                 clientReply: $clientReply,
                 language: $language,
-                servicePricing: $servicePricing
+                servicePricing: $servicePricing,
+                remarks: $remarks
             ),
             'source' => 'fallback',
         ];
@@ -642,7 +675,8 @@ PROMPT;
         ?string $objectionType = null,
         ?string $clientReply = null,
         string $language = 'en',
-        array $servicePricing = []
+        array $servicePricing = [],
+        string $remarks = ''
     ): string {
         $isDefaultName = ($customerName === '' || in_array(strtolower($customerName), ['unnamed', 'lovely'], true));
         $nameEn = !$isDefaultName ? $customerName : 'lovely';
@@ -650,6 +684,9 @@ PROMPT;
         $primaryPrice = $servicePricing['primary_price_qar'] ?? null;
         $firstMatched = $servicePricing['matched_services'][0] ?? null;
         $durationText = !empty($firstMatched['duration']) ? " ({$firstMatched['duration']} mins)" : '';
+        $loyaltyPoints = (int) ($salonHistory['loyalty_points'] ?? 0);
+        $pointsBonusEn = $loyaltyPoints >= 30 ? " (plus {$loyaltyPoints} QAR in loyalty points ready)" : '';
+        $pointsBonusAr = $loyaltyPoints >= 30 ? " وعندك {$loyaltyPoints} نقطة ولاء ({$loyaltyPoints} ريال) جاهزة للاستخدام" : '';
 
         if ($language === 'ar') {
             $priceAr = !empty($firstMatched['price_clean'])
@@ -665,6 +702,16 @@ PROMPT;
                     'custom_reply' => "يا هلا حبيبتي {$nameAr}، بخصوص {$serviceInterest} ({$priceAr}) أخصائياتنا يضمنون لك نتيجة آمنة ومناسبة لك تماماً. تفضلين موعد الصباح أو المساء هالأسبوع؟",
                     default => "يا هلا حبيبتي {$nameAr}، يسعدنا نحجز لك {$serviceInterest} ({$priceAr}). يناسبك الصباح أو المساء هالأسبوع؟",
                 };
+            }
+
+            if (str_contains($remarks, '[Refill Due]')) {
+                return "يا هلا حبيبتي {$nameAr}، حان موعد تجديد جلسة {$serviceInterest}{$pointsBonusAr}. يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟";
+            }
+            if (str_contains($remarks, '[Package Ending]')) {
+                return "يا هلا حبيبتي {$nameAr}، باقي لك جلسات في باقة {$serviceInterest} قبل انتهاء صلاحيتها{$pointsBonusAr}. يناسبك موعد الصباح أو المساء هالأسبوع؟";
+            }
+            if (str_contains($remarks, '[Missing VIP]')) {
+                return "يا هلا حبيبتي {$nameAr}، اشتقنا لك في الصالون لجلستك {$serviceInterest}{$pointsBonusAr}. يناسبك موعد الصباح أو المساء هالأسبوع؟";
             }
 
             return "يا هلا حبيبتي {$nameAr}، شفنا استفسارك عن {$serviceInterest} ({$priceAr}). يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟";
@@ -685,6 +732,17 @@ PROMPT;
                 'custom_reply' => "Hi {$nameEn}! For our {$serviceInterest}{$priceTagEn}, our senior specialists tailor every step safely to your needs—would a morning or afternoon slot work this week?",
                 default => "Hi {$nameEn}! We'd love to book your {$serviceInterest}{$priceTagEn}—would a morning or afternoon slot work better this week?",
             };
+        }
+
+        if (str_contains($remarks, '[Refill Due]')) {
+            return "Hi {$nameEn}! You're due for your {$serviceInterest} refresh{$pointsBonusEn}. Does morning or afternoon work better this week?";
+        }
+        if (str_contains($remarks, '[Package Ending]')) {
+            $sessionPhrase = str_contains($remarks, '1 session left') ? '1 package session left' : 'package sessions left';
+            return "Hi {$nameEn}! You still have {$sessionPhrase} for {$serviceInterest} before it expires{$pointsBonusEn}. Does morning or afternoon work this week?";
+        }
+        if (str_contains($remarks, '[Missing VIP]')) {
+            return "Hi {$nameEn}! We've missed seeing you at the salon for your {$serviceInterest}{$pointsBonusEn}. Does morning or afternoon work better this week?";
         }
 
         $catNorm = strtolower(trim($categoryLabel));

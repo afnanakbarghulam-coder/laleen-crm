@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Appointment;
 use App\Models\AppointmentService;
 use App\Models\ClientPackage;
+use App\Models\ClientPackageService;
 use App\Models\Combo;
 use App\Models\Customer;
 use App\Models\Lead;
@@ -593,6 +594,51 @@ class ClientsHormoziRetentionTest extends TestCase
             'next_followup_date' => today(),
         ]);
 
+        // Client 3: Package Ending (1 session remaining) + 45 loyalty points
+        $pkgClient = Customer::create([
+            'name' => 'Dana PackageEnding',
+            'phone' => '55400003',
+            'loyalty_points' => 45,
+        ]);
+        $combo = Combo::create([
+            'name' => 'Hydrafacial Glow Pack',
+            'price' => 900,
+            'quantity_included' => 4,
+            'validity_days' => 60,
+            'status' => 'active',
+        ]);
+        $sale = Sale::create([
+            'customer_id' => $pkgClient->id,
+            'branch' => 'old_airport',
+            'services_total' => 0,
+            'products_total' => 0,
+            'packages_total' => 900,
+            'discount_amount' => 0,
+            'tip_amount' => 0,
+            'total_amount' => 900,
+        ]);
+        $pkg = ClientPackage::create([
+            'customer_id' => $pkgClient->id,
+            'combo_id' => $combo->id,
+            'sale_id' => $sale->id,
+            'combo_name' => 'Hydrafacial Glow Pack',
+            'price_paid' => 900,
+            'quantity_included' => 1,
+            'purchased_at' => now()->subDays(15),
+            'status' => 'active',
+            'expires_at' => now()->addDays(40),
+        ]);
+
+        // Legacy Lead with old [Retention Radar] remark to verify automatic normalization
+        $legacyLead = Lead::create([
+            'phone' => '55400099',
+            'category' => 'followup',
+            'categories' => ['followup'],
+            'service_interest' => ['Nail Refill'],
+            'customer_remarks' => '[Retention Radar] Overdue 42d for Nail Refill',
+            'next_followup_date' => today(),
+        ]);
+
         // Execute sync twice to verify idempotency and zero duplicate phone rows
         $this->actingAs($this->admin)
             ->post(route('customers.sync-retention-leads'))
@@ -605,12 +651,13 @@ class ClientsHormoziRetentionTest extends TestCase
 
         $this->assertEquals(1, Lead::where('phone', '55400001')->count());
         $this->assertEquals(1, Lead::where('phone', '55400002')->count());
+        $this->assertEquals(1, Lead::where('phone', '55400003')->count());
 
         $mahaLead = Lead::where('phone', '55400001')->firstOrFail();
         $this->assertTrue($mahaLead->hasCategory('followup'));
         $this->assertContains('Russian Manicure', $mahaLead->service_interest);
         $this->assertTrue($mahaLead->next_followup_date->isToday());
-        $this->assertStringContainsString('[Retention Radar]', (string) $mahaLead->customer_remarks);
+        $this->assertEquals('[Refill Due] 9d overdue', (string) $mahaLead->customer_remarks);
 
         $existingLead->refresh();
         $this->assertTrue($existingLead->hasCategory('followup'));
@@ -618,11 +665,46 @@ class ClientsHormoziRetentionTest extends TestCase
         $this->assertContains('Balayage Color', $existingLead->service_interest);
         $this->assertTrue($existingLead->next_followup_date->isToday());
         $this->assertStringContainsString('Asked about weekend slots', (string) $existingLead->customer_remarks);
-        $this->assertStringContainsString('[Retention Radar]', (string) $existingLead->customer_remarks);
+        $this->assertStringContainsString('[Missing VIP] 50d away · 1200 QAR', (string) $existingLead->customer_remarks);
 
-        // Verify syncing to Leads stamps last_retention_contacted_at and hides both clients from outreach tabs during 14-day cooldown
+        $danaLead = Lead::where('phone', '55400003')->firstOrFail();
+        $this->assertTrue($danaLead->hasCategory('followup'));
+        $this->assertEquals('[Package Ending] 1 session left', (string) $danaLead->customer_remarks);
+
+        $legacyLead->refresh();
+        $this->assertEquals('[Refill Due] 42d overdue', (string) $legacyLead->customer_remarks);
+
+        // Verify Leads page renders inline retention pills cleanly in SERVICES & NOTES
+        $this->actingAs($this->admin)
+            ->get(route('leads.index', ['tab' => 'all']))
+            ->assertOk()
+            ->assertSee('🔄 Refill Due', false)
+            ->assertSee('9d overdue')
+            ->assertSee('👑 Missing VIP', false)
+            ->assertSee('50d away · 1200 QAR')
+            ->assertSee('🎟️ Package Ending', false)
+            ->assertSee('1 session left');
+
+        // Verify AI Script on Leads page tailors message to [Package Ending] and weaves in loyalty points (>= 30)
+        config(['services.openai.key' => '', 'services.gemini.key' => '']);
+        $aiPkgResponse = $this->actingAs($this->admin)
+            ->postJson(route('leads.ai-script', $danaLead), ['language' => 'en'])
+            ->assertOk()
+            ->assertJson(['success' => true]);
+        $this->assertStringContainsString('1 package session left', $aiPkgResponse->json('script'));
+        $this->assertStringContainsString('45 QAR', $aiPkgResponse->json('script'));
+
+        // Verify AI Script on Leads page tailors message to [Refill Due]
+        $aiRefillResponse = $this->actingAs($this->admin)
+            ->postJson(route('leads.ai-script', $mahaLead), ['language' => 'en'])
+            ->assertOk()
+            ->assertJson(['success' => true]);
+        $this->assertStringContainsString('due for your Russian Manicure refresh', $aiRefillResponse->json('script'));
+
+        // Verify syncing to Leads stamps last_retention_contacted_at and hides clients from outreach tabs during 14-day cooldown
         $this->assertNotNull($overdueClient->fresh()->last_retention_contacted_at);
         $this->assertNotNull($slippingVip->fresh()->last_retention_contacted_at);
+        $this->assertNotNull($pkgClient->fresh()->last_retention_contacted_at);
 
         $this->actingAs($this->admin)
             ->get(route('customers.index', ['segment' => 'due_for_refill']))

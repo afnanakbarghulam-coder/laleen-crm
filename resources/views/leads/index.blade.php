@@ -159,6 +159,37 @@
         font-weight: 600;
     }
 
+    .lead-retention-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: 600;
+        line-height: 1.25;
+        white-space: nowrap;
+        margin-right: 4px;
+    }
+
+    .lead-retention-pill.pill-refill-due {
+        background: rgba(217, 143, 131, 0.18);
+        border: 1px solid rgba(231, 154, 145, 0.38);
+        color: #f4c4bc;
+    }
+
+    .lead-retention-pill.pill-package-ending {
+        background: rgba(138, 166, 171, 0.18);
+        border: 1px solid rgba(138, 166, 171, 0.36);
+        color: #b4d5db;
+    }
+
+    .lead-retention-pill.pill-missing-vip {
+        background: rgba(201, 166, 107, 0.18);
+        border: 1px solid rgba(201, 166, 107, 0.36);
+        color: #f0d290;
+    }
+
     .btn-ai-script {
         display: inline-flex !important;
         align-items: center !important;
@@ -944,9 +975,34 @@
                                 @endif
 
                                 @if (!empty($lead->customer_remarks))
-                                    <div class="lead-remarks-truncate text-[11px] text-white/50 truncate max-w-[180px]"
-                                        title="{{ $lead->customer_remarks }}">
-                                        <i class="bx bx-message-square-detail me-1" style="font-size: 10px;"></i>{{ $lead->customer_remarks }}
+                                    @php
+                                        $rawRemark = trim((string) $lead->customer_remarks);
+                                        $retentionBadgeLabel = null;
+                                        $retentionBadgeClass = null;
+                                        $remarkDetailText = $rawRemark;
+
+                                        if (str_contains($rawRemark, '[Refill Due]')) {
+                                            $retentionBadgeLabel = '🔄 Refill Due';
+                                            $retentionBadgeClass = 'pill-refill-due';
+                                            $remarkDetailText = trim(str_replace('[Refill Due]', '', $rawRemark), " \t\n\r\0\x0B|·");
+                                        } elseif (str_contains($rawRemark, '[Package Ending]')) {
+                                            $retentionBadgeLabel = '🎟️ Package Ending';
+                                            $retentionBadgeClass = 'pill-package-ending';
+                                            $remarkDetailText = trim(str_replace('[Package Ending]', '', $rawRemark), " \t\n\r\0\x0B|·");
+                                        } elseif (str_contains($rawRemark, '[Missing VIP]')) {
+                                            $retentionBadgeLabel = '👑 Missing VIP';
+                                            $retentionBadgeClass = 'pill-missing-vip';
+                                            $remarkDetailText = trim(str_replace('[Missing VIP]', '', $rawRemark), " \t\n\r\0\x0B|·");
+                                        }
+                                    @endphp
+                                    <div class="lead-remarks-truncate text-[11px] text-white/60 truncate max-w-[220px] mt-0.5"
+                                        title="{{ $rawRemark }}">
+                                        @if ($retentionBadgeLabel)
+                                            <span class="lead-retention-pill {{ $retentionBadgeClass }}">{{ $retentionBadgeLabel }}</span>
+                                            <span>{{ $remarkDetailText }}</span>
+                                        @else
+                                            <i class="bx bx-message-square-detail me-1" style="font-size: 10px;"></i>{{ $rawRemark }}
+                                        @endif
                                     </div>
                                 @endif
                             </td>
