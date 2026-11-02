@@ -228,15 +228,97 @@
         </div>
     </div>
 
+    <!-- 🧠 Hormozi LTV & Ascension Playbook Card -->
+    <div class="card mb-4" style="border: 1px solid rgba(201, 166, 107, 0.35); background: linear-gradient(135deg, rgba(36, 30, 28, 0.92), rgba(52, 40, 35, 0.85));">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2" style="border-bottom: 1px solid rgba(201, 166, 107, 0.2);">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <span class="fw-bold" style="color: #f3d9a4; font-size: 15px;">🧠 Hormozi LTV &amp; Ascension Playbook</span>
+                <span class="text-muted small">Smart package upgrades &amp; new services to suggest</span>
+            </div>
+            <a href="{{ route('appointments.calendar', $rebookFavoriteParams ?? ['customer_id' => $customer->id, 'phone' => $customer->phone, 'name' => $customer->name]) }}"
+                class="btn btn-sm btn-warning fw-semibold text-dark tooltip-bottom tooltip-align-right"
+                data-tooltip="Book her favorite service and stylist on the Calendar">
+                📅 Rebook Favorite Visit
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="p-3 rounded h-100" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(201, 166, 107, 0.2);">
+                        <div class="small text-uppercase fw-bold mb-2 d-flex align-items-center gap-1" style="color: #c9a66b; letter-spacing: .04em;">
+                            <span>🎟️ Next Ascension Pitch (Package Upgrade)</span>
+                            <span class="crm-tooltip-trigger tooltip-bottom" tabindex="0"
+                                data-tooltip="Booked the same service 2+ times without an active package.">ⓘ</span>
+                        </div>
+                        @if (!empty($ascensionOpportunities) && $ascensionOpportunities->isNotEmpty())
+                            @foreach ($ascensionOpportunities as $opp)
+                                <div class="mb-2">
+                                    <div class="fw-bold" style="color: #f2e6e2;">
+                                        Recommend: <span style="color: #e79a91;">{{ $opp['combo_name'] }}</span>
+                                        <span class="badge bg-warning text-dark ms-1">{{ number_format($opp['combo_price'], 0) }} QAR · {{ $opp['quantity_included'] }} sessions</span>
+                                    </div>
+                                    <div class="small text-muted mt-1">
+                                        {{ $opp['pitch'] }}
+                                    </div>
+                                </div>
+                            @endforeach
+                        @else
+                            <div class="small text-muted">
+                                @if ($customer->pending_package_service_count > 0)
+                                    Client currently has <strong>{{ $customer->pending_package_service_count }}</strong> active package session(s) ready to redeem. Focus on redeeming and renewing before expiry.
+                                @else
+                                    No repeat uncovered service with 2+ completed visits yet — nurture toward her 2nd visit to unlock a multi-session Combo package pitch.
+                                @endif
+                            </div>
+                        @endif
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-3 rounded h-100" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(142, 168, 138, 0.22);">
+                        <div class="small text-uppercase fw-bold mb-2 d-flex align-items-center gap-1" style="color: #8ea88a; letter-spacing: .04em;">
+                            <span>✨ Cross-Department Upsell Opportunity</span>
+                            <span class="crm-tooltip-trigger tooltip-bottom" tabindex="0"
+                                data-tooltip="Salon departments she has never tried yet (0 visits).">ⓘ</span>
+                        </div>
+                        @if (!empty($uncapturedCategoryNames))
+                            <div class="fw-semibold mb-1" style="color: #f2e6e2;">
+                                Never tried {{ implode(' or ', $uncapturedCategoryNames) }}
+                            </div>
+                            <div class="small text-muted">
+                                @if (!empty($suggestedAddonService))
+                                    Suggest an express chair-side add-on or complimentary 5-min consultation for <strong>{{ $suggestedAddonService->name }}</strong> ({{ number_format((float) $suggestedAddonService->price, 0) }} QAR · {{ $suggestedAddonService->duration }} mins) during her next visit.
+                                @else
+                                    Offer a complimentary 5-minute specialist consultation or express chair-side add-on in {{ $uncapturedCategoryNames[0] }} on her next visit.
+                                @endif
+                            </div>
+                        @else
+                            <div class="small text-muted">
+                                Full-spectrum VIP! She has explored every salon department — reward her with priority VIP slot access.
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="card mb-4">
-        <div class="card-header fw-semibold">
-            Beauty Planner — Maintenance &amp; Re-booking Timeline
-            <span class="text-muted small fw-normal">Auto-tracked from treatment history</span>
+        <div class="card-header fw-semibold d-flex align-items-center flex-wrap gap-1">
+            <span>Beauty Planner — Maintenance &amp; Re-booking Timeline</span>
+            <span class="crm-tooltip-trigger tooltip-bottom" tabindex="0"
+                data-tooltip="Calculates next due dates from each service's rebooking interval.">ⓘ</span>
+            <span class="text-muted small fw-normal ms-1">Auto-tracked from treatment history</span>
         </div>
         <div class="card-body">
             @php
                 $plannerColors = ['overdue' => '#a8524a', 'due_soon' => '#c9a66b', 'upcoming' => '#8aa6ab', 'scheduled' => '#8ea88a'];
                 $plannerLabels = ['overdue' => 'Overdue', 'due_soon' => 'Due Soon', 'upcoming' => 'On Track', 'scheduled' => 'Upcoming Booking'];
+                $plannerTooltips = [
+                    'overdue' => 'Past due date with no upcoming booking.',
+                    'due_soon' => 'Due for a refresh within the next 7 days.',
+                    'upcoming' => 'Still within normal maintenance window.',
+                    'scheduled' => 'Already has an upcoming appointment booked.',
+                ];
             @endphp
             @forelse ($maintenanceSchedule as $row)
                 <div class="planner-row">
@@ -248,7 +330,9 @@
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2">
-                        <span class="planner-status" style="background:{{ $plannerColors[$row->urgency] ?? '#8aa6ab' }}">
+                        <span class="planner-status"
+                            style="background:{{ $plannerColors[$row->urgency] ?? '#8aa6ab' }}"
+                            data-tooltip="{{ $plannerTooltips[$row->urgency] ?? '' }}">
                             @if ($row->urgency === 'scheduled' && !empty($row->upcoming_appointment_date))
                                 Upcoming Booking on {{ $row->upcoming_appointment_date->format('d M') }}
                             @else

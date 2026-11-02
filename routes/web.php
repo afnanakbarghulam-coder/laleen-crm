@@ -189,6 +189,8 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('module:clients')->group(function () {
         Route::get('/customers-lookup', [CustomerController::class, 'lookup'])->name('customers.lookup');
         Route::get('/customers-search', [CustomerController::class, 'search'])->name('customers.search');
+        Route::post('/customers/sync-retention-leads', [CustomerController::class, 'syncRetentionToLeads'])->name('customers.sync-retention-leads');
+        Route::post('/customers/{customer}/ai-retention-script', [AiScriptController::class, 'generateForMaintenance'])->name('customers.ai-retention-script');
         Route::get('/customers/{customer}/pending-packages', [CustomerController::class, 'pendingPackages'])->name('customers.pendingPackages');
         Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
         Route::get('/customers/beauty-planning', [CustomerController::class, 'beautyPlanning'])->name('customers.beauty-planning');

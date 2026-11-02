@@ -114,7 +114,13 @@ class Lead extends Model
     {
         $items = is_array($categories) ? $categories : ($categories ? [$categories] : []);
         $cleaned = array_values(array_unique(array_filter(array_map(
-            fn($c) => is_string($c) ? trim($c) : '',
+            function ($c) {
+                if (!is_string($c)) {
+                    return '';
+                }
+                $trimmed = trim($c);
+                return strtolower($trimmed) === 'followup' ? 'follow_up' : $trimmed;
+            },
             $items
         ))));
 
@@ -177,12 +183,48 @@ class Lead extends Model
         $current = $this->categories_list;
 
         foreach ($targets as $target) {
-            if (in_array($target, $current, true)) {
+            $normalizedTarget = strtolower(trim((string) $target)) === 'followup' ? 'follow_up' : $target;
+            if (in_array($normalizedTarget, $current, true) || in_array($target, $current, true)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * Find the single active (open) Lead row for a given phone number (or customer ID).
+     */
+    public static function findOpenLeadByPhone(?string $phone, ?int $customerId = null, ?int $excludeLeadId = null): ?self
+    {
+        $rawDigits = preg_replace('/\D+/', '', (string) $phone);
+        [$countryCode, $localNumber] = self::splitPhone($rawDigits);
+        $normalizedPhone = self::normalizePhone($countryCode, $localNumber);
+        $candidates = array_values(array_unique(array_filter([$normalizedPhone, $rawDigits])));
+
+        if (empty($candidates) && !$customerId) {
+            return null;
+        }
+
+        return static::query()
+            ->open()
+            ->where(function ($q) use ($candidates, $customerId) {
+                if (!empty($candidates)) {
+                    $q->whereIn('phone', $candidates);
+                    foreach ($candidates as $cand) {
+                        $q->orWhereRaw(
+                            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'(',''),')',''),'+','') = ?",
+                            [$cand]
+                        );
+                    }
+                }
+                if ($customerId) {
+                    $q->orWhere('customer_id', $customerId);
+                }
+            })
+            ->when($excludeLeadId, fn ($q) => $q->where('id', '!=', $excludeLeadId))
+            ->orderByDesc('id')
+            ->first();
     }
 
     public function scopeWhereHasCategory($query, string|array $categories)

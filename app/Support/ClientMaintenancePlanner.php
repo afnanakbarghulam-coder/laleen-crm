@@ -127,9 +127,22 @@ class ClientMaintenancePlanner
             ->get()
             ->keyBy('id');
 
+        $lastCompletedByCustomer = Appointment::with('staff:id,name')
+            ->whereIn('customer_id', $schedule->pluck('customer_id')->unique())
+            ->where('status', 'completed')
+            ->orderByDesc('appointment_datetime')
+            ->get(['id', 'customer_id', 'staff_id', 'branch', 'service_name', 'appointment_datetime'])
+            ->groupBy('customer_id');
+
         return $schedule
-            ->map(function ($row) use ($customers) {
+            ->map(function ($row) use ($customers, $lastCompletedByCustomer) {
                 $row->customer = $customers->get($row->customer_id);
+                $clientCompleted = $lastCompletedByCustomer->get($row->customer_id, collect());
+                $matchingCompleted = $clientCompleted->first(
+                    fn ($a) => stripos((string) $a->service_name, (string) $row->service_name) !== false
+                ) ?: $clientCompleted->first();
+                $row->last_staff_name = $matchingCompleted?->staff?->name;
+                $row->branch = $matchingCompleted?->branch;
                 return $row;
             })
             ->filter(fn ($row) => $row->customer !== null)

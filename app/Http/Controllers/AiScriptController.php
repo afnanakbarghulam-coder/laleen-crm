@@ -839,4 +839,148 @@ PROMPT;
             'metrics' => $metrics,
         ]);
     }
+
+    /**
+     * POST /customers/{customer}/ai-retention-script
+     * Generates a punchy 1-to-2 sentence (max 30 words) warm outreach WhatsApp message
+     * for client retention / beauty maintenance in English or Qatari/Gulf White Arabic.
+     */
+    public function generateForMaintenance(Request $request, Customer $customer)
+    {
+        $allowedModes = ['maintenance', 'package_expiry', 'vip_winback', 'second_visit'];
+        $requestedMode = strtolower(trim((string) $request->input('mode', 'maintenance')));
+        $mode = in_array($requestedMode, $allowedModes, true) ? $requestedMode : 'maintenance';
+        $language = $this->resolveLanguage($request->input('language'), null);
+
+        $lastCompleted = $customer->appointments()
+            ->with('staff:id,name')
+            ->where('status', 'completed')
+            ->orderByDesc('appointment_datetime')
+            ->first();
+
+        $serviceName = trim((string) (
+            $request->input('service_name')
+            ?: ($lastCompleted?->service_name ? trim(explode(',', (string) $lastCompleted->service_name)[0]) : 'Signature Treatment')
+        ));
+        $daysOverdue = (int) $request->input('days_overdue', 0);
+        $lastStaffName = trim((string) ($request->input('last_staff_name') ?: $lastCompleted?->staff?->name ?: ''));
+        $branchRaw = trim((string) ($request->input('branch') ?: $lastCompleted?->branch ?: ''));
+        $branchLabel = AppointmentController::BRANCH_LABELS[$branchRaw] ?? $branchRaw;
+
+        $loyaltyPoints = (int) $customer->loyalty_points;
+        $pendingPackageSessions = (int) $customer->pending_package_service_count;
+        $customerName = trim((string) ($customer->name ?: 'lovely'));
+
+        $script = $this->fallbackMaintenanceScript(
+            customerName: $customerName,
+            serviceName: $serviceName,
+            daysOverdue: $daysOverdue,
+            lastStaffName: $lastStaffName,
+            branchLabel: $branchLabel,
+            mode: $mode,
+            language: $language,
+            loyaltyPoints: $loyaltyPoints,
+            pendingPackageSessions: $pendingPackageSessions,
+        );
+        $source = 'fallback';
+
+        $languageDirective = $language === 'ar'
+            ? "Write the ENTIRE 1-to-2 sentence WhatsApp message (max 28 words) in warm Qatari / Gulf White Arabic (لهجة خليجية قطرية بيضاء راقية ولطيفة — using 'يا هلا حبيبتي')."
+            : "Write the ENTIRE 1-to-2 sentence WhatsApp message (max 28 words) in warm, natural English.";
+
+        $systemPrompt = <<<PROMPT
+You are a warm ladies' salon manager in Qatar texting a returning client on WhatsApp (Alex Hormozi Warm Outreach framework).
+Strictly 1 to 2 sentences (MAX 28 words total). Zero brochure fluff.
+{$languageDirective}
+Client: {$customerName}. Mode: {$mode}. Service: {$serviceName}. Days Overdue: {$daysOverdue}. Last Stylist: {$lastStaffName}. Branch: {$branchLabel}. Loyalty Points: {$loyaltyPoints}. Remaining Package Sessions: {$pendingPackageSessions}.
+Reference their last visit/stylist, loyalty points (if > 0), or remaining package sessions, and end with a low-friction A/B morning or afternoon booking question.
+PROMPT;
+
+        $openAiKey = config('services.openai.key');
+        if (!empty($openAiKey)) {
+            try {
+                $model = config('services.openai.model', 'gpt-4o-mini');
+                $response = Http::withToken($openAiKey)
+                    ->timeout(15)
+                    ->post('https://api.openai.com/v1/chat/completions', [
+                        'model' => $model,
+                        'messages' => [
+                            ['role' => 'system', 'content' => $systemPrompt],
+                            ['role' => 'user', 'content' => 'Output only the raw 1-2 sentence WhatsApp text (max 28 words) without quotes.'],
+                        ],
+                        'temperature' => 0.65,
+                        'max_tokens' => 80,
+                    ]);
+
+                if ($response->successful()) {
+                    $text = trim((string) data_get($response->json(), 'choices.0.message.content', ''));
+                    $text = trim($text, "\"' \t\n\r\0\x0B");
+                    if ($text !== '') {
+                        $script = $text;
+                        $source = 'openai';
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('OpenAI retention script errored', ['message' => $e->getMessage()]);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'script' => $script,
+            'source' => $source,
+            'customer_id' => $customer->id,
+            'service_name' => $serviceName,
+            'days_overdue' => $daysOverdue,
+            'last_staff_name' => $lastStaffName !== '' ? $lastStaffName : null,
+            'branch' => $branchLabel !== '' ? $branchLabel : null,
+            'mode' => $mode,
+            'language' => $language,
+            'loyalty_points' => $loyaltyPoints,
+            'pending_package_sessions' => $pendingPackageSessions,
+        ]);
+    }
+
+    private function fallbackMaintenanceScript(
+        string $customerName,
+        string $serviceName,
+        int $daysOverdue,
+        string $lastStaffName,
+        string $branchLabel,
+        string $mode,
+        string $language,
+        int $loyaltyPoints,
+        int $pendingPackageSessions
+    ): string {
+        $isDefaultName = ($customerName === '' || in_array(strtolower($customerName), ['unnamed', 'unnamed client', 'lovely'], true));
+        $nameEn = !$isDefaultName ? $customerName : 'lovely';
+        $nameAr = !$isDefaultName ? $customerName : 'حبيبتي';
+
+        $staffEn = $lastStaffName !== '' ? " with {$lastStaffName}" : '';
+        $staffAr = $lastStaffName !== '' ? " مع {$lastStaffName}" : '';
+
+        if ($language === 'ar') {
+            $perkAr = $pendingPackageSessions > 0
+                ? " وعندك {$pendingPackageSessions} جلسة متبقية في باقتك"
+                : ($loyaltyPoints > 0 ? " وعندك {$loyaltyPoints} نقطة ولاء جاهزة للاستخدام" : '');
+
+            return match ($mode) {
+                'package_expiry' => "يا هلا حبيبتي {$nameAr}، باقي لك جلسات في باقة {$serviceName}{$staffAr} قبل انتهاء صلاحيتها. يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟",
+                'vip_winback' => "يا هلا حبيبتي {$nameAr}، اشتقنا لك في الصالون لجلستك {$serviceName}{$staffAr}{$perkAr}. يناسبك موعد الصباح أو المساء هالأسبوع؟",
+                'second_visit' => "يا هلا حبيبتي {$nameAr}، نورتينا بزيارتك الأولى لخدمة {$serviceName}{$staffAr}{$perkAr}. تحبين نرتب جلستك الثانية الصباح أو المساء هالأسبوع؟",
+                default => "يا هلا حبيبتي {$nameAr}، حان موعد تجديد جلسة {$serviceName}{$staffAr}{$perkAr}. يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟",
+            };
+        }
+
+        $perkEn = $pendingPackageSessions > 0
+            ? " and you have {$pendingPackageSessions} package session(s) ready"
+            : ($loyaltyPoints > 0 ? " plus {$loyaltyPoints} loyalty points waiting" : '');
+
+        return match ($mode) {
+            'package_expiry' => "Hi {$nameEn}! You still have package sessions left for {$serviceName}{$staffEn} before they expire. Would a morning or afternoon slot work better this week?",
+            'vip_winback' => "Hi {$nameEn}! We've missed seeing you for your {$serviceName}{$staffEn}{$perkEn}. Would a morning or afternoon slot work better for you this week?",
+            'second_visit' => "Hi {$nameEn}! Loved having you for your first {$serviceName}{$staffEn}{$perkEn}. Would a morning or afternoon slot work for your next visit this week?",
+            default => "Hi {$nameEn}! You're due for your {$serviceName} refresh{$staffEn}{$perkEn}. Would a morning or afternoon slot work better for you this week?",
+        };
+    }
 }

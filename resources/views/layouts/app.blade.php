@@ -56,6 +56,161 @@
         }
     </Style>
     <style>[x-cloak] { display: none !important; }</style>
+    <style>
+        /* Reusable Zero-Lag Dark-Luxury CSS Tooltip Component */
+        .crm-tooltip-trigger {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            font-size: 10px;
+            font-weight: 700;
+            font-style: normal;
+            line-height: 1;
+            color: #e79a91;
+            background: rgba(217, 143, 131, 0.12);
+            border: 1px solid rgba(201, 166, 107, 0.5);
+            cursor: help;
+            position: relative;
+            vertical-align: middle;
+            flex-shrink: 0;
+            user-select: none;
+            transition: background 0.08s ease, border-color 0.08s ease, color 0.08s ease;
+        }
+
+        .crm-tooltip-trigger:hover,
+        .crm-tooltip-trigger:focus {
+            background: rgba(217, 143, 131, 0.28);
+            border-color: #e79a91;
+            color: #fff;
+            outline: none;
+        }
+
+        [data-tooltip] {
+            position: relative;
+        }
+
+        [data-tooltip]::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%) translateY(4px);
+            width: max-content;
+            max-width: 260px;
+            padding: 8px 11px;
+            border-radius: 8px;
+            background: #191413;
+            color: #f4eae6;
+            border: 1px solid rgba(217, 143, 131, 0.45);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+            font-family: 'Poppins', sans-serif;
+            font-size: 11.5px;
+            font-weight: 400;
+            line-height: 1.45;
+            letter-spacing: 0;
+            text-transform: none;
+            text-align: left;
+            white-space: normal;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.07s ease, transform 0.07s ease, visibility 0.07s ease;
+            z-index: 9999;
+        }
+
+        [data-tooltip]::before {
+            content: '';
+            position: absolute;
+            bottom: calc(100% + 3px);
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 5px 5px 0 5px;
+            border-style: solid;
+            border-color: rgba(217, 143, 131, 0.55) transparent transparent transparent;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.07s ease, visibility 0.07s ease;
+            z-index: 9999;
+        }
+
+        [data-tooltip]:hover::after,
+        [data-tooltip]:focus::after,
+        [data-tooltip]:focus-visible::after {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        [data-tooltip]:hover::before,
+        [data-tooltip]:focus::before,
+        [data-tooltip]:focus-visible::before {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Prevent parent tooltip from rendering if it contains a nested tooltip child */
+        [data-tooltip]:has([data-tooltip])::after,
+        [data-tooltip]:has([data-tooltip])::before {
+            display: none !important;
+        }
+
+        /* Bottom placement modifier so top-of-page buttons/headers never clip off-screen */
+        [data-tooltip].tooltip-bottom::after {
+            bottom: auto;
+            top: calc(100% + 8px);
+            transform: translateX(-50%) translateY(-4px);
+        }
+
+        [data-tooltip].tooltip-bottom::before {
+            bottom: auto;
+            top: calc(100% + 3px);
+            border-width: 0 5px 5px 5px;
+            border-color: transparent transparent rgba(217, 143, 131, 0.55) transparent;
+        }
+
+        [data-tooltip].tooltip-bottom:hover::after,
+        [data-tooltip].tooltip-bottom:focus::after {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Right-edge alignment modifier so right-most buttons never overflow viewport */
+        [data-tooltip].tooltip-align-right::after {
+            left: auto;
+            right: 0;
+            transform: translateX(0) translateY(4px);
+        }
+
+        [data-tooltip].tooltip-align-right:hover::after,
+        [data-tooltip].tooltip-align-right:focus::after {
+            transform: translateX(0) translateY(0);
+        }
+
+        [data-tooltip].tooltip-bottom.tooltip-align-right::after {
+            left: auto;
+            right: 0;
+            transform: translateX(0) translateY(-4px);
+        }
+
+        [data-tooltip].tooltip-bottom.tooltip-align-right:hover::after,
+        [data-tooltip].tooltip-bottom.tooltip-align-right:focus::after {
+            transform: translateX(0) translateY(0);
+        }
+
+        /* Left-edge alignment modifier so first-column pills never clip on the left */
+        [data-tooltip].tooltip-align-left::after {
+            left: 0;
+            transform: translateX(0) translateY(4px);
+        }
+
+        [data-tooltip].tooltip-align-left:hover::after,
+        [data-tooltip].tooltip-align-left:focus::after {
+            transform: translateX(0) translateY(0);
+        }
+    </style>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 
