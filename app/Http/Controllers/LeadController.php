@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AdLeadEntry;
 use App\Models\Appointment;
 use App\Models\Customer;
 use App\Models\Lead;
@@ -184,6 +185,8 @@ class LeadController extends Controller
                 'next_followup_date' => $request->next_followup_date ?: $existingLead->next_followup_date,
             ]);
 
+            $this->linkSameMonthAdLeadEntries($existingLead, $customer, $normalizedPhone);
+
             return redirect()->route('leads.index')
                 ->with('existing_lead_id', $existingLead->id)
                 ->with('warning', 'This client already has an open lead. Their services and details have been merged into the existing lead.');
@@ -191,7 +194,7 @@ class LeadController extends Controller
 
         $initialCategories = Lead::normalizeCategories([$request->category]);
 
-        Lead::create([
+        $newLead = Lead::create([
             'phone' => $normalizedPhone,
             'customer_id' => $customer->id,
             'assigned_agent_id' => $request->assigned_agent_id,
@@ -201,6 +204,8 @@ class LeadController extends Controller
             'service_interest' => $request->service_interest,
             'next_followup_date' => $request->next_followup_date,
         ]);
+
+        $this->linkSameMonthAdLeadEntries($newLead, $customer, $normalizedPhone);
 
         return redirect()->back()->with('success', 'Lead added successfully.');
     }
@@ -279,7 +284,10 @@ class LeadController extends Controller
             $data['category'] = Lead::resolvePrimaryCategory($mergedCats);
 
             $existingLead->update($data);
+            $mergedFromLeadId = $lead->id;
             $lead->delete();
+
+            $this->linkSameMonthAdLeadEntries($existingLead, $customer, $normalizedPhone, $mergedFromLeadId);
 
             return redirect()->route('leads.index')
                 ->with('existing_lead_id', $existingLead->id)
@@ -287,6 +295,7 @@ class LeadController extends Controller
         }
 
         $lead->update($data);
+        $this->linkSameMonthAdLeadEntries($lead, $customer, $normalizedPhone);
 
         return redirect()->route('leads.index')
             ->with('success', 'Lead updated successfully.');
@@ -908,5 +917,37 @@ class LeadController extends Controller
         }
 
         return $customer;
+    }
+
+    /**
+     * Link any same-month AdLeadEntry rows for this customer/phone that do not
+     * yet have a lead_id (or were pointing at a merged duplicate lead).
+     */
+    private function linkSameMonthAdLeadEntries(Lead $lead, Customer $customer, string $normalizedPhone, ?int $mergedFromLeadId = null): void
+    {
+        $refDate = $lead->created_at ? Carbon::parse($lead->created_at) : now();
+
+        AdLeadEntry::query()
+            ->whereYear('date', $refDate->year)
+            ->whereMonth('date', $refDate->month)
+            ->where(function ($q) use ($customer, $normalizedPhone, $mergedFromLeadId) {
+                $q->where('customer_id', $customer->id);
+                if ($normalizedPhone !== '') {
+                    $q->orWhere('phone', $normalizedPhone);
+                }
+                if ($mergedFromLeadId) {
+                    $q->orWhere('lead_id', $mergedFromLeadId);
+                }
+            })
+            ->where(function ($q) use ($mergedFromLeadId) {
+                $q->whereNull('lead_id');
+                if ($mergedFromLeadId) {
+                    $q->orWhere('lead_id', $mergedFromLeadId);
+                }
+            })
+            ->update([
+                'lead_id' => $lead->id,
+                'customer_id' => $customer->id,
+            ]);
     }
 }

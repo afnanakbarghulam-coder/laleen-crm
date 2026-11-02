@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\Lead;
+use App\Models\AdLeadEntry;
 use App\Models\Staff;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -514,6 +515,8 @@ class AppointmentController extends Controller
                 $this->autoCloseOpenLeadsForBooking($appointment, $customer, $phone);
             }
 
+            $this->syncAdLeadAttributionForAppointment($appointment);
+
             return $appointment;
         });
 
@@ -716,6 +719,7 @@ class AppointmentController extends Controller
 
         $oldStaffId = $appointment->staff_id;
         $oldStatus = $appointment->status;
+        $oldApptDate = Carbon::parse($appointment->appointment_datetime ?: $appointment->booking_date ?: now());
         $hasSale = $appointment->sale()->exists();
         $requestedStatus = $request->status ?: $appointment->status;
         $redirectToCheckout = ($requestedStatus === 'completed' && !$hasSale);
@@ -847,6 +851,8 @@ class AppointmentController extends Controller
             $this->markAppointmentLeadsAsBooked($appointment);
         }
 
+        $this->syncAdLeadAttributionForAppointment($appointment, $oldApptDate);
+
         if ($redirectToCheckout) {
             return redirect()->route('appointments.revenue.payment', $appointment->id)
                 ->with('info', 'Please complete payment checkout to mark this appointment as completed.');
@@ -859,6 +865,11 @@ class AppointmentController extends Controller
     public function destroy(Appointment $appointment)
     {
         DB::transaction(function () use ($appointment) {
+            $customer = $appointment->customer;
+            $apptDate = Carbon::parse($appointment->appointment_datetime ?: $appointment->booking_date ?: now());
+            $phone = $appointment->phone;
+            $appointmentId = $appointment->id;
+
             $reopenNote = '[Reopened: Booking deleted on ' . now()->format('d M Y') . ']';
             $linkedBookedLeads = Lead::where('appointment_id', $appointment->id)
                 ->where('needful_done', 'booked')
@@ -881,6 +892,8 @@ class AppointmentController extends Controller
             $this->reverseAppointmentSale($appointment);
 
             $appointment->delete();
+
+            AdLeadEntry::syncFromCustomerActivity($customer, $apptDate, $phone, $appointmentId);
         });
 
         return redirect()->back()->with('success', 'Booking successfully deleted.');
@@ -2048,6 +2061,8 @@ class AppointmentController extends Controller
             } else {
                 $this->markAppointmentLeadsAsBooked($appointment);
             }
+
+            $this->syncAdLeadAttributionForAppointment($appointment);
         });
 
         if ($request->status === 'completed') {
@@ -2485,6 +2500,7 @@ class AppointmentController extends Controller
         });
 
         $this->markAppointmentLeadsAsBooked($appointment);
+        $this->syncAdLeadAttributionForAppointment($appointment, $oldStart);
 
         return response()->json([
             'success' => true,
@@ -2670,6 +2686,7 @@ class AppointmentController extends Controller
         ]);
 
         $appointment->syncFromServices();
+        $this->syncAdLeadAttributionForAppointment($appointment);
 
         return response()->json([
             'success' => true,
@@ -2773,6 +2790,7 @@ class AppointmentController extends Controller
 
         $appointmentService->update($data);
         $appointment->syncFromServices();
+        $this->syncAdLeadAttributionForAppointment($appointment);
 
         $this->logPriceOverrideIfDiscounted($appointmentService->fresh(), $request->discount_reason);
 
@@ -2813,6 +2831,7 @@ class AppointmentController extends Controller
         }
 
         $appointment->syncFromServices();
+        $this->syncAdLeadAttributionForAppointment($appointment);
 
         return response()->json(['success' => true, 'message' => 'Service removed.']);
     }
@@ -2895,6 +2914,8 @@ class AppointmentController extends Controller
             'created_by' => auth()->id(),
         ]);
 
+        $this->syncAdLeadAttributionForAppointment($appointment);
+
         return response()->json([
             'success' => true,
             'message' => 'Upsell added.',
@@ -2915,6 +2936,8 @@ class AppointmentController extends Controller
             'amount' => $request->amount,
         ]);
 
+        $this->syncAdLeadAttributionForAppointment($appointment);
+
         return response()->json([
             'success' => true,
             'message' => 'Upsell updated.',
@@ -2929,6 +2952,7 @@ class AppointmentController extends Controller
         }
 
         $appointmentUpsell->delete();
+        $this->syncAdLeadAttributionForAppointment($appointment);
 
         return response()->json(['success' => true, 'message' => 'Upsell removed.']);
     }
@@ -3338,6 +3362,7 @@ class AppointmentController extends Controller
             ]);
 
             $this->markAppointmentLeadsAsBooked($appointment);
+            $this->syncAdLeadAttributionForAppointment($appointment);
 
             if ($customer && $effectiveRedeemPoints > 0) {
                 LoyaltyTransaction::create([
@@ -3572,5 +3597,22 @@ class AppointmentController extends Controller
         }
 
         return $purchased;
+    }
+
+    /**
+     * Synchronize the client's matching AdLeadEntry in the SAME calendar month
+     * as the appointment (or its previous month if rescheduled across months).
+     */
+    private function syncAdLeadAttributionForAppointment(Appointment $appointment, ?Carbon $previousDate = null): void
+    {
+        $appointment->refresh();
+        $customer = $appointment->customer ?: ($appointment->customer_id ? Customer::find($appointment->customer_id) : null);
+        $apptDate = Carbon::parse($appointment->appointment_datetime ?: $appointment->booking_date ?: now());
+
+        if ($previousDate && ($previousDate->year !== $apptDate->year || $previousDate->month !== $apptDate->month || $previousDate->toDateString() !== $apptDate->toDateString())) {
+            AdLeadEntry::syncFromCustomerActivity($customer, $previousDate, $appointment->phone, $appointment->id);
+        }
+
+        AdLeadEntry::syncFromCustomerActivity($customer, $apptDate, $appointment->phone, $appointment->id);
     }
 }

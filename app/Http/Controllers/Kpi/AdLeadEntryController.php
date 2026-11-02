@@ -8,6 +8,7 @@ use App\Models\AdLeadEntry;
 use App\Models\Customer;
 use App\Models\Lead;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
@@ -15,18 +16,57 @@ class AdLeadEntryController extends Controller
 {
     public function store(Request $request)
     {
+        $hasManualBranch = $request->filled('branch');
         $validated = $this->validated($request);
+
+        if (!$hasManualBranch) {
+            $validated['branch'] = null;
+            $validated['ticket_amount'] = 0;
+        }
 
         $entry = AdLeadEntry::create($validated + ['created_by' => auth()->id()]);
         $this->syncLeadFromAdEntry($entry);
+
+        $entry = $entry->fresh();
+        $synced = AdLeadEntry::syncFromCustomerActivity(
+            customer: $entry->customer,
+            activityDate: Carbon::parse($entry->date)->endOfMonth(),
+            phone: $entry->phone,
+            targetEntry: $entry,
+            resetIfNoActivity: !$hasManualBranch
+        );
+        if ($synced) {
+            $this->syncLeadFromAdEntry($synced);
+        }
 
         return redirect()->route('kpi.ads.index')->with('success', 'Ad lead logged.');
     }
 
     public function update(Request $request, AdLeadEntry $adLeadEntry)
     {
-        $adLeadEntry->update($this->validated($request));
-        $this->syncLeadFromAdEntry($adLeadEntry->fresh());
+        $hasManualBranch = $request->filled('branch');
+        $validated = $this->validated($request);
+
+        if (!$hasManualBranch) {
+            $validated['branch'] = null;
+            $validated['ticket_amount'] = 0;
+        }
+
+        $adLeadEntry->update($validated);
+        $entry = $adLeadEntry->fresh();
+        $this->syncLeadFromAdEntry($entry);
+
+        $entry = $entry->fresh();
+        $synced = AdLeadEntry::syncFromCustomerActivity(
+            customer: $entry->customer,
+            activityDate: Carbon::parse($entry->date)->endOfMonth(),
+            phone: $entry->phone,
+            targetEntry: $entry,
+            resetIfNoActivity: !$hasManualBranch
+        );
+        if ($synced) {
+            $this->syncLeadFromAdEntry($synced);
+        }
 
         return redirect()->route('kpi.ads.index')->with('success', 'Ad lead updated.');
     }
@@ -118,14 +158,48 @@ class AdLeadEntryController extends Controller
 
         $rawDigits = preg_replace('/\D/', '', (string) $entry->phone);
         $candidates = array_values(array_unique(array_filter([$entry->phone, $rawDigits])));
+        $hasLeadIdColumn = Schema::hasColumn('ad_lead_entries', 'lead_id');
+        $entryDate = $entry->date ? Carbon::parse($entry->date) : now();
 
-        $existingLead = Lead::open()->whereIn('phone', $candidates)->first()
-            ?: Lead::whereIn('phone', $candidates)->latest('id')->first();
+        $existingLead = null;
+        if ($hasLeadIdColumn && $entry->lead_id) {
+            $existingLead = Lead::find($entry->lead_id);
+        }
+
+        if (!$existingLead) {
+            $existingLead = Lead::open()
+                ->where(function ($q) use ($entry, $candidates) {
+                    if ($entry->customer_id) {
+                        $q->where('customer_id', $entry->customer_id);
+                    }
+                    if (!empty($candidates)) {
+                        $q->orWhereIn('phone', $candidates);
+                    }
+                })
+                ->latest('id')
+                ->first();
+        }
+
+        if (!$existingLead) {
+            $existingLead = Lead::query()
+                ->where(function ($q) use ($entry, $candidates) {
+                    if ($entry->customer_id) {
+                        $q->where('customer_id', $entry->customer_id);
+                    }
+                    if (!empty($candidates)) {
+                        $q->orWhereIn('phone', $candidates);
+                    }
+                })
+                ->whereYear('created_at', $entryDate->year)
+                ->whereMonth('created_at', $entryDate->month)
+                ->latest('id')
+                ->first();
+        }
 
         $interestList = $entry->category ? [$entry->category] : [];
 
         if (!$existingLead) {
-            Lead::create([
+            $newLead = Lead::create([
                 'phone' => $entry->phone,
                 'customer_id' => $entry->customer_id,
                 'category' => 'inquiry',
@@ -135,6 +209,10 @@ class AdLeadEntryController extends Controller
                 'needful_done' => $entry->isBooked() ? 'booked' : null,
                 'assigned_agent_id' => $entry->created_by ?? auth()->id(),
             ]);
+
+            if ($hasLeadIdColumn && (int) $entry->lead_id !== (int) $newLead->id) {
+                $entry->update(['lead_id' => $newLead->id]);
+            }
             return;
         }
 
@@ -156,6 +234,10 @@ class AdLeadEntryController extends Controller
 
         if (!empty($updates)) {
             $existingLead->update($updates);
+        }
+
+        if ($hasLeadIdColumn && (int) $entry->lead_id !== (int) $existingLead->id) {
+            $entry->update(['lead_id' => $existingLead->id]);
         }
     }
 }
