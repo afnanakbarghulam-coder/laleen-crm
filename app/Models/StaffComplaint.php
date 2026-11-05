@@ -37,6 +37,7 @@ class StaffComplaint extends Model
         'corrective_action',
         'manager_feedback',
         'is_staff_mistake',
+        'resolved_at',
         'deduction_applied',
         'deduction_amount',
         'created_by',
@@ -46,6 +47,7 @@ class StaffComplaint extends Model
         'complaint_date' => 'date',
         'deduction_amount' => 'float',
         'is_staff_mistake' => 'boolean',
+        'resolved_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -53,6 +55,17 @@ class StaffComplaint extends Model
         static::creating(function (StaffComplaint $complaint) {
             if (empty($complaint->reference_number)) {
                 $complaint->reference_number = static::generateReferenceNumber($complaint->complaint_date ?? now());
+            }
+            if ($complaint->is_staff_mistake !== null && $complaint->resolved_at === null) {
+                $complaint->resolved_at = now();
+            }
+        });
+
+        static::saving(function (StaffComplaint $complaint) {
+            if ($complaint->is_staff_mistake !== null && $complaint->resolved_at === null) {
+                $complaint->resolved_at = now();
+            } elseif ($complaint->isDirty('is_staff_mistake') && $complaint->is_staff_mistake === null && (!$complaint->exists || !$complaint->notices()->exists())) {
+                $complaint->resolved_at = null;
             }
         });
     }

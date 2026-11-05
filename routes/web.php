@@ -216,11 +216,15 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('/users/{user}/toggle-active', [UserController::class, 'toggleActive'])->name('users.toggle-active');
     });
 
-    // ---- KPIs ----
+    // ---- KPIs & Operations ----
     // NOTE: each subresource's literal 'create' path is registered before its
     // '{report}' wildcard (show), same reasoning as the Leads section above.
+    Route::middleware('module:kpis')->get('/operations', [KpiHubController::class, 'operations'])->name('kpis.operations');
+
     Route::prefix('kpis')->name('kpi.')->group(function () {
         Route::middleware('module:kpis')->get('/', [KpiHubController::class, 'index'])->name('hub');
+        Route::middleware('module:kpis')->get('/operations', [KpiHubController::class, 'operations'])->name('operations');
+        Route::middleware('module:kpis')->post('/late-replies', [KpiHubController::class, 'updateLateReplies'])->name('late-replies.update');
         Route::middleware('module:kpis')->get('/marketing', [KpiHubController::class, 'marketing'])->name('marketing.index');
         Route::middleware('module:kpis')->get('/customer-service', [KpiHubController::class, 'customerService'])->name('customer-service.index');
         Route::middleware('module:kpis')->get('/salon-staff', [KpiHubController::class, 'salonStaff'])->name('salon-staff.index');

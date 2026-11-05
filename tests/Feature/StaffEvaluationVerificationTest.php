@@ -13,10 +13,11 @@ class StaffEvaluationVerificationTest extends TestCase
 {
     use RefreshDatabase;
 
-    // A fixed Monday/Tuesday pair so store() tests don't depend on which
+    // A fixed Monday/Tuesday/Wednesday set so store() tests don't depend on which
     // day the suite actually runs on.
     private const A_MONDAY = '2026-10-12 10:00:00';
     private const A_TUESDAY = '2026-10-13 10:00:00';
+    private const A_WEDNESDAY = '2026-10-14 10:00:00';
 
     protected function tearDown(): void
     {
@@ -105,13 +106,13 @@ class StaffEvaluationVerificationTest extends TestCase
 
     public function test_submit_button_disabled_outside_monday_with_warning(): void
     {
-        Carbon::setTestNow(self::A_TUESDAY);
+        Carbon::setTestNow(self::A_WEDNESDAY);
 
         $user = User::factory()->create(['role' => 'admin']);
 
         $response = $this->actingAs($user)->get(route('kpi.evaluations.index'));
         $response->assertOk();
-        $response->assertSee('Evaluations can only be submitted on Mondays.');
+        $response->assertSee('Evaluations can be submitted on Mondays and Tuesdays (2-day window).');
 
         $tag = $this->extractButtonTag($response->getContent(), '>Save Evaluation<');
         $this->assertStringContainsString('disabled', $tag);
@@ -121,26 +122,28 @@ class StaffEvaluationVerificationTest extends TestCase
 
     public function test_submit_button_enabled_on_monday(): void
     {
-        Carbon::setTestNow(self::A_MONDAY);
+        foreach ([self::A_MONDAY, self::A_TUESDAY] as $allowedDay) {
+            Carbon::setTestNow($allowedDay);
 
-        $user = User::factory()->create(['role' => 'admin']);
+            $user = User::factory()->create(['role' => 'admin']);
 
-        $response = $this->actingAs($user)->get(route('kpi.evaluations.index'));
-        $response->assertOk();
-        $response->assertDontSee('Evaluations can only be submitted on Mondays.');
+            $response = $this->actingAs($user)->get(route('kpi.evaluations.index'));
+            $response->assertOk();
+            $response->assertDontSee('Evaluations can be submitted on Mondays and Tuesdays (2-day window).');
 
-        $tag = $this->extractButtonTag($response->getContent(), '>Save Evaluation<');
-        $this->assertStringNotContainsString('disabled', $tag);
-        $this->assertStringNotContainsString('opacity-50', $tag);
-        $this->assertStringNotContainsString('cursor-not-allowed', $tag);
+            $tag = $this->extractButtonTag($response->getContent(), '>Save Evaluation<');
+            $this->assertStringNotContainsString('disabled', $tag);
+            $this->assertStringNotContainsString('opacity-50', $tag);
+            $this->assertStringNotContainsString('cursor-not-allowed', $tag);
+        }
     }
 
     public function test_store_blocked_outside_monday(): void
     {
-        Carbon::setTestNow(self::A_TUESDAY);
+        Carbon::setTestNow(self::A_WEDNESDAY);
 
         $user = User::factory()->create(['role' => 'admin']);
-        $staff = Staff::create(['name' => 'Tuesday Stylist']);
+        $staff = Staff::create(['name' => 'Wednesday Stylist']);
 
         $payload = [
             'staff_id' => $staff->id,
@@ -159,6 +162,14 @@ class StaffEvaluationVerificationTest extends TestCase
             ->assertForbidden();
 
         $this->assertDatabaseCount('kpi_staff_evaluations', 0);
+
+        // Submitting on Tuesday (2nd day of the 2-day window) succeeds cleanly
+        Carbon::setTestNow(self::A_TUESDAY);
+        $this->actingAs($user)
+            ->post(route('kpi.evaluations.store'), $payload)
+            ->assertRedirect(route('kpi.evaluations.index'));
+
+        $this->assertDatabaseCount('kpi_staff_evaluations', 1);
     }
 
     public function test_store_saves_binary_scores_and_branch_and_computes_average(): void

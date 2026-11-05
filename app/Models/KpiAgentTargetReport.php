@@ -56,44 +56,123 @@ class KpiAgentTargetReport extends Model
 
         $logs = AgentShiftLog::whereBetween('date', $bounds)
             ->whereNotNull('check_in_time')
-            ->whereNotNull('check_out_time')
             ->get();
-
-        if ($logs->isEmpty()) {
-            return ['morning' => 0, 'evening' => 0];
-        }
 
         // "agentId|Y-m-d" => Collection<AgentShiftLog>, so an agent who worked
         // both morning and evening shifts on the same day has both shift windows
         // evaluated without the second shift overwriting the first.
         $logsByAgentAndDate = $logs->groupBy(fn ($log) => $log->user_id . '|' . $log->date->format('Y-m-d'));
-        $agentIds = $logs->pluck('user_id')->unique();
 
-        // Only bookings the agent account itself created (never a manager/
-        // admin acting on an agent's behalf) — enforced by joining against
-        // users and requiring role = 'agent' on the creating account.
+        $agentIds = User::where('role', 'agent')
+            ->pluck('id')
+            ->merge($logs->pluck('user_id'))
+            ->unique()
+            ->values();
+
+        if ($agentIds->isEmpty()) {
+            return ['morning' => 0, 'evening' => 0];
+        }
+
         $appointments = Appointment::query()
-            ->join('users', 'users.id', '=', 'appointments.created_by')
-            ->whereIn('appointments.created_by', $agentIds)
-            ->where('users.role', 'agent')
-            ->whereBetween('appointments.created_at', $bounds)
-            ->get(['appointments.id', 'appointments.created_by', 'appointments.created_at']);
+            ->whereNotIn('status', ['cancelled', 'no_show'])
+            ->where(function ($q) use ($agentIds) {
+                $q->whereIn('booking_agent_id', $agentIds)
+                  ->orWhereIn('created_by', $agentIds);
+            })
+            ->whereBetween('created_at', $bounds)
+            ->get(['id', 'booking_agent_id', 'created_by', 'created_at']);
 
         $counts = ['morning' => 0, 'evening' => 0];
 
         foreach ($appointments as $appointment) {
-            $key = $appointment->created_by . '|' . $appointment->created_at->format('Y-m-d');
+            $attributedAgentId = ($appointment->booking_agent_id && $agentIds->contains($appointment->booking_agent_id))
+                ? $appointment->booking_agent_id
+                : $appointment->created_by;
+
+            $key = $attributedAgentId . '|' . $appointment->created_at->format('Y-m-d');
             $dayLogs = $logsByAgentAndDate->get($key, collect());
 
+            $matchedShift = null;
             foreach ($dayLogs as $log) {
                 if (isset($counts[$log->shift]) && $appointment->created_at->between($log->windowStart(), $log->windowEnd())) {
-                    $counts[$log->shift]++;
+                    $matchedShift = $log->shift;
                     break;
                 }
             }
+
+            if ($matchedShift === null && $dayLogs->count() === 1) {
+                $singleShift = $dayLogs->first()->shift;
+                if (isset($counts[$singleShift])) {
+                    $matchedShift = $singleShift;
+                }
+            }
+
+            if ($matchedShift === null) {
+                $matchedShift = (int) $appointment->created_at->format('H') < 14 ? 'morning' : 'evening';
+            }
+
+            $counts[$matchedShift]++;
         }
 
         return $counts;
+    }
+
+    /**
+     * Live per-agent daily & Month-to-Date booking breakdown (13 bookings/day per agent),
+     * matching the /kpis Executive Scorecard 1-to-1.
+     */
+    public static function liveAgentScorecards(): array
+    {
+        $now = now();
+        $periodStart = $now->copy()->startOfMonth()->startOfDay();
+        $periodEnd = $now->copy()->endOfDay();
+        $daysElapsed = max(1, (int) $now->day);
+        $daysInMonth = max(1, (int) $now->daysInMonth);
+        $dailyTarget = self::DAILY_TARGET_PER_SHIFT; // 13
+
+        $agents = User::where('role', 'agent')->orderBy('name')->get();
+        $todayShiftLogs = AgentShiftLog::whereDate('date', $now->toDateString())
+            ->get()
+            ->groupBy('user_id');
+
+        return $agents->map(function (User $agent) use ($now, $periodStart, $periodEnd, $daysElapsed, $daysInMonth, $dailyTarget, $todayShiftLogs) {
+            $todayBookings = Appointment::query()
+                ->whereNotIn('status', ['cancelled', 'no_show'])
+                ->where(function ($q) use ($agent) {
+                    $q->where('booking_agent_id', $agent->id)
+                      ->orWhere('created_by', $agent->id);
+                })
+                ->whereDate('created_at', $now->toDateString())
+                ->count();
+
+            $mtdBookings = Appointment::query()
+                ->whereNotIn('status', ['cancelled', 'no_show'])
+                ->where(function ($q) use ($agent) {
+                    $q->where('booking_agent_id', $agent->id)
+                      ->orWhere('created_by', $agent->id);
+                })
+                ->whereBetween('created_at', [$periodStart, $periodEnd])
+                ->count();
+
+            $mtdTarget = $dailyTarget * $daysElapsed;
+            $fullMonthTarget = $dailyTarget * $daysInMonth;
+            $mtdPct = min(100.0, round(($mtdBookings / max(1, $mtdTarget)) * 100, 1));
+            $todayPct = min(100.0, round(($todayBookings / $dailyTarget) * 100, 1));
+            $latestLog = $todayShiftLogs->get($agent->id)?->last();
+
+            return [
+                'id' => $agent->id,
+                'name' => $agent->name,
+                'daily_target' => $dailyTarget,
+                'today_bookings' => $todayBookings,
+                'today_pct' => $todayPct,
+                'mtd_bookings' => $mtdBookings,
+                'mtd_target' => $mtdTarget,
+                'full_month_target' => $fullMonthTarget,
+                'mtd_pct' => $mtdPct,
+                'shift_log' => $latestLog,
+            ];
+        })->values()->all();
     }
 
     /**

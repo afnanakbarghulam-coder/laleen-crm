@@ -69,7 +69,8 @@ class KpiAdsConversionReport extends Model
     {
         $booked = AdLeadEntry::whereBetween('date', $this->dateRangeBounds())
             ->where('branch', $branch)
-            ->get();
+            ->get()
+            ->filter(fn (AdLeadEntry $e) => $e->isBooked());
 
         return [
             'bookings' => $booked->count(),

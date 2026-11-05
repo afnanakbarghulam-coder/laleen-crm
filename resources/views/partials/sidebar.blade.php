@@ -343,12 +343,19 @@
              </li>
          @endmoduleView
 
-         <!-- KPIs -->
+         <!-- KPIs & Operations -->
          @moduleView('kpis')
-             <li class="menu-item {{ request()->routeIs('kpi.*') ? 'active' : '' }}">
+             <li class="menu-item {{ request()->routeIs('kpi.hub') ? 'active' : '' }}">
                  <a href="{{ route('kpi.hub') }}" class="menu-link">
                      <i class="bx bx-line-chart me-2"></i>
                      <div>KPIs</div>
+                 </a>
+             </li>
+
+             <li class="menu-item {{ (request()->routeIs('kpi.*') && !request()->routeIs('kpi.hub')) || request()->routeIs('kpis.operations') ? 'active' : '' }}">
+                 <a href="{{ route('kpi.operations') }}" class="menu-link">
+                     <i class="bx bx-cog me-2"></i>
+                     <div>Operations</div>
                  </a>
              </li>
          @endmoduleView

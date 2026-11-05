@@ -46,6 +46,7 @@ class SocialContentPlan extends Model
         'reel_posted_at',
         'stories_posted_at',
         'is_reel_skipped',
+        'late_replies_count',
     ];
 
     protected $casts = [
@@ -54,6 +55,7 @@ class SocialContentPlan extends Model
         'reel_posted_at' => 'datetime',
         'stories_posted_at' => 'datetime',
         'is_reel_skipped' => 'boolean',
+        'late_replies_count' => 'integer',
     ];
 
     // week_start_date is deliberately uncast: kept as a plain 'Y-m-d' string

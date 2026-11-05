@@ -8,9 +8,13 @@ use App\Models\AppointmentUpsell;
 use App\Models\ClientPackage;
 use App\Models\Combo;
 use App\Models\Customer;
+use App\Models\EcommerceProduct;
+use App\Models\EcommerceSale;
+use App\Models\Expense;
 use App\Models\KpiMonthlyAd;
 use App\Models\KpiStaffEvaluation;
 use App\Models\Lead;
+use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SalePayment;
 use App\Models\Service;
@@ -221,13 +225,75 @@ class CommandCenterFridayTest extends TestCase
             'overall_average' => 5.00,
         ]);
 
-        // Snapshot DB counts before running all 6 tools
+        // Unrecovered cancelled appointment 3 days ago for a second client
+        $cancelledClient = Customer::create([
+            'name' => 'Noora Cancelled',
+            'phone' => '55119922',
+            'loyalty_points' => 265,
+        ]);
+
+        Appointment::create([
+            'customer_id' => $cancelledClient->id,
+            'customer_name' => $cancelledClient->name,
+            'phone' => $cancelledClient->phone,
+            'service_name' => 'HydraFacial & Manicure',
+            'appointment_datetime' => now()->subDays(3)->setTime(15, 0),
+            'booking_date' => now()->subDays(3)->toDateString(),
+            'branch' => 'wakrah',
+            'staff_id' => $stylist->id,
+            'status' => 'cancelled',
+            'price' => 420,
+        ]);
+
+        // Seed Finance Expense, Retail Product (Low Stock), and Ecommerce Product/Sale
+        Expense::create([
+            'branch' => 'old_airport',
+            'category' => 'Supplies',
+            'amount' => 170,
+            'expense_date' => now()->toDateString(),
+            'description' => 'Lash Adhesive Restock',
+        ]);
+
+        Product::create([
+            'name' => 'Keratin Repair Serum',
+            'sku' => 'KRS-001',
+            'price' => 150,
+            'stock_quantity' => 2,
+            'low_stock_threshold' => 5,
+        ]);
+
+        $ecomProduct = EcommerceProduct::create([
+            'name' => 'Laleen Argan Hair Oil',
+            'sku' => 'LAHO-100',
+            'stock_qatar' => 24,
+            'stock_pakistan' => 40,
+            'sold_qatar' => 3,
+            'sold_pakistan' => 0,
+            'selling_price' => 110,
+            'cogs' => 30,
+            'landed_cost' => 35,
+        ]);
+
+        EcommerceSale::create([
+            'ecommerce_product_id' => $ecomProduct->id,
+            'customer_name' => 'Maryam Online',
+            'quantity' => 2,
+            'channel' => 'Qatar',
+            'unit_price' => 110,
+            'total_price' => 220,
+            'unit_cogs' => 35,
+        ]);
+
+        // Snapshot DB counts before running all 10 read-only tools
         $countsBefore = [
             'customers' => Customer::count(),
             'appointments' => Appointment::count(),
             'sales' => Sale::count(),
             'leads' => Lead::count(),
             'ad_leads' => AdLeadEntry::count(),
+            'expenses' => Expense::count(),
+            'products' => Product::count(),
+            'ecommerce_sales' => EcommerceSale::count(),
         ];
 
         /** @var LaleenCommandCenterService $friday */
@@ -275,6 +341,42 @@ class CommandCenterFridayTest extends TestCase
         $this->assertCount(1, $lookupStaff['staff']);
         $this->assertSame('Amina Stylist', $lookupStaff['staff'][0]['name']);
 
+        // 7. read_calendar_gaps_and_idle_capacity
+        $gapsData = $friday->read_calendar_gaps_and_idle_capacity('all');
+        $this->assertSame('10:00–21:00', $gapsData['operating_hours']);
+        $this->assertSame(1, $gapsData['branches']['old_airport']['booked_appointments_count']);
+        $this->assertSame(0, $gapsData['branches']['wakrah']['booked_appointments_count']);
+        $this->assertNotEmpty($gapsData['branches']['old_airport']['open_gap_windows']);
+        $this->assertNotEmpty($gapsData['top_callable_leads_to_fill_gaps']);
+
+        // 8. read_unrecovered_cancellations
+        $unrecData = $friday->read_unrecovered_cancellations(14);
+        $this->assertSame(1, $unrecData['unrecovered_count']);
+        $this->assertSame(420.0, (float) $unrecData['trapped_revenue_qar']);
+        $this->assertSame('Noora Cancelled', $unrecData['top_unrecovered_clients'][0]['client_name']);
+        $this->assertSame(265, $unrecData['top_unrecovered_clients'][0]['loyalty_points']);
+
+        // 9. draft_whatsapp_closer_pitch
+        $waPitch = $friday->draft_whatsapp_closer_pitch('Noora');
+        $this->assertSame('Noora Cancelled', $waPitch['client_name']);
+        $this->assertSame(265, $waPitch['loyalty_points']);
+        $this->assertStringContainsString('Noora', $waPitch['whatsapp_message']);
+        $this->assertStringContainsString('265 loyalty points', $waPitch['whatsapp_message']);
+        $this->assertStringStartsWith('https://wa.me/97455119922?text=', $waPitch['whatsapp_url']);
+
+        // 10. read_full_crm_catalog_inventory_finance_and_ecommerce
+        $fullOps = $friday->read_full_crm_catalog_inventory_finance_and_ecommerce('all');
+        $this->assertSame(170.0, (float) $fullOps['finance']['today_expenses_qar']);
+        $this->assertSame(170.0, (float) $fullOps['finance']['mtd_expenses_qar']);
+        $this->assertSame(300.0, (float) $fullOps['finance']['mtd_net_profit_qar']); // 470 net sales - 170 expenses
+        $this->assertSame(1, $fullOps['services']['total_services_count']);
+        $this->assertSame(1, $fullOps['products']['total_products_count']);
+        $this->assertSame(1, $fullOps['products']['low_stock_count']);
+        $this->assertSame('Keratin Repair Serum', $fullOps['products']['low_stock_items'][0]['name']);
+        $this->assertSame(1, $fullOps['ecommerce']['total_products_count']);
+        $this->assertSame(1, $fullOps['ecommerce']['total_orders_count']);
+        $this->assertSame(220.0, (float) $fullOps['ecommerce']['total_revenue_qar']);
+
         // Verify zero database mutations occurred
         $this->assertSame($countsBefore, [
             'customers' => Customer::count(),
@@ -282,6 +384,9 @@ class CommandCenterFridayTest extends TestCase
             'sales' => Sale::count(),
             'leads' => Lead::count(),
             'ad_leads' => AdLeadEntry::count(),
+            'expenses' => Expense::count(),
+            'products' => Product::count(),
+            'ecommerce_sales' => EcommerceSale::count(),
         ]);
     }
 
@@ -390,9 +495,9 @@ class CommandCenterFridayTest extends TestCase
 
         $this->assertStringContainsString('Deep Consultant mode', $deepResp->json('reply'));
 
-        // 3. Test skip_tts = true + dedicated /command-center/tts progressive audio endpoint
+        // 3. Test /command-center/tts endpoint sends ONLY spoken_text with zero stage-direction prefix
         $ttsEndpointResp = $this->actingAs($this->admin)->postJson(route('command-center.tts'), [
-            'spoken_text' => 'Right then, Boss—Old Airport is leading today.',
+            'spoken_text' => 'Morning Boss, systems are green.',
             'voice_profile' => 'friday_tactical',
         ]);
 
@@ -400,5 +505,156 @@ class CommandCenterFridayTest extends TestCase
             ->assertJsonPath('audio_mime', 'audio/wav')
             ->assertJsonPath('tts_source', 'gemini_tts');
         $this->assertNotEmpty($ttsEndpointResp->json('audio_base64'));
+
+        Http::assertSent(function ($request) {
+            if (!str_contains($request->url(), 'gemini-2.5-flash-preview-tts:generateContent')) {
+                return false;
+            }
+            $sentText = (string) data_get($request->data(), 'contents.0.parts.0.text');
+            $langCode = (string) data_get($request->data(), 'generationConfig.speechConfig.languageCode');
+            return str_contains($sentText, 'Speak ONLY the exact words after the colon: Morning Boss, systems are green.')
+                && $langCode === 'en-GB';
+        });
+    }
+
+    public function test_friday_voice_configuration_is_permanently_locked(): void
+    {
+        $this->assertSame('Aoede', LaleenCommandCenterService::LOCKED_FRIDAY_VOICE_NAME);
+        $this->assertSame('en-GB', LaleenCommandCenterService::LOCKED_FRIDAY_LANGUAGE_CODE);
+        $this->assertSame(
+            'Speak the following words aloud in a warm, soulful, genuinely human Irish-British female voice with a gentle smile in your tone, natural breath, and relaxed, caring conversational cadence—like Kerry Condon as a warm, trusted executive partner talking to her favourite Boss. Speak ONLY the exact words after the colon: ',
+            LaleenCommandCenterService::LOCKED_FRIDAY_DIRECTOR_PREFIX
+        );
+        $this->assertSame(
+            [
+                'gemini-3.8-flash-tts',
+                'gemini-3.1-flash-tts-preview',
+                'gemini-3.8-flash-lite-tts',
+                'gemini-2.5-flash-preview-tts',
+                'gemini-2.5-pro-preview-tts',
+            ],
+            LaleenCommandCenterService::LOCKED_FRIDAY_TTS_MODELS
+        );
+
+        config([
+            'services.gemini.api_key' => 'locked-voice-test-key',
+            'services.gemini.tts_model' => 'gemini-3.8-flash-tts',
+        ]);
+
+        $fakePcm = str_repeat("\x02\x03", 100);
+        Http::fake([
+            '*gemini-3.8-flash-tts:generateContent*' => Http::response([
+                'candidates' => [
+                    [
+                        'content' => [
+                            'parts' => [
+                                [
+                                    'inlineData' => [
+                                        'mimeType' => 'audio/L16;rate=24000',
+                                        'data' => base64_encode($fakePcm),
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        /** @var LaleenCommandCenterService $service */
+        $service = app(LaleenCommandCenterService::class);
+        $speech = $service->synthesizeSpeech('Right then, Boss—voice lock verified.');
+
+        $this->assertSame('gemini_tts', $speech['tts_source']);
+        $this->assertSame('audio/wav', $speech['audio_mime']);
+        $this->assertSame('Aoede', $speech['voice_name']);
+        $this->assertNotEmpty($speech['audio_base64']);
+
+        $wavBytes = base64_decode($speech['audio_base64']);
+        $this->assertStringStartsWith('RIFF', $wavBytes);
+        $this->assertSame('WAVEfmt ', substr($wavBytes, 8, 8));
+        $this->assertSame(44 + strlen($fakePcm), strlen($wavBytes));
+
+        Http::assertSent(function ($request) {
+            if (!str_contains($request->url(), 'gemini-3.8-flash-tts:generateContent')) {
+                return false;
+            }
+            $data = $request->data();
+            $expectedText = LaleenCommandCenterService::LOCKED_FRIDAY_DIRECTOR_PREFIX . 'Right then, Boss—voice lock verified.';
+
+            return data_get($data, 'contents.0.parts.0.text') === $expectedText
+                && data_get($data, 'generationConfig.responseModalities') === ['AUDIO']
+                && data_get($data, 'generationConfig.speechConfig.languageCode') === 'en-GB'
+                && data_get($data, 'generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName') === 'Aoede';
+        });
+    }
+
+    public function test_turn_two_audio_input_base64_without_text_prompt_succeeds(): void
+    {
+        config([
+            'services.gemini.api_key' => 'turn-two-audio-test-key',
+            'services.gemini.command_model' => 'gemini-2.5-flash',
+            'services.gemini.tts_model' => 'gemini-3.8-flash-tts',
+        ]);
+
+        $fakeWebmInput = base64_encode('fake-webm-audio-turn-two');
+        $fakePcmOutput = str_repeat("\x01\x02", 80);
+
+        Http::fake([
+            '*gemini-2.5-flash:generateContent*' => Http::response([
+                'candidates' => [
+                    [
+                        'content' => [
+                            'parts' => [
+                                [
+                                    'text' => "[TRANSCRIPT: Yes tell me the top names]\nRight then, Boss—Amal Salem is our top call at 350 QAR.",
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+            '*gemini-3.8-flash-tts:generateContent*' => Http::response([
+                'candidates' => [
+                    [
+                        'content' => [
+                            'parts' => [
+                                [
+                                    'inlineData' => [
+                                        'mimeType' => 'audio/L16;rate=24000',
+                                        'data' => base64_encode($fakePcmOutput),
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $response = $this->actingAs($this->admin)->postJson(route('command-center.ask'), [
+            'prompt' => '',
+            'mode' => 'fast',
+            'voice_profile' => 'friday_tactical',
+            'audio_input_base64' => $fakeWebmInput,
+            'audio_input_mime' => 'audio/webm',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('user_transcript', 'Yes tell me the top names')
+            ->assertJsonPath('reply', 'Right then, Boss—Amal Salem is our top call at 350 QAR.')
+            ->assertJsonPath('audio_mime', 'audio/wav')
+            ->assertJsonPath('tts_source', 'gemini_tts');
+
+        $this->assertNotEmpty($response->json('audio_base64'));
+
+        Http::assertSent(function ($request) use ($fakeWebmInput) {
+            if (!str_contains($request->url(), 'gemini-2.5-flash:generateContent')) {
+                return false;
+            }
+            $inlineMime = data_get($request->data(), 'contents.0.parts.0.inlineData.mimeType');
+            $inlineData = data_get($request->data(), 'contents.0.parts.0.inlineData.data');
+            return $inlineMime === 'audio/webm' && $inlineData === $fakeWebmInput;
+        });
     }
 }

@@ -63,12 +63,49 @@ class AdLeadEntry extends Model
     }
 
     /**
-     * A lead is only counted as a booking once it's assigned a branch —
-     * unbooked leads are logged with branch left blank.
+     * A lead is only counted as a booking once it's assigned a branch AND
+     * actually converted (ticket_amount > 0 or linked to a booked lead/appointment).
+     * Unbooked inquiries with ticket_amount = 0 are never counted as booked just because branch is set.
      */
     public function isBooked(): bool
     {
-        return in_array($this->branch, array_keys(self::BRANCHES), true);
+        if (!in_array($this->branch, array_keys(self::BRANCHES), true)) {
+            return false;
+        }
+
+        if ((float) $this->ticket_amount > 0) {
+            return true;
+        }
+
+        if ($this->lead_id && Schema::hasTable('leads')) {
+            $lead = $this->relationLoaded('lead') ? $this->lead : $this->lead()->first();
+            if ($lead && ($lead->needful_done === 'booked' || $lead->appointment_id !== null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function resolveCategoryFromLead(Lead $lead): string
+    {
+        $interests = is_array($lead->service_interest) ? $lead->service_interest : [];
+        $available = self::availableCategories();
+
+        foreach ($interests as $interest) {
+            $normInterest = strtolower(trim((string) $interest));
+            if ($normInterest === '') {
+                continue;
+            }
+            foreach ($available as $cat) {
+                $normCat = strtolower(trim((string) $cat));
+                if ($normInterest === $normCat || str_contains($normInterest, $normCat) || str_contains($normCat, $normInterest)) {
+                    return $cat;
+                }
+            }
+        }
+
+        return 'Other';
     }
 
     /**
@@ -258,6 +295,40 @@ class AdLeadEntry extends Model
                 ->orderByDesc('date')
                 ->orderByDesc('id')
                 ->first();
+        }
+
+        if (!$entry && !empty($leadIds) && Schema::hasTable('leads')) {
+            $sameMonthLeads = Lead::whereIn('id', $leadIds)
+                ->whereYear('created_at', $activityCarbon->year)
+                ->whereMonth('created_at', $activityCarbon->month)
+                ->orderByDesc('id')
+                ->get();
+
+            $paidAdLead = $sameMonthLeads->first(fn (Lead $l) => $l->isPaidAdLead());
+            if ($paidAdLead) {
+                $leadDate = $paidAdLead->created_at ? Carbon::parse($paidAdLead->created_at)->toDateString() : $activityCarbon->toDateString();
+                $resolvedCustomer = $customer ?: ($paidAdLead->customer_id ? Customer::find($paidAdLead->customer_id) : null);
+                $resolvedCategory = self::resolveCategoryFromLead($paidAdLead);
+                $entryPayload = [
+                    'date' => $leadDate,
+                    'phone' => $paidAdLead->phone ?: ($phoneCandidates[0] ?? ''),
+                    'category' => $resolvedCategory,
+                    'ticket_amount' => 0,
+                    'branch' => null,
+                    'remarks' => $paidAdLead->customer_remarks ?: ($paidAdLead->source ? "Source: {$paidAdLead->source}" : null),
+                    'created_by' => $paidAdLead->assigned_agent_id ?? auth()->id(),
+                ];
+                if ($hasCustomerIdColumn) {
+                    $entryPayload['customer_id'] = $resolvedCustomer?->id;
+                }
+                if (Schema::hasColumn('ad_lead_entries', 'customer_name')) {
+                    $entryPayload['customer_name'] = $resolvedCustomer?->name ?: 'Ad Lead Client';
+                }
+                if ($hasLeadIdColumn) {
+                    $entryPayload['lead_id'] = $paidAdLead->id;
+                }
+                $entry = self::create($entryPayload);
+            }
         }
 
         if (!$entry) {

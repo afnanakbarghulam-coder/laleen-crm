@@ -179,7 +179,7 @@
                     <div class="modal-footer flex-wrap justify-content-between">
                         @unless ($isMonday)
                             <div class="se-monday-warning w-100 text-center mb-2">
-                                <i class="bx bx-lock-alt me-1"></i>Evaluations can only be submitted on Mondays.
+                                <i class="bx bx-lock-alt me-1"></i>Evaluations can be submitted on Mondays and Tuesdays (2-day window).
                             </div>
                         @endunless
                         <div class="d-flex gap-2 ms-auto">
@@ -188,7 +188,7 @@
                                 type="submit"
                                 class="btn btn-primary {{ $isMonday ? '' : 'opacity-50 cursor-not-allowed' }}"
                                 @disabled(!$isMonday)
-                                title="{{ $isMonday ? '' : 'Evaluations can only be submitted on Mondays.' }}"
+                                title="{{ $isMonday ? '' : 'Evaluations can be submitted on Mondays and Tuesdays (2-day window).' }}"
                             >Save Evaluation</button>
                         </div>
                     </div>

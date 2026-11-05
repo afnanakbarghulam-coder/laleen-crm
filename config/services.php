@@ -39,9 +39,9 @@ return [
         'key' => env('GEMINI_API_KEY'),
         'api_key' => env('GEMINI_API_KEY'),
         'model' => env('GEMINI_MODEL', 'gemini-3.5-flash-lite'),
-        'command_model' => env('GEMINI_COMMAND_MODEL', env('GEMINI_MODEL', 'gemini-2.5-flash')),
-        'thinking_model' => env('GEMINI_THINKING_MODEL', 'gemini-2.5-pro'),
-        'tts_model' => env('GEMINI_TTS_MODEL', 'gemini-2.5-flash-preview-tts'),
+        'command_model' => env('GEMINI_COMMAND_MODEL', 'gemini-2.5-flash'),
+        'thinking_model' => env('GEMINI_THINKING_MODEL', 'gemini-3.5-flash'),
+        'tts_model' => env('GEMINI_TTS_MODEL', 'gemini-3.8-flash-tts'),
     ],
 
     'openai' => [

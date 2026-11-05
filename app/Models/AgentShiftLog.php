@@ -46,10 +46,14 @@ class AgentShiftLog extends Model
     }
 
     /**
-     * The agent's exact check-out timestamp on this date.
+     * The agent's exact check-out timestamp on this date (defaults to end of day if still clocked in).
      */
     public function windowEnd(): Carbon
     {
+        if (empty($this->check_out_time)) {
+            return $this->date->copy()->endOfDay();
+        }
+
         return $this->date->copy()->setTimeFromTimeString($this->check_out_time);
     }
 

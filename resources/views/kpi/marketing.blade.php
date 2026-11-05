@@ -7,7 +7,10 @@
             <h4>Marketing</h4>
             <p>Manage ad conversions and weekly content schedules.</p>
         </div>
-        <a href="{{ route('kpi.hub') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Categories</a>
+        <div class="d-flex gap-2">
+            <a href="{{ route('kpi.operations') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Operations</a>
+            <a href="{{ route('kpi.hub') }}" class="btn btn-sm btn-outline-primary"><i class="bx bx-line-chart me-1"></i>Executive KPIs</a>
+        </div>
     </div>
 
     <div class="row g-3">

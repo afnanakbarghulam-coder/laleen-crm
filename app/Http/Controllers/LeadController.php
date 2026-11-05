@@ -175,15 +175,19 @@ class LeadController extends Controller
             $mergedCategories = $existingLead->mergeCategories($request->category);
             $primaryCategory = Lead::resolvePrimaryCategory($mergedCategories);
 
-            $existingLead->update([
-                'customer_id' => $existingLead->customer_id ?: $customer->id,
-                'assigned_agent_id' => $request->assigned_agent_id ?: $existingLead->assigned_agent_id,
-                'category' => $primaryCategory ?: $existingLead->category,
-                'categories' => $mergedCategories,
-                'customer_remarks' => $mergedRemarks !== '' ? $mergedRemarks : null,
-                'service_interest' => !empty($mergedServices) ? $mergedServices : $existingLead->service_interest,
-                'next_followup_date' => $request->next_followup_date ?: $existingLead->next_followup_date,
-            ]);
+            $existingUpdatePayload = [
+            'customer_id' => $existingLead->customer_id ?: $customer->id,
+            'assigned_agent_id' => $request->assigned_agent_id ?: $existingLead->assigned_agent_id,
+            'category' => $primaryCategory ?: $existingLead->category,
+            'categories' => $mergedCategories,
+            'customer_remarks' => $mergedRemarks !== '' ? $mergedRemarks : null,
+            'service_interest' => !empty($mergedServices) ? $mergedServices : $existingLead->service_interest,
+            'next_followup_date' => $request->next_followup_date ?: $existingLead->next_followup_date,
+        ];
+        if ($request->filled('source') && \Illuminate\Support\Facades\Schema::hasColumn('leads', 'source')) {
+            $existingUpdatePayload['source'] = trim((string) $request->source);
+        }
+        $existingLead->update($existingUpdatePayload);
 
             $this->linkSameMonthAdLeadEntries($existingLead, $customer, $normalizedPhone);
 
@@ -194,7 +198,7 @@ class LeadController extends Controller
 
         $initialCategories = Lead::normalizeCategories([$request->category]);
 
-        $newLead = Lead::create([
+        $createPayload = [
             'phone' => $normalizedPhone,
             'customer_id' => $customer->id,
             'assigned_agent_id' => $request->assigned_agent_id,
@@ -203,7 +207,12 @@ class LeadController extends Controller
             'customer_remarks' => $request->customer_remarks,
             'service_interest' => $request->service_interest,
             'next_followup_date' => $request->next_followup_date,
-        ]);
+        ];
+        if ($request->filled('source') && \Illuminate\Support\Facades\Schema::hasColumn('leads', 'source')) {
+            $createPayload['source'] = trim((string) $request->source);
+        }
+
+        $newLead = Lead::create($createPayload);
 
         $this->linkSameMonthAdLeadEntries($newLead, $customer, $normalizedPhone);
 
@@ -269,6 +278,9 @@ class LeadController extends Controller
             'service_interest' => $request->service_interest,
             'next_followup_date' => $request->next_followup_date,
         ];
+        if ($request->has('source') && \Illuminate\Support\Facades\Schema::hasColumn('leads', 'source')) {
+            $data['source'] = $request->filled('source') ? trim((string) $request->source) : null;
+        }
 
         $existingLead = $this->findDuplicateLead($normalizedPhone, $primaryCategory, $request->service_interest, $lead->id);
 
@@ -949,5 +961,14 @@ class LeadController extends Controller
                 'lead_id' => $lead->id,
                 'customer_id' => $customer->id,
             ]);
+
+        if ($lead->isPaidAdLead()) {
+            AdLeadEntry::syncFromCustomerActivity(
+                customer: $customer,
+                activityDate: $refDate,
+                phone: $normalizedPhone,
+                resetIfNoActivity: false
+            );
+        }
     }
 }

@@ -11,18 +11,18 @@
     @php
         // Back button steps back one level at a time within the current module,
         // and is hidden entirely once you're on that module's first/landing page
-        // (e.g. the KPI hub, or Products' index). Computed as an explicit target
+        // (e.g. the KPI hub, Operations hub, or Products' index). Computed as an explicit target
         // per route (not history.back()) so it's independent of navigation path.
         $routeName = request()->route() ? request()->route()->getName() : '';
         $backTarget = null;
 
         if (str_starts_with($routeName, 'kpi.')) {
             $seg = explode('.', $routeName)[1] ?? 'hub';
-            if ($seg !== 'hub') {
-                $rootUrl = route("kpi.$seg.index");
-                // kpi.<seg>.index is one level below the hub, not the module's
-                // first page - so it still gets a back button, targeting the hub.
-                $backTarget = $routeName === "kpi.$seg.index" ? route('kpi.hub') : $rootUrl;
+            if ($seg !== 'hub' && $seg !== 'operations') {
+                $rootUrl = \Illuminate\Support\Facades\Route::has("kpi.$seg.index")
+                    ? route("kpi.$seg.index")
+                    : route('kpi.operations');
+                $backTarget = $routeName === "kpi.$seg.index" ? route('kpi.operations') : $rootUrl;
             }
         } elseif (str_starts_with($routeName, 'appointments.revenue')) {
             $backTarget = $routeName === 'appointments.revenue.index' ? null : route('appointments.revenue.index');
@@ -60,13 +60,7 @@
             </a>
         @endif
 
-        <!-- Search (optional) -->
-        {{-- <div class="navbar-nav align-items-center">
-            <span class="fw-bold">Dashboard</span>
-        </div> --}}
-
         <div class="navbar-nav align-items-center">
-            {{-- <span class="fw-bold"> @yield('title') </span> --}}
         </div>
 
         <ul class="navbar-nav flex-row align-items-center ms-auto">
@@ -85,7 +79,6 @@
                     </a>
                 </li>
             @endguest
-
 
             {{-- If user IS logged in --}}
             @auth
@@ -108,15 +101,7 @@
 
                     </a>
 
-
-
                     <ul class="dropdown-menu dropdown-menu-end">
-                        {{-- <li>
-                            <a class="dropdown-item" href="{{ route('profile.edit') }}">
-                                <i class="bx bx-user me-2"></i> My Profile
-                            </a>
-                        </li> --}}
-
                         <li>
                             <form method="POST" action="{{ route('logout') }}">
                                 @csrf

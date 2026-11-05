@@ -36,9 +36,10 @@ class AgentTargetController extends Controller
             ]));
 
         $agents = User::where('role', 'agent')->orderBy('name')->get();
+        $agentScorecards = KpiAgentTargetReport::liveAgentScorecards();
 
         return view('kpi.agents.index', compact(
-            'reports', 'shiftLogs', 'logsFrom', 'logsTo', 'agents', 'activeTab'
+            'reports', 'shiftLogs', 'logsFrom', 'logsTo', 'agents', 'agentScorecards', 'activeTab'
         ));
     }
 

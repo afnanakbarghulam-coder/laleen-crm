@@ -24,29 +24,30 @@ class CommandCenterController extends Controller
 
     public function ask(Request $request, LaleenCommandCenterService $service)
     {
+        @set_time_limit(120);
+
         $validated = $request->validate([
             'prompt' => 'nullable|string|max:4000',
             'mode' => 'nullable|string|in:fast,deep',
             'voice_profile' => 'nullable|string|in:friday_tactical,kore_coo,aoede_advisor',
             'history' => 'nullable|array|max:12',
             'audio_base64' => 'nullable|string',
+            'audio_input_base64' => 'nullable|string',
             'audio_mime' => 'nullable|string|max:64',
+            'audio_input_mime' => 'nullable|string|max:64',
             'skip_tts' => 'nullable|boolean',
             'include_tts' => 'nullable|boolean',
         ]);
 
         $prompt = trim((string) ($validated['prompt'] ?? ''));
-        $audioBase64 = $validated['audio_base64'] ?? null;
-        $audioMime = $validated['audio_mime'] ?? null;
+        $audioBase64 = $validated['audio_input_base64'] ?? $validated['audio_base64'] ?? null;
+        $audioMime = $validated['audio_input_mime'] ?? $validated['audio_mime'] ?? ($audioBase64 ? 'audio/webm' : null);
 
         if ($prompt === '' && empty($audioBase64)) {
             return response()->json([
                 'message' => 'Please enter a command or record a voice prompt for F.R.I.D.A.Y.',
             ], 422);
         }
-
-        $skipTts = $request->boolean('skip_tts', false)
-            || ($request->has('include_tts') && !$request->boolean('include_tts', true));
 
         $result = $service->askFriday(
             prompt: $prompt,
@@ -55,7 +56,7 @@ class CommandCenterController extends Controller
             history: is_array($validated['history'] ?? null) ? $validated['history'] : [],
             audioBase64: $audioBase64,
             audioMime: $audioMime,
-            skipTts: $skipTts
+            skipTts: false
         );
 
         return response()->json($result);

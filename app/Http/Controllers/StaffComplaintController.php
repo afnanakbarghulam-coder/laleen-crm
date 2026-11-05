@@ -179,6 +179,7 @@ class StaffComplaintController extends Controller
 
         $staffComplaint->update([
             'is_staff_mistake' => $anyMistake,
+            'resolved_at' => $staffComplaint->resolved_at ?? now(),
             'deduction_applied' => $totalDeduction > 0 ? 'Y' : 'N',
             'deduction_amount' => $totalDeduction > 0 ? round($totalDeduction, 2) : null,
         ]);
@@ -235,6 +236,10 @@ class StaffComplaintController extends Controller
             'acknowledged' => 'N',
             'created_by' => auth()->id(),
         ]));
+
+        if ($staffComplaint->resolved_at === null) {
+            $staffComplaint->update(['resolved_at' => now()]);
+        }
 
         if ($request->wantsJson()) {
             return response()->json([

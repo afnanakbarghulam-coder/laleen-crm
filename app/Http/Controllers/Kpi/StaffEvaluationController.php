@@ -60,6 +60,8 @@ class StaffEvaluationController extends Controller
             ]
         );
 
+        $canSubmitWindow = now()->isMonday() || now()->isTuesday();
+
         return view('kpi.evaluations.index', [
             'evaluations' => $evaluations,
             'staffList' => $staffList,
@@ -73,14 +75,15 @@ class StaffEvaluationController extends Controller
             'branchFilter' => $branchFilter,
             'weekStart' => $weekStart,
             'weekEnd' => $weekEnd,
-            'isMonday' => now()->isMonday(),
+            'isMonday' => $canSubmitWindow,
+            'canSubmitWindow' => $canSubmitWindow,
         ]);
     }
 
     public function store(Request $request)
     {
-        if (!now()->isMonday()) {
-            abort(403, 'Evaluations can only be submitted on Mondays.');
+        if (!now()->isMonday() && !now()->isTuesday()) {
+            abort(403, 'Evaluations can be submitted on Mondays and Tuesdays (2-day window).');
         }
 
         $validated = $request->validate([

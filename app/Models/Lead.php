@@ -75,12 +75,49 @@ class Lead extends Model
         'appointment_id',
         'assigned_agent_id',
         'category',
+        'source',
         'categories',
         'customer_remarks',
         'service_interest',
         'needful_done',
         'next_followup_date',
     ];
+
+    public const PAID_AD_SOURCES = [
+        'instagram',
+        'tiktok',
+        'snapchat',
+        'meta ads',
+        'meta',
+        'paid ads',
+        'paid ad',
+        'facebook',
+        'facebook ads',
+        'whatsapp ads',
+    ];
+
+    public function isPaidAdLead(): bool
+    {
+        $source = strtolower(trim((string) ($this->source ?? '')));
+        if ($source !== '') {
+            foreach (self::PAID_AD_SOURCES as $adKeyword) {
+                if ($source === $adKeyword || str_contains($source, $adKeyword)) {
+                    return true;
+                }
+            }
+        }
+
+        $remarks = strtolower(trim((string) ($this->customer_remarks ?? '')));
+        if ($remarks !== '') {
+            foreach (['instagram ad', 'tiktok ad', 'snapchat ad', 'meta ad', 'paid ad', 'facebook ad', 'whatsapp ad', 'ig ad', 'ig promo', 'reel ad', '[paid ad]'] as $hint) {
+                if (str_contains($remarks, $hint)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 
     protected $casts = [
         'next_followup_date' => 'date',

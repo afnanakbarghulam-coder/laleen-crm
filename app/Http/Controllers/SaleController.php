@@ -169,6 +169,11 @@ class SaleController extends Controller
 
             if ($customer) {
                 $customer->earnPointsForSale($sale);
+                \App\Models\AdLeadEntry::syncFromCustomerActivity(
+                    customer: $customer,
+                    activityDate: $sale->created_at ?? now(),
+                    phone: $customer->phone
+                );
             }
         });
 
