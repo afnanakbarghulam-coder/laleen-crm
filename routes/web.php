@@ -3,6 +3,7 @@
 use App\Http\Controllers\AiScriptController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\ComboController;
+use App\Http\Controllers\CommandCenterController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\Ecommerce\EcommerceContentCalendarController;
 use App\Http\Controllers\Ecommerce\EcommerceController;
@@ -53,6 +54,9 @@ Route::get('/', function () {
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [UserController::class, 'dashboard'])->name('dashboard');
+    Route::get('/command-center', [CommandCenterController::class, 'index'])->name('command-center.index');
+    Route::post('/command-center/ask', [CommandCenterController::class, 'ask'])->name('command-center.ask');
+    Route::get('/command-center/telemetry', [CommandCenterController::class, 'telemetry'])->name('command-center.telemetry');
     Route::post('/ai-script/{leadId?}', [AiScriptController::class, 'generate'])->name('ai-script.generate');
 
     Route::get('/profile', [UserController::class, 'profile_edit'])->name('profile.edit');
