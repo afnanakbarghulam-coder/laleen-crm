@@ -111,6 +111,12 @@
         box-shadow: 0 0 68px rgba(231, 154, 145, 0.48), inset 0 0 36px rgba(201, 166, 107, 0.28);
     }
 
+    .friday-orb-button.state-endpoint-flash {
+        border-color: #ffeaa7;
+        box-shadow: 0 0 82px rgba(255, 234, 167, 0.72), inset 0 0 42px rgba(217, 143, 131, 0.45);
+        transform: scale(1.045);
+    }
+
     .friday-visualizer-canvas {
         width: 280px;
         height: 280px;
@@ -290,6 +296,7 @@
 <script>
 (function () {
     const askUrl = @json(route('command-center.ask'));
+    const ttsUrl = @json(route('command-center.tts'));
     const csrfToken = @json(csrf_token());
 
     let currentMode = 'fast';
@@ -579,7 +586,45 @@
         window.speechSynthesis.onvoiceschanged = () => pickIrishOrBritishFemaleVoice();
     }
 
-    // 5. Send Spoken or Typed Turn to F.R.I.D.A.Y.
+    // 5. Send Spoken or Typed Turn to F.R.I.D.A.Y. (Decoupled Text + Progressive TTS)
+    async function requestAndPlayFridayTts(spokenText, initialData = {}) {
+        if (initialData.audio_base64 && initialData.audio_mime) {
+            playFridayVoice(initialData);
+            return;
+        }
+
+        try {
+            const ttsResp = await fetch(ttsUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: JSON.stringify({
+                    spoken_text: spokenText,
+                    voice_profile: 'friday_tactical'
+                })
+            });
+
+            const ttsData = await ttsResp.json();
+            if (ttsResp.ok && ttsData.audio_base64 && ttsData.audio_mime) {
+                playFridayVoice({
+                    spoken_text: spokenText,
+                    reply: initialData.reply || spokenText,
+                    audio_base64: ttsData.audio_base64,
+                    audio_mime: ttsData.audio_mime,
+                    voice_meta: ttsData.voice_meta || initialData.voice_meta
+                });
+                return;
+            }
+        } catch (e) {
+            // Fall through to WebSpeech Irish/British fallback
+        }
+
+        speakWithIrishBritishFallback(spokenText);
+    }
+
     async function dispatchToFriday(promptText, audioBase64 = null, audioMime = null) {
         const cleanPrompt = (promptText || '').trim();
         if (!cleanPrompt && !audioBase64) return;
@@ -594,7 +639,7 @@
         }
 
         setHudState('thinking');
-        spokenWordsEl.textContent = 'Scanning live salon telemetry...';
+        spokenWordsEl.textContent = '⚡ Thinking...';
 
         try {
             const response = await fetch(askUrl, {
@@ -608,6 +653,7 @@
                     prompt: cleanPrompt,
                     mode: currentMode,
                     voice_profile: 'friday_tactical',
+                    skip_tts: true,
                     history: conversationHistory.slice(-6),
                     audio_base64: audioBase64,
                     audio_mime: audioMime
@@ -620,7 +666,11 @@
                     conversationHistory.push({ role: 'user', content: cleanPrompt });
                 }
                 conversationHistory.push({ role: 'assistant', content: data.reply });
-                playFridayVoice(data);
+
+                const displayReply = data.spoken_text || data.reply;
+                setHudState('speaking');
+                revealSubtitleWords(displayReply);
+                requestAndPlayFridayTts(displayReply, data);
             } else {
                 spokenWordsEl.textContent = data.message || "Right then, Boss—I hit a brief comms glitch. Say that again for me?";
                 onSpeechFinished();
@@ -681,9 +731,12 @@
                 const toSend = (pendingTranscript || combined).trim();
                 pendingTranscript = '';
                 if (toSend.length >= 2 && currentState !== 'thinking') {
+                    orbBtn.classList.add('state-endpoint-flash');
+                    stateLabel.textContent = '⚡ THINKING...';
+                    setTimeout(() => orbBtn.classList.remove('state-endpoint-flash'), 260);
                     dispatchToFriday(toSend);
                 }
-            }, finalChunk.trim() ? 380 : 950);
+            }, 700);
         };
 
         recognition.onerror = () => {};

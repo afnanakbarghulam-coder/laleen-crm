@@ -31,6 +31,8 @@ class CommandCenterController extends Controller
             'history' => 'nullable|array|max:12',
             'audio_base64' => 'nullable|string',
             'audio_mime' => 'nullable|string|max:64',
+            'skip_tts' => 'nullable|boolean',
+            'include_tts' => 'nullable|boolean',
         ]);
 
         $prompt = trim((string) ($validated['prompt'] ?? ''));
@@ -43,16 +45,42 @@ class CommandCenterController extends Controller
             ], 422);
         }
 
+        $skipTts = $request->boolean('skip_tts', false)
+            || ($request->has('include_tts') && !$request->boolean('include_tts', true));
+
         $result = $service->askFriday(
             prompt: $prompt,
             mode: (string) ($validated['mode'] ?? 'fast'),
             voiceProfile: (string) ($validated['voice_profile'] ?? 'friday_tactical'),
             history: is_array($validated['history'] ?? null) ? $validated['history'] : [],
             audioBase64: $audioBase64,
-            audioMime: $audioMime
+            audioMime: $audioMime,
+            skipTts: $skipTts
         );
 
         return response()->json($result);
+    }
+
+    public function tts(Request $request, LaleenCommandCenterService $service)
+    {
+        $validated = $request->validate([
+            'spoken_text' => 'required|string|max:2500',
+            'voice_profile' => 'nullable|string|in:friday_tactical,kore_coo,aoede_advisor',
+        ]);
+
+        $voiceProfile = (string) ($validated['voice_profile'] ?? 'friday_tactical');
+        $speechPayload = $service->synthesizeSpeech(
+            spokenText: trim((string) $validated['spoken_text']),
+            voiceProfile: $voiceProfile
+        );
+
+        return response()->json([
+            'audio_base64' => $speechPayload['audio_base64'],
+            'audio_mime' => $speechPayload['audio_mime'],
+            'tts_source' => $speechPayload['tts_source'],
+            'voice_name' => $speechPayload['voice_name'],
+            'voice_meta' => LaleenCommandCenterService::VOICE_PROFILES[$voiceProfile] ?? LaleenCommandCenterService::VOICE_PROFILES['friday_tactical'],
+        ]);
     }
 
     public function telemetry(LaleenCommandCenterService $service)

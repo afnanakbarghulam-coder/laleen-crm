@@ -56,6 +56,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [UserController::class, 'dashboard'])->name('dashboard');
     Route::get('/command-center', [CommandCenterController::class, 'index'])->name('command-center.index');
     Route::post('/command-center/ask', [CommandCenterController::class, 'ask'])->name('command-center.ask');
+    Route::post('/command-center/tts', [CommandCenterController::class, 'tts'])->name('command-center.tts');
     Route::get('/command-center/telemetry', [CommandCenterController::class, 'telemetry'])->name('command-center.telemetry');
     Route::post('/ai-script/{leadId?}', [AiScriptController::class, 'generate'])->name('ai-script.generate');
 

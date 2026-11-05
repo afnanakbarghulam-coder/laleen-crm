@@ -19,6 +19,7 @@ use App\Models\StaffNotice;
 use App\Support\ClientMaintenancePlanner;
 use App\Support\StaffSalesAnalytics;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -75,7 +76,8 @@ class LaleenCommandCenterService
         string $voiceProfile = 'friday_tactical',
         array $history = [],
         ?string $audioBase64 = null,
-        ?string $audioMime = null
+        ?string $audioMime = null,
+        bool $skipTts = false
     ): array {
         $mode = in_array($mode, ['fast', 'deep'], true) ? $mode : 'fast';
         $voiceProfile = array_key_exists($voiceProfile, self::VOICE_PROFILES) ? $voiceProfile : 'friday_tactical';
@@ -86,7 +88,7 @@ class LaleenCommandCenterService
 
         $telemetry = $this->getLiveTelemetrySnapshot();
         $toolsUsed = [];
-        $preloadedToolContext = $this->preloadRelevantToolsForPrompt($prompt, $toolsUsed);
+        $preloadedToolContext = $this->preloadRelevantToolsForPrompt($prompt, $toolsUsed, $telemetry);
 
         $apiKey = (string) (config('services.gemini.api_key') ?: config('services.gemini.key'));
         $replyText = '';
@@ -117,7 +119,14 @@ class LaleenCommandCenterService
         }
 
         $spokenText = $this->cleanTextForSpeech($replyText);
-        $speechPayload = $this->synthesizeSpeech($spokenText, $voiceProfile);
+        $speechPayload = $skipTts
+            ? [
+                'audio_base64' => null,
+                'audio_mime' => null,
+                'tts_source' => 'deferred',
+                'voice_name' => self::VOICE_PROFILES[$voiceProfile]['gemini_voice'] ?? 'Aoede',
+            ]
+            : $this->synthesizeSpeech($spokenText, $voiceProfile);
 
         $uniqueTools = array_values(array_unique($toolsUsed));
         $toolBadges = array_map(fn (string $name) => [
@@ -142,24 +151,39 @@ class LaleenCommandCenterService
     }
 
     /**
-     * Build the live read-only telemetry snapshot for the 4 HUD cards and system context.
+     * Build the live read-only telemetry snapshot (cached for 15 seconds for sub-second response latency).
      */
     public function getLiveTelemetrySnapshot(): array
     {
-        $revenue = $this->read_revenue_and_bookings('all', 'today');
-        $leads = $this->read_leads_and_money_brief();
-        $retention = $this->read_retention_radar();
-        $staff = $this->read_staff_upsells_and_evaluations('all');
-        $marketing = $this->read_marketing_and_ads_pulse();
+        $stateFingerprint = implode('_', [
+            Sale::count(),
+            Appointment::count(),
+            Lead::count(),
+            Customer::count(),
+            AdLeadEntry::count(),
+        ]);
 
-        return [
-            'generated_at' => now()->format('d M Y, H:i'),
-            'revenue' => $revenue,
-            'leads' => $leads,
-            'retention' => $retention,
-            'staff' => $staff,
-            'marketing' => $marketing,
-        ];
+        if (Cache::get('friday_live_telemetry_fingerprint') !== $stateFingerprint) {
+            Cache::forget('friday_live_telemetry_snapshot');
+            Cache::put('friday_live_telemetry_fingerprint', $stateFingerprint, 15);
+        }
+
+        return Cache::remember('friday_live_telemetry_snapshot', 15, function () {
+            $revenue = $this->read_revenue_and_bookings('all', 'today');
+            $leads = $this->read_leads_and_money_brief();
+            $retention = $this->read_retention_radar();
+            $staff = $this->read_staff_upsells_and_evaluations('all');
+            $marketing = $this->read_marketing_and_ads_pulse();
+
+            return [
+                'generated_at' => now()->format('d M Y, H:i'),
+                'revenue' => $revenue,
+                'leads' => $leads,
+                'retention' => $retention,
+                'staff' => $staff,
+                'marketing' => $marketing,
+            ];
+        });
     }
 
     /**
@@ -703,7 +727,7 @@ class LaleenCommandCenterService
     }
 
     /**
-     * Synthesize speech via Gemini TTS model (if available) + return WebAudio/WebSpeech metadata.
+     * Synthesize speech via Gemini TTS model (cached for 10 minutes by md5($spokenText)) + return WebAudio/WebSpeech metadata.
      */
     public function synthesizeSpeech(string $spokenText, string $voiceProfile = 'friday_tactical'): array
     {
@@ -714,12 +738,18 @@ class LaleenCommandCenterService
         $candidateModels = array_values(array_unique(array_filter([$primaryTtsModel, 'gemini-2.0-flash'])));
 
         if ($apiKey !== '' && trim($spokenText) !== '') {
+            $cacheKey = 'friday_tts_' . md5($voiceProfile . '|' . $voiceName . '|' . trim($spokenText));
+            $cachedAudio = Cache::get($cacheKey);
+            if (is_array($cachedAudio) && !empty($cachedAudio['audio_base64'])) {
+                return $cachedAudio;
+            }
+
             $styledTtsPrompt = 'Read the following text aloud in a brisk, warm, crisp Irish-British female AI assistant voice like FRIDAY from Iron Man—natural, confident, slightly fast-paced, and conversational, speaking only the exact words after the colon: ' . $spokenText;
 
             foreach ($candidateModels as $ttsModel) {
                 try {
                     $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$ttsModel}:generateContent?key={$apiKey}";
-                    $response = Http::timeout(14)->post($endpoint, [
+                    $response = Http::timeout(10)->post($endpoint, [
                         'contents' => [
                             [
                                 'parts' => [
@@ -749,21 +779,25 @@ class LaleenCommandCenterService
                                 $pcmBytes = base64_decode($rawBase64, true);
                                 if ($pcmBytes !== false) {
                                     $wavBytes = $this->wrapPcm16InWavHeader($pcmBytes, 24000, 1, 16);
-                                    return [
+                                    $result = [
                                         'audio_base64' => base64_encode($wavBytes),
                                         'audio_mime' => 'audio/wav',
                                         'tts_source' => 'gemini_tts',
                                         'voice_name' => $voiceName,
                                     ];
+                                    Cache::put($cacheKey, $result, 600);
+                                    return $result;
                                 }
                             }
 
-                            return [
+                            $result = [
                                 'audio_base64' => $rawBase64,
                                 'audio_mime' => $mimeType ?: 'audio/wav',
                                 'tts_source' => 'gemini_tts',
                                 'voice_name' => $voiceName,
                             ];
+                            Cache::put($cacheKey, $result, 600);
+                            return $result;
                         }
                     }
                 } catch (\Throwable $e) {
@@ -944,25 +978,50 @@ PROMPT;
         ];
 
         $systemInstruction = $this->buildSystemInstruction($telemetry, $preloadedToolContext, $mode);
+        $needsDirectoryLookupTool = $mode === 'deep'
+            || (bool) preg_match('/(?:\d{4,}|lookup|find|search|client|customer|staff|stylist|who is)/i', $prompt);
+        $maxHops = $mode === 'deep' ? 3 : 2;
 
-        for ($hop = 0; $hop < 3; $hop++) {
+        for ($hop = 0; $hop < $maxHops; $hop++) {
+            $generationConfig = $mode === 'deep'
+                ? [
+                    'temperature' => 0.35,
+                    'maxOutputTokens' => 900,
+                ]
+                : [
+                    'temperature' => 0.4,
+                    'maxOutputTokens' => 140,
+                    'thinkingConfig' => [
+                        'thinkingBudget' => 0,
+                    ],
+                ];
+
             $payload = [
                 'systemInstruction' => [
                     'parts' => [['text' => $systemInstruction]],
                 ],
                 'contents' => $contents,
-                'tools' => [
+                'generationConfig' => $generationConfig,
+            ];
+
+            if ($mode === 'deep') {
+                $payload['tools'] = [
                     [
                         'functionDeclarations' => $this->geminiFunctionDeclarations(),
                     ],
-                ],
-                'generationConfig' => [
-                    'temperature' => $mode === 'deep' ? 0.35 : 0.45,
-                    'maxOutputTokens' => $mode === 'deep' ? 900 : 380,
-                ],
-            ];
+                ];
+            } elseif ($needsDirectoryLookupTool && $hop === 0) {
+                $payload['tools'] = [
+                    [
+                        'functionDeclarations' => array_values(array_filter(
+                            $this->geminiFunctionDeclarations(),
+                            fn (array $decl) => $decl['name'] === 'lookup_client_or_staff'
+                        )),
+                    ],
+                ];
+            }
 
-            $response = Http::timeout($mode === 'deep' ? 25 : 15)->post($endpoint, $payload);
+            $response = Http::timeout($mode === 'deep' ? 25 : 10)->post($endpoint, $payload);
             if (!$response->successful()) {
                 break;
             }
@@ -1020,10 +1079,10 @@ PROMPT;
     }
 
     /**
-     * Pre-inspect relevant read-only tools based on the prompt keywords so even single-hop
-     * responses and offline fallbacks have accurate tool attribution and data.
+     * Pre-inspect relevant read-only tools based on the prompt keywords using the cached
+     * telemetry snapshot so zero duplicate DB queries run during a turn.
      */
-    private function preloadRelevantToolsForPrompt(string $prompt, array &$toolsUsed): array
+    private function preloadRelevantToolsForPrompt(string $prompt, array &$toolsUsed, array $telemetry = []): array
     {
         $q = strtolower($prompt);
         $context = [];
@@ -1032,34 +1091,34 @@ PROMPT;
             $toolsUsed[] = 'read_revenue_and_bookings';
             $toolsUsed[] = 'read_leads_and_money_brief';
             $toolsUsed[] = 'read_retention_radar';
-            $context['revenue'] = $this->read_revenue_and_bookings('all', 'today');
-            $context['leads'] = $this->read_leads_and_money_brief();
-            $context['retention'] = $this->read_retention_radar();
+            $context['revenue'] = $telemetry['revenue'] ?? $this->read_revenue_and_bookings('all', 'today');
+            $context['leads'] = $telemetry['leads'] ?? $this->read_leads_and_money_brief();
+            $context['retention'] = $telemetry['retention'] ?? $this->read_retention_radar();
         }
 
         if (str_contains($q, 'cash') || str_contains($q, 'revenue') || str_contains($q, 'airport') || str_contains($q, 'wakrah') || str_contains($q, 'booking') || str_contains($q, 'sale')) {
             $toolsUsed[] = 'read_revenue_and_bookings';
-            $context['revenue'] = $this->read_revenue_and_bookings('all', 'today');
+            $context['revenue'] = $telemetry['revenue'] ?? $this->read_revenue_and_bookings('all', 'today');
         }
 
         if (str_contains($q, 'lead') || str_contains($q, 'money') || str_contains($q, 'call') || str_contains($q, 'overdue') || str_contains($q, 'conversion')) {
             $toolsUsed[] = 'read_leads_and_money_brief';
-            $context['leads'] = $this->read_leads_and_money_brief();
+            $context['leads'] = $telemetry['leads'] ?? $this->read_leads_and_money_brief();
         }
 
         if (str_contains($q, 'retention') || str_contains($q, 'refill') || str_contains($q, 'vip') || str_contains($q, 'package') || str_contains($q, 'churn') || str_contains($q, 'leak')) {
             $toolsUsed[] = 'read_retention_radar';
-            $context['retention'] = $this->read_retention_radar();
+            $context['retention'] = $telemetry['retention'] ?? $this->read_retention_radar();
         }
 
         if (str_contains($q, 'staff') || str_contains($q, 'upsell') || str_contains($q, 'stylist') || str_contains($q, 'leaderboard') || str_contains($q, 'evaluation')) {
             $toolsUsed[] = 'read_staff_upsells_and_evaluations';
-            $context['staff'] = $this->read_staff_upsells_and_evaluations('all');
+            $context['staff'] = $telemetry['staff'] ?? $this->read_staff_upsells_and_evaluations('all');
         }
 
         if (str_contains($q, 'ad') || str_contains($q, 'marketing') || str_contains($q, 'roas') || str_contains($q, 'reel') || str_contains($q, 'content') || str_contains($q, 'story')) {
             $toolsUsed[] = 'read_marketing_and_ads_pulse';
-            $context['marketing'] = $this->read_marketing_and_ads_pulse();
+            $context['marketing'] = $telemetry['marketing'] ?? $this->read_marketing_and_ads_pulse();
         }
 
         if (preg_match('/(?:lookup|find|search|client|customer|who is)\s+([a-z0-9\+\s]{2,30})/i', $prompt, $m)) {

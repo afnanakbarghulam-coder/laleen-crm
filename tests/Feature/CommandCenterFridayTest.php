@@ -389,5 +389,16 @@ class CommandCenterFridayTest extends TestCase
             ->assertJsonPath('voice_profile', 'kore_coo');
 
         $this->assertStringContainsString('Deep Consultant mode', $deepResp->json('reply'));
+
+        // 3. Test skip_tts = true + dedicated /command-center/tts progressive audio endpoint
+        $ttsEndpointResp = $this->actingAs($this->admin)->postJson(route('command-center.tts'), [
+            'spoken_text' => 'Right then, Boss—Old Airport is leading today.',
+            'voice_profile' => 'friday_tactical',
+        ]);
+
+        $ttsEndpointResp->assertOk()
+            ->assertJsonPath('audio_mime', 'audio/wav')
+            ->assertJsonPath('tts_source', 'gemini_tts');
+        $this->assertNotEmpty($ttsEndpointResp->json('audio_base64'));
     }
 }
