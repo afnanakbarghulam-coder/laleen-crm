@@ -255,8 +255,8 @@ class KpiHubController extends Controller
         $oaBookedAdLeads = $oaAdLeads->filter(fn (AdLeadEntry $e) => $e->isBooked());
         $wkBookedAdLeads = $wkAdLeads->filter(fn (AdLeadEntry $e) => $e->isBooked());
 
-        $oaAdRevenueQar = round((float) $oaAdLeads->sum('ticket_amount'), 2);
-        $wkAdRevenueQar = round((float) $wkAdLeads->sum('ticket_amount'), 2);
+        $oaAdRevenueQar = round((float) $oaBookedAdLeads->sum('ticket_amount'), 2);
+        $wkAdRevenueQar = round((float) $wkBookedAdLeads->sum('ticket_amount'), 2);
         $totalAdRevenueQar = round($oaAdRevenueQar + $wkAdRevenueQar, 2);
 
         $dailyBranchAdTarget = round(self::AYAN_BRANCH_AD_REVENUE_TARGET_QAR / $daysInMonth, 2);
@@ -342,12 +342,10 @@ class KpiHubController extends Controller
         $referenceDate = $isCurrentMonth ? now()->copy() : $monthEnd->copy();
 
         $todayBookingsCount = Appointment::query()
-            ->whereNotIn('status', ['cancelled', 'no_show'])
             ->whereDate('created_at', $referenceDate->toDateString())
             ->count();
 
         $mtdBookingsCount = Appointment::query()
-            ->whereNotIn('status', ['cancelled', 'no_show'])
             ->whereBetween('created_at', [$periodStart, $periodEnd])
             ->count();
 
@@ -377,10 +375,13 @@ class KpiHubController extends Controller
         // KPI 3: Lead Management & Conversion Rate (Target: >= 30%)
         $monthLeads = Lead::query()
             ->whereBetween('created_at', [$periodStart, $periodEnd])
-            ->get(['id', 'needful_done', 'assigned_agent_id', 'next_followup_date']);
+            ->get(['id', 'appointment_id', 'needful_done', 'assigned_agent_id', 'next_followup_date']);
 
         $totalLeadsCount = $monthLeads->count();
-        $bookedLeadsCount = $monthLeads->where('needful_done', 'booked')->count();
+        $bookedLeadsCount = $monthLeads->filter(function (Lead $lead) {
+            return $lead->appointment_id !== null
+                || in_array((string) $lead->needful_done, ['booked', 'Appointment Booked', 'Completed / Visited'], true);
+        })->count();
         $leadConversionPct = $totalLeadsCount > 0
             ? round(($bookedLeadsCount / $totalLeadsCount) * 100, 1)
             : 0.0;
@@ -603,12 +604,9 @@ class KpiHubController extends Controller
 
         $todayBookings = 0;
         $mtdBookings = 0;
-        $chatEvalCount = 0;
-        $chatEvalAvgPct = 0.0;
 
         if ($agentUserIds->isNotEmpty()) {
             $todayBookings = Appointment::query()
-                ->whereNotIn('status', ['cancelled', 'no_show'])
                 ->where(function ($q) use ($agentUserIds) {
                     $q->whereIn('booking_agent_id', $agentUserIds)
                       ->orWhereIn('created_by', $agentUserIds);
@@ -617,29 +615,17 @@ class KpiHubController extends Controller
                 ->count();
 
             $mtdBookings = Appointment::query()
-                ->whereNotIn('status', ['cancelled', 'no_show'])
                 ->where(function ($q) use ($agentUserIds) {
                     $q->whereIn('booking_agent_id', $agentUserIds)
                       ->orWhereIn('created_by', $agentUserIds);
                 })
                 ->whereBetween('created_at', [$periodStart, $periodEnd])
                 ->count();
-
-            $evals = KpiChatEvaluation::query()
-                ->whereIn('agent_id', $agentUserIds)
-                ->whereBetween('evaluation_date', [$periodStart, $periodEnd])
-                ->get(['id', 'percentage']);
-
-            $chatEvalCount = $evals->count();
-            $chatEvalAvgPct = $chatEvalCount > 0
-                ? round((float) $evals->avg('percentage'), 1)
-                : 0.0;
         }
 
         $todayAttainmentPct = min(100.0, round(($todayBookings / $dailyTarget) * 100, 1));
         $mtdAttainmentPct = min(100.0, round(($mtdBookings / max(1, $agentMtdTarget)) * 100, 1));
         $isPassing = ($mtdBookings >= $agentMtdTarget || $mtdAttainmentPct >= 85.0 || $todayBookings >= $dailyTarget);
-        $chatEvalPassing = ($chatEvalCount > 0 && $chatEvalAvgPct >= self::LADEN_CHAT_EVAL_TARGET_PCT);
 
         return [
             'owner' => $owner,
@@ -653,9 +639,6 @@ class KpiHubController extends Controller
             'full_month_target' => $agentFullMonthTarget,
             'mtd_attainment_pct' => $mtdAttainmentPct,
             'booking_passing' => $isPassing,
-            'chat_eval_count' => $chatEvalCount,
-            'chat_eval_avg_pct' => $chatEvalAvgPct,
-            'chat_eval_passing' => $chatEvalPassing,
             'overall_score_pct' => $mtdAttainmentPct,
             'passing_kpis_count' => $isPassing ? 1 : 0,
             'total_kpis_count' => 1,

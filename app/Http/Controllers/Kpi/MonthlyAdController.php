@@ -267,7 +267,7 @@ class MonthlyAdController extends Controller
 
         // The column itself is non-nullable with a DB default, so an absent
         // or blank selection falls back to it here rather than erroring.
-        $validated['raw_data_status'] = $validated['raw_data_status'] ?: 'scheduled';
+        $validated['raw_data_status'] = ($validated['raw_data_status'] ?? null) ?: 'scheduled';
 
         if ($validated['raw_data_status'] === 'available') {
             $validated['raw_data_deadline'] = null;

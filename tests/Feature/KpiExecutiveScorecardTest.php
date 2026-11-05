@@ -96,9 +96,10 @@ class KpiExecutiveScorecardTest extends TestCase
             'is_active' => true,
         ]);
 
-        // Areeba books 13 appointments today (100% of today's 13/day target)
+        // Areeba books 13 paid/completed appointments today (100% of today's 13/day target)
+        $firstCompletedAppt = null;
         for ($i = 1; $i <= 13; $i++) {
-            Appointment::create([
+            $appt = Appointment::create([
                 'customer_name' => "Areeba Client {$i}",
                 'phone' => '+9746600' . str_pad((string) $i, 4, '0', STR_PAD_LEFT),
                 'service_name' => 'Manicure',
@@ -107,12 +108,16 @@ class KpiExecutiveScorecardTest extends TestCase
                 'branch' => $i % 2 === 0 ? 'old_airport' : 'wakrah',
                 'booking_agent_id' => $areebaUser->id,
                 'created_by' => $areebaUser->id,
-                'status' => 'confirmed',
+                'status' => 'completed',
+                'paid_at' => $now,
                 'price' => 150,
             ]);
+            if ($i === 1) {
+                $firstCompletedAppt = $appt;
+            }
         }
 
-        // Zoya books 13 appointments today (so team total today is 13 + 13 = 26 = 100% of Laden's 26/day target, or let's test Zoya at 6 and add 7 front-desk/other bookings or assert Laden's 26/day math)
+        // Zoya books 6 paid/completed appointments today
         for ($j = 1; $j <= 6; $j++) {
             Appointment::create([
                 'customer_name' => "Zoya Client {$j}",
@@ -123,7 +128,8 @@ class KpiExecutiveScorecardTest extends TestCase
                 'branch' => $j % 2 === 0 ? 'old_airport' : 'wakrah',
                 'booking_agent_id' => $zoyaUser->id,
                 'created_by' => $zoyaUser->id,
-                'status' => 'confirmed',
+                'status' => 'completed',
+                'paid_at' => $now,
                 'price' => 180,
             ]);
         }
@@ -146,9 +152,10 @@ class KpiExecutiveScorecardTest extends TestCase
             'percentage' => 88.00,
         ]);
 
-        // 2 leads total, 1 booked = 50% conversion (>= 30% floor)
+        // 2 leads total, 1 paid/completed = 50% conversion (>= 30% floor)
         Lead::create([
             'phone' => '+97477001111',
+            'appointment_id' => $firstCompletedAppt?->id,
             'category' => 'inquiry',
             'categories' => ['inquiry'],
             'needful_done' => 'booked',
@@ -448,6 +455,9 @@ class KpiExecutiveScorecardTest extends TestCase
         $this->assertSame($expectedAreebaMtdPct, (float) $scorecard['areeba']['mtd_attainment_pct']);
         $this->assertSame($expectedAreebaMtdPct, (float) $scorecard['areeba']['overall_score_pct']);
         $this->assertSame(1, $scorecard['areeba']['total_kpis_count']);
+        $this->assertArrayNotHasKey('chat_eval_count', $scorecard['areeba']);
+        $this->assertArrayNotHasKey('chat_eval_avg_pct', $scorecard['areeba']);
+        $this->assertArrayNotHasKey('chat_eval_passing', $scorecard['areeba']);
 
         // Assert Zoya's metrics (6 bookings today = 46.2% today target, 6 / (13 * days_elapsed) MTD quota)
         $this->assertSame('Zoya', $scorecard['zoya']['owner']);
@@ -461,6 +471,9 @@ class KpiExecutiveScorecardTest extends TestCase
         $this->assertSame($expectedZoyaMtdPct, (float) $scorecard['zoya']['mtd_attainment_pct']);
         $this->assertSame($expectedZoyaMtdPct, (float) $scorecard['zoya']['overall_score_pct']);
         $this->assertSame(1, $scorecard['zoya']['total_kpis_count']);
+        $this->assertArrayNotHasKey('chat_eval_count', $scorecard['zoya']);
+        $this->assertArrayNotHasKey('chat_eval_avg_pct', $scorecard['zoya']);
+        $this->assertArrayNotHasKey('chat_eval_passing', $scorecard['zoya']);
 
         // 4. Test POST /kpis/late-replies increment -> breaches Sana's KPI 2 AND Ayan's KPI 3
         $this->actingAs($this->admin)
@@ -545,17 +558,53 @@ class KpiExecutiveScorecardTest extends TestCase
         ]);
         $futureAppt->forceFill(['created_at' => $now])->saveQuietly();
 
-        $report = new \App\Models\KpiAgentTargetReport([
-            'date_from' => $now->copy()->startOfDay(),
-            'date_to' => $now->copy()->endOfDay(),
-        ]);
-        $this->assertSame(1, $report->combined()['bookings']);
+        // Agent & Supervisor Booking Rule: Once booked, it counts as 1 regardless of status ('confirmed', 'completed', 'cancelled', 'no_show')
+        foreach (['confirmed', 'completed', 'cancelled', 'no_show'] as $statusToTest) {
+            $futureAppt->update(['status' => $statusToTest]);
 
-        $liveAgentCards = \App\Models\KpiAgentTargetReport::liveAgentScorecards();
-        $areebaLive = collect($liveAgentCards)->firstWhere('id', $areeba->id);
-        $this->assertNotNull($areebaLive);
-        $this->assertSame(1, $areebaLive['today_bookings']);
-        $this->assertSame(1, $areebaLive['mtd_bookings']);
+            $report = new \App\Models\KpiAgentTargetReport([
+                'date_from' => $now->copy()->startOfDay(),
+                'date_to' => $now->copy()->endOfDay(),
+            ]);
+            $this->assertSame(1, $report->combined()['bookings'], "Agent booking must still count when status is {$statusToTest}");
+
+            $liveAgentCards = \App\Models\KpiAgentTargetReport::liveAgentScorecards();
+            $areebaLive = collect($liveAgentCards)->firstWhere('id', $areeba->id);
+            $this->assertNotNull($areebaLive);
+            $this->assertSame(1, $areebaLive['today_bookings'], "Live today_bookings must remain 1 when status is {$statusToTest}");
+            $this->assertSame(1, $areebaLive['mtd_bookings'], "Live mtd_bookings must remain 1 when status is {$statusToTest}");
+
+            $statusScorecard = $this->actingAs($this->admin)
+                ->get(route('kpi.hub', ['month' => $now->format('Y-m')]))
+                ->viewData('scorecard');
+            $this->assertSame(1, $statusScorecard['areeba']['today_bookings'], "Areeba today_bookings must remain 1 when status is {$statusToTest}");
+            $this->assertSame(1, $statusScorecard['areeba']['mtd_bookings'], "Areeba mtd_bookings must remain 1 when status is {$statusToTest}");
+            $this->assertSame(1, $statusScorecard['laden']['today_bookings_count'], "Laden today_bookings_count must remain 1 when status is {$statusToTest}");
+            $this->assertSame(1, $statusScorecard['laden']['mtd_bookings_count'], "Laden mtd_bookings_count must remain 1 when status is {$statusToTest}");
+        }
+
+        // Preserve Lead Conversion Status even if appointment is later cancelled (appointment_id is set)
+        $convertedLeadOnCancelledAppt = Lead::create([
+            'phone' => '55770001',
+            'appointment_id' => $futureAppt->id,
+            'category' => 'cancel',
+            'categories' => ['cancel'],
+            'needful_done' => null,
+        ]);
+        $leadCheckScorecard = $this->actingAs($this->admin)
+            ->get(route('kpi.hub', ['month' => $now->format('Y-m')]))
+            ->viewData('scorecard');
+        $this->assertSame(1, $leadCheckScorecard['laden']['booked_leads_count'], 'Lead with appointment_id must remain counted as converted even if appointment was later cancelled');
+        $convertedLeadOnCancelledAppt->delete();
+
+        // Phone normalization rule: '974', '+974', and '00974' all normalize identically to 8-digit local number
+        $this->assertSame('55901001', Customer::normalizePhone('55901001'));
+        $this->assertSame('55901001', Customer::normalizePhone('+97455901001'));
+        $this->assertSame('55901001', Customer::normalizePhone('97455901001'));
+        $this->assertSame('55901001', Customer::normalizePhone('0097455901001'));
+        $this->assertSame('55901001', Lead::normalizePhone('974', '55901001'));
+        $this->assertSame('55901001', Lead::normalizePhone('+974', '55901001'));
+        $this->assertSame('55901001', Lead::normalizePhone('00974', '55901001'));
 
         // Fix #4: Paid Ad Lead created in Core CRM (/leads with source = Instagram) + standalone POS Sale auto-creates & updates AdLeadEntry
         $product = \App\Models\Product::create([

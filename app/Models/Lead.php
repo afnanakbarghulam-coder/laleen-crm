@@ -314,10 +314,22 @@ class Lead extends Model
      */
     public static function normalizePhone(?string $countryCode, ?string $number): string
     {
-        $digits = preg_replace('/\D+/', '', (string) $number);
+        $cleanCountryCode = preg_replace('/\D+/', '', (string) $countryCode);
+        $cleanCountryCode = preg_replace('/^00+/', '', $cleanCountryCode);
 
-        if ($countryCode && $countryCode !== '974') {
-            $digits = preg_replace('/\D+/', '', $countryCode) . $digits;
+        $digits = preg_replace('/\D+/', '', (string) $number);
+        if (preg_match('/^00974(\d{8})$/', $digits, $m)) {
+            $digits = $m[1];
+        } elseif (preg_match('/^974(\d{8})$/', $digits, $m)) {
+            $digits = $m[1];
+        } elseif (str_starts_with($digits, '00')) {
+            $digits = preg_replace('/^00+/', '', $digits);
+        }
+
+        if ($cleanCountryCode !== '' && $cleanCountryCode !== '974') {
+            if (!str_starts_with($digits, $cleanCountryCode)) {
+                $digits = $cleanCountryCode . $digits;
+            }
         }
 
         return $digits;
@@ -330,16 +342,25 @@ class Lead extends Model
      */
     public static function splitPhone(?string $phone): array
     {
-        $phone = (string) $phone;
+        $digits = preg_replace('/\D+/', '', (string) $phone);
+        if (str_starts_with($digits, '00')) {
+            $digits = preg_replace('/^00+/', '', $digits);
+        }
+
+        if (preg_match('/^974(\d{8})$/', $digits, $m)) {
+            return ['974', $m[1]];
+        }
+
         $codes = array_keys(self::COUNTRY_CODES);
         usort($codes, fn($a, $b) => strlen($b) - strlen($a));
 
         foreach ($codes as $code) {
-            if (str_starts_with($phone, $code)) {
-                return [$code, substr($phone, strlen($code))];
+            $codeStr = (string) $code;
+            if (str_starts_with($digits, $codeStr) && strlen($digits) > strlen($codeStr)) {
+                return [$codeStr, substr($digits, strlen($codeStr))];
             }
         }
 
-        return ['974', $phone];
+        return ['974', $digits];
     }
 }

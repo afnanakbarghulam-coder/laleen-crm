@@ -74,7 +74,6 @@ class KpiAgentTargetReport extends Model
         }
 
         $appointments = Appointment::query()
-            ->whereNotIn('status', ['cancelled', 'no_show'])
             ->where(function ($q) use ($agentIds) {
                 $q->whereIn('booking_agent_id', $agentIds)
                   ->orWhereIn('created_by', $agentIds);
@@ -137,7 +136,6 @@ class KpiAgentTargetReport extends Model
 
         return $agents->map(function (User $agent) use ($now, $periodStart, $periodEnd, $daysElapsed, $daysInMonth, $dailyTarget, $todayShiftLogs) {
             $todayBookings = Appointment::query()
-                ->whereNotIn('status', ['cancelled', 'no_show'])
                 ->where(function ($q) use ($agent) {
                     $q->where('booking_agent_id', $agent->id)
                       ->orWhere('created_by', $agent->id);
@@ -146,7 +144,6 @@ class KpiAgentTargetReport extends Model
                 ->count();
 
             $mtdBookings = Appointment::query()
-                ->whereNotIn('status', ['cancelled', 'no_show'])
                 ->where(function ($q) use ($agent) {
                     $q->where('booking_agent_id', $agent->id)
                       ->orWhere('created_by', $agent->id);

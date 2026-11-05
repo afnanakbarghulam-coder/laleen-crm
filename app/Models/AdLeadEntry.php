@@ -63,28 +63,13 @@ class AdLeadEntry extends Model
     }
 
     /**
-     * A lead is only counted as a booking once it's assigned a branch AND
-     * actually converted (ticket_amount > 0 or linked to a booked lead/appointment).
-     * Unbooked inquiries with ticket_amount = 0 are never counted as booked just because branch is set.
+     * A lead is ONLY counted as booked/converted once it has a valid branch
+     * AND a positive paid ticket_amount (> 0) from a completed/paid sale.
      */
     public function isBooked(): bool
     {
-        if (!in_array($this->branch, array_keys(self::BRANCHES), true)) {
-            return false;
-        }
-
-        if ((float) $this->ticket_amount > 0) {
-            return true;
-        }
-
-        if ($this->lead_id && Schema::hasTable('leads')) {
-            $lead = $this->relationLoaded('lead') ? $this->lead : $this->lead()->first();
-            if ($lead && ($lead->needful_done === 'booked' || $lead->appointment_id !== null)) {
-                return true;
-            }
-        }
-
-        return false;
+        return in_array($this->branch, array_keys(self::BRANCHES), true)
+            && (float) $this->ticket_amount > 0;
     }
 
     public static function resolveCategoryFromLead(Lead $lead): string
@@ -399,6 +384,10 @@ class AdLeadEntry extends Model
             })->values();
         }
 
+        $paidAppointments = $activeAppointments->filter(
+            fn (Appointment $a) => strtolower((string) ($a->status ?? '')) === 'completed' || $a->paid_at !== null
+        )->values();
+
         $newBranch = $entry->branch;
         $newTicketAmount = round((float) $entry->ticket_amount, 2);
 
@@ -415,17 +404,17 @@ class AdLeadEntry extends Model
                 $newBranch = $resolvedBranch;
             }
             $newTicketAmount = $totalPaidRevenue;
-        } elseif ($activeAppointments->isNotEmpty()) {
-            $primaryAppt = ($appointmentId ? $activeAppointments->firstWhere('id', $appointmentId) : null)
-                ?: $activeAppointments->sortByDesc(fn (Appointment $a) => Carbon::parse($a->appointment_datetime ?: $a->booking_date)->timestamp)->first();
+        } elseif ($paidAppointments->isNotEmpty()) {
+            $primaryAppt = ($appointmentId ? $paidAppointments->firstWhere('id', $appointmentId) : null)
+                ?: $paidAppointments->sortByDesc(fn (Appointment $a) => Carbon::parse($a->appointment_datetime ?: $a->booking_date)->timestamp)->first();
 
             if ($primaryAppt && in_array($primaryAppt->branch, array_keys(self::BRANCHES), true)) {
                 $newBranch = $primaryAppt->branch;
             }
 
-            $bookedTotal = round((float) self::appointmentBookedAmount($primaryAppt), 2);
-            if ((float) $entry->ticket_amount <= 0 || ($resetIfNoActivity && $bookedTotal > 0)) {
-                $newTicketAmount = $bookedTotal;
+            $paidTotal = round((float) $paidAppointments->sum(fn (Appointment $a) => self::appointmentBookedAmount($a)), 2);
+            if ($paidTotal > 0) {
+                $newTicketAmount = $paidTotal;
             }
         } elseif ($resetIfNoActivity) {
             $newBranch = null;

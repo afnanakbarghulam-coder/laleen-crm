@@ -115,9 +115,6 @@
         $areebaFullMoTarget = (int) ($areeba['full_month_target'] ?? 390);
         $areebaMtdPct = (float) ($areeba['mtd_attainment_pct'] ?? 0);
         $areebaBkPass = !empty($areeba['booking_passing']);
-        $areebaChatAvg = (float) ($areeba['chat_eval_avg_pct'] ?? 0);
-        $areebaChatCount = (int) ($areeba['chat_eval_count'] ?? 0);
-        $areebaChatPass = !empty($areeba['chat_eval_passing']);
         $areebaOverallPct = (float) ($areeba['overall_score_pct'] ?? $areebaMtdPct);
         $areebaPassingCount = (int) ($areeba['passing_kpis_count'] ?? ($areebaBkPass ? 1 : 0));
         $areebaTotalKpis = (int) ($areeba['total_kpis_count'] ?? 1);
@@ -130,9 +127,6 @@
         $zoyaFullMoTarget = (int) ($zoya['full_month_target'] ?? 390);
         $zoyaMtdPct = (float) ($zoya['mtd_attainment_pct'] ?? 0);
         $zoyaBkPass = !empty($zoya['booking_passing']);
-        $zoyaChatAvg = (float) ($zoya['chat_eval_avg_pct'] ?? 0);
-        $zoyaChatCount = (int) ($zoya['chat_eval_count'] ?? 0);
-        $zoyaChatPass = !empty($zoya['chat_eval_passing']);
         $zoyaOverallPct = (float) ($zoya['overall_score_pct'] ?? $zoyaMtdPct);
         $zoyaPassingCount = (int) ($zoya['passing_kpis_count'] ?? ($zoyaBkPass ? 1 : 0));
         $zoyaTotalKpis = (int) ($zoya['total_kpis_count'] ?? 1);

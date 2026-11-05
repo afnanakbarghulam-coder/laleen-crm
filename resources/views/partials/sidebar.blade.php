@@ -13,7 +13,6 @@
      </div>
 
      <div class="menu-divider mt-0"></div>
-     <div class="menu-inner-shadow"></div>
 
      <ul class="menu-inner py-1">
          <!-- Dashboard -->
@@ -159,6 +158,12 @@
              border-top: 1px solid rgba(217, 143, 131, 0.14);
          }
 
+         #layout-menu .menu-inner-shadow,
+         .menu-inner-shadow {
+             display: none !important;
+             background: none !important;
+         }
+
          /* Minimal sidebar collapse toggle */
          .sidebar-toggle-btn {
              width: 30px;
@@ -237,7 +242,6 @@
      </div>
 
      <div class="menu-divider mt-0"></div>
-     <div class="menu-inner-shadow"></div>
 
      <ul class="menu-inner py-1">
 
@@ -343,19 +347,12 @@
              </li>
          @endmoduleView
 
-         <!-- KPIs & Operations -->
+         <!-- KPIs -->
          @moduleView('kpis')
-             <li class="menu-item {{ request()->routeIs('kpi.hub') ? 'active' : '' }}">
+             <li class="menu-item {{ request()->is('kpis*') || request()->routeIs('kpi.*') || request()->routeIs('kpis.*') ? 'active' : '' }}">
                  <a href="{{ route('kpi.hub') }}" class="menu-link">
                      <i class="bx bx-line-chart me-2"></i>
                      <div>KPIs</div>
-                 </a>
-             </li>
-
-             <li class="menu-item {{ (request()->routeIs('kpi.*') && !request()->routeIs('kpi.hub')) || request()->routeIs('kpis.operations') ? 'active' : '' }}">
-                 <a href="{{ route('kpi.operations') }}" class="menu-link">
-                     <i class="bx bx-cog me-2"></i>
-                     <div>Operations</div>
                  </a>
              </li>
          @endmoduleView

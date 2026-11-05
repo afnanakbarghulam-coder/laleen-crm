@@ -67,6 +67,20 @@ class Appointment extends Model
         return $this->hasOne(Sale::class);
     }
 
+    /**
+     * Scope to appointments where the sale/checkout is actually paid or completed.
+     * Unpaid scheduled/confirmed appointments are excluded until checkout/payment.
+     */
+    public function scopePaidOrCompleted($query)
+    {
+        return $query->whereNotIn('status', ['cancelled', 'no_show'])
+            ->where(function ($q) {
+                $q->where('status', 'completed')
+                  ->orWhereNotNull('paid_at')
+                  ->orWhereHas('sale');
+            });
+    }
+
     public function appointmentServices()
     {
         return $this->hasMany(AppointmentService::class)->orderBy('start_time');

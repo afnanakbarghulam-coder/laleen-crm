@@ -100,8 +100,10 @@ class AdLeadMonthlyAttributionSyncTest extends TestCase
             ->assertRedirect();
 
         $novEntry->refresh();
-        $this->assertSame('old_airport', $novEntry->branch);
-        $this->assertSame(300.0, (float) $novEntry->ticket_amount);
+        // Paid-Only Rule: While appointment is merely scheduled/confirmed (unpaid), ticket_amount stays 0 and isBooked() is false
+        $this->assertNull($novEntry->branch);
+        $this->assertSame(0.0, (float) $novEntry->ticket_amount);
+        $this->assertFalse($novEntry->isBooked());
 
         $novLead = Lead::find($novEntry->lead_id);
         $this->assertNotNull($novLead);
@@ -255,7 +257,7 @@ class AdLeadMonthlyAttributionSyncTest extends TestCase
         $this->assertNull($entry->branch);
         $this->assertSame(0.0, (float) $entry->ticket_amount);
 
-        // Book her on 2026-11-06 -> sets branch = 'old_airport', ticket_amount = 300
+        // Book and complete payment on 2026-11-06 -> sets branch = 'old_airport', ticket_amount = 300
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
                 'customer_name' => 'Dana Al-Sulaiti',
@@ -264,7 +266,7 @@ class AdLeadMonthlyAttributionSyncTest extends TestCase
                 'appointment_datetime' => '2026-11-06 12:00:00',
                 'branch' => 'old_airport',
                 'staff_id' => $this->staff->id,
-                'status' => 'confirmed',
+                'status' => 'completed',
                 'price' => 300,
             ]);
 

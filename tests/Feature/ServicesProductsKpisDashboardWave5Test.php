@@ -367,7 +367,7 @@ class ServicesProductsKpisDashboardWave5Test extends TestCase
             'appointment_datetime' => now()->addDay(),
             'branch' => 'old_airport',
             'price' => 100,
-            'status' => 'confirmed',
+            'status' => 'completed',
             'created_by' => $agent->id,
         ]);
         $morningBooking->forceFill(['created_at' => today()->setTime(10, 30)])->saveQuietly();
@@ -379,7 +379,7 @@ class ServicesProductsKpisDashboardWave5Test extends TestCase
             'appointment_datetime' => now()->addDay(),
             'branch' => 'old_airport',
             'price' => 120,
-            'status' => 'confirmed',
+            'status' => 'completed',
             'created_by' => $agent->id,
         ]);
         $eveningBooking->forceFill(['created_at' => today()->setTime(17, 15)])->saveQuietly();

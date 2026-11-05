@@ -288,7 +288,7 @@ class AppointmentController extends Controller
             }
         }
 
-        $phone = preg_replace('/\D/', '', (string) $request->phone);
+        $phone = Customer::normalizePhone($request->phone);
 
         // Every booking now requires a real client (selected or newly added) —
         // there's no walk-in fallback, so a customer record always exists.
@@ -655,7 +655,7 @@ class AppointmentController extends Controller
         ]);
 
         $services = implode(', ', $request->service_name);
-        $phone = $request->phone ? preg_replace('/\D/', '', $request->phone) : '';
+        $phone = $request->phone ? Customer::normalizePhone($request->phone) : '';
 
         $staffId = $request->staff_id ?? $appointment->staff_id;
         $startTime = Carbon::parse($request->appointment_datetime);
