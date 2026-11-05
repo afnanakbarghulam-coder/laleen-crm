@@ -1,42 +1,46 @@
 @extends('layouts.app')
 
-@section('title', 'F.R.I.D.A.Y. Command Center — Laleen Ops')
+@section('title', 'F.R.I.D.A.Y. — Laleen Ops')
 
 @section('content')
 <style>
-    .friday-shell {
+    .friday-stage {
+        min-height: calc(100vh - 140px);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 16px 24px 22px;
         color: #f4eae6;
         font-family: 'Poppins', sans-serif;
+        background: radial-gradient(circle at 50% 42%, rgba(217, 143, 131, 0.11) 0%, rgba(16, 12, 11, 0.96) 66%);
+        border: 1px solid rgba(217, 143, 131, 0.22);
+        border-radius: 22px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
     }
 
-    .friday-header-card {
-        background: linear-gradient(135deg, rgba(26, 20, 18, 0.96), rgba(38, 28, 25, 0.94));
-        border: 1px solid rgba(217, 143, 131, 0.32);
-        border-radius: 16px;
-        padding: 18px 22px;
-        box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
-    }
-
-    .friday-status-pill {
-        display: inline-flex;
+    /* 1. Minimal Top Bar */
+    .friday-topbar {
+        display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 5px 13px;
-        border-radius: 999px;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        background: rgba(46, 204, 113, 0.12);
-        border: 1px solid rgba(46, 204, 113, 0.42);
-        color: #7ef2a6;
+        justify-content: space-between;
+        gap: 16px;
+    }
+
+    .friday-brand-title {
+        font-family: 'Playfair Display', serif;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        color: #f9efec;
+        margin: 0;
     }
 
     .friday-gear-toggle {
         display: inline-flex;
-        background: rgba(15, 11, 10, 0.85);
-        border: 1px solid rgba(217, 143, 131, 0.28);
+        background: rgba(12, 9, 8, 0.88);
+        border: 1px solid rgba(217, 143, 131, 0.30);
         border-radius: 999px;
-        padding: 3px;
+        padding: 4px;
         gap: 4px;
     }
 
@@ -44,430 +48,240 @@
         border: none;
         background: transparent;
         color: #cbb8b0;
-        font-size: 12px;
+        font-size: 12.5px;
         font-weight: 500;
-        padding: 6px 14px;
+        padding: 7px 16px;
         border-radius: 999px;
         cursor: pointer;
-        transition: all 0.16s ease;
+        transition: all 0.18s ease;
     }
 
     .friday-gear-btn.active {
         background: linear-gradient(135deg, #d98f83, #c9a66b);
         color: #191413;
         font-weight: 700;
-        box-shadow: 0 4px 14px rgba(217, 143, 131, 0.35);
+        box-shadow: 0 4px 16px rgba(217, 143, 131, 0.36);
     }
 
-    .friday-select {
-        background: rgba(18, 14, 13, 0.92);
-        color: #f4eae6;
-        border: 1px solid rgba(217, 143, 131, 0.35);
-        border-radius: 999px;
-        padding: 6px 14px;
-        font-size: 12px;
-        outline: none;
-    }
-
-    .friday-telemetry-card {
-        background: linear-gradient(155deg, rgba(28, 21, 19, 0.94), rgba(20, 15, 14, 0.94));
-        border: 1px solid rgba(217, 143, 131, 0.22);
-        border-radius: 14px;
-        padding: 16px 18px;
-        height: 100%;
-        transition: border-color 0.2s ease, transform 0.2s ease;
-    }
-
-    .friday-telemetry-card:hover {
-        border-color: rgba(217, 143, 131, 0.52);
-        transform: translateY(-2px);
-    }
-
-    .friday-card-label {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #c9a66b;
-        font-weight: 600;
-        margin-bottom: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-
-    .friday-metric-big {
-        font-family: 'Playfair Display', serif;
-        font-size: 23px;
-        font-weight: 700;
-        color: #f9efec;
-        line-height: 1.2;
-    }
-
-    .friday-subrow {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 12px;
-        color: #cbb8b0;
-        padding: 4px 0;
-        border-bottom: 1px dashed rgba(217, 143, 131, 0.12);
-    }
-
-    .friday-subrow:last-child {
-        border-bottom: none;
-    }
-
-    .friday-console-card {
-        background: radial-gradient(circle at top center, rgba(217, 143, 131, 0.10), rgba(19, 14, 13, 0.97) 65%);
-        border: 1px solid rgba(217, 143, 131, 0.34);
-        border-radius: 18px;
-        padding: 22px;
-        box-shadow: 0 18px 46px rgba(0, 0, 0, 0.52);
-    }
-
-    .friday-reactor-wrap {
+    /* 2. Center Interactive F.R.I.D.A.Y. Core Orb */
+    .friday-orb-zone {
+        flex: 1;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 10px 0 16px;
+        padding: 28px 0;
+        user-select: none;
+    }
+
+    .friday-orb-button {
         position: relative;
+        width: 280px;
+        height: 280px;
+        border-radius: 50%;
+        padding: 0;
+        border: 1px solid rgba(201, 166, 107, 0.42);
+        background: radial-gradient(circle, rgba(217, 143, 131, 0.18) 0%, rgba(16, 12, 11, 0.94) 72%);
+        box-shadow: 0 0 48px rgba(217, 143, 131, 0.22), inset 0 0 28px rgba(201, 166, 107, 0.18);
+        cursor: pointer;
+        transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        outline: none;
+    }
+
+    .friday-orb-button:hover {
+        transform: scale(1.025);
+        border-color: rgba(231, 154, 145, 0.72);
+    }
+
+    .friday-orb-button.state-listening {
+        border-color: rgba(126, 242, 166, 0.75);
+        box-shadow: 0 0 58px rgba(46, 204, 113, 0.30), inset 0 0 32px rgba(46, 204, 113, 0.18);
+    }
+
+    .friday-orb-button.state-thinking {
+        border-color: rgba(201, 166, 107, 0.85);
+        box-shadow: 0 0 58px rgba(201, 166, 107, 0.36), inset 0 0 32px rgba(201, 166, 107, 0.22);
+    }
+
+    .friday-orb-button.state-speaking {
+        border-color: rgba(231, 154, 145, 0.92);
+        box-shadow: 0 0 68px rgba(231, 154, 145, 0.48), inset 0 0 36px rgba(201, 166, 107, 0.28);
     }
 
     .friday-visualizer-canvas {
-        width: 220px;
-        height: 220px;
+        width: 280px;
+        height: 280px;
         border-radius: 50%;
-        background: radial-gradient(circle, rgba(217, 143, 131, 0.16) 0%, rgba(18, 13, 12, 0.92) 72%);
-        border: 1px solid rgba(201, 166, 107, 0.42);
-        box-shadow: 0 0 36px rgba(217, 143, 131, 0.24), inset 0 0 24px rgba(201, 166, 107, 0.18);
+        pointer-events: none;
     }
 
-    .friday-chip-bar {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        justify-content: center;
-        margin-bottom: 16px;
-    }
-
-    .friday-chip {
-        background: rgba(217, 143, 131, 0.10);
-        border: 1px solid rgba(217, 143, 131, 0.32);
-        color: #f4eae6;
-        border-radius: 999px;
-        padding: 6px 13px;
+    .friday-status-label {
+        margin-top: 20px;
         font-size: 12px;
-        cursor: pointer;
-        transition: all 0.15s ease;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #e79a91;
+        text-align: center;
+        min-height: 20px;
     }
 
-    .friday-chip:hover {
-        background: rgba(217, 143, 131, 0.25);
-        border-color: #e79a91;
-        transform: translateY(-1px);
+    /* 3. Bottom Subtitle + Sleek Chat Bar */
+    .friday-bottom-dock {
+        max-width: 820px;
+        width: 100%;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
     }
 
-    .friday-chat-feed {
-        max-height: 390px;
-        overflow-y: auto;
-        padding: 12px;
-        border-radius: 12px;
-        background: rgba(12, 9, 8, 0.72);
-        border: 1px solid rgba(217, 143, 131, 0.16);
-        margin-bottom: 14px;
+    .friday-subtitle-box {
+        min-height: 82px;
+        padding: 16px 22px;
+        border-radius: 16px;
+        background: rgba(18, 13, 12, 0.82);
+        border: 1px solid rgba(217, 143, 131, 0.24);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 6px;
+        text-align: center;
+        transition: border-color 0.2s ease;
     }
 
-    .friday-msg {
-        margin-bottom: 14px;
-        padding: 12px 16px;
-        border-radius: 12px;
-        font-size: 13.5px;
-        line-height: 1.6;
+    .friday-user-echo {
+        font-size: 12px;
+        color: #a9958d;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-height: 18px;
     }
 
-    .friday-msg-user {
-        background: rgba(217, 143, 131, 0.16);
-        border: 1px solid rgba(217, 143, 131, 0.35);
-        color: #fff;
-        margin-left: auto;
-        max-width: 82%;
+    .friday-spoken-words {
+        font-size: 15.5px;
+        font-weight: 500;
+        line-height: 1.55;
+        color: #f9efec;
     }
 
-    .friday-msg-ai {
-        background: rgba(29, 22, 20, 0.95);
-        border-left: 3px solid #e79a91;
-        border-top: 1px solid rgba(201, 166, 107, 0.24);
-        border-right: 1px solid rgba(201, 166, 107, 0.24);
-        border-bottom: 1px solid rgba(201, 166, 107, 0.24);
-        color: #f4eae6;
-        max-width: 92%;
-    }
-
-    .friday-tool-trace {
-        display: inline-flex;
+    .friday-input-bar {
+        display: flex;
         align-items: center;
-        gap: 5px;
-        margin-top: 8px;
-        margin-right: 6px;
-        padding: 3px 10px;
+        gap: 10px;
+        background: rgba(14, 10, 9, 0.92);
+        border: 1px solid rgba(217, 143, 131, 0.34);
         border-radius: 999px;
-        font-size: 10.5px;
-        background: rgba(201, 166, 107, 0.13);
-        border: 1px solid rgba(201, 166, 107, 0.38);
-        color: #e6c891;
+        padding: 6px 8px 6px 10px;
     }
 
     .friday-mic-btn {
-        width: 48px;
-        height: 48px;
+        width: 42px;
+        height: 42px;
         border-radius: 50%;
-        border: 1px solid rgba(217, 143, 131, 0.55);
-        background: linear-gradient(135deg, rgba(217, 143, 131, 0.24), rgba(201, 166, 107, 0.22));
+        border: 1px solid rgba(217, 143, 131, 0.48);
+        background: rgba(217, 143, 131, 0.16);
         color: #f4eae6;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 20px;
+        font-size: 19px;
         cursor: pointer;
         transition: all 0.18s ease;
         flex-shrink: 0;
     }
 
-    .friday-mic-btn.recording {
-        background: linear-gradient(135deg, #e74c3c, #c0392b);
-        border-color: #ff7979;
-        color: #fff;
-        box-shadow: 0 0 22px rgba(231, 76, 60, 0.75);
-        animation: fridayPulse 1.1s infinite;
+    .friday-mic-btn.active {
+        background: linear-gradient(135deg, #2ecc71, #27ae60);
+        border-color: #7ef2a6;
+        color: #101612;
+        box-shadow: 0 0 18px rgba(46, 204, 113, 0.55);
     }
 
-    @keyframes fridayPulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.08); }
-        100% { transform: scale(1); }
+    .friday-text-input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: #f4eae6;
+        font-size: 14px;
+        padding: 8px 10px;
+        outline: none;
+    }
+
+    .friday-text-input::placeholder {
+        color: #8c7770;
+    }
+
+    .friday-send-btn {
+        border: none;
+        background: linear-gradient(135deg, #d98f83, #c9a66b);
+        color: #191413;
+        font-weight: 700;
+        font-size: 13px;
+        border-radius: 999px;
+        padding: 10px 22px;
+        cursor: pointer;
+        transition: opacity 0.15s ease;
+    }
+
+    .friday-send-btn:hover {
+        opacity: 0.92;
     }
 </style>
 
-<div class="friday-shell">
-    {{-- Top Control Bar --}}
-    <div class="friday-header-card mb-4">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-            <div>
-                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
-                    <h4 class="mb-0" style="font-family: 'Playfair Display', serif; color: #f9efec; font-weight: 700;">
-                        F.R.I.D.A.Y. Command Center
-                    </h4>
-                    <span class="friday-status-pill" id="fridayStatusPill">
-                        🟢 F.R.I.D.A.Y. ONLINE · READ-ONLY EXECUTIVE ACCESS
-                    </span>
-                </div>
-                <div style="font-size: 12px; color: #cbb8b0;">
-                    50% Tactical Secretary · 35% Hormozi Revenue Math · 15% Sandberg COO Compliance · Strictly <code>SELECT</code> Read-Only
-                </div>
-            </div>
+<div class="friday-stage">
+    {{-- 1. Minimal Top Bar --}}
+    <div class="friday-topbar">
+        <h1 class="friday-brand-title">F.R.I.D.A.Y.</h1>
 
-            <div class="d-flex flex-wrap align-items-center gap-2">
-                {{-- Thinking Gear Toggle --}}
-                <div class="friday-gear-toggle" role="group" aria-label="Thinking Mode">
-                    <button type="button" class="friday-gear-btn active" id="modeFastBtn" data-mode="fast" title="Model: {{ $commandModel }}">
-                        ⚡ Fast Secretary (Flash)
-                    </button>
-                    <button type="button" class="friday-gear-btn" id="modeDeepBtn" data-mode="deep" title="Model: {{ $thinkingModel }}">
-                        🧠 Deep Consultant (Argon Thinking)
-                    </button>
-                </div>
-
-                {{-- Voice Profile Selector --}}
-                <select id="voiceProfileSelect" class="friday-select" aria-label="Voice Profile">
-                    <option value="friday_tactical">🎧 F.R.I.D.A.Y. Tactical (Irish/British HUD)</option>
-                    <option value="kore_coo">⚡ Kore (Firm COO)</option>
-                    <option value="aoede_advisor">✨ Aoede (Warm Advisor)</option>
-                </select>
-
-                {{-- Auto-Speak / Mute Toggle --}}
-                <button type="button" id="toggleMuteBtn" class="friday-select" style="cursor: pointer;">
-                    🔊 Voice Output: ON
-                </button>
-            </div>
+        <div class="friday-gear-toggle" role="group" aria-label="Thinking Mode">
+            <button type="button" class="friday-gear-btn active" id="modeFastBtn" data-mode="fast" title="Model: {{ $commandModel }}">
+                ⚡ Quick
+            </button>
+            <button type="button" class="friday-gear-btn" id="modeDeepBtn" data-mode="deep" title="Model: {{ $thinkingModel }}">
+                🧠 Deep Thinking
+            </button>
         </div>
     </div>
 
-    {{-- 4 Instant Read-Only Telemetry Cards --}}
-    @php
-        $oaRev = $telemetry['revenue']['branches']['old_airport'] ?? [];
-        $wkRev = $telemetry['revenue']['branches']['wakrah'] ?? [];
-        $leadsTel = $telemetry['leads'] ?? [];
-        $retTel = $telemetry['retention'] ?? [];
-        $staffTel = $telemetry['staff'] ?? [];
-        $mktTel = $telemetry['marketing'] ?? [];
-    @endphp
-    <div class="row g-3 mb-4" id="telemetryGrid">
-        {{-- Card 1: Today & MTD Cash (Old Airport vs Wakrah) --}}
-        <div class="col-12 col-md-6 col-xl-3">
-            <div class="friday-telemetry-card">
-                <div class="friday-card-label">
-                    <span>💰 Today & MTD Cash</span>
-                    <span class="badge bg-label-warning" style="font-size: 10px;">Old Airport vs Wakrah</span>
-                </div>
-                <div class="friday-metric-big mb-2" id="telTodayNet">
-                    {{ number_format((float) ($telemetry['revenue']['today_total_net_qar'] ?? 0), 0) }} QAR <small style="font-size: 11px; color: #cbb8b0;">Today</small>
-                </div>
-                <div class="friday-subrow">
-                    <span>Old Airport (Today / MTD)</span>
-                    <strong>{{ number_format((float) ($oaRev['today_net_qar'] ?? 0), 0) }} / {{ number_format((float) ($oaRev['mtd_net_qar'] ?? 0), 0) }} QAR</strong>
-                </div>
-                <div class="friday-subrow">
-                    <span>Wakrah (Today / MTD)</span>
-                    <strong>{{ number_format((float) ($wkRev['today_net_qar'] ?? 0), 0) }} / {{ number_format((float) ($wkRev['mtd_net_qar'] ?? 0), 0) }} QAR</strong>
-                </div>
-                <div class="friday-subrow">
-                    <span>Bookings Today (Done / Open)</span>
-                    <strong>{{ (int) ($telemetry['revenue']['today_completed_visits'] ?? 0) }} done · {{ (int) ($telemetry['revenue']['today_upcoming_bookings'] ?? 0) }} open</strong>
-                </div>
-            </div>
-        </div>
+    {{-- 2. Center Interactive F.R.I.D.A.Y. Core Orb --}}
+    <div class="friday-orb-zone">
+        <button type="button" id="fridayOrbBtn" class="friday-orb-button" aria-label="Toggle Live Conversation with F.R.I.D.A.Y.">
+            <canvas id="fridayVisualizer" class="friday-visualizer-canvas" width="280" height="280"></canvas>
+        </button>
 
-        {{-- Card 2: Sales Floor & Leads --}}
-        <div class="col-12 col-md-6 col-xl-3">
-            <div class="friday-telemetry-card">
-                <div class="friday-card-label">
-                    <span>🔥 Sales Floor & Leads</span>
-                    <span class="badge {{ ($leadsTel['mtd_conversion_pct'] ?? 0) >= 30 ? 'bg-label-success' : 'bg-label-danger' }}" style="font-size: 10px;">
-                        {{ number_format((float) ($leadsTel['mtd_conversion_pct'] ?? 0), 1) }}% Conv (30% Floor)
-                    </span>
-                </div>
-                <div class="friday-metric-big mb-2">
-                    ~{{ number_format((float) ($leadsTel['top_three_potential_qar'] ?? 0), 0) }} QAR <small style="font-size: 11px; color: #cbb8b0;">Top 3 Calls</small>
-                </div>
-                <div class="friday-subrow">
-                    <span>Overdue Follow-ups</span>
-                    <strong style="color: #ff8a80;">{{ (int) ($leadsTel['overdue_count'] ?? 0) }}</strong>
-                </div>
-                <div class="friday-subrow">
-                    <span>Due Today / Unscheduled</span>
-                    <strong>{{ (int) ($leadsTel['due_today_count'] ?? 0) }} due · {{ (int) ($leadsTel['unscheduled_count'] ?? 0) }} unscheduled</strong>
-                </div>
-                <div class="friday-subrow">
-                    <span>MTD Booked / Total Leads</span>
-                    <strong>{{ (int) ($leadsTel['mtd_booked_leads'] ?? 0) }} / {{ (int) ($leadsTel['mtd_total_leads'] ?? 0) }}</strong>
-                </div>
-            </div>
-        </div>
-
-        {{-- Card 3: Retention Radar --}}
-        <div class="col-12 col-md-6 col-xl-3">
-            <div class="friday-telemetry-card">
-                <div class="friday-card-label">
-                    <span>🔄 Retention Radar</span>
-                    <span class="badge bg-label-info" style="font-size: 10px;">Zero-Overlap Engine</span>
-                </div>
-                <div class="friday-metric-big mb-2">
-                    {{ (int) ($retTel['total_actionable_clients'] ?? 0) }} <small style="font-size: 11px; color: #cbb8b0;">Actionable Clients</small>
-                </div>
-                <div class="friday-subrow">
-                    <span>Due for Refill (incl. 1st Visit)</span>
-                    <strong>{{ (int) ($retTel['due_for_refill_count'] ?? 0) }} clients</strong>
-                </div>
-                <div class="friday-subrow">
-                    <span>Packages Ending Soon</span>
-                    <strong>{{ (int) ($retTel['package_renewal_count'] ?? 0) }} clients</strong>
-                </div>
-                <div class="friday-subrow">
-                    <span>Missing VIPs (45d+ Away)</span>
-                    <strong style="color: #ffd180;">{{ (int) ($retTel['bleeding_vips_count'] ?? 0) }} VIPs</strong>
-                </div>
-            </div>
-        </div>
-
-        {{-- Card 4: Staff & Marketing KPIs --}}
-        <div class="col-12 col-md-6 col-xl-3">
-            <div class="friday-telemetry-card">
-                <div class="friday-card-label">
-                    <span>📈 Staff & Marketing KPIs</span>
-                    <span class="badge bg-label-primary" style="font-size: 10px;">1,700 QAR Target</span>
-                </div>
-                <div class="friday-metric-big mb-2">
-                    {{ number_format((float) ($mktTel['attributed_ad_revenue_qar'] ?? 0), 0) }} QAR <small style="font-size: 11px; color: #cbb8b0;">Ad Revenue</small>
-                </div>
-                <div class="friday-subrow">
-                    <span>Prorated Upsell Benchmark</span>
-                    <strong>{{ number_format((float) ($staffTel['prorated_target_qar'] ?? 0), 0) }} QAR (85% Floor)</strong>
-                </div>
-                <div class="friday-subrow">
-                    <span>Monthly Ad Conv. (20% Floor)</span>
-                    <strong>{{ number_format((float) ($mktTel['ad_conversion_pct'] ?? 0), 1) }}% ({{ (int) ($mktTel['ad_leads_booked'] ?? 0) }}/{{ (int) ($mktTel['ad_leads_total'] ?? 0) }})</strong>
-                </div>
-                <div class="friday-subrow">
-                    <span>Weekly Content (4 Reels + 7 Stories)</span>
-                    <strong>{{ (int) ($mktTel['reels_posted'] ?? 0) }}/4 R · {{ (int) ($mktTel['stories_posted'] ?? 0) }}/7 S</strong>
-                </div>
-            </div>
+        <div id="fridayStateLabel" class="friday-status-label">
+            TAP ORB TO START LIVE CONVERSATION
         </div>
     </div>
 
-    {{-- Center Interactive F.R.I.D.A.Y. Core & Conversation Console --}}
-    <div class="friday-console-card">
-        <div class="friday-reactor-wrap">
-            <canvas id="fridayVisualizer" class="friday-visualizer-canvas" width="240" height="240"></canvas>
-            <div id="fridayStateLabel" class="mt-2" style="font-size: 12px; color: #e79a91; font-weight: 600; letter-spacing: 0.05em;">
-                F.R.I.D.A.Y. CORE STANDBY · TAP MICROPHONE OR SELECT A BRIEFING CHIP
+    {{-- 3. Bottom Subtitle + Sleek Chat Bar --}}
+    <div class="friday-bottom-dock">
+        <div class="friday-subtitle-box" id="fridaySubtitleBox">
+            <div class="friday-user-echo" id="fridayUserEcho"></div>
+            <div class="friday-spoken-words" id="fridaySpokenWords">
+                Right then, Boss—tap the orb or start speaking whenever you're ready.
             </div>
         </div>
 
-        {{-- 6 One-Click Tactical Briefing Chips --}}
-        <div class="friday-chip-bar">
-            <button type="button" class="friday-chip" data-prompt="Give me the Morning Executive Brief across Old Airport and Wakrah.">
-                ☀️ Morning Executive Brief
-            </button>
-            <button type="button" class="friday-chip" data-prompt="Audit Old Airport vs Wakrah cash, card payments, and today's bookings.">
-                💰 Audit Old Airport vs Wakrah Cash
-            </button>
-            <button type="button" class="friday-chip" data-prompt="Who are today's Top Money Leads and how is our agent conversion rate performing against the 30% floor?">
-                🔥 Who Are Today's Top Money Leads?
-            </button>
-            <button type="button" class="friday-chip" data-prompt="Check the Retention Radar leaks across Due for Refill, Packages Ending, and Missing VIPs.">
-                🔄 Check Retention Radar Leaks
-            </button>
-            <button type="button" class="friday-chip" data-prompt="Show me the Staff Upsell Leaderboard against the 1,700 QAR monthly target and weekly evaluations.">
-                📈 Staff Upsell Leaderboard
-            </button>
-            <button type="button" class="friday-chip" data-prompt="Audit our Marketing & Ad ROAS, same-month Ad Lead conversion %, and weekly Reels/Stories compliance.">
-                🎯 Audit Marketing & Ad ROAS
-            </button>
-        </div>
-
-        {{-- Conversation Feed --}}
-        <div class="friday-chat-feed" id="fridayChatFeed">
-            <div class="friday-msg friday-msg-ai">
-                <div class="d-flex align-items-center justify-content-between mb-1">
-                    <strong style="color: #e79a91; font-size: 12px;">F.R.I.D.A.Y. · EXECUTIVE HUD</strong>
-                    <span style="font-size: 11px; color: #cbb8b0;">Read-Only Telemetry Online</span>
-                </div>
-                <div>
-                    Good day, Boss. Live telemetry is locked on <strong>Old Airport</strong> and <strong>Wakrah</strong>. Today's collected net cash is <strong>{{ number_format((float) ($telemetry['revenue']['today_total_net_qar'] ?? 0), 0) }} QAR</strong> ({{ number_format((float) ($telemetry['revenue']['mtd_total_net_qar'] ?? 0), 0) }} QAR MTD), with <strong>{{ (int) ($leadsTel['overdue_count'] ?? 0) }} overdue follow-ups</strong> and <strong>{{ (int) ($retTel['total_actionable_clients'] ?? 0) }} retention clients</strong> ready for outreach. Tap the microphone or pick a tactical chip below.
-                </div>
-                <div>
-                    <span class="friday-tool-trace">🔍 Inspected: Revenue & Bookings · Leads & Money Brief · Retention Radar</span>
-                </div>
-            </div>
-        </div>
-
-        {{-- Push-to-Talk Microphone + Text Input Bar --}}
-        <form id="fridayAskForm" class="d-flex align-items-center gap-2">
+        <form id="fridayAskForm" class="friday-input-bar">
             @csrf
-            <button type="button" id="fridayMicBtn" class="friday-mic-btn" title="Tap to Speak to F.R.I.D.A.Y.">
+            <button type="button" id="fridayMicBtn" class="friday-mic-btn" title="Toggle Live Voice">
                 <i class="bx bx-microphone"></i>
             </button>
             <input
                 type="text"
                 id="fridayPromptInput"
-                class="form-control"
-                placeholder="Ask F.R.I.D.A.Y. anything about Old Airport, Wakrah, Leads, Retention, Staff Upsells, or Ads..."
-                style="background: rgba(15, 11, 10, 0.9); border: 1px solid rgba(217, 143, 131, 0.35); color: #f4eae6; border-radius: 999px; padding: 11px 18px;"
+                class="friday-text-input"
+                placeholder="Ask F.R.I.D.A.Y. anything..."
+                autocomplete="off"
             />
-            <button type="submit" id="fridaySendBtn" class="btn" style="background: linear-gradient(135deg, #d98f83, #c9a66b); color: #191413; font-weight: 700; border-radius: 999px; padding: 10px 22px;">
-                Ask F.R.I.D.A.Y.
+            <button type="submit" id="fridaySendBtn" class="friday-send-btn">
+                Send
             </button>
         </form>
     </div>
@@ -479,25 +293,35 @@
     const csrfToken = @json(csrf_token());
 
     let currentMode = 'fast';
-    let voiceEnabled = true;
+    let liveConversationActive = false;
+    let currentState = 'idle'; // 'idle' | 'listening' | 'thinking' | 'speaking'
     let conversationHistory = [];
-    let isSpeaking = false;
-    let isRecording = false;
+
     let recognition = null;
+    let mediaRecorder = null;
+    let mediaChunks = [];
+    let silenceTimer = null;
+    let pendingTranscript = '';
+
+    let currentAudio = null;
+    let audioCtx = null;
+    let analyser = null;
+    let frequencyData = null;
+    let wordRevealTimer = null;
 
     const modeFastBtn = document.getElementById('modeFastBtn');
     const modeDeepBtn = document.getElementById('modeDeepBtn');
-    const voiceSelect = document.getElementById('voiceProfileSelect');
-    const toggleMuteBtn = document.getElementById('toggleMuteBtn');
-    const chatFeed = document.getElementById('fridayChatFeed');
-    const askForm = document.getElementById('fridayAskForm');
-    const promptInput = document.getElementById('fridayPromptInput');
+    const orbBtn = document.getElementById('fridayOrbBtn');
     const micBtn = document.getElementById('fridayMicBtn');
     const stateLabel = document.getElementById('fridayStateLabel');
+    const userEchoEl = document.getElementById('fridayUserEcho');
+    const spokenWordsEl = document.getElementById('fridaySpokenWords');
+    const askForm = document.getElementById('fridayAskForm');
+    const promptInput = document.getElementById('fridayPromptInput');
     const canvas = document.getElementById('fridayVisualizer');
     const ctx = canvas.getContext('2d');
 
-    // Mode Gear Toggle
+    // 1. Quick vs Deep Thinking Toggle
     [modeFastBtn, modeDeepBtn].forEach(btn => {
         btn.addEventListener('click', () => {
             currentMode = btn.dataset.mode;
@@ -506,160 +330,271 @@
         });
     });
 
-    // Mute Toggle
-    toggleMuteBtn.addEventListener('click', () => {
-        voiceEnabled = !voiceEnabled;
-        toggleMuteBtn.textContent = voiceEnabled ? '🔊 Voice Output: ON' : '🔇 Voice Output: MUTED';
-        if (!voiceEnabled && window.speechSynthesis) {
-            window.speechSynthesis.cancel();
-        }
-    });
+    function setHudState(state) {
+        currentState = state;
+        orbBtn.classList.remove('state-listening', 'state-thinking', 'state-speaking');
+        micBtn.classList.toggle('active', liveConversationActive || state === 'listening');
 
-    // Arc-Reactor & Waveform Visualizer
+        if (state === 'listening') {
+            orbBtn.classList.add('state-listening');
+            stateLabel.textContent = 'LISTENING...';
+        } else if (state === 'thinking') {
+            orbBtn.classList.add('state-thinking');
+            stateLabel.textContent = 'THINKING...';
+        } else if (state === 'speaking') {
+            orbBtn.classList.add('state-speaking');
+            stateLabel.textContent = 'F.R.I.D.A.Y. SPEAKING (SPEAK OR TAP TO INTERRUPT)';
+        } else {
+            stateLabel.textContent = liveConversationActive
+                ? 'LISTENING...'
+                : 'TAP ORB TO START LIVE CONVERSATION';
+        }
+    }
+
+    // 2. Arc-Reactor Orb Visualizer driven by WebAudio AnalyserNode
     let phase = 0;
-    function renderReactor() {
+    function renderOrb() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const cx = canvas.width / 2;
         const cy = canvas.height / 2;
-        const baseRadius = 64;
-        const activeAmp = isSpeaking ? 16 : (isRecording ? 12 : 3);
 
-        // Outer ring
+        let energy = 0;
+        if (analyser && frequencyData && currentState === 'speaking') {
+            analyser.getByteFrequencyData(frequencyData);
+            let sum = 0;
+            for (let i = 0; i < 40; i++) sum += frequencyData[i];
+            energy = (sum / 40) / 255;
+        } else if (currentState === 'speaking') {
+            energy = 0.45 + Math.sin(phase * 2.3) * 0.2;
+        } else if (currentState === 'listening') {
+            energy = 0.22 + Math.sin(phase * 1.4) * 0.1;
+        } else if (currentState === 'thinking') {
+            energy = 0.30 + Math.cos(phase * 3.0) * 0.15;
+        } else {
+            energy = 0.06;
+        }
+
+        const baseRadius = 74;
+        const amp = 4 + energy * 28;
+
+        // Outer tactical ring
         ctx.beginPath();
-        ctx.strokeStyle = isRecording ? 'rgba(231, 76, 60, 0.75)' : 'rgba(201, 166, 107, 0.45)';
-        ctx.lineWidth = 2;
-        ctx.arc(cx, cy, 92, 0, Math.PI * 2);
+        ctx.strokeStyle = currentState === 'listening'
+            ? 'rgba(126, 242, 166, 0.55)'
+            : 'rgba(201, 166, 107, 0.42)';
+        ctx.lineWidth = 1.6;
+        ctx.arc(cx, cy, 114, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Dynamic waveform ring
+        // Reactive voice waveform ring
         ctx.beginPath();
-        for (let angle = 0; angle < Math.PI * 2; angle += 0.08) {
-            const wave = Math.sin(angle * 8 + phase) * activeAmp * Math.cos(angle * 3 - phase * 0.7);
+        for (let a = 0; a < Math.PI * 2; a += 0.06) {
+            const wave = Math.sin(a * 7 + phase) * amp * Math.cos(a * 3 - phase * 0.8);
             const r = baseRadius + wave;
-            const x = cx + Math.cos(angle) * r;
-            const y = cy + Math.sin(angle) * r;
-            if (angle === 0) ctx.moveTo(x, y);
+            const x = cx + Math.cos(a) * r;
+            const y = cy + Math.sin(a) * r;
+            if (a === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.strokeStyle = isSpeaking ? '#e79a91' : (isRecording ? '#ff7979' : 'rgba(217, 143, 131, 0.75)');
-        ctx.lineWidth = isSpeaking ? 3 : 2;
+        ctx.strokeStyle = currentState === 'listening'
+            ? '#7ef2a6'
+            : (currentState === 'thinking' ? '#e6c891' : '#e79a91');
+        ctx.lineWidth = currentState === 'speaking' ? 3.2 : 2.2;
         ctx.stroke();
 
         // Inner core glow
-        const grad = ctx.createRadialGradient(cx, cy, 6, cx, cy, 44);
-        grad.addColorStop(0, isSpeaking ? 'rgba(231, 154, 145, 0.85)' : 'rgba(201, 166, 107, 0.45)');
-        grad.addColorStop(1, 'rgba(25, 20, 19, 0.05)');
+        const coreRadius = 38 + energy * 18;
+        const grad = ctx.createRadialGradient(cx, cy, 4, cx, cy, coreRadius);
+        grad.addColorStop(0, currentState === 'listening'
+            ? 'rgba(126, 242, 166, 0.85)'
+            : 'rgba(231, 154, 145, 0.90)');
+        grad.addColorStop(1, 'rgba(20, 14, 13, 0.04)');
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(cx, cy, 44, 0, Math.PI * 2);
+        ctx.arc(cx, cy, coreRadius, 0, Math.PI * 2);
         ctx.fill();
 
-        phase += isSpeaking ? 0.16 : 0.04;
-        requestAnimationFrame(renderReactor);
+        phase += currentState === 'speaking' ? 0.18 : (currentState === 'thinking' ? 0.14 : 0.05);
+        requestAnimationFrame(renderOrb);
     }
-    renderReactor();
+    renderOrb();
 
-    // Play Audio (Gemini WAV w/ WebAudio subtle metallic EQ filter OR Web Speech API fallback)
+    // 3. Stop / Barge-In helper
+    function interruptFridaySpeech() {
+        if (wordRevealTimer) {
+            clearInterval(wordRevealTimer);
+            wordRevealTimer = null;
+        }
+        if (currentAudio) {
+            try {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+            } catch (e) {}
+            currentAudio = null;
+        }
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+    }
+
+    // 4. Progressive Subtitle Reveal + Voice Playback (Gemini WAV + Irish/British WebSpeech fallback)
+    function revealSubtitleWords(fullText) {
+        if (wordRevealTimer) {
+            clearInterval(wordRevealTimer);
+            wordRevealTimer = null;
+        }
+        const words = (fullText || '').trim().split(/\s+/).filter(Boolean);
+        if (words.length <= 4) {
+            spokenWordsEl.textContent = fullText;
+            return;
+        }
+        let idx = 3;
+        spokenWordsEl.textContent = words.slice(0, idx).join(' ');
+        wordRevealTimer = setInterval(() => {
+            idx += 2;
+            if (idx >= words.length) {
+                spokenWordsEl.textContent = fullText;
+                clearInterval(wordRevealTimer);
+                wordRevealTimer = null;
+            } else {
+                spokenWordsEl.textContent = words.slice(0, idx).join(' ');
+            }
+        }, 140);
+    }
+
+    function onSpeechFinished() {
+        if (wordRevealTimer) {
+            clearInterval(wordRevealTimer);
+            wordRevealTimer = null;
+        }
+        if (liveConversationActive) {
+            startContinuousListening();
+        } else {
+            setHudState('idle');
+        }
+    }
+
     function playFridayVoice(data) {
-        if (!voiceEnabled) return;
+        interruptFridaySpeech();
+        const displayReply = data.spoken_text || data.reply || '';
+        setHudState('speaking');
+        revealSubtitleWords(displayReply);
 
         if (data.audio_base64 && data.audio_mime) {
             try {
                 const audio = new Audio('data:' + data.audio_mime + ';base64,' + data.audio_base64);
-                const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                if (AudioCtx) {
-                    const audioCtx = new AudioCtx();
+                currentAudio = audio;
+
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    if (!audioCtx) audioCtx = new AudioContextClass();
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+
                     const source = audioCtx.createMediaElementSource(audio);
-                    const filter = audioCtx.createBiquadFilter();
-                    filter.type = 'peaking';
-                    filter.frequency.value = 2400;
-                    filter.Q.value = 1.4;
-                    filter.gain.value = (data.voice_meta && data.voice_meta.metallic_eq) ? 3.5 : 1.0;
-                    source.connect(filter);
-                    filter.connect(audioCtx.destination);
+                    const eqFilter = audioCtx.createBiquadFilter();
+                    eqFilter.type = 'peaking';
+                    eqFilter.frequency.value = 2500;
+                    eqFilter.Q.value = 1.2;
+                    eqFilter.gain.value = 2.5;
+
+                    analyser = audioCtx.createAnalyser();
+                    analyser.fftSize = 128;
+                    frequencyData = new Uint8Array(analyser.frequencyBinCount);
+
+                    source.connect(eqFilter);
+                    eqFilter.connect(analyser);
+                    analyser.connect(audioCtx.destination);
                 }
-                isSpeaking = true;
-                stateLabel.textContent = 'F.R.I.D.A.Y. SPEAKING · LIVE VOICE STREAM';
+
                 audio.onended = () => {
-                    isSpeaking = false;
-                    stateLabel.textContent = 'F.R.I.D.A.Y. CORE STANDBY';
+                    currentAudio = null;
+                    onSpeechFinished();
                 };
-                audio.play().catch(() => speakWithWebSpeech(data.spoken_text, data.voice_meta));
+                audio.onerror = () => {
+                    currentAudio = null;
+                    speakWithIrishBritishFallback(displayReply);
+                };
+
+                audio.play().catch(() => {
+                    currentAudio = null;
+                    speakWithIrishBritishFallback(displayReply);
+                });
                 return;
             } catch (e) {
-                // Fall through to Web Speech API
+                currentAudio = null;
             }
         }
 
-        speakWithWebSpeech(data.spoken_text || data.reply, data.voice_meta);
+        speakWithIrishBritishFallback(displayReply);
     }
 
-    function speakWithWebSpeech(text, voiceMeta) {
-        if (!voiceEnabled || !('speechSynthesis' in window) || !text) return;
+    function pickIrishOrBritishFemaleVoice() {
+        if (!('speechSynthesis' in window)) return null;
+        const voices = window.speechSynthesis.getVoices() || [];
+        if (!voices.length) return null;
+
+        // 1. Prefer Irish English (en-IE: Moira, Emily, Orla)
+        const irish = voices.find(v => v.lang && v.lang.toLowerCase().startsWith('en-ie'));
+        if (irish) return irish;
+
+        // 2. Prefer UK English Female voices (Libby, Sonia, Hazel, Martha, Google UK English Female, Serena)
+        const ukFemaleNames = ['libby', 'sonia', 'hazel', 'martha', 'female', 'serena', 'kate', 'stephanie'];
+        const ukFemale = voices.find(v =>
+            v.lang && v.lang.toLowerCase().startsWith('en-gb') &&
+            ukFemaleNames.some(n => v.name.toLowerCase().includes(n))
+        );
+        if (ukFemale) return ukFemale;
+
+        // 3. Any en-GB voice
+        const ukAny = voices.find(v => v.lang && v.lang.toLowerCase().startsWith('en-gb'));
+        if (ukAny) return ukAny;
+
+        return voices[0];
+    }
+
+    function speakWithIrishBritishFallback(text) {
+        if (!('speechSynthesis' in window) || !text) {
+            onSpeechFinished();
+            return;
+        }
         window.speechSynthesis.cancel();
         const utter = new SpeechSynthesisUtterance(text);
-        const voices = window.speechSynthesis.getVoices();
-        const prefs = (voiceMeta && voiceMeta.lang_pref) ? voiceMeta.lang_pref : ['en-IE', 'en-GB', 'en-US'];
-
-        for (const pref of prefs) {
-            const match = voices.find(v => v.lang && v.lang.toLowerCase().startsWith(pref.toLowerCase()));
-            if (match) {
-                utter.voice = match;
-                break;
-            }
+        const preferredVoice = pickIrishOrBritishFemaleVoice();
+        if (preferredVoice) {
+            utter.voice = preferredVoice;
+            utter.lang = preferredVoice.lang;
+        } else {
+            utter.lang = 'en-IE';
         }
-        utter.rate = (voiceMeta && voiceMeta.rate) ? voiceMeta.rate : 1.04;
-        utter.pitch = (voiceMeta && voiceMeta.pitch) ? voiceMeta.pitch : 1.05;
-        utter.onstart = () => {
-            isSpeaking = true;
-            stateLabel.textContent = 'F.R.I.D.A.Y. SPEAKING · TACTICAL HUD AUDIO';
-        };
-        utter.onend = () => {
-            isSpeaking = false;
-            stateLabel.textContent = 'F.R.I.D.A.Y. CORE STANDBY';
-        };
+        utter.rate = 1.08;
+        utter.pitch = 1.05;
+
+        utter.onend = () => onSpeechFinished();
+        utter.onerror = () => onSpeechFinished();
         window.speechSynthesis.speak(utter);
     }
 
-    function appendMessage(role, text, toolBadges = [], modeUsed = 'fast') {
-        const div = document.createElement('div');
-        div.className = 'friday-msg ' + (role === 'user' ? 'friday-msg-user' : 'friday-msg-ai');
-
-        if (role === 'user') {
-            div.textContent = text;
-        } else {
-            const header = document.createElement('div');
-            header.className = 'd-flex align-items-center justify-content-between mb-1';
-            header.innerHTML = `<strong style="color:#e79a91;font-size:12px;">F.R.I.D.A.Y. · ${modeUsed === 'deep' ? 'DEEP CONSULTANT' : 'FAST SECRETARY'}</strong>`;
-            div.appendChild(header);
-
-            const body = document.createElement('div');
-            body.style.whiteSpace = 'pre-wrap';
-            body.textContent = text;
-            div.appendChild(body);
-
-            if (Array.isArray(toolBadges) && toolBadges.length > 0) {
-                const traceWrap = document.createElement('div');
-                const labels = toolBadges.map(b => b.label || b.name).join(' · ');
-                traceWrap.innerHTML = `<span class="friday-tool-trace">🔍 Inspected: ${labels}</span>`;
-                div.appendChild(traceWrap);
-            }
-        }
-
-        chatFeed.appendChild(div);
-        chatFeed.scrollTop = chatFeed.scrollHeight;
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = () => pickIrishOrBritishFemaleVoice();
     }
 
-    async function sendCommand(promptText) {
+    // 5. Send Spoken or Typed Turn to F.R.I.D.A.Y.
+    async function dispatchToFriday(promptText, audioBase64 = null, audioMime = null) {
         const cleanPrompt = (promptText || '').trim();
-        if (!cleanPrompt) return;
+        if (!cleanPrompt && !audioBase64) return;
 
-        appendMessage('user', cleanPrompt);
-        promptInput.value = '';
-        stateLabel.textContent = currentMode === 'deep'
-            ? 'F.R.I.D.A.Y. DEEP THINKING · AUDITING SALON TELEMETRY...'
-            : 'F.R.I.D.A.Y. SCANNING LIVE CRM TELEMETRY...';
+        interruptFridaySpeech();
+        stopListeningInstance();
+
+        if (cleanPrompt) {
+            userEchoEl.textContent = 'You: "' + cleanPrompt + '"';
+        } else {
+            userEchoEl.textContent = 'You: [Voice Command]';
+        }
+
+        setHudState('thinking');
+        spokenWordsEl.textContent = 'Scanning live salon telemetry...';
 
         try {
             const response = await fetch(askUrl, {
@@ -672,81 +607,174 @@
                 body: JSON.stringify({
                     prompt: cleanPrompt,
                     mode: currentMode,
-                    voice_profile: voiceSelect.value,
-                    history: conversationHistory.slice(-6)
+                    voice_profile: 'friday_tactical',
+                    history: conversationHistory.slice(-6),
+                    audio_base64: audioBase64,
+                    audio_mime: audioMime
                 })
             });
 
             const data = await response.json();
             if (response.ok && data.reply) {
-                conversationHistory.push({ role: 'user', content: cleanPrompt });
+                if (cleanPrompt) {
+                    conversationHistory.push({ role: 'user', content: cleanPrompt });
+                }
                 conversationHistory.push({ role: 'assistant', content: data.reply });
-                appendMessage('assistant', data.reply, data.tool_badges || [], data.mode || currentMode);
                 playFridayVoice(data);
             } else {
-                appendMessage('assistant', data.message || 'Boss, I hit a temporary link interruption. Please try again.');
+                spokenWordsEl.textContent = data.message || "Right then, Boss—I hit a brief comms glitch. Say that again for me?";
+                onSpeechFinished();
             }
         } catch (err) {
-            appendMessage('assistant', 'Boss, network telemetry timed out. Please retry your command.');
-        } finally {
-            if (!isSpeaking) {
-                stateLabel.textContent = 'F.R.I.D.A.Y. CORE STANDBY';
-            }
+            spokenWordsEl.textContent = "Boss, the network link dropped for a second. Give me that command again.";
+            onSpeechFinished();
         }
     }
 
-    askForm.addEventListener('submit', function (e) {
-        e.preventDefault();
-        sendCommand(promptInput.value);
-    });
-
-    document.querySelectorAll('.friday-chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-            sendCommand(chip.dataset.prompt);
-        });
-    });
-
-    // Microphone SpeechRecognition / Push-to-Talk
+    // 6. Continuous Hands-Free SpeechRecognition + Barge-In
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRec) {
+
+    function initSpeechRecognition() {
+        if (!SpeechRec || recognition) return;
         recognition = new SpeechRec();
         recognition.lang = 'en-US';
-        recognition.interimResults = false;
+        recognition.continuous = true;
+        recognition.interimResults = true;
         recognition.maxAlternatives = 1;
 
         recognition.onstart = () => {
-            isRecording = true;
-            micBtn.classList.add('recording');
-            stateLabel.textContent = 'LISTENING TO BOSS · SPEAK YOUR COMMAND...';
-        };
-
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            if (transcript) {
-                sendCommand(transcript);
+            if (currentState !== 'speaking' && currentState !== 'thinking') {
+                setHudState('listening');
             }
         };
 
+        recognition.onresult = (event) => {
+            let interim = '';
+            let finalChunk = '';
+
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalChunk += transcript + ' ';
+                } else {
+                    interim += transcript;
+                }
+            }
+
+            // Barge-in: if Boss speaks while F.R.I.D.A.Y. is talking, stop her immediately
+            if ((interim.trim().length > 2 || finalChunk.trim().length > 0) && currentState === 'speaking') {
+                interruptFridaySpeech();
+                setHudState('listening');
+            }
+
+            const combined = (pendingTranscript + ' ' + finalChunk + ' ' + interim).trim();
+            if (combined) {
+                userEchoEl.textContent = 'You: "' + combined + '..."';
+            }
+
+            if (finalChunk.trim()) {
+                pendingTranscript = (pendingTranscript + ' ' + finalChunk).trim();
+            }
+
+            if (silenceTimer) clearTimeout(silenceTimer);
+            silenceTimer = setTimeout(() => {
+                const toSend = (pendingTranscript || combined).trim();
+                pendingTranscript = '';
+                if (toSend.length >= 2 && currentState !== 'thinking') {
+                    dispatchToFriday(toSend);
+                }
+            }, finalChunk.trim() ? 380 : 950);
+        };
+
+        recognition.onerror = () => {};
+
         recognition.onend = () => {
-            isRecording = false;
-            micBtn.classList.remove('recording');
-            if (!isSpeaking) {
-                stateLabel.textContent = 'F.R.I.D.A.Y. CORE STANDBY';
+            if (liveConversationActive && currentState === 'listening') {
+                try { recognition.start(); } catch (e) {}
             }
         };
     }
 
-    micBtn.addEventListener('click', () => {
-        if (!recognition) {
-            promptInput.focus();
-            stateLabel.textContent = 'VOICE MIC UNSUPPORTED IN THIS BROWSER · TYPE BELOW';
+    function startContinuousListening() {
+        if (SpeechRec) {
+            initSpeechRecognition();
+            pendingTranscript = '';
+            setHudState('listening');
+            try {
+                recognition.start();
+            } catch (e) {}
             return;
         }
-        if (isRecording) {
-            recognition.stop();
-        } else {
-            recognition.start();
+
+        // MediaRecorder fallback if browser lacks Web SpeechRecognition
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                mediaChunks = [];
+                mediaRecorder = new MediaRecorder(stream);
+                setHudState('listening');
+                mediaRecorder.ondataavailable = e => {
+                    if (e.data.size > 0) mediaChunks.push(e.data);
+                };
+                mediaRecorder.onstop = () => {
+                    stream.getTracks().forEach(t => t.stop());
+                    const blob = new Blob(mediaChunks, { type: 'audio/webm' });
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        const base64 = (reader.result || '').toString().split(',')[1];
+                        if (base64) dispatchToFriday('', base64, 'audio/webm');
+                    };
+                    reader.readAsDataURL(blob);
+                };
+                mediaRecorder.start();
+            }).catch(() => {
+                liveConversationActive = false;
+                setHudState('idle');
+                promptInput.focus();
+            });
         }
+    }
+
+    function stopListeningInstance() {
+        if (silenceTimer) {
+            clearTimeout(silenceTimer);
+            silenceTimer = null;
+        }
+        if (recognition) {
+            try { recognition.stop(); } catch (e) {}
+        }
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            try { mediaRecorder.stop(); } catch (e) {}
+        }
+    }
+
+    function toggleLiveConversation() {
+        // If F.R.I.D.A.Y. is currently speaking, tapping the orb barges in and switches straight to listening
+        if (currentState === 'speaking') {
+            interruptFridaySpeech();
+            liveConversationActive = true;
+            startContinuousListening();
+            return;
+        }
+
+        liveConversationActive = !liveConversationActive;
+        if (liveConversationActive) {
+            startContinuousListening();
+        } else {
+            interruptFridaySpeech();
+            stopListeningInstance();
+            setHudState('idle');
+        }
+    }
+
+    orbBtn.addEventListener('click', toggleLiveConversation);
+    micBtn.addEventListener('click', toggleLiveConversation);
+
+    askForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const text = promptInput.value.trim();
+        if (!text) return;
+        promptInput.value = '';
+        dispatchToFriday(text);
     });
 })();
 </script>

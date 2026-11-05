@@ -33,26 +33,26 @@ class LaleenCommandCenterService
     public const VOICE_PROFILES = [
         'friday_tactical' => [
             'label' => 'F.R.I.D.A.Y. Tactical (Irish/British HUD)',
-            'gemini_voice' => 'Kore',
+            'gemini_voice' => 'Aoede',
             'lang_pref' => ['en-IE', 'en-GB', 'en-US'],
-            'rate' => 1.04,
+            'rate' => 1.08,
             'pitch' => 1.05,
             'metallic_eq' => true,
         ],
         'kore_coo' => [
             'label' => 'Kore (Firm COO)',
             'gemini_voice' => 'Kore',
-            'lang_pref' => ['en-GB', 'en-US'],
-            'rate' => 1.07,
-            'pitch' => 0.96,
+            'lang_pref' => ['en-IE', 'en-GB', 'en-US'],
+            'rate' => 1.08,
+            'pitch' => 1.02,
             'metallic_eq' => false,
         ],
         'aoede_advisor' => [
             'label' => 'Aoede (Warm Advisor)',
             'gemini_voice' => 'Aoede',
-            'lang_pref' => ['en-GB', 'en-US'],
-            'rate' => 1.00,
-            'pitch' => 1.06,
+            'lang_pref' => ['en-IE', 'en-GB', 'en-US'],
+            'rate' => 1.06,
+            'pitch' => 1.05,
             'metallic_eq' => false,
         ],
     ];
@@ -708,62 +708,67 @@ class LaleenCommandCenterService
     public function synthesizeSpeech(string $spokenText, string $voiceProfile = 'friday_tactical'): array
     {
         $profile = self::VOICE_PROFILES[$voiceProfile] ?? self::VOICE_PROFILES['friday_tactical'];
-        $voiceName = $profile['gemini_voice'];
+        $voiceName = $profile['gemini_voice'] ?? 'Aoede';
         $apiKey = (string) (config('services.gemini.api_key') ?: config('services.gemini.key'));
-        $ttsModel = (string) config('services.gemini.tts_model', 'gemini-2.5-flash-preview-tts');
+        $primaryTtsModel = (string) config('services.gemini.tts_model', 'gemini-2.5-flash-preview-tts');
+        $candidateModels = array_values(array_unique(array_filter([$primaryTtsModel, 'gemini-2.0-flash'])));
 
         if ($apiKey !== '' && trim($spokenText) !== '') {
-            try {
-                $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$ttsModel}:generateContent?key={$apiKey}";
-                $response = Http::timeout(12)->post($endpoint, [
-                    'contents' => [
-                        [
-                            'parts' => [
-                                ['text' => $spokenText],
-                            ],
-                        ],
-                    ],
-                    'generationConfig' => [
-                        'responseModalities' => ['AUDIO'],
-                        'speechConfig' => [
-                            'voiceConfig' => [
-                                'prebuiltVoiceConfig' => [
-                                    'voiceName' => $voiceName,
+            $styledTtsPrompt = 'Read the following text aloud in a brisk, warm, crisp Irish-British female AI assistant voice like FRIDAY from Iron Man—natural, confident, slightly fast-paced, and conversational, speaking only the exact words after the colon: ' . $spokenText;
+
+            foreach ($candidateModels as $ttsModel) {
+                try {
+                    $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$ttsModel}:generateContent?key={$apiKey}";
+                    $response = Http::timeout(14)->post($endpoint, [
+                        'contents' => [
+                            [
+                                'parts' => [
+                                    ['text' => $styledTtsPrompt],
                                 ],
                             ],
                         ],
-                    ],
-                ]);
+                        'generationConfig' => [
+                            'responseModalities' => ['AUDIO'],
+                            'speechConfig' => [
+                                'voiceConfig' => [
+                                    'prebuiltVoiceConfig' => [
+                                        'voiceName' => $voiceName,
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ]);
 
-                if ($response->successful()) {
-                    $inlineData = data_get($response->json(), 'candidates.0.content.parts.0.inlineData');
-                    $rawBase64 = (string) ($inlineData['data'] ?? '');
-                    $mimeType = (string) ($inlineData['mimeType'] ?? 'audio/wav');
+                    if ($response->successful()) {
+                        $inlineData = data_get($response->json(), 'candidates.0.content.parts.0.inlineData');
+                        $rawBase64 = (string) ($inlineData['data'] ?? '');
+                        $mimeType = (string) ($inlineData['mimeType'] ?? 'audio/wav');
 
-                    if ($rawBase64 !== '') {
-                        if (str_contains(strtolower($mimeType), 'l16') || str_contains(strtolower($mimeType), 'pcm')) {
-                            $pcmBytes = base64_decode($rawBase64, true);
-                            if ($pcmBytes !== false) {
-                                $wavBytes = $this->wrapPcm16InWavHeader($pcmBytes, 24000, 1, 16);
-                                return [
-                                    'audio_base64' => base64_encode($wavBytes),
-                                    'audio_mime' => 'audio/wav',
-                                    'tts_source' => 'gemini_tts',
-                                    'voice_name' => $voiceName,
-                                ];
+                        if ($rawBase64 !== '') {
+                            if (str_contains(strtolower($mimeType), 'l16') || str_contains(strtolower($mimeType), 'pcm')) {
+                                $pcmBytes = base64_decode($rawBase64, true);
+                                if ($pcmBytes !== false) {
+                                    $wavBytes = $this->wrapPcm16InWavHeader($pcmBytes, 24000, 1, 16);
+                                    return [
+                                        'audio_base64' => base64_encode($wavBytes),
+                                        'audio_mime' => 'audio/wav',
+                                        'tts_source' => 'gemini_tts',
+                                        'voice_name' => $voiceName,
+                                    ];
+                                }
                             }
-                        }
 
-                        return [
-                            'audio_base64' => $rawBase64,
-                            'audio_mime' => $mimeType ?: 'audio/wav',
-                            'tts_source' => 'gemini_tts',
-                            'voice_name' => $voiceName,
-                        ];
+                            return [
+                                'audio_base64' => $rawBase64,
+                                'audio_mime' => $mimeType ?: 'audio/wav',
+                                'tts_source' => 'gemini_tts',
+                                'voice_name' => $voiceName,
+                            ];
+                        }
                     }
+                } catch (\Throwable $e) {
+                    Log::info("F.R.I.D.A.Y. Gemini TTS attempt ({$ttsModel}) fell back.", ['message' => $e->getMessage()]);
                 }
-            } catch (\Throwable $e) {
-                Log::info('F.R.I.D.A.Y. Gemini TTS fallback to WebSpeech HUD.', ['message' => $e->getMessage()]);
             }
         }
 
@@ -812,20 +817,20 @@ class LaleenCommandCenterService
         $telemetryJson = json_encode($telemetry, JSON_UNESCAPED_UNICODE);
         $preloadedJson = json_encode($preloadedToolContext, JSON_UNESCAPED_UNICODE);
         $depthInstruction = $mode === 'deep'
-            ? 'DEEP CONSULTANT MODE: Provide a sharp executive diagnosis with exact QAR math, root-cause bottleneck analysis, and a 3-step tactical action plan.'
-            : 'FAST SECRETARY MODE: Keep your response crisp, punchy, and vocal-ready (2 to 4 sentences max) with exact QAR numbers and immediate next moves.';
+            ? 'DEEP THINKING MODE: Give a sharp, spoken-style executive diagnosis (2 to 4 crisp spoken sentences max unless Boss explicitly asks for a full breakdown) with exact QAR math, root-cause bottleneck insight, and the #1 immediate move.'
+            : 'QUICK CONVERSATION MODE: You are in a live, real-time voice conversation with the Boss. Keep your reply to 1 to 3 short, natural spoken sentences max.';
 
         return <<<PROMPT
-You are F.R.I.D.A.Y., the read-only Executive AI Voice Secretary and Business Consultant for Laleen Beauty Salon in Qatar.
-Your persona is a 3-Way Hybrid Brain:
-- 50% F.R.I.D.A.Y. (Tony Stark's Tactical AI): Crisp, warm Irish/British cadence, hyper-competent, zero fluff, always addresses the owner as "Boss".
-- 35% Alex Hormozi ($100M Offers & Leads Math): Evaluate every metric through CAC, LTV, Speed-to-Lead, Conversion %, and Upsell math. Translate raw counts into exact QAR impact.
-- 15% Sheryl Sandberg (Elite COO): Ruthless on SOP compliance and Pass/Fail thresholds:
-  * Strictly 2 salon branches only: Old Airport and Wakrah (never reference home service).
-  * Lead Conversion Floor: >= 30% PASS.
-  * Ad Conversion Floor: >= 20% PASS.
-  * Stylist Monthly Upsell Target: 1,700 QAR/month prorated (>= 85% Green Floor).
-  * Weekly Content Target: 4 Reels + 7 Stories per week.
+You are F.R.I.D.A.Y., Tony Stark's tactical AI assistant, serving as the live, read-only Executive Voice Secretary and Business Consultant for Laleen Beauty Salon in Qatar.
+
+VOICE & CADENCE RULES (CRITICAL):
+- You are speaking aloud in a real-time back-and-forth voice call with the Boss.
+- NEVER output markdown bullet lists, numbered lists, asterisks, bold headers, or essay-style walls of text.
+- Speak in 1 to 3 crisp, natural conversational sentences using natural contractions ("You've got", "We're sitting at", "Right now, Boss", "That's") and warm Irish/Celtic phrasing ("Right then, Boss", "Grand", "Here's the picture", "Shall I pull up the names?").
+- Combine your 3-Way Hybrid Brain seamlessly into your spoken reply:
+  * 50% F.R.I.D.A.Y.: Warm, brisk Irish-tactical cadence, zero fluff, addresses the owner as "Boss".
+  * 35% Alex Hormozi: Translate raw counts into exact QAR impact, LTV, speed-to-lead, and upsell math.
+  * 15% Sheryl Sandberg (COO): Hold the line on our salon benchmarks (2 branches only: Old Airport and Wakrah; 30% lead conversion floor; 20% ad conversion floor; 1,700 QAR/month prorated stylist upsell target at >=85% green floor; 4 Reels + 7 Stories weekly content target).
   * Strictly READ-ONLY access: You never create, edit, or delete database records.
 
 {$depthInstruction}
@@ -1092,29 +1097,30 @@ PROMPT;
         $q = strtolower($prompt);
 
         if (str_contains($q, 'retention') || str_contains($q, 'leak') || str_contains($q, 'vip')) {
-            return "Boss, I've scanned the Retention Radar. Right now we have {$ret['due_for_refill_count']} clients Due for Refill, {$ret['package_renewal_count']} with Packages Ending, and {$ret['bleeding_vips_count']} Missing VIPs (45+ days away). Push the {$ret['total_actionable_clients']} actionable clients to the Leads queue today to lock in repeat LTV.";
+            return "Right then, Boss—we've got {$ret['due_for_refill_count']} clients due for a refill, {$ret['package_renewal_count']} with packages ending soon, and {$ret['bleeding_vips_count']} missing VIPs over 45 days away. That's {$ret['total_actionable_clients']} high-LTV clients ready for a call today—shall I read out the top names?";
         }
 
         if (str_contains($q, 'upsell') || str_contains($q, 'staff') || str_contains($q, 'leaderboard')) {
             $prorated = number_format((float) ($staff['prorated_target_qar'] ?? 0), 0);
             $topName = $staff['top_stylists'][0]['name'] ?? 'our lead stylist';
             $topAmt = number_format((float) ($staff['top_stylists'][0]['upsell'] ?? 0), 0);
-            return "Boss, our prorated stylist upsell benchmark today is {$prorated} QAR (against the 1,700 QAR monthly target at an 85% green floor). Top performer is {$topName} at {$topAmt} QAR MTD, with {$staff['open_complaints_count']} open complaints on the floor.";
+            return "Right now, Boss, our prorated stylist upsell benchmark sits at {$prorated} QAR against the 1,700 QAR monthly target. {$topName} is leading the floor at {$topAmt} QAR this month, and we've got {$staff['open_complaints_count']} open complaints.";
         }
 
         if (str_contains($q, 'marketing') || str_contains($q, 'ad') || str_contains($q, 'roas')) {
-            return "Boss, Marketing & Ads telemetry shows {$mkt['ad_leads_total']} Ad Leads this month with {$mkt['ad_conversion_pct']}% booked ({$mkt['ad_conversion_verdict']} against our 20% floor) and " . number_format((float) $mkt['attributed_ad_revenue_qar'], 0) . " QAR in verified same-month revenue. Weekly content stands at {$mkt['reels_posted']}/{$mkt['reels_target']} Reels and {$mkt['stories_posted']}/{$mkt['stories_target']} Stories ({$mkt['content_compliance_pct']}% compliance).";
+            return "Here's the marketing pulse, Boss: we've pulled in {$mkt['ad_leads_total']} ad leads this month at {$mkt['ad_conversion_pct']}% conversion, banking " . number_format((float) $mkt['attributed_ad_revenue_qar'], 0) . " QAR in verified revenue. Weekly content is sitting at {$mkt['reels_posted']} of {$mkt['reels_target']} Reels and {$mkt['stories_posted']} of {$mkt['stories_target']} Stories.";
         }
 
-        return "Boss, live telemetry is online across both branches. Today's net collected cash sits at {$oaToday} QAR in Old Airport and {$wkToday} QAR in Wakrah ({$mtdNet} QAR MTD). On the sales floor, we have {$leads['overdue_count']} overdue follow-ups and {$leads['due_today_count']} due today—calling your Top 3 priority leads right now unlocks ~{$topQar} QAR, while {$ret['total_actionable_clients']} retention clients are ready for refill outreach.";
+        return "Right then, Boss—we're sitting at {$oaToday} QAR today in Old Airport and {$wkToday} QAR in Wakrah, bringing us to {$mtdNet} QAR for the month. You've got {$leads['overdue_count']} overdue leads and {$leads['due_today_count']} due today, and calling the top three right now unlocks about {$topQar} QAR.";
     }
 
     /**
-     * Strip markdown formatting and emojis so spoken TTS and Web Speech API sound natural and crisp.
+     * Strip markdown formatting, bullet prefixes, and emojis so spoken TTS and Web Speech API sound natural and crisp.
      */
     private function cleanTextForSpeech(string $text): string
     {
-        $clean = preg_replace('/[*#`_~>]+/', '', $text);
+        $clean = preg_replace('/^[\s\-\*\d\.]+/m', '', $text);
+        $clean = preg_replace('/[*#`_~>]+/', '', (string) $clean);
         $clean = preg_replace('/[\x{1F300}-\x{1F9FF}\x{2600}-\x{27BF}]/u', '', (string) $clean);
         $clean = preg_replace('/\s+/', ' ', (string) $clean);
         return trim((string) $clean);

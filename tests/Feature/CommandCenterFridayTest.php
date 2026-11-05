@@ -75,13 +75,13 @@ class CommandCenterFridayTest extends TestCase
         $response = $this->actingAs($this->admin)->get(route('command-center.index'));
 
         $response->assertOk();
-        $response->assertSee('F.R.I.D.A.Y. Command Center');
-        $response->assertSee('F.R.I.D.A.Y. ONLINE · READ-ONLY EXECUTIVE ACCESS');
-        $response->assertSee('Fast Secretary (Flash)');
-        $response->assertSee('Deep Consultant (Argon Thinking)');
-        $response->assertSee('Old Airport (Today / MTD)');
-        $response->assertSee('Wakrah (Today / MTD)');
-        $response->assertSee('700 QAR');
+        $response->assertSee('F.R.I.D.A.Y.');
+        $response->assertSee('⚡ Quick');
+        $response->assertSee('🧠 Deep Thinking');
+        $response->assertSee('TAP ORB TO START LIVE CONVERSATION');
+        $response->assertSee('Ask F.R.I.D.A.Y. anything...');
+        $response->assertDontSee('TODAY & MTD CASH');
+        $response->assertDontSee('Morning Executive Brief');
 
         $telResponse = $this->actingAs($this->admin)->getJson(route('command-center.telemetry'));
         $telResponse->assertOk()
