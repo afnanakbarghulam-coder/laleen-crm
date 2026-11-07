@@ -49,4 +49,14 @@ return [
         'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
     ],
 
+    'shopify' => [
+        'webhook_secret' => env('SHOPIFY_WEBHOOK_SECRET'),
+    ],
+
+    'whatsapp' => [
+        'webhook_token' => env('ECOMMERCE_WHATSAPP_WEBHOOK_TOKEN'),
+        'token' => env('WHATSAPP_CLOUD_API_TOKEN'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+    ],
+
 ];

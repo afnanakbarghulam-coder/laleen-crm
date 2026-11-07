@@ -30,22 +30,31 @@ class Partner extends Model
 
     /**
      * Preloads both per-partner transaction totals as SQL aggregates on the
-     * same query. Without this the total_injected / total_distributed
-     * accessors each fire their own SUM per partner on every serialization
-     * (N+1) — $appends means that happens on every page render.
+     * same query. Optionally scoped by currency ('PKR' or 'QAR').
      */
-    public function scopeWithTransactionTotals(Builder $query): Builder
+    public function scopeWithTransactionTotals(Builder $query, ?string $currency = null): Builder
     {
         return $query
-            ->withSum(['transactions as total_injected_sum' => fn ($q) => $q->where('type', 'injection')], 'amount')
-            ->withSum(['transactions as total_distributed_sum' => fn ($q) => $q->where('type', 'distribution')], 'amount');
+            ->withSum([
+                'transactions as total_injected_sum' => function ($q) use ($currency) {
+                    $q->where('type', 'injection');
+                    if ($currency !== null) {
+                        $q->where('currency', $currency);
+                    }
+                },
+            ], 'amount')
+            ->withSum([
+                'transactions as total_distributed_sum' => function ($q) use ($currency) {
+                    $q->where('type', 'distribution');
+                    if ($currency !== null) {
+                        $q->where('currency', $currency);
+                    }
+                },
+            ], 'amount');
     }
 
     public function getTotalInjectedAttribute(): float
     {
-        // Prefer the preloaded aggregate from withTransactionTotals(); fall
-        // back to a direct SUM so a Partner fetched without the scope (e.g.
-        // route-model binding) still reports the right number.
         if (array_key_exists('total_injected_sum', $this->attributes)) {
             return (float) ($this->attributes['total_injected_sum'] ?? 0);
         }
@@ -62,17 +71,9 @@ class Partner extends Model
         return (float) $this->transactions()->where('type', 'distribution')->sum('amount');
     }
 
-    /**
-     * Capital matching across all partners: the target is the highest amount
-     * any single partner has injected, so every other partner's balance is
-     * what they still owe to match that top investor (never negative).
-     *
-     * Pass an already-loaded collection (from withTransactionTotals()) to
-     * reuse it instead of issuing a second round of queries.
-     */
-    public static function equalizationSummary(?Collection $partners = null)
+    public static function equalizationSummary(?Collection $partners = null, ?string $currency = null)
     {
-        $partners ??= static::withTransactionTotals()->get();
+        $partners ??= static::withTransactionTotals($currency)->get();
 
         $pool = (float) $partners->sum('total_injected');
         $maxInjected = (float) $partners->max('total_injected');

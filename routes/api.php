@@ -1,15 +1,20 @@
 <?php
 
-use App\Http\Controllers\Ecommerce\EcommerceCustomerController;
-use App\Http\Controllers\Ecommerce\EcommerceSalesController;
+use App\Http\Controllers\Ecommerce\EcommerceAiAgentController;
 use App\Http\Controllers\Ecommerce\ShopifyWebhookController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/ecommerce/customers/search', [EcommerceSalesController::class, 'searchCustomer'])
-    ->name('api.ecommerce.customers.search');
-
-Route::get('/ecommerce/customers/suggestions', [EcommerceCustomerController::class, 'searchSuggestions'])
-    ->name('api.ecommerce.customers.suggestions');
-
 Route::post('/webhooks/shopify/orders', [ShopifyWebhookController::class, 'storeOrder'])
     ->name('api.webhooks.shopify.orders');
+
+Route::post('/webhooks/shopify/orders-updated', [ShopifyWebhookController::class, 'updateOrder'])
+    ->name('api.webhooks.shopify.orders-updated');
+
+Route::post('/webhooks/shopify/orders-cancelled', [ShopifyWebhookController::class, 'cancelOrder'])
+    ->name('api.webhooks.shopify.orders-cancelled');
+
+Route::post('/webhooks/shopify/orders-fulfilled', [ShopifyWebhookController::class, 'fulfillOrder'])
+    ->name('api.webhooks.shopify.orders-fulfilled');
+
+Route::post('/webhooks/ecommerce/whatsapp-inbound', [EcommerceAiAgentController::class, 'inboundWebhook'])
+    ->name('api.webhooks.ecommerce.whatsapp-inbound');

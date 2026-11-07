@@ -13,6 +13,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 
@@ -26,16 +27,19 @@ class EcommerceSalesController extends Controller
 
     public function index(Request $request)
     {
+        $region = EcommerceSale::normalizeRegion($request->query('region', 'pk'));
+        $currency = EcommerceSale::currencyForRegion($region);
+        $regionChannels = EcommerceSale::channelsForRegion($region);
+
         $selectedChannels = [];
         if ($request->has('channels') && is_array($request->channels) && count($request->channels) > 0) {
-            $selectedChannels = array_values(array_intersect($request->channels, EcommerceSale::CHANNELS));
+            $selectedChannels = array_values(array_intersect($request->channels, $regionChannels));
         }
 
-        $salesQuery = EcommerceSale::with('product')->orderByDesc('created_at');
-
-        if (!empty($selectedChannels)) {
-            $salesQuery->whereIn('channel', $selectedChannels);
-        }
+        $salesQuery = EcommerceSale::with(['product', 'bundle'])
+            ->whereIn('channel', !empty($selectedChannels) ? $selectedChannels : $regionChannels)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
 
         if ($request->filled('start_date')) {
             $salesQuery->whereDate('created_at', '>=', $request->start_date);
@@ -49,9 +53,19 @@ class EcommerceSalesController extends Controller
         $products = EcommerceProduct::orderBy('name')->get();
         $salePricesByProduct = EcommercePricingModel::pluck('selling_price', 'ecommerce_product_id');
 
-        $totalRevenue = $sales->sum('total_price');
-        $totalItemsSoldRevenue = $sales->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)->sum('quantity');
-        $totalItemsUsedDamaged = $sales->whereIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)->sum('quantity');
+        $realizedSales = $sales->filter(fn (EcommerceSale $s) => $s->isRealizedRevenue());
+        $pendingCodSales = $sales->filter(fn (EcommerceSale $s) => $s->isPendingCod());
+        $nonRevenueActiveSales = $sales->filter(
+            fn (EcommerceSale $s) => in_array($s->channel, EcommerceSale::NON_REVENUE_CHANNELS, true)
+                && !in_array($s->order_status, EcommerceSale::INACTIVE_ORDER_STATUSES, true)
+        );
+
+        $totalRevenue = (float) $realizedSales->sum('total_price');
+        $totalOrders = EcommerceSale::countDistinctOrders($realizedSales);
+        $pendingCodRevenue = (float) $pendingCodSales->sum('total_price');
+        $pendingCodOrders = EcommerceSale::countDistinctOrders($pendingCodSales);
+        $totalItemsSoldRevenue = (int) $realizedSales->sum('quantity');
+        $totalItemsUsedDamaged = (int) $nonRevenueActiveSales->sum('quantity');
 
         $chartFrom = $request->filled('start_date') ? Carbon::parse($request->start_date)->startOfDay() : now()->startOfMonth();
         $chartTo = $request->filled('end_date') ? Carbon::parse($request->end_date)->startOfDay() : now()->startOfDay();
@@ -63,7 +77,7 @@ class EcommerceSalesController extends Controller
         $bucketKey = fn ($date) => $weekly ? $date->format('o-W') : $date->format('Y-m-d');
         $bucketLabel = fn ($date) => $weekly ? 'Wk ' . $date->format('W M') : $date->format('d M');
 
-        $grouped = $sales->groupBy(fn ($sale) => $bucketKey($sale->created_at));
+        $grouped = $realizedSales->groupBy(fn ($sale) => $bucketKey($sale->created_at));
 
         $chartLabels = [];
         $chartRevenue = [];
@@ -77,16 +91,17 @@ class EcommerceSalesController extends Controller
                 $group = $grouped->get($key, collect());
                 $chartLabels[] = $bucketLabel($cursor);
                 $chartRevenue[] = round((float) $group->sum('total_price'), 2);
-                $chartUnits[] = (int) $group->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)->sum('quantity');
+                $chartUnits[] = (int) $group->sum('quantity');
             }
             $cursor->addDay();
         }
 
-        $totalChannelsCount = count(EcommerceSale::CHANNELS);
+        $totalChannelsCount = count($regionChannels);
         $selectedChannelsCount = count($selectedChannels);
+        $regionLabel = $region === 'qa' ? 'Qatar (QAR)' : 'Pakistan (PKR)';
 
         if ($selectedChannelsCount === 0 || $selectedChannelsCount === $totalChannelsCount) {
-            $filterText = 'Across all channels';
+            $filterText = "All {$regionLabel} channels";
         } elseif ($selectedChannelsCount > 2) {
             $filterText = 'Filtered: ' . $selectedChannelsCount . ' channels';
         } else {
@@ -110,10 +125,16 @@ class EcommerceSalesController extends Controller
         $bundles = EcommerceBundle::with(['items.product.pricingModel'])->orderBy('name')->get();
 
         return view('ecommerce.sales', [
+            'region' => $region,
+            'currency' => $currency,
+            'regionChannels' => $regionChannels,
             'sales' => $sales,
             'products' => $products,
             'salePricesByProduct' => $salePricesByProduct,
             'totalRevenue' => $totalRevenue,
+            'totalOrders' => $totalOrders,
+            'pendingCodRevenue' => $pendingCodRevenue,
+            'pendingCodOrders' => $pendingCodOrders,
             'totalItemsSoldRevenue' => $totalItemsSoldRevenue,
             'totalItemsUsedDamaged' => $totalItemsUsedDamaged,
             'filterText' => $filterText,
@@ -143,7 +164,8 @@ class EcommerceSalesController extends Controller
 
     /**
      * Lightweight Smart Search endpoint for the Front-Desk Sales Modal.
-     * GET /api/ecommerce/customers/search?phone=...
+     * Protected under auth + module:ecommerce in routes/web.php:
+     * GET /ecommerce/hub/sales/customer-search?phone=...
      */
     public function searchCustomer(Request $request): JsonResponse
     {
@@ -174,43 +196,13 @@ class EcommerceSalesController extends Controller
     }
 
     /**
-     * Combine country code and raw phone digits into a single normalized phone string.
-     * Returns '' if no subscriber digits were provided.
+     * Resolve customer by ecommerce_customer_id first; otherwise normalize phone and firstOrCreate.
+     * Must be called inside a DB transaction and ONLY for revenue channels.
      */
-    private function combineAndNormalizePhone(?string $countryCode, ?string $rawPhoneDigits): string
-    {
-        $digitsOnly = EcommerceCustomer::normalizePhone($rawPhoneDigits);
-        if ($digitsOnly === '') {
-            return '';
-        }
-
-        $codeDigits = EcommerceCustomer::normalizePhone($countryCode);
-        if ($codeDigits !== '') {
-            if (str_starts_with($digitsOnly, '00' . $codeDigits)) {
-                $digitsOnly = substr($digitsOnly, 2);
-                return $digitsOnly;
-            }
-            if (str_starts_with($digitsOnly, $codeDigits) && strlen($digitsOnly) > strlen($codeDigits) + 6) {
-                return $digitsOnly;
-            }
-            $digitsOnly = ltrim($digitsOnly, '0');
-            return $codeDigits . $digitsOnly;
-        }
-
-        return $digitsOnly;
-    }
-
-    /**
-     * Resolve customer by ecommerce_customer_id first; otherwise combine country code
-     * and digits, normalize phone, and firstOrCreate the EcommerceCustomer.
-     * Updates name if empty and increments LTV / order count. Must be called inside
-     * a DB transaction and ONLY for revenue channels.
-     */
-    private function resolveAndIncrementCustomer(
+    private function resolveCustomer(
         ?int $customerId,
         ?string $normalizedPhone,
-        ?string $customerName,
-        float $orderRevenue
+        ?string $customerName
     ): ?EcommerceCustomer {
         $cleanName = trim((string) $customerName) !== '' ? trim((string) $customerName) : null;
         $customer = null;
@@ -236,12 +228,8 @@ class EcommerceSalesController extends Controller
 
         if (empty($customer->name) && $cleanName !== null) {
             $customer->name = $cleanName;
+            $customer->save();
         }
-
-        $customer->total_spend = round((float) $customer->total_spend + $orderRevenue, 2);
-        $customer->total_orders = (int) $customer->total_orders + 1;
-        $customer->last_purchase_at = now();
-        $customer->save();
 
         return $customer;
     }
@@ -269,6 +257,8 @@ class EcommerceSalesController extends Controller
             'customer_phone' => 'nullable|string|max:40',
             'quantity' => 'required|integer|min:1',
             'channel' => 'required|in:' . implode(',', EcommerceSale::CHANNELS),
+            'order_status' => ['nullable', Rule::in(['pending', 'shipped', 'delivered'])],
+            'payment_status' => ['nullable', Rule::in(['unpaid_cod', 'paid'])],
             'reason' => 'nullable|string|max:255',
             'unit_price' => [
                 Rule::requiredIf(fn () => !$isBundleSale && !in_array($request->input('channel'), EcommerceSale::NON_REVENUE_CHANNELS, true)),
@@ -293,11 +283,17 @@ class EcommerceSalesController extends Controller
         $unitPrice = $isNonRevenue ? 0.0 : (float) ($validated['unit_price'] ?? 0);
         $totalPrice = $quantity * $unitPrice;
 
+        $orderStatus = $validated['order_status'] ?? 'delivered';
+        $paymentStatus = ($orderStatus === 'delivered' || $isNonRevenue)
+            ? 'paid'
+            : ($validated['payment_status'] ?? 'paid');
+
         $isPakistan = str_contains($validated['channel'], 'Pakistan');
         $source = $isPakistan ? 'pakistan' : 'qatar';
         $stockField = "stock_{$source}";
         $soldField = "sold_{$source}";
         $locationName = $isPakistan ? 'Pakistan' : 'Qatar';
+        $defaultCountryCode = $validated['customer_country_code'] ?? ($isPakistan ? '+92' : '+974');
 
         $product = EcommerceProduct::findOrFail($validated['ecommerce_product_id']);
 
@@ -310,15 +306,19 @@ class EcommerceSalesController extends Controller
         $unitOuterBoxCost = (float) ($pricingModel->box_cost ?? 0);
 
         $customerId = !empty($validated['ecommerce_customer_id']) ? (int) $validated['ecommerce_customer_id'] : null;
-        $normalizedPhone = $this->combineAndNormalizePhone(
-            $validated['customer_country_code'] ?? '+974',
-            $validated['customer_phone'] ?? null
+        $normalizedPhone = EcommerceCustomer::normalizePhone(
+            $validated['customer_phone'] ?? null,
+            $defaultCountryCode
         );
+        $orderGroupId = (string) Str::uuid();
 
         try {
             DB::transaction(function () use (
                 $validated,
                 $isNonRevenue,
+                $orderGroupId,
+                $orderStatus,
+                $paymentStatus,
                 $customerId,
                 $normalizedPhone,
                 $quantity,
@@ -343,15 +343,12 @@ class EcommerceSalesController extends Controller
                     throw new RuntimeException("Insufficient stock in {$locationName} for this sale. Requested: " . number_format($quantity, 2) . ', Available: ' . number_format((float) $product->{$stockField}, 2) . '.');
                 }
 
-                // Fix LTV Corruption Bug: Non-revenue events (Damage, Backbar) must NEVER
-                // touch the EcommerceCustomer table, even if a phone number is present.
                 $customer = null;
-                if (!in_array($validated['channel'], self::NON_REVENUE_CHANNELS, true)) {
-                    $customer = $this->resolveAndIncrementCustomer(
+                if (!$isNonRevenue) {
+                    $customer = $this->resolveCustomer(
                         $customerId,
                         $normalizedPhone,
-                        $validated['customer_name'] ?? null,
-                        $totalPrice
+                        $validated['customer_name'] ?? null
                     );
                 }
 
@@ -369,10 +366,14 @@ class EcommerceSalesController extends Controller
                     'ecommerce_product_id' => $validated['ecommerce_product_id'],
                     'ecommerce_customer_id' => $customer?->id,
                     'reference_id' => $validated['reference_id'] ?? null,
+                    'order_group_id' => $orderGroupId,
                     'customer_name' => $finalCustomerName,
                     'customer_phone' => $finalCustomerPhone,
                     'quantity' => $quantity,
                     'channel' => $validated['channel'],
+                    'order_status' => $orderStatus,
+                    'payment_status' => $paymentStatus,
+                    'stock_deducted' => true,
                     'reason' => $validated['reason'] ?? null,
                     'unit_price' => $unitPrice,
                     'total_price' => $totalPrice,
@@ -390,9 +391,33 @@ class EcommerceSalesController extends Controller
                 $product->{$stockField} -= $quantity;
                 $product->{$soldField} += $quantity;
                 $product->save();
+
+                if ($customer) {
+                    $customer->recalculateLtv();
+                }
+
+                return $customer;
             });
         } catch (RuntimeException $e) {
             return back()->withErrors(['error' => $e->getMessage()]);
+        }
+
+        if (!$isNonRevenue) {
+            try {
+                /** @var \App\Services\Ecommerce\EcommerceAiSalesAgentService $aiAgent */
+                $aiAgent = app(\App\Services\Ecommerce\EcommerceAiSalesAgentService::class);
+                $saleCustomer = EcommerceSale::where('order_group_id', $orderGroupId)->first()?->customer;
+                $aiAgent->attributeRetentionThreadConversion($saleCustomer, $orderGroupId, (float) $totalPrice);
+
+                if ($paymentStatus === 'unpaid_cod') {
+                    $aiAgent->initiateCodConfirmation($orderGroupId);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('AI COD confirmation auto-trigger failed on manual sale.', [
+                    'order_group_id' => $orderGroupId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         return back()->with('success', 'Sale logged and stock updated.');
@@ -404,10 +429,16 @@ class EcommerceSalesController extends Controller
         $channel = $validated['channel'];
         $isNonRevenue = in_array($channel, EcommerceSale::NON_REVENUE_CHANNELS, true);
 
+        $orderStatus = $validated['order_status'] ?? 'delivered';
+        $paymentStatus = ($orderStatus === 'delivered' || $isNonRevenue)
+            ? 'paid'
+            : ($validated['payment_status'] ?? 'paid');
+
         $isPakistan = str_contains($channel, 'Pakistan');
         $stockField = $isPakistan ? 'stock_pakistan' : 'stock_qatar';
         $soldField = $isPakistan ? 'sold_pakistan' : 'sold_qatar';
         $locationName = $isPakistan ? 'Pakistan' : 'Qatar';
+        $defaultCountryCode = $validated['customer_country_code'] ?? ($isPakistan ? '+92' : '+974');
 
         $bundle = EcommerceBundle::with(['items.product.pricingModel'])->findOrFail($validated['ecommerce_bundle_id']);
 
@@ -424,19 +455,21 @@ class EcommerceSalesController extends Controller
         $metaAdAllocation = (float) ($validated['meta_ad_allocation'] ?? 0);
 
         $customerId = !empty($validated['ecommerce_customer_id']) ? (int) $validated['ecommerce_customer_id'] : null;
-        $normalizedPhone = $this->combineAndNormalizePhone(
-            $validated['customer_country_code'] ?? '+974',
-            $validated['customer_phone'] ?? null
+        $normalizedPhone = EcommerceCustomer::normalizePhone(
+            $validated['customer_phone'] ?? null,
+            $defaultCountryCode
         );
-        $totalBundleRevenue = (float) array_sum($allocation);
+        $orderGroupId = (string) Str::uuid();
 
         try {
             DB::transaction(function () use (
                 $validated,
                 $isNonRevenue,
+                $orderGroupId,
+                $orderStatus,
+                $paymentStatus,
                 $customerId,
                 $normalizedPhone,
-                $totalBundleRevenue,
                 $bundle,
                 $bundleQuantity,
                 $allocation,
@@ -468,14 +501,12 @@ class EcommerceSalesController extends Controller
                     }
                 }
 
-                // Fix LTV Corruption Bug: Only resolve/increment customer for revenue channels
                 $customer = null;
-                if (!in_array($validated['channel'], self::NON_REVENUE_CHANNELS, true)) {
-                    $customer = $this->resolveAndIncrementCustomer(
+                if (!$isNonRevenue) {
+                    $customer = $this->resolveCustomer(
                         $customerId,
                         $normalizedPhone,
-                        $validated['customer_name'] ?? null,
-                        $totalBundleRevenue
+                        $validated['customer_name'] ?? null
                     );
                 }
 
@@ -502,10 +533,14 @@ class EcommerceSalesController extends Controller
                         'ecommerce_bundle_id' => $bundle->id,
                         'ecommerce_customer_id' => $customer?->id,
                         'reference_id' => $validated['reference_id'] ?? null,
+                        'order_group_id' => $orderGroupId,
                         'customer_name' => $finalCustomerName,
                         'customer_phone' => $finalCustomerPhone,
                         'quantity' => $unitsSold,
                         'channel' => $validated['channel'],
+                        'order_status' => $orderStatus,
+                        'payment_status' => $paymentStatus,
+                        'stock_deducted' => true,
                         'reason' => trim(($validated['reason'] ?? '') . ' [Bundle: ' . $bundle->name . ']'),
                         'unit_price' => $unitsSold > 0 ? round($lineRevenue / $unitsSold, 2) : 0,
                         'total_price' => $lineRevenue,
@@ -526,61 +561,110 @@ class EcommerceSalesController extends Controller
 
                     $isFirstLine = false;
                 }
+
+                if ($customer) {
+                    $customer->recalculateLtv();
+                }
             });
         } catch (RuntimeException $e) {
             return back()->withErrors(['error' => $e->getMessage()]);
         }
 
+        if (!$isNonRevenue) {
+            try {
+                /** @var \App\Services\Ecommerce\EcommerceAiSalesAgentService $aiAgent */
+                $aiAgent = app(\App\Services\Ecommerce\EcommerceAiSalesAgentService::class);
+                $saleCustomer = EcommerceSale::where('order_group_id', $orderGroupId)->first()?->customer;
+                $bundleTotalRevenue = array_sum($allocation);
+                $aiAgent->attributeRetentionThreadConversion($saleCustomer, $orderGroupId, (float) $bundleTotalRevenue);
+
+                if ($paymentStatus === 'unpaid_cod') {
+                    $aiAgent->initiateCodConfirmation($orderGroupId);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('AI COD confirmation auto-trigger failed on bundle sale.', [
+                    'order_group_id' => $orderGroupId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         return back()->with('success', 'Bundle sale logged — ' . $bundle->items->count() . ' component line(s) recorded and stock updated.');
     }
 
+    /**
+     * Quick status update for an atomic order_group_id.
+     * PATCH /ecommerce/hub/sales/{orderGroupId}/status
+     */
+    public function updateStatus(Request $request, string $orderGroupId)
+    {
+        $validated = $request->validate([
+            'order_status' => ['required', Rule::in(EcommerceSale::ORDER_STATUSES)],
+            'payment_status' => ['nullable', Rule::in(EcommerceSale::PAYMENT_STATUSES)],
+        ]);
+
+        try {
+            $updated = EcommerceSale::transitionOrderGroup(
+                $orderGroupId,
+                $validated['order_status'],
+                $validated['payment_status'] ?? null
+            );
+
+            if ($updated === 0) {
+                return back()->withErrors(['error' => 'Order not found.']);
+            }
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Order status updated to ' . strtoupper($validated['order_status']) . ' (' . $updated . ' line item(s) updated).');
+    }
+
+    /**
+     * Delete all sibling rows sharing the same order_group_id atomically,
+     * restoring stock for every row where stock_deducted === true and recalculating customer LTV.
+     */
     public function destroy(EcommerceSale $sale)
     {
         DB::transaction(function () use ($sale) {
-            $isPakistan = str_contains($sale->channel, 'Pakistan');
-            $source = $isPakistan ? 'pakistan' : 'qatar';
-            $stockField = "stock_{$source}";
-            $soldField = "sold_{$source}";
+            $siblings = !empty($sale->order_group_id)
+                ? EcommerceSale::lockForUpdate()->where('order_group_id', $sale->order_group_id)->get()
+                : collect([$sale]);
 
-            $product = EcommerceProduct::lockForUpdate()->findOrFail($sale->ecommerce_product_id);
-            $product->{$stockField} += $sale->quantity;
-            $product->{$soldField} -= $sale->quantity;
-            $product->save();
+            if ($siblings->isEmpty()) {
+                $siblings = collect([$sale]);
+            }
 
-            $customerId = $sale->ecommerce_customer_id;
+            $affectedCustomerIds = [];
 
-            $sale->delete();
+            foreach ($siblings as $row) {
+                if ($row->stock_deducted) {
+                    $isPakistan = str_contains((string) $row->channel, 'Pakistan');
+                    $source = $isPakistan ? 'pakistan' : 'qatar';
+                    $stockField = "stock_{$source}";
+                    $soldField = "sold_{$source}";
 
-            // Patch 3: Recalculate the customer's exact LTV from their remaining revenue sales,
-            // grouping by reference_id (Shopify) or ecommerce_bundle_id (kits) so deleting
-            // a single bundle component row never over-decrements total_orders.
-            if ($customerId) {
-                $customer = EcommerceCustomer::lockForUpdate()->find($customerId);
-                if ($customer) {
-                    $remainingRevenueSales = EcommerceSale::where('ecommerce_customer_id', $customer->id)
-                        ->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
-                        ->get(['id', 'reference_id', 'ecommerce_bundle_id', 'created_at', 'total_price']);
-
-                    $customer->total_spend = round((float) $remainingRevenueSales->sum('total_price'), 2);
-                    $customer->total_orders = $remainingRevenueSales
-                        ->groupBy(function ($s) {
-                            if (!empty($s->reference_id)) {
-                                return 'ref:' . $s->reference_id;
-                            }
-                            if (!empty($s->ecommerce_bundle_id)) {
-                                return 'bundle:' . $s->ecommerce_bundle_id . ':' . $s->created_at;
-                            }
-                            return 'sale:' . $s->id;
-                        })
-                        ->count();
-
-                    $latestRemainingSaleAt = $remainingRevenueSales->max('created_at');
-                    $customer->last_purchase_at = $latestRemainingSaleAt ? Carbon::parse($latestRemainingSaleAt) : null;
-                    $customer->save();
+                    $product = EcommerceProduct::lockForUpdate()->find($row->ecommerce_product_id);
+                    if ($product) {
+                        $product->{$stockField} = (float) $product->{$stockField} + (int) $row->quantity;
+                        $product->{$soldField} = max(0, (float) $product->{$soldField} - (int) $row->quantity);
+                        $product->save();
+                    }
                 }
+
+                if ($row->ecommerce_customer_id) {
+                    $affectedCustomerIds[$row->ecommerce_customer_id] = $row->ecommerce_customer_id;
+                }
+
+                $row->delete();
+            }
+
+            foreach ($affectedCustomerIds as $customerId) {
+                $customer = EcommerceCustomer::lockForUpdate()->find($customerId);
+                $customer?->recalculateLtv();
             }
         });
 
-        return back()->with('success', 'Sale deleted, inventory restored, and customer LTV updated.');
+        return back()->with('success', 'Order deleted, inventory restored, and customer LTV updated.');
     }
 }

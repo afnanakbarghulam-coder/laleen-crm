@@ -5,6 +5,7 @@ use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CommandCenterController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\Ecommerce\EcommerceAiAgentController;
 use App\Http\Controllers\Ecommerce\EcommerceContentCalendarController;
 use App\Http\Controllers\Ecommerce\EcommerceController;
 use App\Http\Controllers\Ecommerce\EcommerceCustomerController;
@@ -316,9 +317,11 @@ Route::middleware(['auth'])->group(function () {
                 Route::get('/customers/suggestions', [EcommerceCustomerController::class, 'searchSuggestions'])->name('customers.suggestions');
                 Route::get('/customers', [EcommerceCustomerController::class, 'index'])->name('customers.index');
                 Route::get('/customers/{customer}', [EcommerceCustomerController::class, 'show'])->name('customers.show');
+                Route::get('/sales/customer-search', [EcommerceSalesController::class, 'searchCustomer'])->name('sales.customer-search');
                 Route::get('/sales', [EcommerceSalesController::class, 'index'])->name('sales.index');
                 Route::get('/profit', [EcommerceNetProfitController::class, 'index'])->name('net-profit.index');
                 Route::get('/profit/transactions', [EcommerceNetProfitController::class, 'transactions'])->name('profit.transactions');
+                Route::get('/ai-agent', [EcommerceAiAgentController::class, 'index'])->name('ai-agent.index');
             });
         });
         Route::middleware('module:ecommerce,edit')->group(function () {
@@ -348,7 +351,20 @@ Route::middleware(['auth'])->group(function () {
             // Customers & Sales Hub write routes
             Route::prefix('hub')->group(function () {
                 Route::post('/sales', [EcommerceSalesController::class, 'store'])->name('sales.store');
+                Route::patch('/sales/{orderGroupId}/status', [EcommerceSalesController::class, 'updateStatus'])->name('sales.update-status');
                 Route::delete('/sales/{sale}', [EcommerceSalesController::class, 'destroy'])->name('sales.destroy');
+                Route::post('/customers/{customer}/mark-contacted', [EcommerceCustomerController::class, 'markContacted'])->name('customers.mark-contacted');
+
+                // AI Sales & Retention Agent write routes
+                Route::post('/ai-agent/settings', [EcommerceAiAgentController::class, 'updateSettings'])->name('ai-agent.settings');
+                Route::post('/ai-agent/run-scan', [EcommerceAiAgentController::class, 'runOutreachScan'])->name('ai-agent.run-scan');
+                Route::post('/ai-agent/trigger-cod', [EcommerceAiAgentController::class, 'triggerCod'])->name('ai-agent.trigger-cod-order');
+                Route::post('/ai-agent/threads/{thread}/Trigger-cod', [EcommerceAiAgentController::class, 'triggerCod'])->name('ai-agent.trigger-cod');
+                Route::post('/ai-agent/threads/{thread}/trigger-cod', [EcommerceAiAgentController::class, 'triggerCod'])->name('ai-agent.trigger-cod.lower');
+                Route::post('/ai-agent/messages/{message}/approve', [EcommerceAiAgentController::class, 'approveMessage'])->name('ai-agent.messages.approve');
+                Route::post('/ai-agent/threads/{thread}/send-manual', [EcommerceAiAgentController::class, 'sendManual'])->name('ai-agent.threads.send-manual');
+                Route::post('/ai-agent/threads/{thread}/simulate-inbound', [EcommerceAiAgentController::class, 'simulateInbound'])->name('ai-agent.threads.simulate-inbound');
+                Route::post('/ai-agent/threads/{thread}/toggle-handoff', [EcommerceAiAgentController::class, 'toggleHandoff'])->name('ai-agent.threads.toggle-handoff');
             });
 
             Route::post('/kpis', [EcommerceController::class, 'storeKpi'])->name('kpis.store');

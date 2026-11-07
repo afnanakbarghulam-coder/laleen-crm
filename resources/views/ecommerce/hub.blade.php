@@ -2,17 +2,22 @@
 @section('title', 'Ecommerce')
 
 @section('content')
-    <div class="kpi-header mb-4">
+    @php
+        $currency = $currency ?? 'PKR';
+        $regionParam = ['region' => $region ?? 'pk'];
+    @endphp
+    <div class="kpi-header mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <h4>Ecommerce</h4>
             <p>Partner capital, unified customer LTV &amp; sales, creative growth engines, and acquisition performance.</p>
         </div>
+        @include('ecommerce.partials._region_tabs')
     </div>
 
     <div class="row g-4">
         {{-- Card 1: Financials & Inventory --}}
         <div class="col-md-6">
-            <a href="{{ route('ecommerce.partners.index') }}" class="ec-workstation-card bg-white/5 hover:bg-white/10 backdrop-blur-lg border border-[#d98f83]/20 shadow-xl">
+            <a href="{{ route('ecommerce.partners.index', $regionParam) }}" class="ec-workstation-card bg-white/5 hover:bg-white/10 backdrop-blur-lg border border-[#d98f83]/20 shadow-xl">
                 <div class="ec-workstation-top">
                     <div class="ec-workstation-icon">
                         <i class="bx bx-wallet"></i>
@@ -27,7 +32,7 @@
                 </div>
                 <div class="ec-workstation-footer">
                     <span class="ec-workstation-badge {{ $runway >= 0 ? 'ec-badge-emerald' : 'ec-badge-danger' }}">
-                        Runway: PKR {{ number_format($runway, 2) }}
+                        Runway: {{ $currency }} {{ number_format($runway, 2) }}
                     </span>
                 </div>
             </a>
@@ -35,7 +40,7 @@
 
         {{-- Card 2: Customers & Sales --}}
         <div class="col-md-6">
-            <a href="{{ route('ecommerce.customers.index') }}" class="ec-workstation-card bg-white/5 hover:bg-white/10 backdrop-blur-lg border border-[#d98f83]/20 shadow-xl">
+            <a href="{{ route('ecommerce.customers.index', $regionParam) }}" class="ec-workstation-card bg-white/5 hover:bg-white/10 backdrop-blur-lg border border-[#d98f83]/20 shadow-xl">
                 <div class="ec-workstation-top">
                     <div class="ec-workstation-icon">
                         <i class="bx bx-user-check"></i>
@@ -81,7 +86,7 @@
 
         {{-- Card 4: Performance & KPIs --}}
         <div class="col-md-6">
-            <a href="{{ route('ecommerce.dashboard') }}" class="ec-workstation-card bg-white/5 hover:bg-white/10 backdrop-blur-lg border border-[#d98f83]/20 shadow-xl">
+            <a href="{{ route('ecommerce.dashboard', $regionParam) }}" class="ec-workstation-card bg-white/5 hover:bg-white/10 backdrop-blur-lg border border-[#d98f83]/20 shadow-xl">
                 <div class="ec-workstation-top">
                     <div class="ec-workstation-icon">
                         <i class="bx bx-bar-chart-alt-2"></i>
@@ -96,7 +101,7 @@
                 </div>
                 <div class="ec-workstation-footer">
                     <span class="ec-workstation-badge ec-badge-emerald">
-                        AOV: PKR {{ number_format($aov, 0) }}
+                        AOV: {{ $currency }} {{ number_format($aov, 0) }}
                     </span>
                 </div>
             </a>

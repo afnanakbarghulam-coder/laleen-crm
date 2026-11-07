@@ -4,30 +4,36 @@ namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceExpense;
+use App\Models\EcommerceSale;
 use App\Models\Partner;
 use App\Models\PartnerTransaction;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class EcommercePartnerController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        // withTransactionTotals() resolves both per-partner SUMs as aggregates
-        // on this one query, so the total_injected / total_distributed
-        // accessors never fall back to a per-partner SUM (the old N+1).
-        $partners = Partner::withTransactionTotals()->orderBy('name')->get();
+        $region = EcommerceSale::normalizeRegion($request->query('region', 'pk'));
+        $currency = EcommerceSale::currencyForRegion($region);
 
-        // Reuses the collection above rather than re-querying every partner.
-        $equalization = Partner::equalizationSummary($partners);
+        $partners = Partner::withTransactionTotals($currency)->orderBy('name')->get();
+
+        $equalization = Partner::equalizationSummary($partners, $currency);
         $totalPool = (float) $partners->sum('total_injected');
-        $remainingBalance = $totalPool - (float) EcommerceExpense::where('funding_source', 'partner_ledger')->sum('amount');
+        $remainingBalance = $totalPool - (float) EcommerceExpense::where('funding_source', 'partner_ledger')
+            ->where('currency', $currency)
+            ->sum('amount');
 
         $transactions = PartnerTransaction::with('partner')
+            ->where('currency', $currency)
             ->orderByDesc('transaction_date')
             ->orderByDesc('id')
             ->get();
 
         return view('ecommerce.partners', [
+            'region' => $region,
+            'currency' => $currency,
             'partners' => $partners,
             'equalization' => $equalization,
             'totalPool' => $totalPool,
@@ -62,10 +68,13 @@ class EcommercePartnerController extends Controller
         $validated = $request->validate([
             'type' => 'required|in:injection,distribution',
             'amount' => 'required|numeric|min:0.01',
+            'currency' => ['nullable', Rule::in(['PKR', 'QAR'])],
             'category' => 'nullable|string|max:100',
             'reference_note' => 'nullable|string|max:255',
             'transaction_date' => 'required|date',
         ]);
+
+        $validated['currency'] = strtoupper((string) ($validated['currency'] ?? 'PKR'));
 
         $partner->transactions()->create($validated);
 

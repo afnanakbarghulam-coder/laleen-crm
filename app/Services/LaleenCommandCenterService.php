@@ -1391,15 +1391,15 @@ class LaleenCommandCenterService
 
             $productSalesRows = SaleItem::query()
                 ->whereNotNull('product_id')
-                ->orWhere('item_type', 'product')
-                ->get(['name', 'quantity', 'line_total']);
+                ->orWhere('type', 'product')
+                ->get(['name', 'quantity', 'total']);
 
             $topSellingProducts = $productSalesRows
                 ->groupBy(fn (SaleItem $item) => $item->name ?: 'Retail Product')
                 ->map(fn ($group, $name) => [
                     'name' => $name,
                     'units_sold' => (int) $group->sum('quantity'),
-                    'revenue_qar' => round((float) $group->sum('line_total'), 2),
+                    'revenue_qar' => round((float) $group->sum('total'), 2),
                 ])
                 ->sortByDesc('revenue_qar')
                 ->take(5)
@@ -1430,22 +1430,25 @@ class LaleenCommandCenterService
 
         // 4. ECOMMERCE PRODUCTS, ORDERS, STOCK & EXPENSES
         if ($includeAll || $scopeKey === 'ecommerce') {
-            $ecomProducts = EcommerceProduct::query()->get([
-                'id', 'name', 'sku', 'stock_qatar', 'stock_pakistan', 'sold_qatar', 'sold_pakistan', 'selling_price', 'cogs', 'landed_cost',
+            $ecomProducts = EcommerceProduct::with('pricingModel')->get([
+                'id', 'name', 'sku', 'stock_qatar', 'stock_pakistan', 'sold_qatar', 'sold_pakistan',
+                'selling_price', 'liquid_cost_per_ml', 'volume_ml', 'bottle_cost', 'pump_cost',
+                'label_cost', 'box_cost', 'labor_cost', 'shipping_cost', 'payment_gateway_fee_percent',
             ]);
 
             $ecomSales = EcommerceSale::with('product:id,name')
-                ->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
-                ->get(['id', 'ecommerce_product_id', 'customer_name', 'quantity', 'channel', 'total_price', 'unit_cogs']);
+                ->realizedRevenue()
+                ->get(['id', 'ecommerce_product_id', 'order_group_id', 'customer_name', 'quantity', 'channel', 'total_price', 'unit_cogs']);
 
             $ecomTotalRevenue = round((float) $ecomSales->sum('total_price'), 2);
             $ecomTotalUnits = (int) $ecomSales->sum('quantity');
             $ecomExpensesTotal = round((float) EcommerceExpense::query()->sum('amount'), 2);
+            $ecomTotalOrders = $ecomSales->pluck('order_group_id')->filter()->unique()->count() ?: $ecomSales->count();
 
             $channelBreakdown = $ecomSales
                 ->groupBy(fn (EcommerceSale $s) => $s->channel ?: 'Qatar')
                 ->map(fn ($group) => [
-                    'orders_count' => $group->count(),
+                    'orders_count' => $group->pluck('order_group_id')->filter()->unique()->count() ?: $group->count(),
                     'units_sold' => (int) $group->sum('quantity'),
                     'revenue_qar' => round((float) $group->sum('total_price'), 2),
                 ])
@@ -1455,7 +1458,7 @@ class LaleenCommandCenterService
                 ->groupBy(fn (EcommerceSale $s) => $s->product?->name ?? 'Ecommerce Item')
                 ->map(fn ($group, $name) => [
                     'name' => $name,
-                    'orders_count' => $group->count(),
+                    'orders_count' => $group->pluck('order_group_id')->filter()->unique()->count() ?: $group->count(),
                     'units_sold' => (int) $group->sum('quantity'),
                     'revenue_qar' => round((float) $group->sum('total_price'), 2),
                 ])
@@ -1468,7 +1471,7 @@ class LaleenCommandCenterService
                 'total_products_count' => $ecomProducts->count(),
                 'total_stock_qatar' => (int) $ecomProducts->sum('stock_qatar'),
                 'total_stock_pakistan' => (int) $ecomProducts->sum('stock_pakistan'),
-                'total_orders_count' => $ecomSales->count(),
+                'total_orders_count' => $ecomTotalOrders,
                 'total_units_sold' => $ecomTotalUnits,
                 'total_revenue_qar' => $ecomTotalRevenue,
                 'total_expenses_qar' => $ecomExpensesTotal,
@@ -1478,7 +1481,8 @@ class LaleenCommandCenterService
                 'catalog_items' => $ecomProducts->take(6)->map(fn (EcommerceProduct $ep) => [
                     'name' => $ep->name,
                     'sku' => $ep->sku,
-                    'selling_price_qar' => round((float) $ep->selling_price, 2),
+                    'selling_price_qar' => round((float) ($ep->pricingModel?->selling_price ?? $ep->selling_price), 2),
+                    'unit_cogs' => round((float) $ep->unit_cogs, 2),
                     'stock_qatar' => (int) $ep->stock_qatar,
                     'stock_pakistan' => (int) $ep->stock_pakistan,
                 ])->values()->all(),

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class PartnerTransaction extends Model
@@ -18,6 +19,7 @@ class PartnerTransaction extends Model
         'partner_id',
         'type',
         'amount',
+        'currency',
         'category',
         'reference_note',
         'transaction_date',
@@ -31,5 +33,12 @@ class PartnerTransaction extends Model
     public function partner()
     {
         return $this->belongsTo(Partner::class);
+    }
+
+    public function scopeForRegion(Builder $query, ?string $region): Builder
+    {
+        $currency = EcommerceSale::currencyForRegion($region);
+
+        return $query->where('currency', $currency);
     }
 }

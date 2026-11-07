@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class EcommerceExpense extends Model
@@ -19,15 +20,10 @@ class EcommerceExpense extends Model
         'sales' => 'Sales Revenue',
     ];
 
+    const CURRENCIES = ['PKR', 'QAR'];
+
     // True non-BOM operating expenses deducted from Gross Profit on the Net
     // Profit dashboard.
-    //
-    // Physical BOM components (Bottles, Labels, Packaging, Stickers, Raw
-    // Material Restock) are deliberately EXCLUDED: those purchases already
-    // leave the business twice-over in the correct places — against Cash
-    // Runway the moment they're bought, and against Net Profit via each
-    // sale's unit_cogs snapshot once the finished unit actually sells.
-    // Listing them here as well deducted the same rupee from profit twice.
     const NET_PROFIT_DEDUCTION_CATEGORIES = [
         'Courier/Shipping',
         'Taxes',
@@ -57,21 +53,39 @@ class EcommerceExpense extends Model
         'expense_date',
         'title',
         'amount',
+        'currency',
         'category',
         'funding_source',
         'vendor',
         'notes',
         'receipt_path',
+        'includes_raw_material_restock',
+        'ecommerce_raw_material_id',
+        'quantity_received',
         'created_by',
     ];
 
     protected $casts = [
         'expense_date' => 'date',
         'amount' => 'decimal:2',
+        'includes_raw_material_restock' => 'boolean',
+        'quantity_received' => 'decimal:2',
     ];
 
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function rawMaterial()
+    {
+        return $this->belongsTo(EcommerceRawMaterial::class, 'ecommerce_raw_material_id');
+    }
+
+    public function scopeForRegion(Builder $query, ?string $region): Builder
+    {
+        $currency = EcommerceSale::currencyForRegion($region);
+
+        return $query->where('currency', $currency);
     }
 }

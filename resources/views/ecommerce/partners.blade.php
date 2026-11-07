@@ -4,10 +4,11 @@
 @include('ecommerce._styles')
 
 @section('content')
+    @php $currency = $currency ?? 'PKR'; @endphp
     <div class="ec-header">
         <div>
             <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Financials &amp; Inventory</div>
-            <h4>Partner Investment &amp; Capital Ledger</h4>
+            <h4>Partner Investment &amp; Capital Ledger ({{ $currency }})</h4>
             <p>Capital matching across the partners, plus the full capital injection history.</p>
         </div>
         @moduleEdit('ecommerce')
@@ -20,15 +21,15 @@
     <div class="row">
         <div class="col-md-6">
             <div class="ec-card">
-                <h6>Total Capital Pool</h6>
-                <div class="ec-value">PKR {{ number_format($totalPool, 2) }}</div>
-                <div class="ec-sub">Total cash injected across all partners</div>
+                <h6>Total Capital Pool ({{ $currency }})</h6>
+                <div class="ec-value">{{ $currency }} {{ number_format($totalPool, 2) }}</div>
+                <div class="ec-sub">Total cash injected across all partners ({{ $currency }})</div>
             </div>
         </div>
         <div class="col-md-6">
             <div class="ec-card">
                 <h6>Available Balance (Runway)</h6>
-                <div class="ec-value {{ $remainingBalance >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($remainingBalance, 2) }}</div>
+                <div class="ec-value {{ $remainingBalance >= 0 ? 'ec-positive' : 'ec-negative' }}">{{ $currency }} {{ number_format($remainingBalance, 2) }}</div>
                 <div class="ec-sub">Capital Pool &minus; Partner-Funded Expenses</div>
             </div>
         </div>
@@ -39,16 +40,16 @@
             <div class="col-md-4">
                 <div class="ec-card">
                     <h6>{{ $row['partner']->name }}</h6>
-                    <div class="ec-value">PKR {{ number_format($row['contributed'], 2) }}</div>
+                    <div class="ec-value">{{ $currency }} {{ number_format($row['contributed'], 2) }}</div>
                     <div class="ec-sub">{{ number_format($row['percent'], 1) }}% of total pool</div>
                     <div class="mt-2">
-                        <span class="ec-badge ec-badge-distribution">Distributed: PKR {{ number_format($row['distributed'], 2) }}</span>
+                        <span class="ec-badge ec-badge-distribution">Distributed: {{ $currency }} {{ number_format($row['distributed'], 2) }}</span>
                     </div>
                     <hr style="border-color: var(--ec-border); margin: 10px 0;">
                     @if ($row['balance'] <= 0.01)
                         <div class="ec-sub ec-positive">Fully Matched</div>
                     @else
-                        <div class="ec-sub ec-negative">Owes PKR {{ number_format($row['balance'], 2) }} to match the top investor</div>
+                        <div class="ec-sub ec-negative">Owes {{ $currency }} {{ number_format($row['balance'], 2) }} to match the top investor</div>
                     @endif
                 </div>
             </div>
@@ -83,7 +84,7 @@
                             <td><span class="ec-badge ec-badge-{{ $transaction->type }}">{{ ucfirst($transaction->type) }}</span></td>
                             <td>{{ $transaction->category ?? '—' }}</td>
                             <td class="{{ $transaction->type === 'distribution' ? 'ec-negative' : '' }}">
-                                {{ $transaction->type === 'distribution' ? '−' : '+' }} PKR {{ number_format($transaction->amount, 2) }}
+                                {{ $transaction->type === 'distribution' ? '−' : '+' }} {{ $transaction->currency ?? $currency }} {{ number_format($transaction->amount, 2) }}
                             </td>
                             <td>{{ $transaction->reference_note ?? '—' }}</td>
                             @moduleEdit('ecommerce')
@@ -163,9 +164,18 @@
                                     <option value="distribution">Profit Distribution / Withdrawal (Money Out)</option>
                                 </select>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label">Amount (PKR)</label>
-                                <input type="number" step="0.01" min="0.01" name="amount" class="form-control" required>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Currency</label>
+                                    <select name="currency" class="form-select" required>
+                                        <option value="PKR" {{ $currency === 'PKR' ? 'selected' : '' }}>PKR (Pakistan)</option>
+                                        <option value="QAR" {{ $currency === 'QAR' ? 'selected' : '' }}>QAR (Qatar)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label">Amount</label>
+                                    <input type="number" step="0.01" min="0.01" name="amount" class="form-control" required>
+                                </div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Category</label>

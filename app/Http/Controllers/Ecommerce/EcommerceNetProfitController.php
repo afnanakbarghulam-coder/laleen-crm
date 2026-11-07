@@ -13,6 +13,10 @@ class EcommerceNetProfitController extends Controller
 {
     public function index(Request $request)
     {
+        $region = EcommerceSale::normalizeRegion($request->query('region', 'pk'));
+        $currency = EcommerceSale::currencyForRegion($region);
+        $regionChannels = EcommerceSale::channelsForRegion($region);
+
         $from = $request->filled('start_date') ? Carbon::parse($request->start_date)->startOfDay() : now()->startOfMonth();
         $to = $request->filled('end_date') ? Carbon::parse($request->end_date)->startOfDay() : now()->startOfDay();
         if ($from->gt($to)) {
@@ -20,23 +24,30 @@ class EcommerceNetProfitController extends Controller
         }
 
         $sales = EcommerceSale::with('product')
+            ->whereIn('channel', $regionChannels)
             ->whereBetween('created_at', [$from, $to->copy()->endOfDay()])
             ->orderByDesc('created_at')
             ->get();
 
-        // Patch 1: Exclude BOM inventory restocks instead of relying on a hardcoded inclusion
-        // whitelist, so custom operating expense categories are properly deducted.
-        $deductionExpenses = EcommerceExpense::whereNotIn('category', EcommerceExpense::BOM_INVENTORY_CATEGORIES)
+        // Single source of truth for operating expenses: monthly EcommerceExpense records in this currency,
+        // excluding physical BOM inventory restocks (which hit profit via unit_cogs on sale).
+        $deductionExpenses = EcommerceExpense::where('currency', $currency)
+            ->whereNotIn('category', EcommerceExpense::BOM_INVENTORY_CATEGORIES)
             ->whereBetween('expense_date', [$from->toDateString(), $to->toDateString()])
             ->get();
 
-        // Patch 4: Separate revenue sales from non-revenue usage/shrinkage so Backbar Use
-        // and Damage/Expiry do not contaminate Gross Profit and Gross Margin %.
-        $revenueSales = $sales->reject(
-            fn (EcommerceSale $sale) => in_array($sale->channel, EcommerceSale::NON_REVENUE_CHANNELS, true)
-        );
+        // Realized Revenue Sales ONLY (paid or delivered, excluding unpaid_cod, cancelled, rto, and non-revenue channels)
+        $revenueSales = $sales->filter(fn (EcommerceSale $sale) => $sale->isRealizedRevenue());
+
+        // Pending COD Pipeline Sales (excluded from realized revenue until delivered/paid)
+        $pendingCodSales = $sales->filter(fn (EcommerceSale $sale) => $sale->isPendingCod());
+        $pendingCodRevenue = (float) $pendingCodSales->sum('total_price');
+        $pendingCodOrders = EcommerceSale::countDistinctOrders($pendingCodSales);
+
+        // Non-revenue inventory usage/shrinkage (Backbar Use, Damage/Expiry) excluding cancelled/rto
         $nonRevenueSales = $sales->filter(
             fn (EcommerceSale $sale) => in_array($sale->channel, EcommerceSale::NON_REVENUE_CHANNELS, true)
+                && !in_array($sale->order_status, EcommerceSale::INACTIVE_ORDER_STATUSES, true)
         );
 
         $totalRevenue = (float) $revenueSales->sum('total_price');
@@ -58,25 +69,22 @@ class EcommerceNetProfitController extends Controller
             ])
             ->values();
 
-        // Order-level costs captured on revenue sales plus non-revenue shrinkage COGS.
-        $perSaleShipping = (float) $revenueSales->sum(fn (EcommerceSale $sale) => (float) ($sale->shipping_cost ?? 0));
-        $perSaleTax = (float) $revenueSales->sum(fn (EcommerceSale $sale) => (float) ($sale->tax_amount ?? 0));
-        $perSaleMetaAds = (float) $revenueSales->sum(fn (EcommerceSale $sale) => (float) ($sale->meta_ad_allocation ?? 0));
-        $saleLevelDeductions = $perSaleShipping + $perSaleTax + $perSaleMetaAds + $nonRevenueShrinkageCogs;
+        // Per-sale shipping, tax, and Meta ad fields are kept strictly as Unit Economics Reference Only
+        // and are NOT subtracted from Gross Profit (to prevent double-counting against Monthly Expenses).
+        $referencePerSaleShipping = (float) $revenueSales->sum(fn (EcommerceSale $sale) => (float) ($sale->shipping_cost ?? 0));
+        $referencePerSaleTax = (float) $revenueSales->sum(fn (EcommerceSale $sale) => (float) ($sale->tax_amount ?? 0));
+        $referencePerSaleMetaAds = (float) $revenueSales->sum(fn (EcommerceSale $sale) => (float) ($sale->meta_ad_allocation ?? 0));
+        $referenceOrderCostsTotal = $referencePerSaleShipping + $referencePerSaleTax + $referencePerSaleMetaAds;
 
         $deductionBreakdown = $expenseBreakdown->concat([
-            ['category' => 'Per-Sale Shipping', 'amount' => $perSaleShipping],
-            ['category' => 'Per-Sale Tax', 'amount' => $perSaleTax],
-            ['category' => 'Per-Sale Meta Ads', 'amount' => $perSaleMetaAds],
             ['category' => 'Backbar & Shrinkage COGS', 'amount' => $nonRevenueShrinkageCogs],
         ])->values();
 
-        $totalDeductions = (float) $deductionBreakdown->sum('amount');
+        $expenseDeductions = (float) $expenseBreakdown->sum('amount');
+        $totalDeductions = $expenseDeductions + $nonRevenueShrinkageCogs;
         $trueNetProfit = $grossProfit - $totalDeductions;
         $trueNetMargin = $totalRevenue > 0 ? ($trueNetProfit / $totalRevenue) * 100 : 0;
 
-        // Falls back to weekly buckets once the range is too wide for a legible daily x-axis,
-        // mirroring the Sales Trend and Bookings Trend charts so every module buckets consistently.
         $weekly = $from->diffInDays($to) > 62;
         $bucketKey = fn ($date) => $weekly ? $date->format('o-W') : $date->format('Y-m-d');
         $bucketLabel = fn ($date) => $weekly ? 'Wk ' . $date->format('W M') : $date->format('d M');
@@ -99,13 +107,10 @@ class EcommerceNetProfitController extends Controller
                 $dailyRevenue = (float) $bucketRevSales->sum('total_price');
                 $dailyCogs = (float) $bucketRevSales->sum(fn (EcommerceSale $sale) => (float) $sale->quantity * (float) ($sale->unit_cogs ?? 0));
                 $dailyShrinkageCogs = (float) $bucketNonRevSales->sum(fn (EcommerceSale $sale) => (float) $sale->quantity * (float) ($sale->unit_cogs ?? 0));
-                $dailySaleDeductions = (float) $bucketRevSales->sum(fn (EcommerceSale $sale) => (float) ($sale->shipping_cost ?? 0)
-                    + (float) ($sale->tax_amount ?? 0)
-                    + (float) ($sale->meta_ad_allocation ?? 0));
                 $dailyExpenseDeductions = (float) $deductionsByBucket->get($key, collect())->sum('amount');
 
                 $chartLabels[] = $bucketLabel($cursor);
-                $chartNetProfit[] = round($dailyRevenue - $dailyCogs - $dailyShrinkageCogs - $dailySaleDeductions - $dailyExpenseDeductions, 2);
+                $chartNetProfit[] = round($dailyRevenue - $dailyCogs - $dailyShrinkageCogs - $dailyExpenseDeductions, 2);
             }
             $cursor->addDay();
         }
@@ -114,7 +119,7 @@ class EcommerceNetProfitController extends Controller
             ? 'From ' . $from->format('M d, Y') . ' to ' . $to->format('M d, Y')
             : 'This month to date';
 
-        $partners = Partner::withTransactionTotals()->orderBy('id')->get();
+        $partners = Partner::withTransactionTotals($currency)->orderBy('id')->get();
         $partnerProfitShare = $partners->map(fn (Partner $partner) => [
             'partner' => $partner,
             'equity_percentage' => (float) $partner->equity_percentage,
@@ -122,14 +127,20 @@ class EcommerceNetProfitController extends Controller
         ]);
 
         return view('ecommerce.net-profit', [
+            'region' => $region,
+            'currency' => $currency,
             'sales' => $sales,
             'totalRevenue' => $totalRevenue,
+            'pendingCodRevenue' => $pendingCodRevenue,
+            'pendingCodOrders' => $pendingCodOrders,
             'totalCogs' => $totalCogs,
             'grossProfit' => $grossProfit,
             'grossMargin' => $grossMargin,
             'totalDeductions' => $totalDeductions,
-            'saleLevelDeductions' => $saleLevelDeductions,
-            'expenseDeductions' => (float) $expenseBreakdown->sum('amount'),
+            'nonRevenueShrinkageCogs' => $nonRevenueShrinkageCogs,
+            'expenseDeductions' => $expenseDeductions,
+            'referenceOrderCostsTotal' => $referenceOrderCostsTotal,
+            'saleLevelDeductions' => $nonRevenueShrinkageCogs,
             'trueNetProfit' => $trueNetProfit,
             'trueNetMargin' => $trueNetMargin,
             'deductionBreakdown' => $deductionBreakdown,
@@ -146,6 +157,10 @@ class EcommerceNetProfitController extends Controller
 
     public function transactions(Request $request)
     {
+        $region = EcommerceSale::normalizeRegion($request->query('region', 'pk'));
+        $currency = EcommerceSale::currencyForRegion($region);
+        $regionChannels = EcommerceSale::channelsForRegion($region);
+
         $from = $request->filled('start_date') ? Carbon::parse($request->start_date)->startOfDay() : now()->startOfMonth();
         $to = $request->filled('end_date') ? Carbon::parse($request->end_date)->startOfDay() : now()->startOfDay();
         if ($from->gt($to)) {
@@ -153,6 +168,7 @@ class EcommerceNetProfitController extends Controller
         }
 
         $sales = EcommerceSale::with('product')
+            ->whereIn('channel', $regionChannels)
             ->whereBetween('created_at', [$from, $to->copy()->endOfDay()])
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -164,6 +180,8 @@ class EcommerceNetProfitController extends Controller
             : 'This month to date';
 
         return view('ecommerce.net-profit-transactions', [
+            'region' => $region,
+            'currency' => $currency,
             'sales' => $sales,
             'filterText' => $filterText,
             'startDate' => $request->input('start_date'),

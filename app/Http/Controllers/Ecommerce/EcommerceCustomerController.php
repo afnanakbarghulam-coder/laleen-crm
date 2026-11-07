@@ -22,6 +22,10 @@ class EcommerceCustomerController extends Controller
 
     public function index(Request $request)
     {
+        $region = EcommerceSale::normalizeRegion($request->query('region', 'pk'));
+        $currency = EcommerceSale::currencyForRegion($region);
+        $regionChannels = EcommerceSale::revenueChannelsForRegion($region);
+
         $search = trim((string) $request->input('search', ''));
         $channel = trim((string) $request->input('channel', 'all'));
         $segment = trim((string) $request->input('segment', $request->input('tier', 'all')));
@@ -78,16 +82,24 @@ class EcommerceCustomerController extends Controller
 
         if ($isSpecificChannel) {
             $totalCustomers = EcommerceCustomer::whereHas('sales', function ($q) use ($channel) {
-                $q->where('channel', $channel);
+                $q->realizedRevenue()->where('channel', $channel);
             })->count();
 
-            $totalRevenue = (float) EcommerceSale::where('channel', $channel)->sum('total_price');
+            $totalRevenue = (float) EcommerceSale::realizedRevenue()
+                ->where('channel', $channel)
+                ->sum('total_price');
+            $activeCurrency = EcommerceSale::currencyForChannel($channel);
         } else {
             $totalCustomers = EcommerceCustomer::count();
-            $totalRevenue = (float) EcommerceCustomer::sum('total_spend');
+            $totalRevenue = (float) EcommerceSale::realizedRevenue()
+                ->whereIn('channel', $regionChannels)
+                ->sum('total_price');
+            $activeCurrency = $currency;
         }
 
         return view('ecommerce.customers.index', [
+            'region' => $region,
+            'currency' => $activeCurrency,
             'customers' => $customers,
             'search' => $search,
             'channel' => $channel,
@@ -101,10 +113,22 @@ class EcommerceCustomerController extends Controller
     }
 
     /**
-     * 3-Stage Automated Customer Lifecycle Pipeline (LTV Expansion):
-     * - Day 7 (Cross-Sell): 6-8 days ago, 20% bundle-completion hook.
-     * - Day 30 (Refill): 25-35 days ago, refill reminder hook.
-     * - Day 60 (Win-Back): 60-70 days ago with no subsequent orders, high-urgency risk-free Grand Slam kit hook.
+     * Mark a customer as contacted in the retention pipeline.
+     * POST /ecommerce/hub/customers/{customer}/mark-contacted
+     */
+    public function markContacted(Request $request, EcommerceCustomer $customer)
+    {
+        $stage = trim((string) $request->input('stage', 'manual'));
+        $customer->update([
+            'last_retention_contacted_at' => now(),
+            'last_retention_stage' => $stage !== '' ? $stage : 'manual',
+        ]);
+
+        return back()->with('success', ($customer->name ?: 'Customer') . ' marked as contacted.');
+    }
+
+    /**
+     * 3-Stage Automated Customer Lifecycle Pipeline (LTV Expansion).
      */
     private function lifecyclePipeline(): array
     {
@@ -113,7 +137,7 @@ class EcommerceCustomerController extends Controller
                 'key' => 'day7',
                 'title' => 'Day 7 · Cross-Sell',
                 'window_label' => 'Day ' . self::CROSS_SELL_START_DAYS . '–' . self::CROSS_SELL_END_DAYS,
-                'subtitle' => 'Revenue channel sales 6–8 days ago. Hook with a 20% bundle-completion cross-sell.',
+                'subtitle' => 'Realized revenue sales 6–8 days ago. Hook with a 20% bundle-completion cross-sell.',
                 'cta_label' => 'Send 20% Cross-Sell',
                 'badge_class' => 'ec-badge-bundle',
                 'items' => $this->buildLifecycleStage(
@@ -127,7 +151,7 @@ class EcommerceCustomerController extends Controller
                 'key' => 'day30',
                 'title' => 'Day 30 · Refill',
                 'window_label' => 'Day ' . self::REFILL_WINDOW_START_DAYS . '–' . self::REFILL_WINDOW_END_DAYS,
-                'subtitle' => 'Revenue channel sales 25–35 days ago. Remind customers right before their bottle runs dry.',
+                'subtitle' => 'Realized revenue sales 25–35 days ago. Remind customers right before their bottle runs dry.',
                 'cta_label' => 'Send Refill Nudge',
                 'badge_class' => 'ec-badge-injection',
                 'items' => $this->buildLifecycleStage(
@@ -141,7 +165,7 @@ class EcommerceCustomerController extends Controller
                 'key' => 'day60',
                 'title' => 'Day 60 · Win-Back',
                 'window_label' => 'Day ' . self::WIN_BACK_START_DAYS . '–' . self::WIN_BACK_END_DAYS,
-                'subtitle' => 'Revenue channel sales 60–70 days ago with no subsequent orders. High-urgency, risk-free Grand Slam kit offer.',
+                'subtitle' => 'Realized revenue sales 60–70 days ago with no subsequent orders. High-urgency, risk-free Grand Slam kit offer.',
                 'cta_label' => 'Send Grand Slam Offer',
                 'badge_class' => 'ec-badge-expense-paid',
                 'items' => $this->buildLifecycleStage(
@@ -163,8 +187,8 @@ class EcommerceCustomerController extends Controller
         $windowStart = now()->subDays($endDaysAgo)->startOfDay();
         $windowEnd = now()->subDays($startDaysAgo)->endOfDay();
 
-        $dueSales = EcommerceSale::with('product')
-            ->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+        $dueSales = EcommerceSale::with(['product', 'customer'])
+            ->realizedRevenue()
             ->whereBetween('created_at', [$windowStart, $windowEnd])
             ->orderByDesc('created_at')
             ->get();
@@ -180,7 +204,7 @@ class EcommerceCustomerController extends Controller
         $repurchasedNames = collect();
 
         if ($excludeSubsequentOrders) {
-            $subsequentSales = EcommerceSale::whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+            $subsequentSales = EcommerceSale::realizedRevenue()
                 ->where('created_at', '>', $windowEnd)
                 ->get(['customer_phone', 'customer_name']);
 
@@ -207,7 +231,8 @@ class EcommerceCustomerController extends Controller
                 if ($name !== '') {
                     return 'name:' . $name;
                 }
-                return 'sale:' . ($sale->reference_id ?: $sale->id);
+
+                return 'sale:' . $sale->resolvedOrderGroupKey();
             })
             ->reject(function ($group) use ($excludeSubsequentOrders, $normalizePhone, $normalizeName, $repurchasedPhones, $repurchasedNames) {
                 if (!$excludeSubsequentOrders) {
@@ -222,10 +247,13 @@ class EcommerceCustomerController extends Controller
                 if ($phone === '' && $name !== '' && $repurchasedNames->has($name)) {
                     return true;
                 }
+
                 return false;
             })
             ->map(function ($group) use ($normalizePhone, $stageType) {
+                /** @var EcommerceSale $latest */
                 $latest = $group->first();
+                $customer = $latest->customer;
                 $phone = $normalizePhone($latest->customer_phone);
                 $customerName = trim((string) $latest->customer_name) !== '' ? trim((string) $latest->customer_name) : 'there';
                 $daysSince = (int) $latest->created_at->startOfDay()->diffInDays(now()->startOfDay());
@@ -243,6 +271,10 @@ class EcommerceCustomerController extends Controller
                     . '?text=' . rawurlencode($waText);
 
                 return [
+                    'customer_id' => $customer?->id,
+                    'contacted_recently' => $customer ? $customer->wasRecentlyContacted(7) : false,
+                    'last_contacted_at' => $customer?->last_retention_contacted_at,
+                    'last_retention_stage' => $customer?->last_retention_stage,
                     'phone' => $phone,
                     'display_phone' => $latest->customer_phone ?: 'No phone logged',
                     'customer_name' => $customerName,
@@ -250,10 +282,12 @@ class EcommerceCustomerController extends Controller
                     'days_since' => $daysSince,
                     'products' => $products,
                     'channel' => $latest->channel,
-                    'order_count' => $group->count(),
+                    'currency' => EcommerceSale::currencyForChannel($latest->channel),
+                    'order_count' => EcommerceSale::countDistinctOrders($group),
                     'total_spent' => (float) $group->sum('total_price'),
                     'wa_text' => $waText,
                     'wa_link' => $waLink,
+                    'stage_type' => $stageType,
                 ];
             })
             ->sortByDesc('days_since')
@@ -292,15 +326,16 @@ class EcommerceCustomerController extends Controller
         }]);
 
         $channelsShopped = $customer->sales->pluck('channel')->filter()->unique()->values();
+        $realizedSales = $customer->sales->filter(fn (EcommerceSale $s) => $s->isRealizedRevenue());
 
-        $productBreakdown = $customer->sales
+        $productBreakdown = $realizedSales
             ->groupBy(fn ($sale) => $sale->product->name ?? 'Deleted Product')
             ->map(function ($group, $productName) {
                 return [
                     'product_name' => $productName,
                     'sku' => $group->first()?->product?->sku,
                     'total_units' => (int) $group->sum('quantity'),
-                    'orders_count' => $group->count(),
+                    'orders_count' => EcommerceSale::countDistinctOrders($group),
                     'total_spent' => (float) $group->sum('total_price'),
                     'last_bought_at' => $group->max('created_at'),
                 ];

@@ -7,19 +7,31 @@ use App\Models\EcommerceComponentType;
 use App\Models\EcommerceExpense;
 use App\Models\EcommerceProductLine;
 use App\Models\EcommerceRawMaterial;
+use App\Models\EcommerceSale;
 use App\Models\PartnerTransaction;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use RuntimeException;
 
 class EcommerceExpenseController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $expenses = EcommerceExpense::with('creator')->orderByDesc('expense_date')->get();
+        $region = EcommerceSale::normalizeRegion($request->query('region', 'pk'));
+        $currency = EcommerceSale::currencyForRegion($region);
+
+        $expenses = EcommerceExpense::with('creator')
+            ->where('currency', $currency)
+            ->orderByDesc('expense_date')
+            ->orderByDesc('id')
+            ->get();
 
         $totalExpenses = (float) $expenses->sum('amount');
-        $totalPool = (float) PartnerTransaction::where('type', 'injection')->sum('amount');
+        $totalPool = (float) PartnerTransaction::where('type', 'injection')
+            ->where('currency', $currency)
+            ->sum('amount');
         $partnerLedgerExpenses = (float) $expenses->where('funding_source', 'partner_ledger')->sum('amount');
         $remainingBalance = $totalPool - $partnerLedgerExpenses;
 
@@ -41,8 +53,6 @@ class EcommerceExpenseController extends Controller
             ->sort()
             ->values();
 
-        // Only product lines with a defined Bill of Materials are eligible for
-        // the restock recipe below (Hair Mask / Serum are not yet supported).
         $productLines = EcommerceProductLine::whereIn('name', array_keys(EcommerceProductLine::COMPONENT_TYPES_BY_PRODUCT_LINE))
             ->orderBy('name')
             ->get();
@@ -60,6 +70,8 @@ class EcommerceExpenseController extends Controller
         });
 
         return view('ecommerce.expenses', [
+            'region' => $region,
+            'currency' => $currency,
             'expenses' => $expenses,
             'categories' => $categories,
             'vendors' => $vendors,
@@ -75,12 +87,10 @@ class EcommerceExpenseController extends Controller
 
     public function store(Request $request)
     {
-        // The category/vendor comboboxes and their "+ Add New" text inputs swap
-        // which element owns name="category"/name="vendor" client-side, so exactly
-        // one of them is ever present here — the selected value or the typed one.
         $validated = $request->validate([
             'expense_date' => 'required|date',
             'amount' => 'required|numeric|min:0.01',
+            'currency' => ['nullable', Rule::in(['PKR', 'QAR'])],
             'category' => 'required|string|max:100',
             'funding_source' => 'required|in:partner_ledger,sales',
             'vendor' => 'nullable|string|max:255',
@@ -93,6 +103,7 @@ class EcommerceExpenseController extends Controller
         ]);
 
         $receiptPath = $this->handleReceipt($request);
+        $currency = strtoupper((string) ($validated['currency'] ?? 'PKR'));
         $isRestock = $request->boolean('includes_raw_material_restock')
             && !empty($validated['product_line_id'])
             && !empty($validated['component_type_id'])
@@ -100,18 +111,9 @@ class EcommerceExpenseController extends Controller
 
         $title = $validated['category'] . ' - ' . Carbon::parse($validated['expense_date'])->format('d M Y');
 
-        DB::transaction(function () use ($validated, $receiptPath, $isRestock, $title) {
-            EcommerceExpense::create([
-                'expense_date' => $validated['expense_date'],
-                'title' => $title,
-                'amount' => $validated['amount'],
-                'category' => $validated['category'],
-                'funding_source' => $validated['funding_source'],
-                'vendor' => $validated['vendor'] ?? null,
-                'notes' => $validated['notes'] ?? null,
-                'receipt_path' => $receiptPath,
-                'created_by' => auth()->id(),
-            ]);
+        DB::transaction(function () use ($validated, $currency, $receiptPath, $isRestock, $title) {
+            $rawMaterialId = null;
+            $quantityReceived = null;
 
             if ($isRestock) {
                 $quantityReceived = (float) $validated['quantity_received'];
@@ -123,9 +125,6 @@ class EcommerceExpenseController extends Controller
                     ->first();
 
                 if ($rawMaterial) {
-                    // initial_stock is the lifetime total ever received, not just
-                    // the first batch — it must grow with current_stock on every
-                    // restock, or "Remaining" drifts past "Original" over time.
                     $rawMaterial->update([
                         'current_stock' => (float) $rawMaterial->current_stock + $quantityReceived,
                         'initial_stock' => (float) $rawMaterial->initial_stock + $quantityReceived,
@@ -135,7 +134,7 @@ class EcommerceExpenseController extends Controller
                     $productLine = EcommerceProductLine::find($validated['product_line_id']);
                     $componentType = EcommerceComponentType::find($validated['component_type_id']);
 
-                    EcommerceRawMaterial::create([
+                    $rawMaterial = EcommerceRawMaterial::create([
                         'name' => $productLine->name . ' - ' . $componentType->name,
                         'product_line_id' => $productLine->id,
                         'component_type_id' => $componentType->id,
@@ -144,15 +143,64 @@ class EcommerceExpenseController extends Controller
                         'last_purchased_unit_cost' => $unitCost,
                     ]);
                 }
+
+                $rawMaterialId = $rawMaterial->id;
             }
+
+            EcommerceExpense::create([
+                'expense_date' => $validated['expense_date'],
+                'title' => $title,
+                'amount' => $validated['amount'],
+                'currency' => $currency,
+                'category' => $validated['category'],
+                'funding_source' => $validated['funding_source'],
+                'vendor' => $validated['vendor'] ?? null,
+                'notes' => $validated['notes'] ?? null,
+                'receipt_path' => $receiptPath,
+                'includes_raw_material_restock' => $isRestock,
+                'ecommerce_raw_material_id' => $rawMaterialId,
+                'quantity_received' => $quantityReceived,
+                'created_by' => auth()->id(),
+            ]);
         });
 
         return back()->with('success', 'Expense logged.');
     }
 
+    /**
+     * Guard raw material restock deletion:
+     * If the expense added raw material stock, verify that those units have not already been
+     * consumed by production runs before decrementing current_stock & initial_stock and deleting.
+     */
     public function destroy(EcommerceExpense $ecommerceExpense)
     {
-        $ecommerceExpense->delete();
+        try {
+            DB::transaction(function () use ($ecommerceExpense) {
+                if ($ecommerceExpense->includes_raw_material_restock && $ecommerceExpense->ecommerce_raw_material_id) {
+                    $rawMaterial = EcommerceRawMaterial::lockForUpdate()->find($ecommerceExpense->ecommerce_raw_material_id);
+                    $qtyReceived = (float) ($ecommerceExpense->quantity_received ?? 0);
+
+                    if ($rawMaterial && $qtyReceived > 0) {
+                        $currentStock = (float) $rawMaterial->current_stock;
+                        if ($currentStock < $qtyReceived) {
+                            $consumed = round($qtyReceived - $currentStock, 2);
+                            throw new RuntimeException(
+                                "Cannot delete this restock expense because {$consumed} units of this raw material have already been consumed in production runs."
+                            );
+                        }
+
+                        $rawMaterial->update([
+                            'current_stock' => max(0.0, $currentStock - $qtyReceived),
+                            'initial_stock' => max(0.0, (float) $rawMaterial->initial_stock - $qtyReceived),
+                        ]);
+                    }
+                }
+
+                $ecommerceExpense->delete();
+            });
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
 
         return back()->with('success', 'Expense deleted.');
     }

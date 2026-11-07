@@ -6,13 +6,15 @@
 @php
     $channelBadgeClasses = \App\Models\EcommerceSale::CHANNEL_BADGE_CLASSES;
     $channelGroups = \App\Models\EcommerceSale::CHANNEL_GROUPS;
+    $currency = $currency ?? 'PKR';
+    $region = $region ?? 'pk';
 @endphp
 
 @section('content')
     <div class="ec-header">
         <div>
-            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Customers &amp; Sales</div>
-            <h4>Sales &amp; Usage</h4>
+            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Customers &amp; Sales &middot; {{ $region === 'qa' ? 'Qatar (QAR)' : 'Pakistan (PKR)' }}</div>
+            <h4>Sales &amp; Usage ({{ $currency }})</h4>
             <p>Finished goods leaving inventory &mdash; retail sales, backbar use, promos, and damage/expiry, routed to the correct location automatically.</p>
         </div>
         @moduleEdit('ecommerce')
@@ -25,6 +27,7 @@
     {{-- Date & Channel Filters --}}
     <div class="d-flex justify-content-end align-items-center mb-4">
         <form method="GET" action="{{ route('ecommerce.sales.index') }}" class="d-flex align-items-center flex-wrap gap-2">
+            <input type="hidden" name="region" value="{{ $region }}">
             <div class="d-flex align-items-center gap-2">
                 <label for="startDateFilter" class="ec-sub mb-0">From</label>
                 <input type="date" name="start_date" id="startDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ request('start_date') }}">
@@ -44,16 +47,18 @@
                         <button type="button" id="channelClearAllBtn" class="ec-channel-filter-utility-btn">Clear All</button>
                     </div>
                     <div class="ec-channel-filter-list">
-                        @php $channelCheckIndex = 0; @endphp
-                        @foreach ($channelGroups as $groupName => $groupChannels)
-                            <div class="ec-channel-filter-group-label">{{ $groupName }}</div>
-                            @foreach ($groupChannels as $channel)
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="channels[]" value="{{ $channel }}" id="channelCheck{{ $channelCheckIndex }}" {{ in_array($channel, $selectedChannels, true) ? 'checked' : '' }}>
-                                    <label class="form-check-label" for="channelCheck{{ $channelCheckIndex }}">{{ $channel }}</label>
-                                </div>
-                                @php $channelCheckIndex++; @endphp
-                            @endforeach
+                        @php
+                            $channelCheckIndex = 0;
+                            $activeGroupName = $region === 'qa' ? 'Qatar' : 'Pakistan';
+                            $activeGroupChannels = $regionChannels ?? ($channelGroups[$activeGroupName] ?? []);
+                        @endphp
+                        <div class="ec-channel-filter-group-label">{{ $activeGroupName }}</div>
+                        @foreach ($activeGroupChannels as $channel)
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="channels[]" value="{{ $channel }}" id="channelCheck{{ $channelCheckIndex }}" {{ in_array($channel, $selectedChannels, true) ? 'checked' : '' }}>
+                                <label class="form-check-label" for="channelCheck{{ $channelCheckIndex }}">{{ $channel }}</label>
+                            </div>
+                            @php $channelCheckIndex++; @endphp
                         @endforeach
                     </div>
                     <button type="submit" class="btn btn-primary btn-sm w-100 mt-3">Apply Filter</button>
@@ -62,27 +67,34 @@
         </form>
     </div>
 
-    {{-- Top 3 Metric Cards --}}
-    <div class="row">
-        <div class="col-md-4">
-            <div class="ec-card">
-                <h6>Total Revenue</h6>
-                <div class="ec-value ec-positive">PKR {{ number_format($totalRevenue, 2) }}</div>
+    {{-- Top 4 Metric Cards --}}
+    <div class="row g-3">
+        <div class="col-md-3">
+            <div class="ec-card h-100 mb-0">
+                <h6>Realized Revenue</h6>
+                <div class="ec-value ec-positive">{{ $currency }} {{ number_format($totalRevenue, 2) }}</div>
+                <div class="ec-sub">{{ number_format($totalOrders ?? 0) }} paid/delivered order(s)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="ec-card h-100 mb-0" style="border-color: rgba(201, 166, 107, 0.35);">
+                <h6>Pending COD / Pipeline</h6>
+                <div class="ec-value" style="color: #deb97c;">{{ $currency }} {{ number_format($pendingCodRevenue ?? 0, 2) }}</div>
+                <div class="ec-sub">{{ number_format($pendingCodOrders ?? 0) }} unpaid COD order(s)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="ec-card h-100 mb-0">
+                <h6>Items Sold (Realized)</h6>
+                <div class="ec-value">{{ number_format($totalItemsSoldRevenue, 0) }}</div>
                 <div class="ec-sub">{{ $filterText }}</div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="ec-card">
-                <h6>Total Items Sold (Revenue Channels)</h6>
-                <div class="ec-value">{{ number_format($totalItemsSoldRevenue, 0) }}</div>
-                <div class="ec-sub">{{ $filterText }} (Revenue)</div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="ec-card">
-                <h6>Total Items Used/Damaged (Non-Revenue)</h6>
+        <div class="col-md-3">
+            <div class="ec-card h-100 mb-0">
+                <h6>Items Used/Damaged (Non-Rev)</h6>
                 <div class="ec-value ec-negative">{{ number_format($totalItemsUsedDamaged, 0) }}</div>
-                <div class="ec-sub">{{ $filterText }} (Non-Revenue)</div>
+                <div class="ec-sub">{{ $filterText }}</div>
             </div>
         </div>
     </div>
@@ -90,9 +102,9 @@
     {{-- Sales Trend Chart --}}
     <div class="ec-card ec-chart-card mt-3 mb-3">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <h6 class="mb-0">Sales Trend</h6>
+            <h6 class="mb-0">Realized Sales Trend ({{ $currency }})</h6>
             <div class="ec-chart-legend">
-                <span><span class="ec-legend-dot" style="background: #e79a91;"></span>Revenue</span>
+                <span><span class="ec-legend-dot" style="background: #e79a91;"></span>Realized Revenue</span>
                 <span><span class="ec-legend-dot" style="background: #c9a66b;"></span>Units Sold</span>
             </div>
         </div>
@@ -104,8 +116,12 @@
     </div>
 
     {{-- Recent Sales Table --}}
+    @php
+        $upsellGroupIds = $sales->where('is_ai_upsell', true)->pluck('order_group_id')->filter()->unique()->flip();
+        $codConfirmedGroupIds = $sales->whereNotNull('cod_confirmed_at')->pluck('order_group_id')->filter()->unique()->flip();
+    @endphp
     <div class="ec-card">
-        <h6 class="mb-3">Recent Sales</h6>
+        <h6 class="mb-3">Recent Sales ({{ $currency }})</h6>
         <div class="table-responsive">
             <table class="table ec-table align-middle">
                 <thead>
@@ -116,6 +132,7 @@
                         <th>Product</th>
                         <th class="text-end">Quantity</th>
                         <th>Channel</th>
+                        <th>Order / Payment Status</th>
                         <th class="text-end">Unit Price</th>
                         <th class="text-end">Total Revenue</th>
                         <th>Reason/Notes</th>
@@ -124,27 +141,117 @@
                 </thead>
                 <tbody>
                     @forelse ($sales as $sale)
-                        <tr>
+                        @php
+                            $orderStatus = $sale->order_status ?? 'delivered';
+                            $paymentStatus = $sale->payment_status ?? 'paid';
+                            $groupId = $sale->order_group_id ?: ('LEGACY-' . $sale->id);
+                            $hasAiUpsellInGroup = (bool) $sale->is_ai_upsell || ($sale->order_group_id && $upsellGroupIds->has($sale->order_group_id));
+                            $isCodConfirmedInGroup = $sale->cod_confirmed_at !== null || ($sale->order_group_id && $codConfirmedGroupIds->has($sale->order_group_id));
+                            $statusBadgeStyle = match ($orderStatus) {
+                                'delivered' => 'background: rgba(142, 168, 138, 0.22); color: #a3c49e; border: 1px solid rgba(142, 168, 138, 0.45);',
+                                'shipped' => 'background: rgba(96, 165, 250, 0.18); color: #93c5fd; border: 1px solid rgba(96, 165, 250, 0.4);',
+                                'pending' => 'background: rgba(201, 166, 107, 0.2); color: #deb97c; border: 1px solid rgba(201, 166, 107, 0.45);',
+                                default => 'background: rgba(168, 82, 74, 0.22); color: #eba199; border: 1px solid rgba(168, 82, 74, 0.45);',
+                            };
+                        @endphp
+                        <tr style="{{ $sale->is_ai_upsell ? 'background: rgba(201, 166, 107, 0.05);' : '' }}">
                             <td>{{ $sale->created_at->format('d M Y') }}</td>
-                            <td>{{ $sale->reference_id ?? '—' }}</td>
+                            <td>
+                                {{ $sale->reference_id ?? '—' }}
+                                @if ($sale->bundle)
+                                    <div class="ec-sub" style="font-size: 11px;">📦 {{ $sale->bundle->name }}</div>
+                                @endif
+                            </td>
                             <td>{{ $sale->customer_name ?? '—' }}</td>
-                            <td>{{ $sale->product->name ?? '—' }}</td>
+                            <td>
+                                <div>{{ $sale->product->name ?? '—' }}</div>
+                                @if ($sale->is_ai_upsell || $hasAiUpsellInGroup)
+                                    <span class="badge mt-1" style="font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 6px; background: rgba(201, 166, 107, 0.18); color: #deb97c; border: 1px solid rgba(201, 166, 107, 0.38);">
+                                        ⚡ AI Upsell Added
+                                    </span>
+                                @endif
+                            </td>
                             <td class="text-end">{{ number_format($sale->quantity, 0) }}</td>
                             <td><span class="ec-channel-badge {{ $channelBadgeClasses[$sale->channel] ?? 'ec-channel-backbar' }}">{{ $sale->channel }}</span></td>
-                            <td class="text-end">PKR {{ number_format($sale->unit_price, 2) }}</td>
-                            <td class="text-end">PKR {{ number_format($sale->total_price, 2) }}</td>
-                            <td>{{ $sale->reason ?? '—' }}</td>
+                            <td>
+                                <div class="d-flex align-items-center flex-wrap gap-1">
+                                    <span class="ec-badge" style="{{ $statusBadgeStyle }}">{{ strtoupper($orderStatus) }}</span>
+                                    <span class="ec-sub" style="font-size: 11px;">
+                                        {{ $paymentStatus === 'unpaid_cod' ? 'Unpaid COD' : ucfirst($paymentStatus) }}
+                                    </span>
+                                </div>
+                                @if ($isCodConfirmedInGroup)
+                                    <div class="mt-1">
+                                        <span class="badge" style="font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 6px; background: rgba(142, 168, 138, 0.16); color: #a3c49e; border: 1px solid rgba(142, 168, 138, 0.35);">
+                                            COD Confirmed ✓
+                                        </span>
+                                    </div>
+                                @endif
+                            </td>
+                            <td class="text-end">{{ $currency }} {{ number_format($sale->unit_price, 2) }}</td>
+                            <td class="text-end">{{ $currency }} {{ number_format($sale->total_price, 2) }}</td>
+                            <td>
+                                <div>{{ $sale->reason ?? '—' }}</div>
+                                @if ($sale->delivery_notes)
+                                    <div class="mt-1">
+                                        <span class="badge text-wrap text-start" style="font-size: 10.5px; font-weight: 500; padding: 3px 7px; border-radius: 6px; background: rgba(201, 166, 107, 0.14); color: #deb97c; border: 1px solid rgba(201, 166, 107, 0.32);">
+                                            📍 {{ $sale->delivery_notes }}
+                                        </span>
+                                    </div>
+                                @endif
+                            </td>
                             @moduleEdit('ecommerce')
                                 <td class="text-end">
-                                    <form action="{{ route('ecommerce.sales.destroy', $sale->id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this record? This will add the items back to your inventory.');">
-                                        @csrf @method('DELETE')
-                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                    </form>
+                                    <div class="d-inline-flex align-items-center gap-1">
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle py-1 px-2" type="button" data-bs-toggle="dropdown" title="Update Order Status">
+                                                Status
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end" style="background: #241e1c; border: 1px solid rgba(217, 143, 131, 0.35);">
+                                                <li>
+                                                    <form action="{{ route('ecommerce.sales.update-status', $groupId) }}" method="POST">
+                                                        @csrf @method('PATCH')
+                                                        <input type="hidden" name="order_status" value="delivered">
+                                                        <input type="hidden" name="payment_status" value="paid">
+                                                        <button type="submit" class="dropdown-item text-light" style="font-size: 12.5px;">✓ Mark Delivered &amp; Paid</button>
+                                                    </form>
+                                                </li>
+                                                <li>
+                                                    <form action="{{ route('ecommerce.sales.update-status', $groupId) }}" method="POST">
+                                                        @csrf @method('PATCH')
+                                                        <input type="hidden" name="order_status" value="shipped">
+                                                        <button type="submit" class="dropdown-item text-light" style="font-size: 12.5px;">🚚 Mark Shipped</button>
+                                                    </form>
+                                                </li>
+                                                <li><hr class="dropdown-divider" style="border-color: rgba(255,255,255,0.1);"></li>
+                                                <li>
+                                                    <form action="{{ route('ecommerce.sales.update-status', $groupId) }}" method="POST" onsubmit="return confirm('Mark this order as RTO (Return to Origin)? Stock will be restored automatically.');">
+                                                        @csrf @method('PATCH')
+                                                        <input type="hidden" name="order_status" value="rto">
+                                                        <input type="hidden" name="payment_status" value="refunded">
+                                                        <button type="submit" class="dropdown-item text-warning" style="font-size: 12.5px;">↩ Mark RTO (Restore Stock)</button>
+                                                    </form>
+                                                </li>
+                                                <li>
+                                                    <form action="{{ route('ecommerce.sales.update-status', $groupId) }}" method="POST" onsubmit="return confirm('Cancel this order? Stock will be restored automatically.');">
+                                                        @csrf @method('PATCH')
+                                                        <input type="hidden" name="order_status" value="cancelled">
+                                                        <input type="hidden" name="payment_status" value="refunded">
+                                                        <button type="submit" class="dropdown-item text-danger" style="font-size: 12.5px;">✕ Mark Cancelled (Restore Stock)</button>
+                                                    </form>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        <form action="{{ route('ecommerce.sales.destroy', $sale->id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this order? All items in this order group will be restored to inventory.');">
+                                            @csrf @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
                                 </td>
                             @endmoduleEdit
                         </tr>
                     @empty
-                        <tr><td colspan="10" class="text-center text-muted">No sales logged yet &mdash; use "Log New Sale" above.</td></tr>
+                        <tr><td colspan="11" class="text-center text-muted">No sales logged yet &mdash; use "Log New Sale" above.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -223,6 +330,24 @@
                                 <div id="salesUnitPriceWrapper">
                                     <label class="form-label" id="salesUnitPriceLabel">Unit Price</label>
                                     <input type="number" step="0.01" min="0" name="unit_price" id="salesUnitPriceInput" class="form-control" placeholder="e.g. 1500">
+                                </div>
+                            </div>
+
+                            <div class="ec-form-grid mb-3">
+                                <div>
+                                    <label class="form-label">Order Status</label>
+                                    <select name="order_status" id="salesOrderStatusSelect" class="form-select">
+                                        <option value="delivered" selected>Delivered (Completed)</option>
+                                        <option value="shipped">Shipped (In Transit)</option>
+                                        <option value="pending">Pending (Awaiting Dispatch)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label">Payment Status</label>
+                                    <select name="payment_status" id="salesPaymentStatusSelect" class="form-select">
+                                        <option value="paid" selected>Paid (Recognized Revenue)</option>
+                                        <option value="unpaid_cod">Unpaid COD (Pipeline Until Delivered)</option>
+                                    </select>
                                 </div>
                             </div>
 
@@ -373,24 +498,29 @@
                                 <input type="text" name="reference_id" class="form-control" placeholder="e.g. Shopify order #1042">
                             </div>
 
+                            <div class="mb-2">
+                                <span class="ec-sub" style="font-size: 11.5px;">
+                                    <em>Est. Unit Economics Reference Only — Deducted via Monthly Expenses</em>
+                                </span>
+                            </div>
                             <div class="row g-3 mb-3">
                                 <div class="col-md-4">
-                                    <label class="form-label">Courier/Shipping Cost (PKR) <span class="ec-sub">(optional)</span></label>
+                                    <label class="form-label">Courier/Shipping Cost (Ref) <span class="ec-sub">(optional)</span></label>
                                     <input type="number" step="0.01" min="0" name="shipping_cost" class="form-control" placeholder="0.00">
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label">Taxes (PKR) <span class="ec-sub">(optional)</span></label>
+                                    <label class="form-label">Taxes (Ref) <span class="ec-sub">(optional)</span></label>
                                     <input type="number" step="0.01" min="0" name="tax_amount" class="form-control" placeholder="0.00">
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label">Attributed Meta Ads Cost (CAC) <span class="ec-sub">(optional)</span></label>
+                                    <label class="form-label">Attributed Meta Ads (Ref) <span class="ec-sub">(optional)</span></label>
                                     <input type="number" step="0.01" min="0" name="meta_ad_allocation" class="form-control" placeholder="0.00">
                                 </div>
                             </div>
 
                             <div class="ec-grand-total">
                                 <span class="ec-grand-total-label">Grand Total</span>
-                                <span class="ec-grand-total-value" id="salesGrandTotalValue">PKR 0.00</span>
+                                <span class="ec-grand-total-value" id="salesGrandTotalValue">{{ $currency }} 0.00</span>
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -620,6 +750,17 @@
                 });
             }
 
+            const ACTIVE_CURRENCY = @json($currency);
+            const salesOrderStatusSelect = document.getElementById('salesOrderStatusSelect');
+            const salesPaymentStatusSelect = document.getElementById('salesPaymentStatusSelect');
+            if (salesOrderStatusSelect && salesPaymentStatusSelect) {
+                salesOrderStatusSelect.addEventListener('change', function () {
+                    if (this.value === 'delivered') {
+                        salesPaymentStatusSelect.value = 'paid';
+                    }
+                });
+            }
+
             const isBundleMode = () => salesModeSelect.value === 'bundle';
 
             function updateGrandTotal() {
@@ -634,7 +775,7 @@
                     total = quantity * (parseFloat(salesUnitPriceInput.value) || 0);
                 }
 
-                salesGrandTotalValue.textContent = 'PKR ' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                salesGrandTotalValue.textContent = ACTIVE_CURRENCY + ' ' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
 
             function restoreDefaultPrice() {
@@ -832,7 +973,7 @@
                                 callbacks: {
                                     label: function (context) {
                                         if (context.dataset.yAxisID === 'y') {
-                                            return '  Revenue: PKR ' + Number(context.parsed.y).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                            return '  Revenue: ' + @json($currency) + ' ' + Number(context.parsed.y).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                         }
                                         return '  Units Sold: ' + context.parsed.y;
                                     },
@@ -852,7 +993,7 @@
                                     color: '#9ca3af',
                                     font: { size: 11 },
                                     callback: function (value) {
-                                        return 'PKR ' + Number(value).toLocaleString('en-US');
+                                        return @json($currency) + ' ' + Number(value).toLocaleString('en-US');
                                     },
                                 },
                             },

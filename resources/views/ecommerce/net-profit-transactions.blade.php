@@ -5,12 +5,14 @@
 
 @php
     $channelBadgeClasses = \App\Models\EcommerceSale::CHANNEL_BADGE_CLASSES;
+    $currency = $currency ?? 'PKR';
+    $region = $region ?? 'pk';
 @endphp
 
 @section('content')
-    <div class="mb-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <a
-            href="{{ route('ecommerce.net-profit.index', array_filter(['start_date' => $startDate, 'end_date' => $endDate])) }}"
+            href="{{ route('ecommerce.net-profit.index', array_filter(['region' => $region, 'start_date' => $startDate, 'end_date' => $endDate])) }}"
             class="d-inline-flex align-items-center gap-2 text-decoration-none fw-semibold"
             style="color: #d98f83; font-size: 13px; padding: 6px 12px; border-radius: 8px; background: rgba(217, 143, 131, 0.08); border: 1px solid rgba(217, 143, 131, 0.25); transition: background 0.15s ease;"
             onmouseover="this.style.background='rgba(217, 143, 131, 0.16)'"
@@ -18,16 +20,18 @@
         >
             <span>&larr; Back to Net Profit Dashboard</span>
         </a>
+        @include('ecommerce.partials._region_tabs')
     </div>
 
     <div class="ec-header">
         <div>
-            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Customers &amp; Sales &middot; Net Profit</div>
+            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Customers &amp; Sales &middot; Net Profit ({{ $currency }})</div>
             <h4>Per-Transaction Profitability</h4>
-            <p>{{ $filterText }} &middot; Each cost column is a snapshot of the product's BOM at the time the sale was logged, not today's pricing.</p>
+            <p>{{ $filterText }} &middot; Shipping, Tax, and Meta Ads columns are <em>Est. Unit Economics Reference Only — Deducted via Monthly Expenses</em>.</p>
         </div>
 
         <form method="GET" action="{{ route('ecommerce.profit.transactions') }}" class="d-flex align-items-center flex-wrap gap-2">
+            <input type="hidden" name="region" value="{{ $region }}">
             <div class="d-flex align-items-center gap-2">
                 <label for="startDateFilter" class="ec-sub mb-0">From</label>
                 <input type="date" name="start_date" id="startDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ $startDate }}">
@@ -40,7 +44,7 @@
 
     <div class="ec-card">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-            <h6 class="mb-0">Per-Transaction Profitability Ledger</h6>
+            <h6 class="mb-0">Per-Transaction Profitability Ledger ({{ $currency }})</h6>
             <span class="ec-sub mt-0">Showing {{ $sales->count() }} of {{ $sales->total() }} transactions</span>
         </div>
 
@@ -51,6 +55,7 @@
                         <th>Date</th>
                         <th>Product</th>
                         <th>Channel</th>
+                        <th>Status</th>
                         <th class="text-end">Quantity</th>
                         <th class="text-end">Total Revenue</th>
                         <th class="text-end">Liquid Cost</th>
@@ -58,13 +63,11 @@
                         <th class="text-end">Label Cost</th>
                         <th class="text-end">Pump Cost</th>
                         <th class="text-end">Box Cost</th>
-                        <th class="text-end">Shipping</th>
-                        <th class="text-end">Taxes</th>
-                        <th class="text-end">Meta Ads</th>
+                        <th class="text-end">Shipping (Ref)</th>
+                        <th class="text-end">Taxes (Ref)</th>
+                        <th class="text-end">Meta Ads (Ref)</th>
                         <th class="text-end">Gross Profit</th>
                         <th class="text-end">Gross Margin %</th>
-                        <th class="text-end">True Net Profit</th>
-                        <th class="text-end">Net Margin %</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -84,30 +87,30 @@
                             $saleShipping = (float) ($sale->shipping_cost ?? 0);
                             $saleTax = (float) ($sale->tax_amount ?? 0);
                             $saleMetaAd = (float) ($sale->meta_ad_allocation ?? 0);
-                            $saleTrueNetProfit = $saleGrossProfit - $saleShipping - $saleTax - $saleMetaAd;
-                            $saleNetMargin = $saleRevenue > 0 ? ($saleTrueNetProfit / $saleRevenue) * 100 : 0;
                         @endphp
                         <tr>
                             <td>{{ $sale->created_at->format('d M Y') }}</td>
                             <td>{{ $sale->product->name ?? '—' }}</td>
                             <td><span class="ec-channel-badge {{ $channelBadgeClasses[$sale->channel] ?? 'ec-channel-backbar' }}">{{ $sale->channel }}</span></td>
+                            <td>
+                                <span class="ec-badge">{{ strtoupper($sale->order_status ?? 'delivered') }}</span>
+                                <span class="ec-sub ms-1">({{ $sale->payment_status ?? 'paid' }})</span>
+                            </td>
                             <td class="text-end">{{ number_format($sale->quantity, 0) }}</td>
-                            <td class="text-end">PKR {{ number_format($saleRevenue, 2) }}</td>
-                            <td class="text-end">{{ $saleLiquidCost > 0 ? 'PKR ' . number_format($saleLiquidCost, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleBottleCost > 0 ? 'PKR ' . number_format($saleBottleCost, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleLabelCost > 0 ? 'PKR ' . number_format($saleLabelCost, 2) : '—' }}</td>
-                            <td class="text-end">{{ $salePumpCost > 0 ? 'PKR ' . number_format($salePumpCost, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleBoxCost > 0 ? 'PKR ' . number_format($saleBoxCost, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleShipping > 0 ? 'PKR ' . number_format($saleShipping, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleTax > 0 ? 'PKR ' . number_format($saleTax, 2) : '—' }}</td>
-                            <td class="text-end">{{ $saleMetaAd > 0 ? 'PKR ' . number_format($saleMetaAd, 2) : '—' }}</td>
-                            <td class="text-end {{ $saleGrossProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($saleGrossProfit, 2) }}</td>
+                            <td class="text-end">{{ $currency }} {{ number_format($saleRevenue, 2) }}</td>
+                            <td class="text-end">{{ $saleLiquidCost > 0 ? $currency . ' ' . number_format($saleLiquidCost, 2) : '—' }}</td>
+                            <td class="text-end">{{ $saleBottleCost > 0 ? $currency . ' ' . number_format($saleBottleCost, 2) : '—' }}</td>
+                            <td class="text-end">{{ $saleLabelCost > 0 ? $currency . ' ' . number_format($saleLabelCost, 2) : '—' }}</td>
+                            <td class="text-end">{{ $salePumpCost > 0 ? $currency . ' ' . number_format($salePumpCost, 2) : '—' }}</td>
+                            <td class="text-end">{{ $saleBoxCost > 0 ? $currency . ' ' . number_format($saleBoxCost, 2) : '—' }}</td>
+                            <td class="text-end text-muted">{{ $saleShipping > 0 ? $currency . ' ' . number_format($saleShipping, 2) : '—' }}</td>
+                            <td class="text-end text-muted">{{ $saleTax > 0 ? $currency . ' ' . number_format($saleTax, 2) : '—' }}</td>
+                            <td class="text-end text-muted">{{ $saleMetaAd > 0 ? $currency . ' ' . number_format($saleMetaAd, 2) : '—' }}</td>
+                            <td class="text-end {{ $saleGrossProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">{{ $currency }} {{ number_format($saleGrossProfit, 2) }}</td>
                             <td class="text-end {{ $saleGrossMargin >= 0 ? 'ec-positive' : 'ec-negative' }}">{{ number_format($saleGrossMargin, 1) }}%</td>
-                            <td class="text-end {{ $saleTrueNetProfit >= 0 ? 'ec-positive' : 'ec-negative' }}">PKR {{ number_format($saleTrueNetProfit, 2) }}</td>
-                            <td class="text-end {{ $saleNetMargin >= 0 ? 'ec-positive' : 'ec-negative' }}">{{ number_format($saleNetMargin, 1) }}%</td>
                         </tr>
                     @empty
-                        <tr><td colspan="17" class="text-center text-muted py-4">No sales in this date range</td></tr>
+                        <tr><td colspan="16" class="text-center text-muted py-4">No sales in this date range</td></tr>
                     @endforelse
                 </tbody>
             </table>

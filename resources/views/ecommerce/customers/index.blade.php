@@ -5,16 +5,18 @@
 
 @php
     $channelBadgeClasses = \App\Models\EcommerceSale::CHANNEL_BADGE_CLASSES;
+    $currency = $currency ?? 'PKR';
+    $region = $region ?? 'pk';
 @endphp
 
 @section('content')
     <div class="ec-header">
         <div>
-            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Customers &amp; Sales</div>
+            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Customers &amp; Sales &middot; {{ $region === 'qa' ? 'Qatar (QAR)' : 'Pakistan (PKR)' }}</div>
             <h4>Customers &amp; LTV (Unified Database)</h4>
             <p>Cross-channel customer identity tracking across Shopify (Pakistan), Qatar Salons, and Organic WhatsApp.</p>
         </div>
-        <a href="{{ route('ecommerce.sales.index') }}" class="btn btn-outline-primary btn-sm">
+        <a href="{{ route('ecommerce.sales.index', ['region' => $region]) }}" class="btn btn-outline-primary btn-sm">
             <i class="bx bx-plus"></i> Log Sale in Sales &amp; Usage
         </a>
     </div>
@@ -34,10 +36,10 @@
         </div>
         <div class="col-md-6">
             <div class="ec-card ec-card-highlight mb-0 h-100">
-                <h6>Total Tracked LTV Revenue</h6>
-                <div class="ec-value ec-positive" style="font-size: 24px;">PKR {{ number_format($totalRevenue, 2) }}</div>
+                <h6>Realized Revenue ({{ $currency }})</h6>
+                <div class="ec-value ec-positive" style="font-size: 24px;">{{ $currency }} {{ number_format($totalRevenue, 2) }}</div>
                 <div class="ec-sub">
-                    {{ ($channel ?? 'all') !== 'all' ? 'Total sales revenue in ' . $channel : 'Cumulative spend across all channels' }}
+                    {{ ($channel ?? 'all') !== 'all' ? 'Realized sales revenue in ' . $channel : 'Realized revenue in ' . ($region === 'qa' ? 'Qatar (QAR)' : 'Pakistan (PKR)') }}
                 </div>
             </div>
         </div>
@@ -46,6 +48,7 @@
     {{-- Search, Channel & Smart Segment Filter Bar --}}
     <div class="ec-card mb-3" style="overflow: visible; position: relative; z-index: 20;">
         <form id="customerFilterForm" method="GET" action="{{ route('ecommerce.customers.index') }}" class="row g-3 align-items-end">
+            <input type="hidden" name="region" value="{{ $region }}">
             <div class="col-lg-5 col-md-12 position-relative">
                 <label class="ec-sub d-block mb-1" style="font-size: 11px; text-transform: uppercase; letter-spacing: .04em;">Search Profile</label>
                 <input
@@ -262,7 +265,14 @@
                             <tbody>
                                 @foreach ($stage['items'] as $row)
                                     <tr>
-                                        <td>{{ $row['customer_name'] === 'there' ? '—' : $row['customer_name'] }}</td>
+                                        <td>
+                                            <div>{{ $row['customer_name'] === 'there' ? '—' : $row['customer_name'] }}</div>
+                                            @if (!empty($row['contacted_recently']))
+                                                <span class="ec-health-badge ec-health-active mt-1" title="Last contacted {{ optional($row['last_contacted_at'])->format('d M Y H:i') }}">
+                                                    ✓ Contacted {{ optional($row['last_contacted_at'])->diffForHumans() }}
+                                                </span>
+                                            @endif
+                                        </td>
                                         <td>{{ $row['display_phone'] }}</td>
                                         <td>
                                             <span class="ec-channel-badge {{ $channelBadgeClasses[$row['channel']] ?? 'ec-channel-shopify' }}">
@@ -272,11 +282,24 @@
                                         <td>{{ $row['last_purchase_at']->format('d M Y') }}</td>
                                         <td class="text-end">{{ $row['days_since'] }}d</td>
                                         <td>{{ $row['products']->implode(', ') }}</td>
-                                        <td class="text-end">PKR {{ number_format($row['total_spent'], 2) }}</td>
+                                        <td class="text-end">{{ $row['currency'] ?? 'PKR' }} {{ number_format($row['total_spent'], 2) }}</td>
                                         <td class="text-end">
-                                            <a href="{{ $row['wa_link'] }}" target="_blank" rel="noopener" class="ec-wa-btn" title="{{ $row['wa_text'] }}">
-                                                <i class="bi bi-whatsapp"></i> {{ $stage['cta_label'] }}
-                                            </a>
+                                            <div class="d-inline-flex align-items-center gap-2">
+                                                <a href="{{ $row['wa_link'] }}" target="_blank" rel="noopener" class="ec-wa-btn" title="{{ $row['wa_text'] }}">
+                                                    <i class="bi bi-whatsapp"></i> {{ $stage['cta_label'] }}
+                                                </a>
+                                                @moduleEdit('ecommerce')
+                                                    @if (!empty($row['customer_id']))
+                                                        <form action="{{ route('ecommerce.customers.mark-contacted', $row['customer_id']) }}" method="POST" class="d-inline">
+                                                            @csrf
+                                                            <input type="hidden" name="stage" value="{{ $row['stage_type'] ?? $stageKey }}">
+                                                            <button type="submit" class="btn btn-sm btn-outline-light" style="border-radius: 20px; font-size: 11.5px; padding: 4px 11px; border-color: rgba(217, 143, 131, 0.35); color: #e79a91;">
+                                                                ✓ Mark Contacted
+                                                            </button>
+                                                        </form>
+                                                    @endif
+                                                @endmoduleEdit
+                                            </div>
                                         </td>
                                     </tr>
                                 @endforeach

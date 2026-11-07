@@ -11,14 +11,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
-/**
- * Ecommerce weekly content calendar.
- *
- * Mirrors the salon calendar's execution model (week navigation, a Reel
- * module and a Stories module per day, each independently gated before it
- * can be marked Posted) but reads and writes ONLY ecommerce_content_calendar.
- * It never touches social_content_plans, so the two stay fully isolated.
- */
 class EcommerceContentCalendarController extends Controller
 {
     public function index(Request $request)
@@ -27,10 +19,6 @@ class EcommerceContentCalendarController extends Controller
             ? Carbon::parse($request->query('week'))->startOfWeek(Carbon::MONDAY)
             : now()->startOfWeek(Carbon::MONDAY);
 
-        // Guarantee a row per day for the selected week, even one nobody has
-        // opened before. Wrapped per-day: two overlapping requests for the
-        // same new week can both clear firstOrCreate's existence check before
-        // either INSERT lands — the loser just means the row already exists.
         foreach (EcommerceContentCalendar::DAYS_OF_WEEK as $dayName) {
             try {
                 EcommerceContentCalendar::firstOrCreate(
@@ -87,8 +75,6 @@ class EcommerceContentCalendarController extends Controller
         $days = $validated['days'] ?? [];
         $gateErrors = [];
 
-        // Rest-day guardrail: at most MAX_REEL_SKIP_DAYS per week. The first
-        // three requested (Mon->Sun order) win; the rest stay scheduled.
         $requestedSkips = collect(EcommerceContentCalendar::DAYS_OF_WEEK)
             ->filter(fn ($d) => $request->boolean("days.{$d}.is_reel_skipped"));
 
@@ -113,8 +99,6 @@ class EcommerceContentCalendarController extends Controller
                 $stories = $content['stories_content'] ?? null;
                 $skipped = $allowedSkips->contains($dayName);
 
-                // A Reel can only be Posted with both a concept and a live
-                // link — and a Rest Day can never be Posted at all.
                 $wantsReelPosted = $request->boolean("days.{$dayName}.is_reel_posted");
                 $reelPosted = $wantsReelPosted && !$skipped;
                 if (!$skipped && $wantsReelPosted && (blank($script) || blank($link))) {
@@ -129,6 +113,8 @@ class EcommerceContentCalendarController extends Controller
                     $gateErrors[] = "Gatekeeper: {$dayName}'s Stories cannot be marked Posted without Daily Stories content.";
                 }
 
+                $resolvedStatus = ($reelPosted || $storiesPosted) ? 'Live on Shopify/Meta' : 'Scheduled';
+
                 EcommerceContentCalendar::updateOrCreate(
                     ['week_start_date' => $weekStart, 'day_of_week' => $dayName],
                     [
@@ -139,11 +125,10 @@ class EcommerceContentCalendarController extends Controller
                         'reel_link' => $link,
                         'stories_content' => $stories,
                         'person_responsible' => $content['person_responsible'] ?? null,
+                        'status' => $resolvedStatus,
                         'is_reel_skipped' => $skipped,
                         'is_reel_posted' => $reelPosted,
                         'are_stories_posted' => $storiesPosted,
-                        // Preserve the original timestamp on a row that was
-                        // already posted, so re-saving doesn't reset history.
                         'reel_posted_at' => $reelPosted
                             ? ($existing && $existing->is_reel_posted ? $existing->reel_posted_at : now())
                             : null,
@@ -164,8 +149,6 @@ class EcommerceContentCalendarController extends Controller
 
     /**
      * Instant per-cell save + status toggle behind the status pills.
-     * Saves whatever was last typed in that cell, then flips its flag
-     * subject to the same gates enforced in updateWeek().
      */
     public function toggleStatus(Request $request, EcommerceContentCalendar $content)
     {
@@ -239,6 +222,10 @@ class EcommerceContentCalendarController extends Controller
                 $content->stories_posted_at = null;
             }
         }
+
+        $content->status = ($content->is_reel_posted || $content->are_stories_posted)
+            ? 'Live on Shopify/Meta'
+            : 'Scheduled';
 
         $content->save();
 

@@ -5,6 +5,8 @@
 
 @php
     $canEdit = auth()->check() && auth()->user()->canEdit('ecommerce');
+    $currency = $currency ?? 'PKR';
+    $region = $region ?? 'pk';
 
     // null = no data (render an em dash), true = healthy, false = needs attention.
     $borderClass = fn ($healthy) => $healthy === null ? '' : ($healthy ? 'ec-kpi-good' : 'ec-kpi-bad');
@@ -13,20 +15,23 @@
 @section('content')
     <div class="ec-header">
         <div>
-            <h4>Ecommerce KPIs</h4>
-            <p>Live sales &amp; customer retention economics paired with your daily ad spend.</p>
+            <div class="ec-sub text-uppercase fw-bold mb-1" style="font-size: 11px; letter-spacing: .08em; color: var(--ec-gold);">Performance &amp; KPIs &middot; {{ $region === 'qa' ? 'Qatar (QAR)' : 'Pakistan (PKR)' }}</div>
+            <h4>Ecommerce KPIs ({{ $currency }})</h4>
+            <p>Live realized sales &amp; customer retention economics paired with your daily ad spend.</p>
         </div>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @include('ecommerce.partials._region_tabs')
             @moduleEdit('ecommerce')
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#kpiModal">+ Enter Daily Ad Spend</button>
             @endmoduleEdit
-            <a href="{{ route('ecommerce.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Ecommerce</a>
+            <a href="{{ route('ecommerce.index', ['region' => $region]) }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Ecommerce</a>
         </div>
     </div>
 
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <p class="ec-sub mb-0">{{ $filterText }} &middot; {{ $metrics['day_count'] }} day(s) of ad spend logged</p>
+        <p class="ec-sub mb-0">{{ $filterText }} &middot; {{ $metrics['day_count'] }} day(s) of {{ $currency }} ad spend logged</p>
         <form method="GET" action="{{ route('ecommerce.dashboard') }}" class="d-flex align-items-center flex-wrap gap-2">
+            <input type="hidden" name="region" value="{{ $region }}">
             <div class="d-flex align-items-center gap-2">
                 <label for="startDateFilter" class="ec-sub mb-0">From</label>
                 <input type="date" name="start_date" id="startDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ $startDate }}">
@@ -193,9 +198,9 @@
                     </span>
                 </h6>
                 <div class="ec-kpi-value my-1" style="font-size: 2rem; font-weight: 800;">
-                    {{ $metrics['cac'] === null ? '—' : 'PKR ' . number_format($metrics['cac'], 2) }}
+                    {{ $metrics['cac'] === null ? '—' : $currency . ' ' . number_format($metrics['cac'], 2) }}
                 </div>
-                <div class="ec-sub mt-1">Target: &lt; {{ ($metrics['aov'] ?? 0) > 0 ? 'PKR ' . number_format($metrics['aov'], 0) . ' (AOV)' : 'AOV' }}</div>
+                <div class="ec-sub mt-1">Target: &lt; {{ ($metrics['aov'] ?? 0) > 0 ? $currency . ' ' . number_format($metrics['aov'], 0) . ' (AOV)' : 'AOV' }}</div>
                 @if ($metrics['cac_healthy'] !== null)
                     <div class="ec-kpi-flag {{ $metrics['cac_healthy'] ? 'ec-positive' : 'ec-negative' }} mt-2">
                         {{ $metrics['cac_healthy'] ? '✓ Below AOV' : '⚠ Exceeds AOV' }}
@@ -222,9 +227,9 @@
                     </span>
                 </h6>
                 <div class="ec-kpi-value my-1" style="font-size: 2rem; font-weight: 800;">
-                    PKR {{ number_format($metrics['aov'] ?? 0, 2) }}
+                    {{ $currency }} {{ number_format($metrics['aov'] ?? 0, 2) }}
                 </div>
-                <div class="ec-sub mt-1">{{ number_format($metrics['total_orders'] ?? 0) }} orders in range</div>
+                <div class="ec-sub mt-1">{{ number_format($metrics['total_orders'] ?? 0) }} realized orders in range</div>
                 @if (($metrics['total_orders'] ?? 0) > 0)
                     <div class="ec-kpi-flag ec-sub mt-2">✓ Live from Sales Ledger</div>
                 @endif
@@ -263,9 +268,10 @@
 
     <div class="ec-card ec-summary-strip-card mt-3">
         <div class="d-flex flex-wrap justify-content-between gap-4">
-            <div><span class="ec-sub">Revenue</span><div class="ec-stock-emphasis">PKR {{ number_format($metrics['total_revenue'], 2) }}</div></div>
-            <div><span class="ec-sub">Ad Spend</span><div class="ec-stock-emphasis">PKR {{ number_format($metrics['total_ad_spend'], 2) }}</div></div>
-            <div><span class="ec-sub">Orders</span><div class="ec-stock-emphasis">{{ number_format($metrics['total_orders']) }}</div></div>
+            <div><span class="ec-sub">Realized Revenue</span><div class="ec-stock-emphasis">{{ $currency }} {{ number_format($metrics['total_revenue'], 2) }}</div></div>
+            <div><span class="ec-sub">Pending COD / Pipeline</span><div class="ec-stock-emphasis" style="color: #deb97c;">{{ $currency }} {{ number_format($metrics['pending_cod_revenue'] ?? 0, 2) }} ({{ number_format($metrics['pending_cod_orders'] ?? 0) }} orders)</div></div>
+            <div><span class="ec-sub">Ad Spend</span><div class="ec-stock-emphasis">{{ $currency }} {{ number_format($metrics['total_ad_spend'], 2) }}</div></div>
+            <div><span class="ec-sub">Realized Orders</span><div class="ec-stock-emphasis">{{ number_format($metrics['total_orders']) }}</div></div>
             <div><span class="ec-sub">New Customers</span><div class="ec-stock-emphasis">{{ number_format($metrics['new_customers']) }}</div></div>
             <div><span class="ec-sub">Repeat Customers</span><div class="ec-stock-emphasis">{{ number_format($metrics['repeat_customers']) }}</div></div>
         </div>
@@ -274,13 +280,13 @@
     {{-- ============ Logged Daily Ad Spend ============ --}}
     @if ($kpiRows->isNotEmpty())
         <div class="ec-card mt-3">
-            <h6 class="mb-3">Daily Ad Spend Log</h6>
+            <h6 class="mb-3">Daily Ad Spend Log ({{ $currency }})</h6>
             <div class="table-responsive">
                 <table class="table ec-table align-middle mb-0">
                     <thead>
                         <tr>
                             <th>Date</th>
-                            <th class="text-end">Revenue</th>
+                            <th class="text-end">Realized Revenue</th>
                             <th class="text-end">Ad Spend</th>
                             <th class="text-end">Orders</th>
                             <th class="text-end">ROAS</th>
@@ -292,8 +298,8 @@
                             @php $rowRoas = (float) $row->total_ad_spend > 0 ? (float) $row->total_revenue / (float) $row->total_ad_spend : null; @endphp
                             <tr>
                                 <td>{{ $row->date->format('d M Y') }}</td>
-                                <td class="text-end">PKR {{ number_format($row->total_revenue, 2) }}</td>
-                                <td class="text-end">PKR {{ number_format($row->total_ad_spend, 2) }}</td>
+                                <td class="text-end">{{ $currency }} {{ number_format($row->total_revenue, 2) }}</td>
+                                <td class="text-end">{{ $currency }} {{ number_format($row->total_ad_spend, 2) }}</td>
                                 <td class="text-end">{{ number_format($row->total_orders) }}</td>
                                 <td class="text-end {{ $rowRoas === null ? '' : ($rowRoas >= $merTarget ? 'ec-positive' : 'ec-negative') }}">
                                     {{ $rowRoas === null ? '—' : number_format($rowRoas, 2) . 'x' }}
@@ -326,14 +332,21 @@
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <p class="ec-sub mb-3">Revenue, order counts, and customer retention are calculated automatically from your Sales &amp; Customers database. Enter the day's total ad spend below.</p>
+                            <p class="ec-sub mb-3">Realized revenue, order counts, and customer retention are calculated automatically from your Sales &amp; Customers database. Enter the day's total ad spend below.</p>
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <label class="form-label">Date</label>
                                     <input type="date" name="date" class="form-control" value="{{ now()->toDateString() }}" required>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Total Ad Spend (PKR)</label>
+                                <div class="col-md-4">
+                                    <label class="form-label">Region / Currency</label>
+                                    <select name="currency" class="form-select" required>
+                                        <option value="PKR" {{ $currency === 'PKR' ? 'selected' : '' }}>PKR (Pakistan)</option>
+                                        <option value="QAR" {{ $currency === 'QAR' ? 'selected' : '' }}>QAR (Qatar)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Total Ad Spend</label>
                                     <input type="number" step="0.01" min="0" name="total_ad_spend" id="kpiAdSpend" class="form-control" placeholder="0.00" required>
                                 </div>
                             </div>

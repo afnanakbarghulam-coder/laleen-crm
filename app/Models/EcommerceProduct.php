@@ -10,6 +10,8 @@ class EcommerceProduct extends Model
         'name',
         'product_line_id',
         'sku',
+        'shopify_url',
+        'shopify_variant_id',
         'unit_size',
         'stock_pakistan',
         'stock_qatar',
@@ -45,6 +47,7 @@ class EcommerceProduct extends Model
     ];
 
     protected $appends = [
+        'base_price',
         'liquid_cost',
         'total_cogs',
         'unit_cogs',
@@ -77,6 +80,92 @@ class EcommerceProduct extends Model
     public function productLine()
     {
         return $this->belongsTo(EcommerceProductLine::class, 'product_line_id');
+    }
+
+    public function getBasePriceAttribute(): float
+    {
+        return $this->resolveBasePrice('PK');
+    }
+
+    /**
+     * Resolve a strictly positive (> 0) base price for this product.
+     * If selling_price / base_price on ecommerce_products is 0 or null, falls back in exact order:
+     *   1. $this->pricingModel?->selling_price (if > 0)
+     *   2. Most recent positive unit_price in ecommerce_sales for this product
+     *   3. Regional default fallback (1200.00 for PK / 65.00 for QA)
+     */
+    public function resolveBasePrice(?string $region = 'PK'): float
+    {
+        if (array_key_exists('base_price', $this->attributes) && (float) $this->attributes['base_price'] > 0) {
+            return (float) $this->attributes['base_price'];
+        }
+
+        if ((float) ($this->selling_price ?? 0) > 0) {
+            return (float) $this->selling_price;
+        }
+
+        $model = $this->relationLoaded('pricingModel') ? $this->pricingModel : $this->pricingModel()->first();
+        if ($model && (float) $model->selling_price > 0) {
+            return (float) $model->selling_price;
+        }
+
+        if ($this->id) {
+            $recentUnitPrice = EcommerceSale::where('ecommerce_product_id', $this->id)
+                ->where('unit_price', '>', 0)
+                ->latest('id')
+                ->value('unit_price');
+
+            if ($recentUnitPrice && (float) $recentUnitPrice > 0) {
+                return (float) $recentUnitPrice;
+            }
+        }
+
+        $isQatar = in_array(strtoupper(trim((string) $region)), ['QA', 'QAR', 'QATAR'], true);
+
+        return $isQatar ? 65.00 : 1200.00;
+    }
+
+    /**
+     * Build a direct Shopify discount checkout URL or cart permalink for this product.
+     */
+    public function getShopifyCheckoutUrl(?string $discountCode = null, ?string $storeDomain = null): string
+    {
+        $rawDomain = trim((string) ($storeDomain ?: (EcommerceAiSetting::current()->shopify_store_domain ?? 'laleenrituals.com')));
+        $cleanDomain = preg_replace('#^https?://#i', '', $rawDomain);
+        $cleanDomain = rtrim((string) $cleanDomain, '/');
+        if ($cleanDomain === '') {
+            $cleanDomain = 'laleenrituals.com';
+        }
+
+        $code = trim((string) $discountCode);
+
+        // 1. If a Shopify variant ID is set, return a direct cart permalink
+        $variantId = trim((string) ($this->shopify_variant_id ?? ''));
+        if ($variantId !== '') {
+            $cartUrl = "https://{$cleanDomain}/cart/{$variantId}:1";
+
+            return $code !== '' ? ($cartUrl . '?discount=' . urlencode($code)) : $cartUrl;
+        }
+
+        // 2. Resolve product path from shopify_url or product name slug
+        $customUrl = trim((string) ($this->shopify_url ?? ''));
+        if ($customUrl !== '') {
+            if (preg_match('#^https?://#i', $customUrl)) {
+                $parsedPath = parse_url($customUrl, PHP_URL_PATH) ?: ('/products/' . \Illuminate\Support\Str::slug($this->name));
+                $productPath = '/' . ltrim($parsedPath, '/');
+            } else {
+                $productPath = '/' . ltrim($customUrl, '/');
+            }
+        } else {
+            $slug = \Illuminate\Support\Str::slug($this->name ?: 'laleen-ritual');
+            $productPath = "/products/{$slug}";
+        }
+
+        if ($code !== '') {
+            return "https://{$cleanDomain}/discount/" . urlencode($code) . '?redirect=' . $productPath;
+        }
+
+        return "https://{$cleanDomain}{$productPath}";
     }
 
     public function getLiquidCostAttribute(): float

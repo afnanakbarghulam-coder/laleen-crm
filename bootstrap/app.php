@@ -13,7 +13,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->validateCsrfTokens(except: [
-            'api/webhooks/shopify/orders',
+            'api/webhooks/shopify/*',
+            'api/webhooks/ecommerce/*',
         ]);
 
         $middleware->alias([

@@ -150,6 +150,7 @@
                         <th>Reference ID</th>
                         <th>Product Purchased</th>
                         <th>Channel</th>
+                        <th>Status</th>
                         <th class="text-end">Quantity</th>
                         <th class="text-end">Unit Price</th>
                         <th class="text-end">Total Amount</th>
@@ -158,6 +159,7 @@
                 </thead>
                 <tbody>
                     @forelse ($customer->sales as $sale)
+                        @php $saleCurr = \App\Models\EcommerceSale::currencyForChannel($sale->channel); @endphp
                         <tr>
                             <td>
                                 <div>{{ $sale->created_at?->format('d M Y') ?? '—' }}</div>
@@ -175,16 +177,20 @@
                                     {{ $sale->channel }}
                                 </span>
                             </td>
+                            <td>
+                                <span class="ec-badge">{{ strtoupper($sale->order_status ?? 'delivered') }}</span>
+                                <span class="ec-sub ms-1">({{ $sale->payment_status ?? 'paid' }})</span>
+                            </td>
                             <td class="text-end">{{ number_format($sale->quantity, 0) }}</td>
-                            <td class="text-end" style="font-variant-numeric: tabular-nums;">PKR {{ number_format($sale->unit_price, 2) }}</td>
+                            <td class="text-end" style="font-variant-numeric: tabular-nums;">{{ $saleCurr }} {{ number_format($sale->unit_price, 2) }}</td>
                             <td class="text-end fw-bold" style="color: var(--ec-success); font-variant-numeric: tabular-nums;">
-                                PKR {{ number_format($sale->total_price, 2) }}
+                                {{ $saleCurr }} {{ number_format($sale->total_price, 2) }}
                             </td>
                             <td class="ec-sub">{{ $sale->reason ?: '—' }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="text-center text-muted py-4">No orders logged for this customer yet.</td>
+                            <td colspan="9" class="text-center text-muted py-4">No orders logged for this customer yet.</td>
                         </tr>
                     @endforelse
                 </tbody>

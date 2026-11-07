@@ -12,49 +12,53 @@ use App\Models\EcommerceSale;
 use App\Models\PartnerTransaction;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class EcommerceController extends Controller
 {
     /**
-     * Top-level 2x2 workstation card menu. Each card carries a live headline
-     * figure so the hub reports operational state at a glance.
+     * Top-level 2x2 workstation card menu. Supports ?region=pk (PKR) vs ?region=qa (QAR).
      */
-    public function hub()
+    public function hub(Request $request)
     {
-        $capitalPool = (float) PartnerTransaction::where('type', 'injection')->sum('amount');
-        $partnerFundedExpenses = (float) EcommerceExpense::where('funding_source', 'partner_ledger')->sum('amount');
+        $region = EcommerceSale::normalizeRegion($request->query('region', 'pk'));
+        $currency = EcommerceSale::currencyForRegion($region);
+        $regionChannels = EcommerceSale::channelsForRegion($region);
+
+        $capitalPool = (float) PartnerTransaction::where('type', 'injection')
+            ->where('currency', $currency)
+            ->sum('amount');
+        $partnerFundedExpenses = (float) EcommerceExpense::where('funding_source', 'partner_ledger')
+            ->where('currency', $currency)
+            ->sum('amount');
 
         $contentSlots = EcommerceContentCalendar::count() ?: 7;
-        $contentLive = EcommerceContentCalendar::where('status', 'Live on Shopify/Meta')->count();
+        $contentLive = EcommerceContentCalendar::where(function ($q) {
+            $q->where('is_reel_posted', true)
+                ->orWhere('are_stories_posted', true)
+                ->orWhere('status', 'Live on Shopify/Meta');
+        })->count();
         $inFlightAdsCount = EcommerceMonthlyAd::whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count();
 
         $totalCustomersCount = EcommerceCustomer::count();
 
-        $revenueSales = EcommerceSale::whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
-            ->get(['id', 'reference_id', 'ecommerce_bundle_id', 'created_at', 'total_price']);
+        $revenueSales = EcommerceSale::realizedRevenue()
+            ->whereIn('channel', $regionChannels)
+            ->get(['id', 'order_group_id', 'reference_id', 'ecommerce_bundle_id', 'created_at', 'total_price']);
 
-        $totalSalesCount = $revenueSales
-            ->groupBy(function ($s) {
-                if (!empty($s->reference_id)) {
-                    return 'ref:' . $s->reference_id;
-                }
-                if (!empty($s->ecommerce_bundle_id)) {
-                    return 'bundle:' . $s->ecommerce_bundle_id . ':' . $s->created_at;
-                }
-                return 'sale:' . $s->id;
-            })
-            ->count();
-
+        $totalSalesCount = EcommerceSale::countDistinctOrders($revenueSales);
         $totalSalesRevenue = (float) $revenueSales->sum('total_price');
         $aov = $totalSalesCount > 0 ? ($totalSalesRevenue / $totalSalesCount) : 0.0;
 
         if ($aov <= 0) {
-            $kpiRevenue = (float) EcommerceKpi::sum('total_revenue');
-            $kpiOrders = (int) EcommerceKpi::sum('total_orders');
+            $kpiRevenue = (float) EcommerceKpi::where('currency', $currency)->sum('total_revenue');
+            $kpiOrders = (int) EcommerceKpi::where('currency', $currency)->sum('total_orders');
             $aov = $kpiOrders > 0 ? ($kpiRevenue / $kpiOrders) : 0.0;
         }
 
         return view('ecommerce.hub', [
+            'region' => $region,
+            'currency' => $currency,
             'runway' => $capitalPool - $partnerFundedExpenses,
             'totalCustomersCount' => $totalCustomersCount,
             'totalSalesCount' => $totalSalesCount,
@@ -74,17 +78,29 @@ class EcommerceController extends Controller
 
     public function marketing()
     {
+        $contentLive = EcommerceContentCalendar::where(function ($q) {
+            $q->where('is_reel_posted', true)
+                ->orWhere('are_stories_posted', true)
+                ->orWhere('status', 'Live on Shopify/Meta');
+        })->count();
+
         return view('ecommerce.marketing.hub', [
             'adsInFlight' => EcommerceMonthlyAd::whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count(),
             'adsScaling' => EcommerceMonthlyAd::where('phase', 'Scaling')->count(),
             'contentSlots' => EcommerceContentCalendar::count(),
-            'contentLive' => EcommerceContentCalendar::where('status', 'Live on Shopify/Meta')->count(),
+            'contentLive' => $contentLive,
         ]);
     }
 
-    /** Performance & KPIs — automated sales/customer metrics + daily ad spend ROAS/CAC. */
+    /**
+     * Performance & KPIs — strictly separated by region/currency (?region=pk [PKR] vs ?region=qa [QAR]).
+     */
     public function dashboard(Request $request)
     {
+        $region = EcommerceSale::normalizeRegion($request->query('region', 'pk'));
+        $currency = EcommerceSale::currencyForRegion($region);
+        $regionChannels = EcommerceSale::channelsForRegion($region);
+
         $from = $request->filled('start_date')
             ? Carbon::parse($request->start_date)->startOfDay()
             : now()->startOfMonth();
@@ -99,48 +115,41 @@ class EcommerceController extends Controller
         $rangeStart = $from->copy()->startOfDay();
         $rangeEnd = $to->copy()->endOfDay();
 
-        $kpiRows = EcommerceKpi::whereBetween('date', [$rangeStart, $rangeEnd])
+        $kpiRows = EcommerceKpi::where('currency', $currency)
+            ->whereBetween('date', [$rangeStart, $rangeEnd])
             ->orderByDesc('date')
             ->get();
 
-        // 1. Dynamically calculate Revenue, Orders, and AOV from ecommerce_sales
-        $salesInRange = EcommerceSale::whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+        // 1. Fetch all sales in range for this region, separating Realized vs Pending COD
+        $allSalesInRange = EcommerceSale::whereIn('channel', $regionChannels)
             ->whereBetween('created_at', [$rangeStart, $rangeEnd])
             ->get();
 
-        $totalRevenue = (float) $salesInRange->sum('total_price');
+        $realizedSalesInRange = $allSalesInRange->filter(fn (EcommerceSale $s) => $s->isRealizedRevenue());
+        $pendingCodSalesInRange = $allSalesInRange->filter(fn (EcommerceSale $s) => $s->isPendingCod());
 
-        $groupOrders = fn ($sales) => $sales->groupBy(function (EcommerceSale $s) {
-            if (!empty($s->reference_id)) {
-                return 'ref:' . $s->reference_id;
-            }
-            if (!empty($s->ecommerce_bundle_id)) {
-                return 'bundle:' . $s->ecommerce_bundle_id . ':' . $s->created_at;
-            }
-            return 'id:' . $s->id;
-        });
-
-        $totalOrders = $groupOrders($salesInRange)->count();
+        $totalRevenue = (float) $realizedSalesInRange->sum('total_price');
+        $totalOrders = EcommerceSale::countDistinctOrders($realizedSalesInRange);
         $aov = $totalOrders > 0 ? ($totalRevenue / $totalOrders) : 0.0;
 
-        // 2. Dynamically calculate Repeat Customer Rate & New Customers from ecommerce_customers
-        $customersInRange = EcommerceCustomer::where(function ($q) use ($rangeStart, $rangeEnd) {
-            $q->whereBetween('last_purchase_at', [$rangeStart, $rangeEnd])
-                ->orWhereBetween('created_at', [$rangeStart, $rangeEnd])
-                ->orWhereHas('sales', function ($sq) use ($rangeStart, $rangeEnd) {
-                    $sq->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
-                        ->whereBetween('created_at', [$rangeStart, $rangeEnd]);
-                });
-        })->get();
+        $pendingCodRevenue = (float) $pendingCodSalesInRange->sum('total_price');
+        $pendingCodOrders = EcommerceSale::countDistinctOrders($pendingCodSalesInRange);
 
-        $totalCustomersInRange = $customersInRange->count();
-        $repeatCustomers = $customersInRange->where('total_orders', '>=', 2)->count();
-        $newCustomers = $customersInRange->where('total_orders', '<=', 1)->count();
+        // 2. Historical Cohort Calculation for New vs Repeat Customers in the selected date range & region:
+        // Group realized sales up to $rangeEnd by customer identifier (customer_id or normalized phone)
+        // and count distinct order_group_id up to $rangeEnd.
+        [$newCustomers, $repeatCustomers] = $this->computeCohortCustomerCounts(
+            $regionChannels,
+            $rangeStart,
+            $rangeEnd
+        );
+
+        $totalCustomersInRange = $newCustomers + $repeatCustomers;
         $repeatRate = $totalCustomersInRange > 0
             ? ($repeatCustomers / $totalCustomersInRange) * 100
             : 0.0;
 
-        // 3. Calculate ROAS & Cost Per New Customer using logged Ad Spend + dynamic Revenue/Orders
+        // 3. Calculate ROAS & Cost Per New Customer using logged Ad Spend + dynamic Realized Revenue/Orders
         $totalAdSpend = (float) $kpiRows->sum('total_ad_spend');
         $roas = $totalAdSpend > 0 ? ($totalRevenue / $totalAdSpend) : null;
 
@@ -149,14 +158,14 @@ class EcommerceController extends Controller
             ? ($totalAdSpend / $acquisitionDenominator)
             : null;
 
-        // Enrich daily ad spend rows with live per-day revenue & order counts
-        $salesByDate = $salesInRange->groupBy(fn (EcommerceSale $s) => $s->created_at->toDateString());
+        // Enrich daily ad spend rows with live per-day realized revenue & order counts
+        $salesByDate = $realizedSalesInRange->groupBy(fn (EcommerceSale $s) => $s->created_at->toDateString());
         foreach ($kpiRows as $row) {
             $dateKey = $row->date->toDateString();
             $daySales = $salesByDate->get($dateKey, collect());
             if ($daySales->isNotEmpty() || (float) $row->total_revenue == 0.0) {
                 $row->total_revenue = (float) $daySales->sum('total_price');
-                $row->total_orders = $groupOrders($daySales)->count();
+                $row->total_orders = EcommerceSale::countDistinctOrders($daySales);
             }
         }
 
@@ -165,6 +174,8 @@ class EcommerceController extends Controller
             'has_ad_spend' => $kpiRows->isNotEmpty(),
             'day_count' => $kpiRows->count(),
             'total_revenue' => $totalRevenue,
+            'pending_cod_revenue' => $pendingCodRevenue,
+            'pending_cod_orders' => $pendingCodOrders,
             'total_ad_spend' => $totalAdSpend,
             'total_orders' => $totalOrders,
             'new_customers' => $newCustomers,
@@ -182,6 +193,8 @@ class EcommerceController extends Controller
         ];
 
         return view('ecommerce.dashboard', [
+            'region' => $region,
+            'currency' => $currency,
             'metrics' => $metrics,
             'kpiRows' => $kpiRows,
             'merTarget' => EcommerceKpi::MER_TARGET,
@@ -194,49 +207,90 @@ class EcommerceController extends Controller
         ]);
     }
 
+    /**
+     * Compute [$newCustomers, $repeatCustomers] active during [$rangeStart, $rangeEnd]
+     * based on their cumulative realized order count (COUNT DISTINCT order_group_id) up to $rangeEnd.
+     */
+    private function computeCohortCustomerCounts(array $regionChannels, Carbon $rangeStart, Carbon $rangeEnd): array
+    {
+        $salesUpToEnd = EcommerceSale::realizedRevenue()
+            ->whereIn('channel', $regionChannels)
+            ->where('created_at', '<=', $rangeEnd)
+            ->get(['id', 'ecommerce_customer_id', 'customer_phone', 'order_group_id', 'reference_id', 'ecommerce_bundle_id', 'created_at']);
+
+        if ($salesUpToEnd->isEmpty()) {
+            return [0, 0];
+        }
+
+        $groupedByCustomer = $salesUpToEnd->groupBy(function (EcommerceSale $sale) {
+            if ($sale->ecommerce_customer_id) {
+                return 'cid:' . $sale->ecommerce_customer_id;
+            }
+            $phone = EcommerceCustomer::normalizePhone($sale->customer_phone);
+            if ($phone !== '') {
+                return 'phone:' . $phone;
+            }
+
+            return 'order:' . $sale->resolvedOrderGroupKey();
+        });
+
+        $newCustomers = 0;
+        $repeatCustomers = 0;
+
+        foreach ($groupedByCustomer as $customerSales) {
+            $activeInRange = $customerSales->contains(
+                fn (EcommerceSale $s) => $s->created_at && $s->created_at->betweenIncluded($rangeStart, $rangeEnd)
+            );
+
+            if (!$activeInRange) {
+                continue;
+            }
+
+            $ordersUpToPeriodEnd = EcommerceSale::countDistinctOrders($customerSales);
+            if ($ordersUpToPeriodEnd >= 2) {
+                $repeatCustomers++;
+            } else {
+                $newCustomers++;
+            }
+        }
+
+        return [$newCustomers, $repeatCustomers];
+    }
+
     public function storeKpi(Request $request)
     {
         $validated = $this->validatedKpi($request);
+        $currency = strtoupper((string) ($validated['currency'] ?? 'PKR'));
+        $region = $currency === 'QAR' ? 'qa' : 'pk';
+        $regionChannels = EcommerceSale::channelsForRegion($region);
+
         $date = Carbon::parse($validated['date'])->startOfDay();
         $dayEnd = $date->copy()->endOfDay();
 
-        $daySales = EcommerceSale::whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+        $daySales = EcommerceSale::realizedRevenue()
+            ->whereIn('channel', $regionChannels)
             ->whereBetween('created_at', [$date, $dayEnd])
             ->get();
 
         $dayRevenue = (float) $daySales->sum('total_price');
-        $dayOrders = $daySales->groupBy(function (EcommerceSale $s) {
-            if (!empty($s->reference_id)) {
-                return 'ref:' . $s->reference_id;
-            }
-            if (!empty($s->ecommerce_bundle_id)) {
-                return 'bundle:' . $s->ecommerce_bundle_id . ':' . $s->created_at;
-            }
-            return 'id:' . $s->id;
-        })->count();
+        $dayOrders = EcommerceSale::countDistinctOrders($daySales);
 
-        $dayCustomers = EcommerceCustomer::where(function ($q) use ($date, $dayEnd) {
-            $q->whereBetween('last_purchase_at', [$date, $dayEnd])
-                ->orWhereBetween('created_at', [$date, $dayEnd])
-                ->orWhereHas('sales', function ($sq) use ($date, $dayEnd) {
-                    $sq->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
-                        ->whereBetween('created_at', [$date, $dayEnd]);
-                });
-        })->get();
+        [$newCustomers, $repeatCustomers] = $this->computeCohortCustomerCounts($regionChannels, $date, $dayEnd);
 
         EcommerceKpi::updateOrCreate(
-            ['date' => $date],
+            ['date' => $date, 'currency' => $currency],
             [
                 'date' => $date,
+                'currency' => $currency,
                 'total_ad_spend' => $validated['total_ad_spend'],
                 'total_revenue' => $dayRevenue,
                 'total_orders' => $dayOrders,
-                'new_customers' => $dayCustomers->where('total_orders', '<=', 1)->count(),
-                'repeat_customers' => $dayCustomers->where('total_orders', '>=', 2)->count(),
+                'new_customers' => $newCustomers,
+                'repeat_customers' => $repeatCustomers,
             ]
         );
 
-        return back()->with('success', 'Daily ad spend saved.');
+        return back()->with('success', "Daily {$currency} ad spend saved.");
     }
 
     public function destroyKpi(EcommerceKpi $kpi)
@@ -250,6 +304,7 @@ class EcommerceController extends Controller
     {
         return $request->validate([
             'date' => 'required|date',
+            'currency' => ['nullable', Rule::in(['PKR', 'QAR'])],
             'total_ad_spend' => 'required|numeric|min:0',
         ]);
     }
