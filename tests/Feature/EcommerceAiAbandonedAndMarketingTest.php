@@ -478,8 +478,10 @@ class EcommerceAiAbandonedAndMarketingTest extends TestCase
             ->first();
         $this->assertNotNull($coldThread);
         $this->assertSame('inbound_active', $coldThread->state);
-        $this->assertNull($coldThread->order_group_id);
+        $this->assertNotNull($coldThread->order_group_id);
+        $this->assertStringStartsWith('COLD-', (string) $coldThread->order_group_id);
         $this->assertStringStartsWith('New WhatsApp Visitor #', (string) $coldThread->customer?->name);
+        $this->assertStringContainsString('@whatsapp.local', (string) $coldThread->customer?->email);
 
         // Verify no outbound AI template was sent—only the subtle system note
         $this->assertSame(0, $coldThread->messages()->where('sender_type', 'ai')->count());
@@ -554,7 +556,7 @@ class EcommerceAiAbandonedAndMarketingTest extends TestCase
         $thread = $step1['thread'];
 
         $this->assertSame('send_checkout_link', $step1['ai_decision']['should_trigger_action']);
-        $this->assertNull($thread->order_group_id);
+        $this->assertTrue(EcommerceWhatsappThread::isColdChatOrderRef($thread->order_group_id));
         $this->assertSame('inbound_support', $thread->playbook);
         $this->assertSame('inbound_active', $thread->state);
         $this->assertSame($this->oilProduct->id, (int) $thread->offered_product_id);

@@ -16,6 +16,9 @@ use App\Services\Ecommerce\EcommerceWhatsappTransportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class EcommerceAiAgentController extends Controller
@@ -135,7 +138,11 @@ class EcommerceAiAgentController extends Controller
         }
 
         $activeOrderSales = collect();
-        if ($activeThread && $activeThread->order_group_id) {
+        if (
+            $activeThread
+            && !empty($activeThread->order_group_id)
+            && !str_starts_with(strtoupper((string) $activeThread->order_group_id), 'COLD-')
+        ) {
             $activeOrderSales = EcommerceSale::with(['product.pricingModel', 'bundle'])
                 ->where('order_group_id', $activeThread->order_group_id)
                 ->orderBy('id')
@@ -415,51 +422,103 @@ class EcommerceAiAgentController extends Controller
     {
         $region = EcommerceSale::normalizeRegion($request->input('region', 'pk'));
         $regionUpper = strtoupper($region);
-        $visitorNum = random_int(100, 999);
-        $phonePrefix = $regionUpper === 'QA' ? '97455' : '92300';
-        $uniquePhone = $phonePrefix . str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
 
-        $customer = EcommerceCustomer::create([
-            'name' => "New WhatsApp Visitor #{$visitorNum}",
-            'phone' => $uniquePhone,
-            'total_spend' => 0,
-            'total_orders' => 0,
-        ]);
+        try {
+            $visitorNum = random_int(100, 999);
+            $phonePrefix = $regionUpper === 'QA' ? '97455' : '92300';
+            $uniquePhone = $phonePrefix . str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+            $visitorName = "New WhatsApp Visitor #{$visitorNum}";
+            $visitorEmail = 'visitor-' . random_int(1000, 9999) . '-' . $visitorNum . '@whatsapp.local';
 
-        $stockField = $regionUpper === 'QA' ? 'stock_qatar' : 'stock_pakistan';
-        $heroProduct = EcommerceProduct::with('pricingModel')
-            ->orderBy('id')
-            ->get()
-            ->first(fn (EcommerceProduct $p) => (float) $p->{$stockField} >= 1)
-            ?? EcommerceProduct::with('pricingModel')->orderBy('id')->first();
+            $customerData = $this->filterExistingTableColumns('ecommerce_customers', [
+                'name' => $visitorName,
+                'phone' => $uniquePhone,
+                'email' => $visitorEmail,
+                'region' => $regionUpper,
+                'orders_count' => 0,
+                'total_orders' => 0,
+                'total_spend' => 0,
+            ]);
 
-        $thread = EcommerceWhatsappThread::create([
-            'ecommerce_customer_id' => $customer->id,
-            'order_group_id' => null,
-            'region' => $regionUpper,
-            'playbook' => 'inbound_support',
-            'state' => 'inbound_active',
-            'offered_product_id' => $heroProduct?->id,
-            'offered_addon_price' => $heroProduct ? $heroProduct->resolveBasePrice($regionUpper) : 0,
-            'upsell_revenue_generated' => 0,
-            'unread_count' => 0,
-            'last_message_at' => now(),
-        ]);
+            $customer = EcommerceCustomer::create($customerData);
 
-        EcommerceWhatsappMessage::create([
-            'thread_id' => $thread->id,
-            'direction' => 'outbound',
-            'sender_type' => 'system_event',
-            'delivery_status' => 'sent',
-            'message_body' => '💬 Blank Cold Customer Chat started — type any message below as a new customer!',
-        ]);
+            $stockField = $regionUpper === 'QA' ? 'stock_qatar' : 'stock_pakistan';
+            $heroProduct = EcommerceProduct::with('pricingModel')
+                ->orderBy('id')
+                ->get()
+                ->first(fn (EcommerceProduct $p) => (float) $p->{$stockField} >= 1)
+                ?? EcommerceProduct::with('pricingModel')->orderBy('id')->first();
 
-        return redirect()
-            ->route('ecommerce.ai-agent.index', [
-                'region' => $region,
+            $coldOrderGroupId = 'COLD-' . strtoupper(Str::random(6));
+
+            $threadData = $this->filterExistingTableColumns('ecommerce_whatsapp_threads', [
+                'ecommerce_customer_id' => $customer->id,
+                'order_group_id' => $coldOrderGroupId,
+                'customer_name' => $customer->name,
+                'customer_phone' => $customer->phone,
+                'region' => $regionUpper,
+                'playbook' => 'inbound_support',
+                'state' => 'inbound_active',
+                'offered_product_id' => $heroProduct?->id,
+                'offered_addon_price' => $heroProduct ? $heroProduct->resolveBasePrice($regionUpper) : 0,
+                'upsell_revenue_generated' => 0,
+                'unread_count' => 0,
+                'last_message_at' => now(),
+            ]);
+
+            $thread = EcommerceWhatsappThread::create($threadData);
+
+            EcommerceWhatsappMessage::create([
                 'thread_id' => $thread->id,
-            ])
-            ->with('success', "Blank Cold Customer Chat started for {$customer->name}. Type any message below!");
+                'direction' => 'outbound',
+                'sender_type' => 'system_event',
+                'delivery_status' => 'sent',
+                'message_body' => '💬 Blank Cold Customer Chat started — type any message below as a new customer!',
+            ]);
+
+            return redirect()
+                ->route('ecommerce.ai-agent.index', [
+                    'region' => $region,
+                    'thread_id' => $thread->id,
+                ])
+                ->with('success', "Blank Cold Customer Chat started for {$customer->name}. Type any message below!");
+        } catch (\Throwable $e) {
+            Log::error('startColdCustomerChat error: ' . $e->getMessage(), [
+                'exception' => $e,
+                'region' => $regionUpper,
+            ]);
+
+            $fallbackThread = EcommerceWhatsappThread::where('region', $regionUpper)
+                ->orderByDesc('id')
+                ->first();
+
+            return redirect()
+                ->route('ecommerce.ai-agent.index', array_filter([
+                    'region' => $region,
+                    'thread_id' => $fallbackThread?->id,
+                ]))
+                ->withErrors(['error' => 'Could not initialize a new blank chat: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Filter attributes against the actual database table schema so extra/optional columns
+     * never fail on servers with older or stricter schemas.
+     */
+    protected function filterExistingTableColumns(string $table, array $attributes): array
+    {
+        try {
+            $columns = Schema::getColumnListing($table);
+            if (!empty($columns)) {
+                $lookup = array_flip($columns);
+
+                return array_intersect_key($attributes, $lookup);
+            }
+        } catch (\Throwable $e) {
+            // Fallback to default attributes if schema inspection fails
+        }
+
+        return $attributes;
     }
 
     /**
@@ -478,8 +537,9 @@ class EcommerceAiAgentController extends Controller
     {
         $thread->messages()->delete();
 
-        if ($thread->playbook === 'inbound_support') {
-            $thread->order_group_id = null;
+        if ($thread->playbook === 'inbound_support' || EcommerceWhatsappThread::isColdChatOrderRef($thread->order_group_id)) {
+            $thread->playbook = 'inbound_support';
+            $thread->order_group_id = 'COLD-' . strtoupper(Str::random(6));
             $thread->state = 'inbound_active';
             $thread->upsell_revenue_generated = 0;
             $thread->delivery_notes = null;
@@ -977,13 +1037,18 @@ class EcommerceAiAgentController extends Controller
 
                 if (!$thread) {
                     $region = str_starts_with((string) $customer->phone, '974') ? 'QA' : 'PK';
-                    $thread = EcommerceWhatsappThread::create([
+                    $thread = EcommerceWhatsappThread::create($this->filterExistingTableColumns('ecommerce_whatsapp_threads', [
                         'ecommerce_customer_id' => $customer->id,
+                        'order_group_id' => 'COLD-' . strtoupper(Str::random(6)),
+                        'customer_name' => $customer->name,
+                        'customer_phone' => $customer->phone,
                         'region' => $region,
                         'playbook' => 'inbound_support',
                         'state' => 'inbound_active',
+                        'upsell_revenue_generated' => 0,
+                        'unread_count' => 0,
                         'last_message_at' => now(),
-                    ]);
+                    ]));
                 } elseif ($thread->playbook === 'inbound_support' && $thread->state === 'idle') {
                     $thread->state = 'inbound_active';
                     $thread->save();

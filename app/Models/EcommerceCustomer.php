@@ -15,6 +15,8 @@ class EcommerceCustomer extends Model
         'name',
         'phone',
         'email',
+        'region',
+        'orders_count',
         'total_spend',
         'total_orders',
         'last_purchase_at',

@@ -163,11 +163,14 @@
                         <span class="ai-chat-customer-phone">
                             +{{ $activeThread->customer?->phone }}
                         </span>
-                        @if ($activeThread->order_group_id)
+                        @php
+                            $isColdOrderRef = empty($activeThread->order_group_id) || str_starts_with(strtoupper((string) $activeThread->order_group_id), 'COLD-');
+                        @endphp
+                        @if (!$isColdOrderRef)
                             <span class="ai-order-ref-pill">
                                 Order {{ $activeThread->shortOrderRef() }}
                             </span>
-                        @elseif ($activeThread->playbook === 'inbound_support')
+                        @elseif ($activeThread->playbook === 'inbound_support' || $isColdOrderRef)
                             <span class="ai-order-ref-pill is-cold-chat">
                                 Cold Chat
                             </span>
@@ -360,7 +363,8 @@
                 <div class="ai-context-scroll">
                     @if ($activeThread)
                         @php
-                            $isInboundCatalogPreview = $activeThread->playbook === 'inbound_support' && $activeOrderSales->isEmpty();
+                            $isColdOrderRef = empty($activeThread->order_group_id) || str_starts_with(strtoupper((string) $activeThread->order_group_id), 'COLD-');
+                            $isInboundCatalogPreview = ($activeThread->playbook === 'inbound_support' || $isColdOrderRef) && $activeOrderSales->isEmpty();
                             $isAbandonedPreview = !$isInboundCatalogPreview && $activeOrderSales->isEmpty() && !empty($activeAbandonedCheckout);
                             $abandonedLineItems = $isAbandonedPreview && is_array($activeAbandonedCheckout->line_items_json)
                                 ? $activeAbandonedCheckout->line_items_json

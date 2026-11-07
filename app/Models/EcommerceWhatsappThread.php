@@ -67,6 +67,8 @@ class EcommerceWhatsappThread extends Model
     protected $fillable = [
         'ecommerce_customer_id',
         'order_group_id',
+        'customer_name',
+        'customer_phone',
         'region',
         'playbook',
         'state',
@@ -144,6 +146,21 @@ class EcommerceWhatsappThread extends Model
     }
 
     /**
+     * Check whether an order_group_id represents a cold customer chat with no linked order yet.
+     */
+    public static function isColdChatOrderRef(?string $orderGroupId): bool
+    {
+        $raw = trim((string) $orderGroupId);
+
+        return $raw === '' || str_starts_with(strtoupper($raw), 'COLD-');
+    }
+
+    public function hasRealOrderGroup(): bool
+    {
+        return !self::isColdChatOrderRef($this->order_group_id);
+    }
+
+    /**
      * Turn a raw UUID like `d2871bec-800c-4b0f-8971-0e03c2b976b0` into `#D2871B`
      * or format `SHOPIFY-xxxx` cleanly.
      */
@@ -155,7 +172,7 @@ class EcommerceWhatsappThread extends Model
     public static function formatShortOrderRef(?string $orderGroupId): string
     {
         $raw = trim((string) $orderGroupId);
-        if ($raw === '') {
+        if ($raw === '' || str_starts_with(strtoupper($raw), 'COLD-')) {
             return '#ORDER';
         }
 

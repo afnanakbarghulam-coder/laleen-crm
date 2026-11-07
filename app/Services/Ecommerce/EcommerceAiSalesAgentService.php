@@ -161,7 +161,10 @@ class EcommerceAiSalesAgentService
                 }
 
                 foreach ($duplicates as $dup) {
-                    if (!$keeper->order_group_id && $dup->order_group_id) {
+                    if (
+                        EcommerceWhatsappThread::isColdChatOrderRef($keeper->order_group_id)
+                        && !EcommerceWhatsappThread::isColdChatOrderRef($dup->order_group_id)
+                    ) {
                         $keeper->order_group_id = $dup->order_group_id;
                     }
                     if (!$keeper->offered_product_id && $dup->offered_product_id) {
@@ -843,8 +846,12 @@ class EcommerceAiSalesAgentService
 
         $orderRefTag = 'CART-' . ($checkout->shopify_checkout_token ?: $checkout->shopify_checkout_id);
 
+        $existingOrderRef = ($existingThread && !EcommerceWhatsappThread::isColdChatOrderRef($existingThread->order_group_id))
+            ? $existingThread->order_group_id
+            : $orderRefTag;
+
         $thread = $this->resolveUnifiedCustomerThread($customer->id, $regionUpper, [
-            'order_group_id' => $existingThread?->order_group_id ?: $orderRefTag,
+            'order_group_id' => $existingOrderRef,
             'playbook' => 'abandoned_checkout',
             'state' => 'abandoned_followup_sent',
             'offered_product_id' => $primaryProduct?->id,
@@ -1124,7 +1131,7 @@ class EcommerceAiSalesAgentService
 
         $thread->loadMissing(['customer', 'offeredProduct.pricingModel', 'offeredBundle', 'messages']);
 
-        $orderSales = $thread->order_group_id
+        $orderSales = ($thread->order_group_id && !EcommerceWhatsappThread::isColdChatOrderRef($thread->order_group_id))
             ? EcommerceSale::with(['product.productLine', 'product.pricingModel'])
                 ->where('order_group_id', $thread->order_group_id)
                 ->get()
@@ -1987,7 +1994,7 @@ PROMPT;
         }
 
         // 4. INBOUND COLD BUYER CONSULTATION PLAYBOOK (`inbound_support`)
-        if ($thread->playbook === 'inbound_support' && empty($thread->order_group_id)) {
+        if ($thread->playbook === 'inbound_support' && EcommerceWhatsappThread::isColdChatOrderRef($thread->order_group_id)) {
             $recProduct = $offeredProduct ?? ($catalogContext['recommended_product'] ?? null);
             if (preg_match('/\boil\b/i', $lower) && !preg_match('/\bshampoo\b/i', $lower)) {
                 $oilCandidate = EcommerceProduct::with('pricingModel')
@@ -2267,7 +2274,7 @@ PROMPT;
         }
 
         // 4C. PRE-DISPATCH ORDER MUTATIONS (Revert Extra Bottles OR Add Bottles From Any Active Pre-Dispatch State)
-        if (!$isRetentionPlaybook && !empty($thread->order_group_id)) {
+        if (!$isRetentionPlaybook && !EcommerceWhatsappThread::isColdChatOrderRef($thread->order_group_id)) {
             $isRevertRequest = (bool) preg_match(
                 '/\b(remove\s+(?:the\s+)?(?:extra|shampoo|oil|upgrade|add-on|addon|bottles|bottle)|revert|take\s+off|cancel\s+(?:the\s+)?upgrade|remove\s+upgrade|only\s+send\s+(?:my\s+)?original|only\s+send\s+(?:the\s+)?oil|just\s+send\s+(?:the\s+)?oil|only\s+original)\b/i',
                 $lower
@@ -3005,7 +3012,7 @@ PROMPT;
                 $stockField = $isQatar ? 'stock_qatar' : 'stock_pakistan';
                 $soldField = $isQatar ? 'sold_qatar' : 'sold_pakistan';
 
-                $liveOrderSales = $lockedThread->order_group_id
+                $liveOrderSales = ($lockedThread->order_group_id && !EcommerceWhatsappThread::isColdChatOrderRef($lockedThread->order_group_id))
                     ? EcommerceSale::with(['product.productLine', 'product.pricingModel'])
                         ->where('order_group_id', $lockedThread->order_group_id)
                         ->orderBy('id')
@@ -3069,7 +3076,9 @@ PROMPT;
                 $pricingModel = EcommercePricingModel::where('ecommerce_product_id', $product->id)->first();
                 $unitCogs = $pricingModel?->bomUnitCost() ?? 0.0;
 
-                $targetOrderGroupId = $lockedThread->order_group_id ?: ('AI-CROSS-SELL-' . Str::upper(Str::random(8)));
+                $targetOrderGroupId = ($lockedThread->order_group_id && !EcommerceWhatsappThread::isColdChatOrderRef($lockedThread->order_group_id))
+                    ? $lockedThread->order_group_id
+                    : ('AI-CROSS-SELL-' . Str::upper(Str::random(8)));
                 $channel = $firstSale?->channel ?: ($isQatar ? 'Organic (Qatar)' : 'Shopify (Pakistan)');
                 $orderStatus = $firstSale && in_array($firstSale->order_status, ['pending', 'shipped'], true)
                     ? $firstSale->order_status
