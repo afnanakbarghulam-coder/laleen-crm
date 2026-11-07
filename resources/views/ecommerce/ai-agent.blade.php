@@ -1681,6 +1681,46 @@
             focusUnifiedChatInput();
         }
 
+        function appendAjaxErrorRetryBubble(errorMessage, actionUrl, formData) {
+            var typingBubble = document.getElementById('ai-typing-indicator-bubble');
+            if (typingBubble) {
+                typingBubble.remove();
+            }
+
+            var container = document.getElementById('chat-messages-container') || document.getElementById('ai-chat-timeline');
+            if (!container) {
+                return;
+            }
+
+            var existingErr = document.getElementById('ai-ajax-error-bubble');
+            if (existingErr) {
+                existingErr.remove();
+            }
+
+            var wrapper = document.createElement('div');
+            wrapper.id = 'ai-ajax-error-bubble';
+            wrapper.className = 'd-flex justify-content-center w-100 my-1 ai-bubble-animate';
+            wrapper.innerHTML =
+                '<div class="ai-system-pill py-1.5 px-3 text-xs rounded-full" style="color: #f5c2b8; background: rgba(168, 82, 74, 0.22); border-color: rgba(168, 82, 74, 0.45); white-space: normal;">' +
+                    '⚠ ' + escapeHtmlText(errorMessage || 'Message delivery delayed — click Retry to resend.') +
+                    ' <button type="button" class="ai-ghost-header-btn ms-2" style="padding: 1px 7px; font-size: 0.7rem;" id="ai-retry-send-btn">↻ Retry</button>' +
+                '</div>';
+
+            container.appendChild(wrapper);
+            scrollChatToBottom(true);
+
+            var retryBtn = wrapper.querySelector('#ai-retry-send-btn');
+            if (retryBtn && actionUrl && formData) {
+                retryBtn.addEventListener('click', function () {
+                    wrapper.remove();
+                    var mainForm = document.getElementById('unified-chat-form');
+                    var persona = mainForm ? (mainForm.getAttribute('data-persona-name') || 'Zara') : 'Zara';
+                    appendZaraTypingIndicator(persona);
+                    sendAjaxChatRequest(actionUrl, formData);
+                });
+            }
+        }
+
         function sendAjaxChatRequest(actionUrl, formData) {
             return fetch(actionUrl, {
                 method: 'POST',
@@ -1694,24 +1734,29 @@
                 var contentType = response.headers.get('content-type') || '';
                 if (contentType.indexOf('application/json') !== -1) {
                     return response.json().then(function (json) {
-                        return { type: 'json', data: json };
+                        return { ok: response.ok, type: 'json', data: json };
                     });
                 }
                 return response.text().then(function (html) {
-                    return { type: 'html', data: html };
+                    return { ok: response.ok, type: 'html', data: html };
                 });
             })
             .then(function (res) {
-                if (res.type === 'json' && res.data && res.data.status === 'ok') {
+                if (res.type === 'json' && res.data && (res.data.ok === true || res.data.status === 'ok')) {
                     applyJsonAjaxChatUpdate(res.data);
-                } else if (res.type === 'html' && res.data && res.data.indexOf('ai-chat-timeline') !== -1) {
+                } else if (res.type === 'html' && res.ok && res.data && res.data.indexOf('ai-chat-timeline') !== -1) {
+                    var typingBubble = document.getElementById('ai-typing-indicator-bubble');
+                    if (typingBubble) {
+                        typingBubble.remove();
+                    }
                     swapAjaxDomFromHtml(res.data);
                 } else {
-                    window.location.reload();
+                    var errMsg = (res.data && res.data.message) ? res.data.message : 'Temporary connection issue while generating reply.';
+                    appendAjaxErrorRetryBubble(errMsg, actionUrl, formData);
                 }
             })
             .catch(function () {
-                window.location.reload();
+                appendAjaxErrorRetryBubble('Network error while sending message.', actionUrl, formData);
             });
         }
 

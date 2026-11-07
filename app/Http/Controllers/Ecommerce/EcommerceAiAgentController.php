@@ -650,64 +650,81 @@ class EcommerceAiAgentController extends Controller
             'customer_reply' => 'required|string|max:2000',
         ]);
 
-        // If thread was in human_handoff and admin is simulating a customer test reply, allow resuming AI if requested
-        if ($thread->state === 'human_handoff' && $request->boolean('resume_ai', true)) {
-            $resumeState = match ($thread->playbook) {
-                'day7_cross_sell' => 'day7_checkin_sent',
-                'day30_refill' => 'day30_refill_pitched',
-                'abandoned_checkout' => 'abandoned_followup_sent',
-                'inbound_support' => 'inbound_active',
-                default => 'awaiting_cod_confirm',
-            };
+        try {
+            // If thread was in human_handoff and admin is simulating a customer test reply, allow resuming AI if requested
+            if ($thread->state === 'human_handoff' && $request->boolean('resume_ai', true)) {
+                $resumeState = match ($thread->playbook) {
+                    'day7_cross_sell' => 'day7_checkin_sent',
+                    'day30_refill' => 'day30_refill_pitched',
+                    'abandoned_checkout' => 'abandoned_followup_sent',
+                    'inbound_support' => 'inbound_active',
+                    default => 'awaiting_cod_confirm',
+                };
 
-            if ($thread->playbook === 'cod_upsell' && $thread->order_group_id) {
-                $isConfirmed = EcommerceSale::where('order_group_id', $thread->order_group_id)
-                    ->whereNotNull('cod_confirmed_at')
-                    ->exists();
-                if ($isConfirmed) {
-                    $resumeState = 'cod_confirmed_upsell_pitched';
+                if ($thread->playbook === 'cod_upsell' && !EcommerceWhatsappThread::isColdChatOrderRef($thread->order_group_id)) {
+                    $isConfirmed = EcommerceSale::where('order_group_id', $thread->order_group_id)
+                        ->whereNotNull('cod_confirmed_at')
+                        ->exists();
+                    if ($isConfirmed) {
+                        $resumeState = 'cod_confirmed_upsell_pitched';
+                    }
                 }
+
+                $thread->state = $resumeState;
+                $thread->save();
             }
 
-            $thread->state = $resumeState;
-            $thread->save();
-        }
+            $result = $this->agentService->handleInboundCustomerMessage($thread, $validated['customer_reply']);
 
-        $result = $this->agentService->handleInboundCustomerMessage($thread, $validated['customer_reply']);
+            // Always auto-reply immediately when testing in Simulator (even if global mode is Co-Pilot)
+            if (!empty($result['outbound_message']) && $result['outbound_message']->delivery_status === 'pending_approval') {
+                $this->agentService->approveAndSendDraft($result['outbound_message']);
+            }
+            $pendingDrafts = EcommerceWhatsappMessage::where('thread_id', $thread->id)
+                ->where('delivery_status', 'pending_approval')
+                ->get();
+            foreach ($pendingDrafts as $draft) {
+                $this->agentService->approveAndSendDraft($draft);
+            }
 
-        // Always auto-reply immediately when testing in Simulator (even if global mode is Co-Pilot)
-        if (!empty($result['outbound_message']) && $result['outbound_message']->delivery_status === 'pending_approval') {
-            $this->agentService->approveAndSendDraft($result['outbound_message']);
-        }
-        $pendingDrafts = EcommerceWhatsappMessage::where('thread_id', $thread->id)
-            ->where('delivery_status', 'pending_approval')
-            ->get();
-        foreach ($pendingDrafts as $draft) {
-            $this->agentService->approveAndSendDraft($draft);
-        }
+            $intent = $result['ai_decision']['detected_intent'] ?? 'processed';
+            $action = $result['ai_decision']['should_trigger_action'] ?? 'none';
 
-        $intent = $result['ai_decision']['detected_intent'] ?? 'processed';
-        $action = $result['ai_decision']['should_trigger_action'] ?? 'none';
+            if ($request->expectsJson() || $request->ajax()) {
+                $appendMessages = array_values(array_filter([
+                    $result['system_event'] ?? null,
+                    !empty($result['outbound_message']) ? $result['outbound_message']->fresh() : null,
+                ]));
 
-        if ($request->expectsJson() || $request->ajax()) {
-            $appendMessages = array_values(array_filter([
-                $result['system_event'] ?? null,
-                !empty($result['outbound_message']) ? $result['outbound_message']->fresh() : null,
-            ]));
+                return response()->json($this->buildAjaxThreadPayload(
+                    $result['thread'] ?? $thread->fresh(),
+                    $appendMessages,
+                    $result['inbound_message'] ?? null
+                ));
+            }
 
-            return response()->json($this->buildAjaxThreadPayload(
-                $result['thread'] ?? $thread->fresh(),
-                $appendMessages,
-                $result['inbound_message'] ?? null
-            ));
-        }
-
-        return redirect()
-            ->route('ecommerce.ai-agent.index', [
-                'region' => strtolower($thread->region),
+            return redirect()
+                ->route('ecommerce.ai-agent.index', [
+                    'region' => strtolower($thread->region),
+                    'thread_id' => $thread->id,
+                ])
+                ->with('success', "Simulated customer reply processed (Intent: {$intent} | Action: {$action}).");
+        } catch (\Throwable $e) {
+            Log::error('simulateInbound error: ' . $e->getMessage(), [
                 'thread_id' => $thread->id,
-            ])
-            ->with('success', "Simulated customer reply processed (Intent: {$intent} | Action: {$action}).");
+                'exception' => $e,
+            ]);
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'ok' => false,
+                    'status' => 'error',
+                    'message' => 'Could not process reply: ' . $e->getMessage(),
+                ], 500);
+            }
+
+            return back()->withErrors(['error' => 'Could not process reply: ' . $e->getMessage()]);
+        }
     }
 
     /**
@@ -789,6 +806,7 @@ class EcommerceAiAgentController extends Controller
         $renderedHtml = $this->index($subRequest)->render();
 
         return [
+            'ok' => true,
             'status' => 'ok',
             'thread_id' => $thread->id,
             'thread_state' => $thread->state,

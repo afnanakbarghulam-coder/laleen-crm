@@ -186,4 +186,23 @@ class EcommerceMonthlyAd extends Model
 
         return null;
     }
+
+    /**
+     * Try saving with full native emojis first; if legacy MySQL utf8mb3 throws 1366,
+     * automatically sanitize 4-byte characters and retry immediately.
+     */
+    public function save(array $options = []): bool
+    {
+        try {
+            return parent::save($options);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (EcommerceWhatsappMessage::isLegacyCharsetError($e)) {
+                EcommerceWhatsappMessage::sanitizeModelAttributesForLegacyMysql($this);
+
+                return parent::save($options);
+            }
+
+            throw $e;
+        }
+    }
 }

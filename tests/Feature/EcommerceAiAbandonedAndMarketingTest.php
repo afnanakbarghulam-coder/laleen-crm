@@ -509,16 +509,24 @@ class EcommerceAiAbandonedAndMarketingTest extends TestCase
         ]);
         $ajaxReply->assertStatus(200)
             ->assertJson([
+                'ok' => true,
                 'status' => 'ok',
                 'thread_id' => $coldThread->id,
             ])
             ->assertJsonStructure([
+                'ok',
                 'status',
                 'messages_html',
                 'new_messages',
                 'receipt_html',
                 'kpis_html',
             ]);
+
+        // Verify legacy MySQL utf8mb3 4-byte emoji sanitizer converts 4-byte emojis into 3-byte BMP symbols
+        $rawEmojiText = '💬 Blank Cold Chat 🎉 Order 📦 Confirmed 🔄 Reset 🚨 Alert';
+        $sanitizedText = \App\Models\EcommerceWhatsappMessage::sanitizeForLegacyMysql($rawEmojiText);
+        $this->assertSame(0, preg_match('/[\x{10000}-\x{10FFFF}]/u', $sanitizedText));
+        $this->assertStringContainsString('✨ Blank Cold Chat', $sanitizedText);
 
         $pageAfterReply = $this->get("/ecommerce/hub/ai-agent?region=pk&thread_id={$coldThread->id}");
         $pageAfterReply->assertStatus(200);
