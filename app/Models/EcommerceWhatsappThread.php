@@ -18,32 +18,41 @@ class EcommerceWhatsappThread extends Model
         'cod_upsell',
         'day7_cross_sell',
         'day30_refill',
+        'abandoned_checkout',
         'inbound_support',
     ];
 
     public const STATES = [
         'idle',
+        'inbound_active',
         'awaiting_cod_confirm',
         'cod_confirmed_upsell_pitched',
         'upsell_accepted',
         'upsell_declined',
         'day7_checkin_sent',
         'day7_cross_sell_pitched',
+        'day30_refill_pitched',
+        'abandoned_followup_sent',
         'checkout_link_sent',
         'human_handoff',
+        'opted_out',
         'completed',
     ];
 
     public const STATE_LABELS = [
         'idle' => 'Idle',
+        'inbound_active' => 'Inbound Concierge 💬',
         'awaiting_cod_confirm' => 'Awaiting COD Confirm',
         'cod_confirmed_upsell_pitched' => 'Upsell Pitched',
         'upsell_accepted' => 'Upsell Won 💰',
         'upsell_declined' => 'Order Locked',
         'day7_checkin_sent' => 'Day 7 Check-In Sent',
         'day7_cross_sell_pitched' => 'Day 7 Cross-Sell Pitched',
+        'day30_refill_pitched' => 'Day 30 Refill Pitched',
+        'abandoned_followup_sent' => 'Abandoned Cart Rescue Sent 🛒',
         'checkout_link_sent' => 'Checkout Link Sent 🔗',
         'human_handoff' => 'Human Handoff 🚨',
+        'opted_out' => 'Opted Out 🔕',
         'completed' => 'Completed',
     ];
 
@@ -51,7 +60,8 @@ class EcommerceWhatsappThread extends Model
         'cod_upsell' => 'COD Confirm + Box Upgrade',
         'day7_cross_sell' => 'Day 7 Ritual Cross-Sell',
         'day30_refill' => 'Day 30 Refill Check-In',
-        'inbound_support' => 'Inbound Support',
+        'abandoned_checkout' => '15-Min Abandoned Cart Rescue',
+        'inbound_support' => 'Inbound Hair Concierge',
     ];
 
     protected $fillable = [
@@ -77,6 +87,19 @@ class EcommerceWhatsappThread extends Model
         'last_message_at' => 'datetime',
         'nudge_sent_at' => 'datetime',
     ];
+
+    protected ?float $virtualOfferedDiscountPercent = null;
+
+    public function getOfferedDiscountPercentAttribute(): float
+    {
+        return $this->virtualOfferedDiscountPercent ?? 20.0;
+    }
+
+    public function setOfferedDiscountPercentAttribute($value): void
+    {
+        $this->virtualOfferedDiscountPercent = $value !== null ? (float) $value : null;
+    }
+
 
     public function customer(): BelongsTo
     {
@@ -160,6 +183,8 @@ class EcommerceWhatsappThread extends Model
             'checkout_link_sent' => ['label' => 'Link Sent 🔗', 'variant' => 'confirmed'],
             'cod_confirmed_upsell_pitched', 'upsell_declined', 'completed' => ['label' => 'Confirmed', 'variant' => 'confirmed'],
             'human_handoff' => ['label' => 'Escalated', 'variant' => 'escalated'],
+            'opted_out' => ['label' => 'Opted Out', 'variant' => 'escalated'],
+            'inbound_active' => ['label' => 'Concierge 💬', 'variant' => 'awaiting'],
             default => ['label' => 'Awaiting Reply', 'variant' => 'awaiting'],
         };
     }

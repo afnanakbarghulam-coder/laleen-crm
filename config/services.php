@@ -55,8 +55,11 @@ return [
 
     'whatsapp' => [
         'webhook_token' => env('ECOMMERCE_WHATSAPP_WEBHOOK_TOKEN'),
+        'verify_token' => env('WHATSAPP_VERIFY_TOKEN', 'laleen_whatsapp_verify_2026'),
         'token' => env('WHATSAPP_CLOUD_API_TOKEN'),
         'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'template_name' => env('WHATSAPP_TEMPLATE_NAME'),
+        'template_language' => env('WHATSAPP_TEMPLATE_LANGUAGE', 'en_US'),
     ],
 
 ];

@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
+use App\Models\EcommerceAbandonedCheckout;
 use App\Models\EcommerceAiSetting;
+use App\Models\EcommerceBundle;
 use App\Models\EcommerceCustomer;
+use App\Models\EcommerceProduct;
 use App\Models\EcommerceSale;
 use App\Models\EcommerceWhatsappMessage;
 use App\Models\EcommerceWhatsappThread;
@@ -74,6 +77,12 @@ class EcommerceAiAgentController extends Controller
             ->whereIn('thread_id', $allRegionThreads->pluck('id'))
             ->count();
 
+        // Scoreboard Metric 5: Recovered Abandoned Carts (Playbook 4)
+        $recoveredCartsQuery = EcommerceAbandonedCheckout::where('region', $regionUpper)
+            ->where('status', 'recovered');
+        $recoveredCartsCount = (clone $recoveredCartsQuery)->count();
+        $recoveredCartsRevenue = round((float) (clone $recoveredCartsQuery)->sum('subtotal_price'), 2);
+
         // Filter counts for Left Column tabs (3 clean tabs: All, Needs Approval, Escalated)
         $needsApprovalCount = $allRegionThreads->filter(
             fn (EcommerceWhatsappThread $t) => $t->messages->contains('delivery_status', 'pending_approval')
@@ -104,9 +113,21 @@ class EcommerceAiAgentController extends Controller
         };
 
         $selectedThreadId = $request->filled('thread_id') ? (int) $request->query('thread_id') : null;
-        $activeThread = $selectedThreadId
-            ? ($allRegionThreads->firstWhere('id', $selectedThreadId) ?? $threads->first())
-            : $threads->first();
+        $requestedOrderGroupId = $request->filled('order_group_id') ? trim((string) $request->query('order_group_id')) : null;
+
+        $activeThread = null;
+        if ($selectedThreadId) {
+            $activeThread = $allRegionThreads->firstWhere('id', $selectedThreadId);
+        } elseif ($requestedOrderGroupId) {
+            $activeThread = $allRegionThreads->firstWhere('order_group_id', $requestedOrderGroupId);
+            if (!$activeThread) {
+                $orderSale = EcommerceSale::with('customer')->where('order_group_id', $requestedOrderGroupId)->first();
+                if ($orderSale && $orderSale->customer) {
+                    $activeThread = $allRegionThreads->firstWhere('ecommerce_customer_id', $orderSale->customer->id);
+                }
+            }
+        }
+        $activeThread = $activeThread ?? $threads->first();
 
         if ($activeThread && $activeThread->unread_count > 0) {
             $activeThread->unread_count = 0;
@@ -120,6 +141,25 @@ class EcommerceAiAgentController extends Controller
                 ->orderBy('id')
                 ->get();
         }
+
+        $activeAbandonedCheckout = null;
+        if ($activeThread && $activeThread->playbook === 'abandoned_checkout' && $activeOrderSales->isEmpty() && $activeThread->ecommerce_customer_id) {
+            $activeAbandonedCheckout = EcommerceAbandonedCheckout::where('ecommerce_customer_id', $activeThread->ecommerce_customer_id)
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        // In-stock regional catalog & bundles for right-hand preview when playbook === 'inbound_support'
+        $stockField = $regionUpper === 'QA' ? 'stock_qatar' : 'stock_pakistan';
+        $catalogProducts = EcommerceProduct::with('pricingModel')
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (EcommerceProduct $p) => (float) $p->{$stockField} >= 1)
+            ->values();
+        if ($catalogProducts->isEmpty()) {
+            $catalogProducts = EcommerceProduct::with('pricingModel')->orderBy('id')->get();
+        }
+        $catalogBundles = EcommerceBundle::with('items.product')->orderBy('id')->get();
 
         // Recent active orders in this region so admin can manually trigger AI confirmation on any order
         $recentOrderGroups = EcommerceSale::with('product')
@@ -142,6 +182,9 @@ class EcommerceAiAgentController extends Controller
             'threads' => $threads,
             'activeThread' => $activeThread,
             'activeOrderSales' => $activeOrderSales,
+            'activeAbandonedCheckout' => $activeAbandonedCheckout,
+            'catalogProducts' => $catalogProducts,
+            'catalogBundles' => $catalogBundles,
             'recentOrderGroups' => $recentOrderGroups,
             'filterCounts' => $filterCounts,
             'codConfirmedCount' => $codConfirmedCount,
@@ -152,6 +195,8 @@ class EcommerceAiAgentController extends Controller
             'extraUpsellRevenue' => $extraUpsellRevenue,
             'totalUpsellWinsCount' => $totalUpsellWinsCount,
             'pendingApprovalMessagesCount' => $pendingApprovalMessagesCount,
+            'recoveredCartsCount' => $recoveredCartsCount,
+            'recoveredCartsRevenue' => $recoveredCartsRevenue,
         ]);
     }
 
@@ -181,6 +226,8 @@ class EcommerceAiAgentController extends Controller
             'pre_shipment_upsell_enabled' => 'nullable|boolean',
             'day7_cross_sell_enabled' => 'nullable|boolean',
             'day30_refill_enabled' => 'nullable|boolean',
+            'abandoned_checkout_enabled' => 'nullable|boolean',
+            'abandoned_checkout_delay_minutes' => 'nullable|integer|min:1|max:1440',
             'upsell_discount_percent' => 'required|numeric|min:0|max:90',
             'shopify_store_domain' => 'nullable|string|max:190',
             'day7_discount_code' => 'nullable|string|max:60',
@@ -197,6 +244,8 @@ class EcommerceAiAgentController extends Controller
             'pre_shipment_upsell_enabled' => $request->boolean('pre_shipment_upsell_enabled'),
             'day7_cross_sell_enabled' => $request->boolean('day7_cross_sell_enabled'),
             'day30_refill_enabled' => $request->boolean('day30_refill_enabled'),
+            'abandoned_checkout_enabled' => $request->has('abandoned_checkout_enabled') ? $request->boolean('abandoned_checkout_enabled') : ($settings->abandoned_checkout_enabled ?? true),
+            'abandoned_checkout_delay_minutes' => (int) ($validated['abandoned_checkout_delay_minutes'] ?? $settings->abandoned_checkout_delay_minutes ?? 15),
             'upsell_discount_percent' => (float) $validated['upsell_discount_percent'],
             'shopify_store_domain' => trim((string) ($validated['shopify_store_domain'] ?? '')) ?: 'laleenrituals.com',
             'day7_discount_code' => strtoupper(trim((string) ($validated['day7_discount_code'] ?? ''))) ?: 'COMPLETE20',
@@ -221,11 +270,12 @@ class EcommerceAiAgentController extends Controller
         return back()->with(
             'success',
             sprintf(
-                'Outreach Scan complete: %d COD confirmation(s), %d 6-hour nudge(s), %d Day-7 cross-sell(s), and %d Day-30 refill thread(s) processed.',
+                'Outreach Scan complete: %d COD confirmation(s), %d 6-hour nudge(s), %d Day-7 cross-sell(s), %d Day-30 refill(s), and %d Abandoned Cart rescue(s) processed.',
                 $result['cod_threads_created'] ?? 0,
                 $result['nudges_sent'] ?? 0,
                 $result['day7_threads_created'] ?? 0,
-                $result['day30_threads_created'] ?? 0
+                $result['day30_threads_created'] ?? 0,
+                $result['abandoned_threads_created'] ?? 0
             )
         );
     }
@@ -237,7 +287,7 @@ class EcommerceAiAgentController extends Controller
     {
         $orderGroupId = $request->input('order_group_id');
         $playbook = (string) $request->input('playbook', 'cod_upsell');
-        if (!in_array($playbook, ['cod_upsell', 'day7_cross_sell', 'day30_refill'], true)) {
+        if (!in_array($playbook, ['cod_upsell', 'day7_cross_sell', 'day30_refill', 'abandoned_checkout'], true)) {
             $playbook = 'cod_upsell';
         }
 
@@ -259,8 +309,8 @@ class EcommerceAiAgentController extends Controller
 
         $orderGroupIdStr = (string) $orderGroupId;
 
-        if ($playbook === 'day7_cross_sell' || $playbook === 'day30_refill') {
-            $firstSale = EcommerceSale::with('customer')
+        if (in_array($playbook, ['day7_cross_sell', 'day30_refill', 'abandoned_checkout'], true)) {
+            $firstSale = EcommerceSale::with(['customer', 'product'])
                 ->where('order_group_id', $orderGroupIdStr)
                 ->orderBy('id')
                 ->first();
@@ -269,10 +319,13 @@ class EcommerceAiAgentController extends Controller
                 return back()->withErrors(['error' => "Order {$orderGroupIdStr} not found."]);
             }
 
+            $region = EcommerceSale::regionForChannel($firstSale->channel);
+            $regionUpper = strtoupper($region);
+            $currency = EcommerceSale::currencyForRegion($region);
+            $defaultCode = $region === 'qa' ? '+974' : '+92';
+
             $customer = $firstSale->customer;
             if (!$customer) {
-                $region = EcommerceSale::regionForChannel($firstSale->channel);
-                $defaultCode = $region === 'qa' ? '+974' : '+92';
                 $phone = EcommerceCustomer::normalizePhone($firstSale->customer_phone, $defaultCode);
                 if ($phone === '') {
                     $phone = ($region === 'qa' ? '+9745500' : '+9230000') . str_pad((string) $firstSale->id, 4, '0', STR_PAD_LEFT);
@@ -287,13 +340,48 @@ class EcommerceAiAgentController extends Controller
                     ->update(['ecommerce_customer_id' => $customer->id]);
             }
 
-            $createdThread = $playbook === 'day30_refill'
-                ? $this->agentService->initiateDay30Refill($customer, $orderGroupIdStr)
-                : $this->agentService->initiateDay7CrossSell($customer, $orderGroupIdStr);
+            if ($playbook === 'abandoned_checkout') {
+                $checkout = EcommerceAbandonedCheckout::where('ecommerce_customer_id', $customer->id)
+                    ->whereIn('status', ['abandoned', 'outreach_sent'])
+                    ->orderByDesc('id')
+                    ->first();
 
-            $playbookLabel = $playbook === 'day30_refill'
-                ? 'Day 30 VIP Refill Link'
-                : 'Day 7 Ritual + Cross-Sell Link';
+                if (!$checkout) {
+                    $product = $firstSale->product;
+                    $unitPrice = (float) ($firstSale->unit_price > 0 ? $firstSale->unit_price : ($product ? $product->resolveBasePrice($regionUpper) : 1200));
+                    $qty = max(1, (int) $firstSale->quantity);
+                    $checkoutUrl = $product ? $product->getShopifyCheckoutUrl() : 'https://laleenrituals.com/checkout';
+
+                    $checkout = EcommerceAbandonedCheckout::create([
+                        'shopify_checkout_id' => 'SIM-CHK-' . $firstSale->id . '-' . time(),
+                        'shopify_checkout_token' => 'tok-' . $firstSale->id,
+                        'ecommerce_customer_id' => $customer->id,
+                        'customer_name' => $customer->name ?: $firstSale->customer_name,
+                        'phone' => $customer->phone,
+                        'region' => $regionUpper,
+                        'currency' => $currency,
+                        'subtotal_price' => round($unitPrice * $qty, 2),
+                        'abandoned_checkout_url' => $checkoutUrl,
+                        'line_items_json' => [[
+                            'title' => $product?->name ?? 'Hunza Apricot Oil',
+                            'quantity' => $qty,
+                            'price' => $unitPrice,
+                            'ecommerce_product_id' => $product?->id,
+                        ]],
+                        'status' => 'abandoned',
+                        'abandoned_at' => now()->subMinutes(16),
+                    ]);
+                }
+
+                $createdThread = $this->agentService->initiateAbandonedCheckoutRescue($checkout);
+                $playbookLabel = '15-Min Abandoned Cart Rescue';
+            } elseif ($playbook === 'day30_refill') {
+                $createdThread = $this->agentService->initiateDay30Refill($customer, $orderGroupIdStr);
+                $playbookLabel = 'Day 30 VIP Refill Link';
+            } else {
+                $createdThread = $this->agentService->initiateDay7CrossSell($customer, $orderGroupIdStr);
+                $playbookLabel = 'Day 7 Ritual + Cross-Sell Link';
+            }
         } else {
             $createdThread = $this->agentService->initiateCodConfirmation($orderGroupIdStr, true);
             $playbookLabel = 'COD Confirmation + Box Upgrade';
@@ -303,11 +391,137 @@ class EcommerceAiAgentController extends Controller
             return back()->withErrors(['error' => "Could not initiate {$playbookLabel} for order {$orderGroupIdStr}."]);
         }
 
+        if (EcommerceAiSetting::current()->whatsapp_driver === 'simulator') {
+            $pendingDrafts = EcommerceWhatsappMessage::where('thread_id', $createdThread->id)
+                ->where('delivery_status', 'pending_approval')
+                ->get();
+            foreach ($pendingDrafts as $draft) {
+                $this->agentService->approveAndSendDraft($draft);
+            }
+        }
+
         $regionParam = strtolower($createdThread->region);
 
         return redirect()
             ->route('ecommerce.ai-agent.index', ['region' => $regionParam, 'thread_id' => $createdThread->id])
             ->with('success', "AI {$playbookLabel} initiated for Order {$createdThread->shortOrderRef()}.");
+    }
+
+    /**
+     * POST /ecommerce/hub/ai-agent/start-cold-chat
+     * Create a fresh test customer and blank inbound_support WhatsApp thread with zero scenario or order.
+     */
+    public function startColdCustomerChat(Request $request): RedirectResponse
+    {
+        $region = EcommerceSale::normalizeRegion($request->input('region', 'pk'));
+        $regionUpper = strtoupper($region);
+        $visitorNum = random_int(100, 999);
+        $phonePrefix = $regionUpper === 'QA' ? '97455' : '92300';
+        $uniquePhone = $phonePrefix . str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+
+        $customer = EcommerceCustomer::create([
+            'name' => "New WhatsApp Visitor #{$visitorNum}",
+            'phone' => $uniquePhone,
+            'total_spend' => 0,
+            'total_orders' => 0,
+        ]);
+
+        $stockField = $regionUpper === 'QA' ? 'stock_qatar' : 'stock_pakistan';
+        $heroProduct = EcommerceProduct::with('pricingModel')
+            ->orderBy('id')
+            ->get()
+            ->first(fn (EcommerceProduct $p) => (float) $p->{$stockField} >= 1)
+            ?? EcommerceProduct::with('pricingModel')->orderBy('id')->first();
+
+        $thread = EcommerceWhatsappThread::create([
+            'ecommerce_customer_id' => $customer->id,
+            'order_group_id' => null,
+            'region' => $regionUpper,
+            'playbook' => 'inbound_support',
+            'state' => 'inbound_active',
+            'offered_product_id' => $heroProduct?->id,
+            'offered_addon_price' => $heroProduct ? $heroProduct->resolveBasePrice($regionUpper) : 0,
+            'upsell_revenue_generated' => 0,
+            'unread_count' => 0,
+            'last_message_at' => now(),
+        ]);
+
+        EcommerceWhatsappMessage::create([
+            'thread_id' => $thread->id,
+            'direction' => 'outbound',
+            'sender_type' => 'system_event',
+            'delivery_status' => 'sent',
+            'message_body' => '💬 Blank Cold Customer Chat started — type any message below as a new customer!',
+        ]);
+
+        return redirect()
+            ->route('ecommerce.ai-agent.index', [
+                'region' => $region,
+                'thread_id' => $thread->id,
+            ])
+            ->with('success', "Blank Cold Customer Chat started for {$customer->name}. Type any message below!");
+    }
+
+    /**
+     * Alias for startColdCustomerChat().
+     */
+    public function startNewCustomerChat(Request $request): RedirectResponse
+    {
+        return $this->startColdCustomerChat($request);
+    }
+
+    /**
+     * POST /ecommerce/hub/ai-agent/threads/{thread}/reset-chat
+     * Wipe the current thread's messages and reset its state to test from scratch.
+     */
+    public function resetThreadChat(Request $request, EcommerceWhatsappThread $thread): RedirectResponse
+    {
+        $thread->messages()->delete();
+
+        if ($thread->playbook === 'inbound_support') {
+            $thread->order_group_id = null;
+            $thread->state = 'inbound_active';
+            $thread->upsell_revenue_generated = 0;
+            $thread->delivery_notes = null;
+            $thread->unread_count = 0;
+            $thread->last_message_at = now();
+            $thread->save();
+
+            EcommerceWhatsappMessage::create([
+                'thread_id' => $thread->id,
+                'direction' => 'outbound',
+                'sender_type' => 'system_event',
+                'delivery_status' => 'sent',
+                'message_body' => '💬 Blank Cold Customer Chat started — type any message below as a new customer!',
+            ]);
+        } else {
+            $thread->state = match ($thread->playbook) {
+                'day7_cross_sell' => 'day7_checkin_sent',
+                'day30_refill' => 'day30_refill_pitched',
+                'abandoned_checkout' => 'abandoned_followup_sent',
+                default => 'awaiting_cod_confirm',
+            };
+            $thread->upsell_revenue_generated = 0;
+            $thread->delivery_notes = null;
+            $thread->unread_count = 0;
+            $thread->last_message_at = now();
+            $thread->save();
+
+            EcommerceWhatsappMessage::create([
+                'thread_id' => $thread->id,
+                'direction' => 'outbound',
+                'sender_type' => 'system_event',
+                'delivery_status' => 'sent',
+                'message_body' => '🔄 Chat cleared — type any message below as a customer to test from scratch!',
+            ]);
+        }
+
+        return redirect()
+            ->route('ecommerce.ai-agent.index', [
+                'region' => strtolower($thread->region),
+                'thread_id' => $thread->id,
+            ])
+            ->with('success', 'Conversation history cleared and reset for fresh testing.');
     }
 
     /**
@@ -351,7 +565,12 @@ class EcommerceAiAgentController extends Controller
         $thread->last_message_at = now();
         $thread->save();
 
-        return back()->with('success', 'Manual WhatsApp reply sent.');
+        return redirect()
+            ->route('ecommerce.ai-agent.index', [
+                'region' => strtolower($thread->region),
+                'thread_id' => $thread->id,
+            ])
+            ->with('success', 'Manual WhatsApp reply sent.');
     }
 
     /**
@@ -364,12 +583,41 @@ class EcommerceAiAgentController extends Controller
         ]);
 
         // If thread was in human_handoff and admin is simulating a customer test reply, allow resuming AI if requested
-        if ($thread->state === 'human_handoff' && $request->boolean('resume_ai')) {
-            $thread->state = $thread->playbook === 'day7_cross_sell' ? 'day7_checkin_sent' : 'awaiting_cod_confirm';
+        if ($thread->state === 'human_handoff' && $request->boolean('resume_ai', true)) {
+            $resumeState = match ($thread->playbook) {
+                'day7_cross_sell' => 'day7_checkin_sent',
+                'day30_refill' => 'day30_refill_pitched',
+                'abandoned_checkout' => 'abandoned_followup_sent',
+                'inbound_support' => 'inbound_active',
+                default => 'awaiting_cod_confirm',
+            };
+
+            if ($thread->playbook === 'cod_upsell' && $thread->order_group_id) {
+                $isConfirmed = EcommerceSale::where('order_group_id', $thread->order_group_id)
+                    ->whereNotNull('cod_confirmed_at')
+                    ->exists();
+                if ($isConfirmed) {
+                    $resumeState = 'cod_confirmed_upsell_pitched';
+                }
+            }
+
+            $thread->state = $resumeState;
             $thread->save();
         }
 
         $result = $this->agentService->handleInboundCustomerMessage($thread, $validated['customer_reply']);
+
+        // Always auto-reply immediately when testing in Simulator (even if global mode is Co-Pilot)
+        if (!empty($result['outbound_message']) && $result['outbound_message']->delivery_status === 'pending_approval') {
+            $this->agentService->approveAndSendDraft($result['outbound_message']);
+        }
+        $pendingDrafts = EcommerceWhatsappMessage::where('thread_id', $thread->id)
+            ->where('delivery_status', 'pending_approval')
+            ->get();
+        foreach ($pendingDrafts as $draft) {
+            $this->agentService->approveAndSendDraft($draft);
+        }
+
         $intent = $result['ai_decision']['detected_intent'] ?? 'processed';
         $action = $result['ai_decision']['should_trigger_action'] ?? 'none';
 
@@ -387,8 +635,15 @@ class EcommerceAiAgentController extends Controller
     public function toggleHandoff(Request $request, EcommerceWhatsappThread $thread): RedirectResponse
     {
         if ($thread->state === 'human_handoff') {
-            $resumeState = $thread->playbook === 'day7_cross_sell' ? 'day7_checkin_sent' : 'awaiting_cod_confirm';
-            if ($thread->order_group_id) {
+            $resumeState = match ($thread->playbook) {
+                'day7_cross_sell' => 'day7_checkin_sent',
+                'day30_refill' => 'day30_refill_pitched',
+                'abandoned_checkout' => 'abandoned_followup_sent',
+                'inbound_support' => 'inbound_active',
+                default => 'awaiting_cod_confirm',
+            };
+
+            if ($thread->playbook === 'cod_upsell' && $thread->order_group_id) {
                 $isConfirmed = EcommerceSale::where('order_group_id', $thread->order_group_id)
                     ->whereNotNull('cod_confirmed_at')
                     ->exists();
@@ -426,6 +681,26 @@ class EcommerceAiAgentController extends Controller
     }
 
     /**
+     * GET /api/webhooks/ecommerce/whatsapp-inbound
+     * Official Meta WhatsApp Cloud API Webhook Verification endpoint (hub.challenge).
+     */
+    public function verifyWhatsappWebhook(Request $request)
+    {
+        $query = $request->query();
+        $mode = (string) ($query['hub_mode'] ?? $query['hub.mode'] ?? $request->input('hub_mode') ?? '');
+        $token = (string) ($query['hub_verify_token'] ?? $query['hub.verify_token'] ?? $request->input('hub_verify_token') ?? '');
+        $challenge = (string) ($query['hub_challenge'] ?? $query['hub.challenge'] ?? $request->input('hub_challenge') ?? '');
+
+        $expectedToken = (string) config('services.whatsapp.verify_token', env('WHATSAPP_VERIFY_TOKEN', 'laleen_whatsapp_verify_2026'));
+
+        if ($mode === 'subscribe' && $expectedToken !== '' && hash_equals($expectedToken, $token)) {
+            return response($challenge, 200)->header('Content-Type', 'text/plain');
+        }
+
+        return response('Forbidden: Invalid verify token.', 403);
+    }
+
+    /**
      * POST /api/webhooks/ecommerce/whatsapp-inbound
      * Accepts inbound customer replies from n8n/Make bridge or Meta WhatsApp Cloud API.
      */
@@ -446,15 +721,69 @@ class EcommerceAiAgentController extends Controller
         $rawPhone = $payload['phone']
             ?? $payload['from']
             ?? data_get($payload, 'entry.0.changes.0.value.messages.0.from');
+        $msgType = strtolower((string) (
+            $payload['type']
+            ?? $payload['message_type']
+            ?? data_get($payload, 'entry.0.changes.0.value.messages.0.type')
+            ?? 'text'
+        ));
         $messageBody = trim((string) (
             $payload['message_body']
-            ?? $payload['text']
+            ?? (is_string($payload['text'] ?? null) ? $payload['text'] : data_get($payload, 'text.body'))
             ?? data_get($payload, 'entry.0.changes.0.value.messages.0.text.body')
             ?? ''
         ));
         $externalId = $payload['external_message_id']
             ?? $payload['message_id']
             ?? data_get($payload, 'entry.0.changes.0.value.messages.0.id');
+
+        // Non-Text Media Grace: location pin, audio/voice note, or image
+        $locationData = $payload['location']
+            ?? data_get($payload, 'entry.0.changes.0.value.messages.0.location');
+        $extractedLocationNote = null;
+
+        if ($msgType === 'location' || is_array($locationData)) {
+            $lat = is_array($locationData) ? ($locationData['latitude'] ?? null) : null;
+            $lng = is_array($locationData) ? ($locationData['longitude'] ?? null) : null;
+            $locName = is_array($locationData) ? trim((string) ($locationData['name'] ?? '')) : '';
+            $locAddr = is_array($locationData) ? trim((string) ($locationData['address'] ?? '')) : '';
+
+            $locParts = array_values(array_filter([
+                $locName !== '' ? $locName : null,
+                $locAddr !== '' ? $locAddr : null,
+                ($lat !== null && $lng !== null) ? "Coords: {$lat}, {$lng}" : null,
+            ]));
+            $extractedLocationNote = 'WhatsApp Location Pin: ' . (!empty($locParts) ? implode(' | ', $locParts) : 'Pinned Coordinates');
+
+            if ($messageBody === '') {
+                $messageBody = "[Location Pin Received] {$extractedLocationNote}";
+            }
+        } elseif (
+            $messageBody === ''
+            && (
+                in_array($msgType, ['audio', 'voice'], true)
+                || isset($payload['audio'])
+                || isset($payload['voice'])
+                || data_get($payload, 'entry.0.changes.0.value.messages.0.audio') !== null
+                || data_get($payload, 'entry.0.changes.0.value.messages.0.voice') !== null
+            )
+        ) {
+            $messageBody = '[Voice Note Received]';
+        } elseif (
+            $messageBody === ''
+            && (
+                $msgType === 'image'
+                || isset($payload['image'])
+                || data_get($payload, 'entry.0.changes.0.value.messages.0.image') !== null
+            )
+        ) {
+            $caption = trim((string) (
+                data_get($payload, 'image.caption')
+                ?? data_get($payload, 'entry.0.changes.0.value.messages.0.image.caption')
+                ?? ''
+            ));
+            $messageBody = $caption !== '' ? "[Image Received] {$caption}" : '[Image Received]';
+        }
 
         if ($messageBody === '') {
             return response()->json(['status' => 'ignored_empty_message'], 200);
@@ -471,10 +800,33 @@ class EcommerceAiAgentController extends Controller
         }
 
         if (!$thread && $rawPhone) {
+            $cleanDigits = preg_replace('/\D+/', '', (string) $rawPhone);
+            $isQatarPhone = str_starts_with($cleanDigits, '974')
+                || (strlen($cleanDigits) === 8 && in_array($cleanDigits[0] ?? '', ['3', '5', '6', '7'], true));
+            $defaultCountryCode = $isQatarPhone ? '974' : '92';
+
             $normalizedPk = EcommerceCustomer::normalizePhone((string) $rawPhone, '92');
             $normalizedQa = EcommerceCustomer::normalizePhone((string) $rawPhone, '974');
+            $primaryNormalized = EcommerceCustomer::normalizePhone((string) $rawPhone, $defaultCountryCode);
 
-            $customer = EcommerceCustomer::whereIn('phone', array_filter([$normalizedPk, $normalizedQa]))->first();
+            $customer = EcommerceCustomer::whereIn('phone', array_values(array_unique(array_filter([$primaryNormalized, $normalizedPk, $normalizedQa, $cleanDigits]))))->first();
+
+            // Cold Buyer Inbound Support: create customer if phone number is brand new
+            if (!$customer && $primaryNormalized !== '') {
+                $senderName = trim((string) (
+                    $payload['customer_name']
+                    ?? $payload['profile_name']
+                    ?? data_get($payload, 'entry.0.changes.0.value.contacts.0.profile.name')
+                    ?? 'Valued Guest'
+                ));
+                $customer = EcommerceCustomer::create([
+                    'name' => $senderName !== '' ? $senderName : 'Valued Guest',
+                    'phone' => $primaryNormalized,
+                    'total_spend' => 0,
+                    'total_orders' => 0,
+                ]);
+            }
+
             if ($customer) {
                 $thread = EcommerceWhatsappThread::where('ecommerce_customer_id', $customer->id)
                     ->orderByDesc('last_message_at')
@@ -482,20 +834,33 @@ class EcommerceAiAgentController extends Controller
                     ->first();
 
                 if (!$thread) {
-                    $region = str_starts_with($customer->phone, '974') ? 'QA' : 'PK';
+                    $region = str_starts_with((string) $customer->phone, '974') ? 'QA' : 'PK';
                     $thread = EcommerceWhatsappThread::create([
                         'ecommerce_customer_id' => $customer->id,
                         'region' => $region,
                         'playbook' => 'inbound_support',
-                        'state' => 'idle',
+                        'state' => 'inbound_active',
                         'last_message_at' => now(),
                     ]);
+                } elseif ($thread->playbook === 'inbound_support' && $thread->state === 'idle') {
+                    $thread->state = 'inbound_active';
+                    $thread->save();
                 }
             }
         }
 
         if (!$thread) {
             return response()->json(['error' => 'Thread or customer not found for inbound WhatsApp message.'], 404);
+        }
+
+        if ($extractedLocationNote !== null) {
+            $thread->delivery_notes = $extractedLocationNote;
+            $thread->save();
+
+            if ($thread->order_group_id) {
+                EcommerceSale::where('order_group_id', $thread->order_group_id)
+                    ->update(['delivery_notes' => $extractedLocationNote]);
+            }
         }
 
         $result = $this->agentService->handleInboundCustomerMessage(

@@ -16,5 +16,14 @@ Route::post('/webhooks/shopify/orders-cancelled', [ShopifyWebhookController::cla
 Route::post('/webhooks/shopify/orders-fulfilled', [ShopifyWebhookController::class, 'fulfillOrder'])
     ->name('api.webhooks.shopify.orders-fulfilled');
 
+Route::post('/webhooks/shopify/checkouts-create', [ShopifyWebhookController::class, 'handleCheckoutWebhook'])
+    ->name('api.webhooks.shopify.checkouts-create');
+
+Route::post('/webhooks/shopify/checkouts-update', [ShopifyWebhookController::class, 'handleCheckoutWebhook'])
+    ->name('api.webhooks.shopify.checkouts-update');
+
+Route::get('/webhooks/ecommerce/whatsapp-inbound', [EcommerceAiAgentController::class, 'verifyWhatsappWebhook'])
+    ->name('api.webhooks.ecommerce.whatsapp-inbound.verify');
+
 Route::post('/webhooks/ecommerce/whatsapp-inbound', [EcommerceAiAgentController::class, 'inboundWebhook'])
     ->name('api.webhooks.ecommerce.whatsapp-inbound');

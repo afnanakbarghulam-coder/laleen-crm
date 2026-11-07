@@ -40,6 +40,37 @@ class EcommerceCustomer extends Model
     }
 
     /**
+     * Resolve customer's total order count (`orders_count` alias for lifecycle memory).
+     */
+    public function getOrdersCountAttribute(): int
+    {
+        if (array_key_exists('orders_count', $this->attributes) && $this->attributes['orders_count'] !== null) {
+            return (int) $this->attributes['orders_count'];
+        }
+
+        $realizedCount = (int) ($this->total_orders ?? 0);
+        if ($realizedCount > 0) {
+            return $realizedCount;
+        }
+
+        if ($this->relationLoaded('sales')) {
+            return EcommerceSale::countDistinctOrders(
+                $this->sales->whereNotIn('order_status', EcommerceSale::INACTIVE_ORDER_STATUSES)
+            );
+        }
+
+        if ($this->id) {
+            $activeSales = $this->sales()
+                ->whereNotIn('order_status', EcommerceSale::INACTIVE_ORDER_STATUSES)
+                ->get(['id', 'order_group_id', 'reference_id', 'ecommerce_bundle_id', 'created_at']);
+
+            return EcommerceSale::countDistinctOrders($activeSales);
+        }
+
+        return 0;
+    }
+
+    /**
      * Name of the most recently purchased product for WhatsApp outreach templates.
      */
     public function getLatestProductAttribute(): string

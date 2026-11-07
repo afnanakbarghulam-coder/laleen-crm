@@ -202,6 +202,16 @@ class EcommerceSale extends Model
         return in_array((string) $channel, self::QATAR_CHANNELS, true) ? 'QAR' : 'PKR';
     }
 
+    public static function regionForChannel(?string $channel): string
+    {
+        return in_array((string) $channel, self::QATAR_CHANNELS, true) ? 'qa' : 'pk';
+    }
+
+    public function getRegionAttribute(): string
+    {
+        return self::regionForChannel($this->channel);
+    }
+
     public static function isRevenueChannel(?string $channel): bool
     {
         return !in_array((string) $channel, self::NON_REVENUE_CHANNELS, true);

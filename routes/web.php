@@ -11,6 +11,7 @@ use App\Http\Controllers\Ecommerce\EcommerceController;
 use App\Http\Controllers\Ecommerce\EcommerceCustomerController;
 use App\Http\Controllers\Ecommerce\EcommerceExpenseController;
 use App\Http\Controllers\Ecommerce\EcommerceInventoryController;
+use App\Http\Controllers\Ecommerce\EcommerceMarketingController;
 use App\Http\Controllers\Ecommerce\EcommerceMonthlyAdsController;
 use App\Http\Controllers\Ecommerce\EcommerceNetProfitController;
 use App\Http\Controllers\Ecommerce\EcommercePartnerController;
@@ -322,6 +323,7 @@ Route::middleware(['auth'])->group(function () {
                 Route::get('/profit', [EcommerceNetProfitController::class, 'index'])->name('net-profit.index');
                 Route::get('/profit/transactions', [EcommerceNetProfitController::class, 'transactions'])->name('profit.transactions');
                 Route::get('/ai-agent', [EcommerceAiAgentController::class, 'index'])->name('ai-agent.index');
+                Route::get('/marketing', [EcommerceMarketingController::class, 'index'])->name('hub.marketing');
             });
         });
         Route::middleware('module:ecommerce,edit')->group(function () {
@@ -358,14 +360,23 @@ Route::middleware(['auth'])->group(function () {
                 // AI Sales & Retention Agent write routes
                 Route::post('/ai-agent/settings', [EcommerceAiAgentController::class, 'updateSettings'])->name('ai-agent.settings');
                 Route::post('/ai-agent/run-scan', [EcommerceAiAgentController::class, 'runOutreachScan'])->name('ai-agent.run-scan');
+                Route::post('/ai-agent/start-cold-chat', [EcommerceAiAgentController::class, 'startColdCustomerChat'])->name('ai-agent.start-cold-chat');
                 Route::post('/ai-agent/trigger-cod', [EcommerceAiAgentController::class, 'triggerCod'])->name('ai-agent.trigger-cod-order');
                 Route::post('/ai-agent/threads/{thread}/Trigger-cod', [EcommerceAiAgentController::class, 'triggerCod'])->name('ai-agent.trigger-cod');
                 Route::post('/ai-agent/threads/{thread}/trigger-cod', [EcommerceAiAgentController::class, 'triggerCod'])->name('ai-agent.trigger-cod.lower');
+                Route::post('/ai-agent/threads/{thread}/reset-chat', [EcommerceAiAgentController::class, 'resetThreadChat'])->name('ai-agent.threads.reset-chat');
                 Route::post('/ai-agent/messages/{message}/approve', [EcommerceAiAgentController::class, 'approveMessage'])->name('ai-agent.messages.approve');
                 Route::post('/ai-agent/threads/{thread}/send-manual', [EcommerceAiAgentController::class, 'sendManual'])->name('ai-agent.threads.send-manual');
                 Route::post('/ai-agent/threads/{thread}/simulate-inbound', [EcommerceAiAgentController::class, 'simulateInbound'])->name('ai-agent.threads.simulate-inbound');
                 Route::post('/ai-agent/threads/{thread}/toggle-handoff', [EcommerceAiAgentController::class, 'toggleHandoff'])->name('ai-agent.threads.toggle-handoff');
+
+                // AI Ad Script (20-Video Kanban) & 4x7 Content Calendar Generator routes
+                Route::post('/marketing/ai-generate-ads', [EcommerceMarketingController::class, 'generateMonthlyAdsWithAi'])->name('hub.marketing.ai-generate-ads');
+                Route::post('/marketing/ai-generate-calendar', [EcommerceMarketingController::class, 'generateContentCalendarWithAi'])->name('hub.marketing.ai-generate-calendar');
             });
+
+            Route::post('/marketing/ai-generate-ads', [EcommerceMarketingController::class, 'generateMonthlyAdsWithAi'])->name('marketing.ai-generate-ads');
+            Route::post('/marketing/ai-generate-calendar', [EcommerceMarketingController::class, 'generateContentCalendarWithAi'])->name('marketing.ai-generate-calendar');
 
             Route::post('/kpis', [EcommerceController::class, 'storeKpi'])->name('kpis.store');
             Route::delete('/kpis/{kpi}', [EcommerceController::class, 'destroyKpi'])->name('kpis.destroy');

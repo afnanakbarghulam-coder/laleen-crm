@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
+use App\Models\EcommerceAbandonedCheckout;
 use App\Models\EcommerceCustomer;
 use App\Models\EcommercePricingModel;
 use App\Models\EcommerceProduct;
@@ -311,6 +312,22 @@ class ShopifyWebhookController extends Controller
             try {
                 /** @var \App\Services\Ecommerce\EcommerceAiSalesAgentService $aiAgent */
                 $aiAgent = app(\App\Services\Ecommerce\EcommerceAiSalesAgentService::class);
+                $isQatarOrder = str_starts_with(preg_replace('/\D+/', '', (string) $rawPhone), '974')
+                    || strtoupper((string) ($payload['currency'] ?? '')) === 'QAR';
+                $orderCurrency = $isQatarOrder ? 'QAR' : 'PKR';
+                $checkoutToken = isset($payload['checkout_token'])
+                    ? (string) $payload['checkout_token']
+                    : (isset($payload['checkout_id']) ? (string) $payload['checkout_id'] : null);
+
+                $aiAgent->attributeAbandonedCheckoutRecovery(
+                    $result['customer'] ?? null,
+                    $orderGroupId,
+                    (float) ($result['order_revenue'] ?? 0),
+                    $orderCurrency,
+                    $checkoutToken,
+                    (string) $rawPhone
+                );
+
                 $aiAgent->attributeRetentionThreadConversion(
                     $result['customer'] ?? null,
                     $orderGroupId,
@@ -332,6 +349,179 @@ class ShopifyWebhookController extends Controller
             'status' => !empty($result['duplicate']) ? 'duplicate_ignored' : 'ok',
             'customer_id' => $result['customer_id'],
             'sales_logged' => $result['sales_logged'],
+        ], 200);
+    }
+
+    /**
+     * Handle Shopify checkouts/create and checkouts/update webhooks for Playbook 4 (15-Min Abandoned Cart Rescue).
+     * POST /api/webhooks/shopify/checkouts-create
+     * POST /api/webhooks/shopify/checkouts-update
+     */
+    public function handleCheckoutWebhook(Request $request): JsonResponse
+    {
+        if ($unauthorized = $this->verifyHmac($request)) {
+            return $unauthorized;
+        }
+
+        $payload = $request->all();
+
+        $checkoutId = isset($payload['id']) && $payload['id'] !== ''
+            ? (string) $payload['id']
+            : (isset($payload['token']) && $payload['token'] !== '' ? (string) $payload['token'] : null);
+
+        if (!$checkoutId) {
+            return response()->json(['error' => 'Missing checkout id'], 422);
+        }
+
+        $checkoutToken = isset($payload['token']) && $payload['token'] !== ''
+            ? (string) $payload['token']
+            : (isset($payload['cart_token']) && $payload['cart_token'] !== '' ? (string) $payload['cart_token'] : $checkoutId);
+
+        $currency = strtoupper(trim((string) ($payload['currency'] ?? $payload['presentment_currency'] ?? 'PKR')));
+        $rawPhone = (string) (
+            $payload['phone']
+            ?? data_get($payload, 'shipping_address.phone')
+            ?? data_get($payload, 'billing_address.phone')
+            ?? data_get($payload, 'customer.phone')
+            ?? data_get($payload, 'customer.default_address.phone')
+            ?? ''
+        );
+
+        $cleanDigits = preg_replace('/\D+/', '', $rawPhone);
+        $isQatar = $currency === 'QAR'
+            || str_starts_with($cleanDigits, '974')
+            || strtoupper((string) data_get($payload, 'shipping_address.country_code', '')) === 'QA';
+
+        $region = $isQatar ? 'QA' : 'PK';
+        $resolvedCurrency = $isQatar ? 'QAR' : ($currency ?: 'PKR');
+        $defaultCountryCode = $isQatar ? '974' : '92';
+        $normalizedPhone = EcommerceCustomer::normalizePhone($rawPhone, $defaultCountryCode);
+
+        $firstName = trim((string) (
+            data_get($payload, 'shipping_address.first_name')
+            ?? data_get($payload, 'billing_address.first_name')
+            ?? data_get($payload, 'customer.first_name')
+            ?? ''
+        ));
+        $lastName = trim((string) (
+            data_get($payload, 'shipping_address.last_name')
+            ?? data_get($payload, 'billing_address.last_name')
+            ?? data_get($payload, 'customer.last_name')
+            ?? ''
+        ));
+        $customerName = trim("{$firstName} {$lastName}");
+        if ($customerName === '') {
+            $customerName = trim((string) (
+                $payload['customer_name']
+                ?? data_get($payload, 'shipping_address.name')
+                ?? data_get($payload, 'customer.name')
+                ?? 'Valued Guest'
+            ));
+        }
+
+        $email = $payload['email']
+            ?? $payload['contact_email']
+            ?? data_get($payload, 'customer.email')
+            ?? null;
+
+        $customer = null;
+        if ($normalizedPhone !== '') {
+            $customer = EcommerceCustomer::firstOrCreate(
+                ['phone' => $normalizedPhone],
+                [
+                    'name' => $customerName ?: 'Valued Guest',
+                    'email' => $email,
+                    'total_spend' => 0,
+                    'total_orders' => 0,
+                ]
+            );
+            if ($customerName !== '' && $customerName !== 'Valued Guest' && (empty($customer->name) || $customer->name === 'Valued Guest')) {
+                $customer->name = $customerName;
+                $customer->save();
+            }
+        }
+
+        $rawLineItems = is_array($payload['line_items'] ?? null) ? $payload['line_items'] : [];
+        $parsedLineItems = [];
+        $calculatedSubtotal = 0.0;
+
+        foreach ($rawLineItems as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $sku = trim((string) ($item['sku'] ?? ''));
+            $title = trim((string) ($item['title'] ?? $item['name'] ?? 'Product'));
+            $qty = max(1, (int) ($item['quantity'] ?? 1));
+            $price = (float) ($item['price'] ?? 0);
+
+            $matchedProduct = null;
+            if ($sku !== '') {
+                $matchedProduct = EcommerceProduct::where('sku', $sku)->first();
+            }
+            if (!$matchedProduct && $title !== '') {
+                $matchedProduct = EcommerceProduct::whereRaw('LOWER(name) = ?', [strtolower($title)])
+                    ->orWhere('name', 'like', '%' . $title . '%')
+                    ->first();
+            }
+
+            if ($price <= 0 && $matchedProduct) {
+                $price = $matchedProduct->resolveBasePrice($region);
+            }
+            $calculatedSubtotal += round($price * $qty, 2);
+
+            $parsedLineItems[] = [
+                'title' => $matchedProduct?->name ?: $title,
+                'quantity' => $qty,
+                'price' => $price,
+                'ecommerce_product_id' => $matchedProduct?->id,
+            ];
+        }
+
+        $subtotalPrice = isset($payload['subtotal_price']) && (float) $payload['subtotal_price'] > 0
+            ? (float) $payload['subtotal_price']
+            : (isset($payload['total_price']) && (float) $payload['total_price'] > 0 ? (float) $payload['total_price'] : $calculatedSubtotal);
+
+        $abandonedUrl = trim((string) ($payload['abandoned_checkout_url'] ?? ''));
+        if ($abandonedUrl === '') {
+            $firstMatchedProductId = $parsedLineItems[0]['ecommerce_product_id'] ?? null;
+            $firstProduct = $firstMatchedProductId ? EcommerceProduct::find($firstMatchedProductId) : EcommerceProduct::orderBy('id')->first();
+            $abandonedUrl = $firstProduct
+                ? $firstProduct->getShopifyCheckoutUrl()
+                : 'https://laleenrituals.com/checkout';
+        }
+
+        $existingCheckout = EcommerceAbandonedCheckout::where('shopify_checkout_id', $checkoutId)->first();
+        $preserveStatus = ($existingCheckout && in_array($existingCheckout->status, ['outreach_sent', 'recovered'], true))
+            ? $existingCheckout->status
+            : 'abandoned';
+
+        $abandonedAt = !empty($payload['abandoned_at'])
+            ? \Carbon\Carbon::parse($payload['abandoned_at'])
+            : ($existingCheckout?->abandoned_at ?? now());
+
+        $checkout = EcommerceAbandonedCheckout::updateOrCreate(
+            ['shopify_checkout_id' => $checkoutId],
+            [
+                'shopify_checkout_token' => $checkoutToken,
+                'ecommerce_customer_id' => $customer?->id ?? $existingCheckout?->ecommerce_customer_id,
+                'customer_name' => $customerName ?: $existingCheckout?->customer_name,
+                'phone' => $normalizedPhone !== '' ? $normalizedPhone : $existingCheckout?->phone,
+                'email' => $email ?: $existingCheckout?->email,
+                'region' => $region,
+                'currency' => $resolvedCurrency,
+                'subtotal_price' => round($subtotalPrice, 2),
+                'abandoned_checkout_url' => $abandonedUrl,
+                'line_items_json' => $parsedLineItems,
+                'status' => $preserveStatus,
+                'abandoned_at' => $abandonedAt,
+            ]
+        );
+
+        return response()->json([
+            'status' => 'ok',
+            'abandoned_checkout_id' => $checkout->id,
+            'shopify_checkout_id' => $checkout->shopify_checkout_id,
+            'region' => $checkout->region,
         ], 200);
     }
 

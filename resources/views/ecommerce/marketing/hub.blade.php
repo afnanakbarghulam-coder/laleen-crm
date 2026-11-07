@@ -7,7 +7,28 @@
             <h4>Marketing</h4>
             <p>The weekly content factory that creates demand, and the monthly ads plan that scales it.</p>
         </div>
-        <a href="{{ route('ecommerce.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Ecommerce</a>
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            @moduleEdit('ecommerce')
+                <form method="POST" action="{{ route('ecommerce.hub.marketing.ai-generate-ads') }}" class="d-inline">
+                    @csrf
+                    <input type="hidden" name="plan_month" value="{{ now()->format('Y-m') }}">
+                    <input type="hidden" name="region" value="{{ request('region', 'pk') }}">
+                    <button type="submit" class="btn btn-sm" style="background: rgba(201, 166, 107, 0.16); color: #deb97c; border: 1px solid rgba(201, 166, 107, 0.35); font-weight: 600;">
+                        ⚡ AI Generate 20 Ad Scripts
+                    </button>
+                </form>
+
+                <form method="POST" action="{{ route('ecommerce.hub.marketing.ai-generate-calendar') }}" class="d-inline">
+                    @csrf
+                    <input type="hidden" name="week_start_date" value="{{ now()->startOfWeek()->toDateString() }}">
+                    <input type="hidden" name="region" value="{{ request('region', 'pk') }}">
+                    <button type="submit" class="btn btn-sm" style="background: rgba(142, 168, 138, 0.16); color: #a3c49e; border: 1px solid rgba(142, 168, 138, 0.35); font-weight: 600;">
+                        ⚡ AI Populate 4x7 Content Grid
+                    </button>
+                </form>
+            @endmoduleEdit
+            <a href="{{ route('ecommerce.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Ecommerce</a>
+        </div>
     </div>
 
     <div class="row g-4">

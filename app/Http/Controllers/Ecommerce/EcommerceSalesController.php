@@ -407,6 +407,16 @@ class EcommerceSalesController extends Controller
                 /** @var \App\Services\Ecommerce\EcommerceAiSalesAgentService $aiAgent */
                 $aiAgent = app(\App\Services\Ecommerce\EcommerceAiSalesAgentService::class);
                 $saleCustomer = EcommerceSale::where('order_group_id', $orderGroupId)->first()?->customer;
+                $isQatarSale = in_array($validated['channel'], EcommerceSale::QATAR_CHANNELS, true);
+                $saleCurrency = $isQatarSale ? 'QAR' : 'PKR';
+                $aiAgent->attributeAbandonedCheckoutRecovery(
+                    $saleCustomer,
+                    $orderGroupId,
+                    (float) $totalPrice,
+                    $saleCurrency,
+                    null,
+                    $normalizedPhone
+                );
                 $aiAgent->attributeRetentionThreadConversion($saleCustomer, $orderGroupId, (float) $totalPrice);
 
                 if ($paymentStatus === 'unpaid_cod') {
@@ -576,6 +586,16 @@ class EcommerceSalesController extends Controller
                 $aiAgent = app(\App\Services\Ecommerce\EcommerceAiSalesAgentService::class);
                 $saleCustomer = EcommerceSale::where('order_group_id', $orderGroupId)->first()?->customer;
                 $bundleTotalRevenue = array_sum($allocation);
+                $isQatarBundle = in_array($channel, EcommerceSale::QATAR_CHANNELS, true);
+                $bundleCurrency = $isQatarBundle ? 'QAR' : 'PKR';
+                $aiAgent->attributeAbandonedCheckoutRecovery(
+                    $saleCustomer,
+                    $orderGroupId,
+                    (float) $bundleTotalRevenue,
+                    $bundleCurrency,
+                    null,
+                    $normalizedPhone
+                );
                 $aiAgent->attributeRetentionThreadConversion($saleCustomer, $orderGroupId, (float) $bundleTotalRevenue);
 
                 if ($paymentStatus === 'unpaid_cod') {

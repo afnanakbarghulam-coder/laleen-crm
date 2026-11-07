@@ -13,7 +13,19 @@
             <h4>Weekly Content Calendar</h4>
             <p>Plan, assign and verify each day's Reel and Stories &mdash; nothing counts as Posted without proof.</p>
         </div>
-        <a href="{{ route('ecommerce.marketing') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Marketing</a>
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            @if ($canEdit)
+                <form method="POST" action="{{ route('ecommerce.hub.marketing.ai-generate-calendar') }}" class="d-inline">
+                    @csrf
+                    <input type="hidden" name="week_start_date" value="{{ $currentWeek }}">
+                    <input type="hidden" name="region" value="{{ request('region', 'pk') }}">
+                    <button type="submit" class="btn btn-sm" style="background: rgba(142, 168, 138, 0.16); color: #a3c49e; border: 1px solid rgba(142, 168, 138, 0.35); font-weight: 600;">
+                        ⚡ AI Populate 4x7 Content Grid
+                    </button>
+                </form>
+            @endif
+            <a href="{{ route('ecommerce.marketing') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Marketing</a>
+        </div>
     </div>
 
     {{-- ============ Week navigation + execution pills ============ --}}

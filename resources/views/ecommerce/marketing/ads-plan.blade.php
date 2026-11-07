@@ -7,9 +7,18 @@
             <h4>Monthly Ads Plan</h4>
             <p>3-Creative Batch &amp; 7-Day Funnel Test — move a card through the gates right from the board.</p>
         </div>
-        <div class="kpi-header-meta">
+        <div class="kpi-header-meta d-flex align-items-center flex-wrap gap-2">
             @moduleEdit('ecommerce')
-                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#monthlyAdModal" onclick="resetMonthlyAdForm()">
+                <form method="POST" action="{{ route('ecommerce.hub.marketing.ai-generate-ads') }}" class="d-inline">
+                    @csrf
+                    <input type="hidden" name="plan_month" value="{{ $selectedMonth !== 'all' ? $selectedMonth : now()->format('Y-m') }}">
+                    <input type="hidden" name="region" value="{{ request('region', 'pk') }}">
+                    <button type="submit" class="btn btn-sm" style="background: rgba(201, 166, 107, 0.16); color: #deb97c; border: 1px solid rgba(201, 166, 107, 0.38); font-weight: 600;">
+                        ⚡ AI Generate 20 Ad Scripts
+                    </button>
+                </form>
+
+                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#monthlyAdModal" onclick="resetMonthlyAdForm()">
                     <i class="bx bx-plus me-1"></i> Add Ad
                 </button>
             @endmoduleEdit
@@ -25,7 +34,7 @@
             </a>
         @endforeach
         <span class="ms-auto small" style="color: rgba(255, 255, 255, 0.6);">
-            Total Planned Budget: <strong style="color: rgba(255, 255, 255, 0.9);">{{ number_format((float) $totalPlannedBudget, 0) }} QAR</strong>
+            Total Planned Budget: <strong style="color: rgba(255, 255, 255, 0.9);">{{ number_format((float) $totalPlannedBudget, 0) }} {{ $currency ?? (request('region', 'pk') === 'qa' ? 'QAR' : 'PKR') }}</strong>
         </span>
     </div>
 
@@ -79,14 +88,30 @@
                                         <div class="small text-muted mt-1"><i class="bx bx-user me-1"></i>{{ $ad->person_responsible }}</div>
 
                                         <div class="mt-2 d-flex flex-wrap gap-1">
+                                            @if ($ad->framework)
+                                                <span class="badge" style="background: rgba(201, 166, 107, 0.18); color: #deb97c; border: 1px solid rgba(201, 166, 107, 0.35);">
+                                                    {{ $ad->framework }}
+                                                </span>
+                                            @endif
                                             <span class="badge bg-light text-dark">{{ $ad->target_branch }}</span>
                                             @if ($ad->plan_month)
                                                 <span class="badge bg-light text-dark">{{ \Illuminate\Support\Carbon::createFromFormat('Y-m', $ad->plan_month)->format('M Y') }}</span>
                                             @endif
                                             @if ($ad->offer_price !== null)
-                                                <span class="badge bg-light text-dark">Ticket: {{ number_format((float) $ad->offer_price, 0) }} QAR</span>
+                                                <span class="badge bg-light text-dark">Ticket: {{ number_format((float) $ad->offer_price, 0) }} {{ ($ad->region ?? 'PK') === 'QA' ? 'QAR' : 'PKR' }}</span>
                                             @endif
                                         </div>
+
+                                        @if ($ad->hook_text || $ad->spoken_script || $ad->google_flow_prompt)
+                                            <div class="mt-2">
+                                                <button type="button"
+                                                    class="btn btn-sm w-100 ai-script-drawer-btn"
+                                                    style="background: rgba(217, 143, 131, 0.12); color: #e8b4ab; border: 1px solid rgba(217, 143, 131, 0.28); font-size: 11.5px; font-weight: 600;"
+                                                    data-ad-script='@json($ad->toEditPayload())'>
+                                                    🎬 View AI Script &amp; Google Flow Prompt
+                                                </button>
+                                            </div>
+                                        @endif
 
                                         <div class="mt-2">
                                             @if ($deadline)
@@ -249,4 +274,61 @@
     @moduleEdit('ecommerce')
         @include('ecommerce.marketing._ads-plan-form')
     @endmoduleEdit
+
+    {{-- AI Ad Script & Google Flow Prompt Viewer Modal --}}
+    <div class="modal fade" id="aiAdScriptViewerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content" style="background: #201917; color: #f2e6e2; border: 1px solid rgba(217, 143, 131, 0.28);">
+                <div class="modal-header" style="border-bottom-color: rgba(255, 255, 255, 0.08);">
+                    <div>
+                        <span class="badge mb-1" id="aiModalFrameworkBadge" style="background: rgba(201, 166, 107, 0.2); color: #deb97c; border: 1px solid rgba(201, 166, 107, 0.38);">DTC Framework</span>
+                        <h5 class="modal-title mb-0" id="aiModalAdTitle">AI Ad Script Blueprint</h5>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body d-flex flex-column gap-3">
+                    <div class="p-3 rounded" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);">
+                        <div class="text-uppercase fw-bold small mb-1" style="color: #deb97c; letter-spacing: .05em;">🪝 3-Second Visual &amp; Audio Hook</div>
+                        <div id="aiModalHookText" style="font-size: 13.5px; line-height: 1.5;">—</div>
+                    </div>
+
+                    <div class="p-3 rounded" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);">
+                        <div class="text-uppercase fw-bold small mb-1" style="color: #e8b4ab; letter-spacing: .05em;">🎙️ Full Spoken Script (30–45 Seconds)</div>
+                        <div id="aiModalSpokenScript" style="font-size: 13.5px; line-height: 1.6; white-space: pre-line;">—</div>
+                    </div>
+
+                    <div class="p-3 rounded" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);">
+                        <div class="text-uppercase fw-bold small mb-1" style="color: #a3c49e; letter-spacing: .05em;">🎞️ B-Roll Shot List</div>
+                        <div id="aiModalBRoll" style="font-size: 13px; line-height: 1.55; white-space: pre-line;">—</div>
+                    </div>
+
+                    <div class="p-3 rounded" style="background: rgba(201, 166, 107, 0.08); border: 1px solid rgba(201, 166, 107, 0.28);">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="text-uppercase fw-bold small" style="color: #deb97c; letter-spacing: .05em;">🎥 Photorealistic Google Flow Video Prompt</span>
+                            <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size: 11px;" onclick="navigator.clipboard.writeText(document.getElementById('aiModalGoogleFlowPrompt').innerText)">Copy Prompt</button>
+                        </div>
+                        <div id="aiModalGoogleFlowPrompt" style="font-size: 12.5px; line-height: 1.5; color: #e7dcd8;">—</div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top-color: rgba(255, 255, 255, 0.08);">
+                    <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.querySelectorAll('.ai-script-drawer-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const ad = JSON.parse(this.dataset.adScript || '{}');
+                document.getElementById('aiModalAdTitle').textContent = ad.ad_name || 'AI Video Ad Blueprint';
+                document.getElementById('aiModalFrameworkBadge').textContent = ad.framework || 'DTC Ad Angle';
+                document.getElementById('aiModalHookText').textContent = ad.hook_text || ad.txt_hook || '—';
+                document.getElementById('aiModalSpokenScript').textContent = ad.spoken_script || ad.pre_filled_message || '—';
+                document.getElementById('aiModalBRoll').textContent = ad.b_roll_shot_list || ad.txt_value || '—';
+                document.getElementById('aiModalGoogleFlowPrompt').textContent = ad.google_flow_prompt || '—';
+                new bootstrap.Modal(document.getElementById('aiAdScriptViewerModal')).show();
+            });
+        });
+    </script>
 @endsection

@@ -203,6 +203,15 @@
                             @moduleEdit('ecommerce')
                                 <td class="text-end">
                                     <div class="d-inline-flex align-items-center gap-1">
+                                        @php
+                                            $saleRegionParam = strtolower(\App\Models\EcommerceSale::regionForChannel($sale->channel));
+                                        @endphp
+                                        <a href="{{ route('ecommerce.ai-agent.index', ['region' => $saleRegionParam, 'order_group_id' => $groupId]) }}"
+                                           class="btn btn-sm py-1 px-2"
+                                           style="background: rgba(201, 166, 107, 0.14); color: #deb97c; border: 1px solid rgba(201, 166, 107, 0.35); font-size: 11.5px; font-weight: 600; white-space: nowrap;"
+                                           title="Open Zara AI WhatsApp Chat for this Order">
+                                            💬 AI Chat
+                                        </a>
                                         <div class="dropdown">
                                             <button class="btn btn-sm btn-outline-secondary dropdown-toggle py-1 px-2" type="button" data-bs-toggle="dropdown" title="Update Order Status">
                                                 Status

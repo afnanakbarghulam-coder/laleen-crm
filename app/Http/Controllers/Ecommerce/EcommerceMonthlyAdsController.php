@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceMonthlyAd;
+use App\Models\EcommerceSale;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -13,6 +14,8 @@ class EcommerceMonthlyAdsController extends Controller
     public function index(Request $request)
     {
         $selectedMonth = $request->query('month', now()->format('Y-m'));
+        $region = EcommerceSale::normalizeRegion($request->query('region', 'pk'));
+        $currency = EcommerceSale::currencyForRegion($region);
 
         $availableMonths = EcommerceMonthlyAd::query()
             ->whereNotNull('plan_month')
@@ -45,7 +48,9 @@ class EcommerceMonthlyAdsController extends Controller
             'staff',
             'selectedMonth',
             'availableMonths',
-            'totalPlannedBudget'
+            'totalPlannedBudget',
+            'region',
+            'currency'
         ));
     }
 

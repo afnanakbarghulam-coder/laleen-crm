@@ -30,7 +30,7 @@ class EcommerceWhatsappTransportService
         if ($driver === 'webhook') {
             $this->dispatchViaWebhook($message, $thread, $customer, $phone, $settings);
         } elseif ($driver === 'meta_cloud') {
-            $this->dispatchViaMetaCloud($message, $phone);
+            $this->sendViaMetaCloud($message, $phone, $thread);
         } else {
             // Simulator driver: mark as sent immediately for live in-CRM testing
             $message->delivery_status = 'sent';
@@ -110,9 +110,16 @@ class EcommerceWhatsappTransportService
 
     /**
      * Driver 3: Official Meta WhatsApp Cloud API (v20.0)
+     *
+     * Checks if the thread has received an inbound customer message within the last 24 hours.
+     * If yes, sends a standard `"type": "text"` payload; if outside the 24-hour window (initial Step 1 outreach)
+     * and a Meta template name is configured, supports sending `"type": "template"` with automatic fallback to `"type": "text"`.
      */
-    private function dispatchViaMetaCloud(EcommerceWhatsappMessage $message, string $phone): void
-    {
+    public function sendViaMetaCloud(
+        EcommerceWhatsappMessage $message,
+        string $phone,
+        ?EcommerceWhatsappThread $thread = null
+    ): void {
         $token = trim((string) config('services.whatsapp.token'));
         $phoneNumberId = trim((string) config('services.whatsapp.phone_number_id'));
 
@@ -124,9 +131,78 @@ class EcommerceWhatsappTransportService
             return;
         }
 
+        $thread = $thread ?? ($message->relationLoaded('thread') ? $message->thread : $message->thread()->with('customer')->first());
         $endpoint = "https://graph.facebook.com/v20.0/{$phoneNumberId}/messages";
 
+        $hasInboundWithin24Hours = false;
+        if ($thread) {
+            if ($thread->relationLoaded('messages')) {
+                $hasInboundWithin24Hours = $thread->messages->contains(function (EcommerceWhatsappMessage $m) {
+                    return $m->direction === 'inbound'
+                        && $m->created_at
+                        && $m->created_at->greaterThanOrEqualTo(now()->subHours(24));
+                });
+            } else {
+                $hasInboundWithin24Hours = $thread->messages()
+                    ->where('direction', 'inbound')
+                    ->where('created_at', '>=', now()->subHours(24))
+                    ->exists();
+            }
+        }
+
+        $templateName = trim((string) (
+            data_get($message->ai_metadata, 'meta_template_name')
+            ?: config('services.whatsapp.template_name', '')
+        ));
+        $templateLang = trim((string) (
+            data_get($message->ai_metadata, 'meta_template_language')
+            ?: config('services.whatsapp.template_language', 'en_US')
+        )) ?: 'en_US';
+
         try {
+            // Outside 24-hour customer service window + template configured -> attempt template first
+            if (!$hasInboundWithin24Hours && $templateName !== '') {
+                $customerName = $thread?->customer?->name ?: 'Valued Customer';
+                $templatePayload = [
+                    'messaging_product' => 'whatsapp',
+                    'recipient_type' => 'individual',
+                    'to' => $phone,
+                    'type' => 'template',
+                    'template' => [
+                        'name' => $templateName,
+                        'language' => ['code' => $templateLang],
+                        'components' => [
+                            [
+                                'type' => 'body',
+                                'parameters' => [
+                                    ['type' => 'text', 'text' => $customerName],
+                                    ['type' => 'text', 'text' => mb_substr((string) $message->message_body, 0, 1024)],
+                                ],
+                            ],
+                        ],
+                    ],
+                ];
+
+                $templateResponse = Http::timeout(12)
+                    ->withToken($token)
+                    ->when(app()->environment('local'), fn ($h) => $h->withoutVerifying())
+                    ->post($endpoint, $templatePayload);
+
+                if ($templateResponse->successful()) {
+                    $message->delivery_status = 'sent';
+                    $message->external_message_id = (string) (data_get($templateResponse->json(), 'messages.0.id') ?: ('wamid.tpl.' . uniqid()));
+                    $message->save();
+
+                    return;
+                }
+
+                Log::warning('Meta Cloud WhatsApp template delivery failed; falling back to text payload.', [
+                    'template' => $templateName,
+                    'status' => $templateResponse->status(),
+                    'body' => $templateResponse->body(),
+                ]);
+            }
+
             $response = Http::timeout(12)
                 ->withToken($token)
                 ->when(app()->environment('local'), fn ($h) => $h->withoutVerifying())
@@ -136,7 +212,7 @@ class EcommerceWhatsappTransportService
                     'to' => $phone,
                     'type' => 'text',
                     'text' => [
-                        'preview_url' => false,
+                        'preview_url' => str_contains((string) $message->message_body, 'http'),
                         'body' => $message->message_body,
                     ],
                 ]);
@@ -159,5 +235,10 @@ class EcommerceWhatsappTransportService
         }
 
         $message->save();
+    }
+
+    private function dispatchViaMetaCloud(EcommerceWhatsappMessage $message, string $phone): void
+    {
+        $this->sendViaMetaCloud($message, $phone);
     }
 }
