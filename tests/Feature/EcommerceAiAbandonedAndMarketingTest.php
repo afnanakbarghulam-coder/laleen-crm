@@ -485,23 +485,38 @@ class EcommerceAiAbandonedAndMarketingTest extends TestCase
         $this->assertSame(0, $coldThread->messages()->where('sender_type', 'ai')->count());
         $this->assertSame(1, $coldThread->messages()->where('sender_type', 'system_event')->count());
 
-        // 2. Render page: verify Blank Chat button, Clear/Reset button, AJAX containers, and In-Stock Catalog card
+        // 2. Render page: verify Blank Chat button, Clear/Reset button, Panels toggle, AJAX containers, and Catalog card
         $page = $this->get("/ecommerce/hub/ai-agent?region=pk&thread_id={$coldThread->id}");
         $page->assertStatus(200);
-        $page->assertSee('+ 💬 New Blank Customer Chat (No Scenario)');
-        $page->assertSee('🔄 Clear / Reset Chat');
+        $page->assertSee('+ New Blank Chat');
+        $page->assertSee('↺ Reset');
+        $page->assertSee('◫ Panels');
+        $page->assertSee('✕ Hide Chips');
+        $page->assertSee('bubbleSlideUp', false);
         $page->assertSee('id="ai-chat-timeline"', false);
         $page->assertSee('id="ai-order-receipt-panel"', false);
         $page->assertSee('appendZaraTypingIndicator', false);
-        $page->assertSee('In-Stock Catalog &amp; Bundles (Available to Pitch)', false);
+        $page->assertSee('Catalog &middot; PK', false);
         $page->assertSee('Hunza Apricot Hair Oil');
         $page->assertSee('Sulfate-Free Botanical Shampoo');
 
-        // 3. Send a message as the cold customer -> verify bubble labels ("You (Customer)" on right, "✨ Zara (Laleen AI)" on left)
-        $this->post("/ecommerce/hub/ai-agent/threads/{$coldThread->id}/simulate-inbound", [
+        // 3. Send a message via JSON AJAX as the cold customer -> verify JSON response structure (messages_html, receipt_html, kpis_html)
+        $ajaxReply = $this->postJson("/ecommerce/hub/ai-agent/threads/{$coldThread->id}/simulate-inbound", [
             'customer_reply' => 'Hi!',
             'resume_ai' => 1,
-        ])->assertRedirect();
+        ]);
+        $ajaxReply->assertStatus(200)
+            ->assertJson([
+                'status' => 'ok',
+                'thread_id' => $coldThread->id,
+            ])
+            ->assertJsonStructure([
+                'status',
+                'messages_html',
+                'new_messages',
+                'receipt_html',
+                'kpis_html',
+            ]);
 
         $pageAfterReply = $this->get("/ecommerce/hub/ai-agent?region=pk&thread_id={$coldThread->id}");
         $pageAfterReply->assertStatus(200);

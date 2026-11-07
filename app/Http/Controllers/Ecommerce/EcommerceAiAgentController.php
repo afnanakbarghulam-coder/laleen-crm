@@ -474,7 +474,7 @@ class EcommerceAiAgentController extends Controller
      * POST /ecommerce/hub/ai-agent/threads/{thread}/reset-chat
      * Wipe the current thread's messages and reset its state to test from scratch.
      */
-    public function resetThreadChat(Request $request, EcommerceWhatsappThread $thread): RedirectResponse
+    public function resetThreadChat(Request $request, EcommerceWhatsappThread $thread): RedirectResponse|JsonResponse
     {
         $thread->messages()->delete();
 
@@ -487,7 +487,7 @@ class EcommerceAiAgentController extends Controller
             $thread->last_message_at = now();
             $thread->save();
 
-            EcommerceWhatsappMessage::create([
+            $resetMsg = EcommerceWhatsappMessage::create([
                 'thread_id' => $thread->id,
                 'direction' => 'outbound',
                 'sender_type' => 'system_event',
@@ -507,13 +507,17 @@ class EcommerceAiAgentController extends Controller
             $thread->last_message_at = now();
             $thread->save();
 
-            EcommerceWhatsappMessage::create([
+            $resetMsg = EcommerceWhatsappMessage::create([
                 'thread_id' => $thread->id,
                 'direction' => 'outbound',
                 'sender_type' => 'system_event',
                 'delivery_status' => 'sent',
                 'message_body' => '🔄 Chat cleared — type any message below as a customer to test from scratch!',
             ]);
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json($this->buildAjaxThreadPayload($thread, [$resetMsg], null, true));
         }
 
         return redirect()
@@ -541,7 +545,7 @@ class EcommerceAiAgentController extends Controller
     /**
      * POST /ecommerce/hub/ai-agent/threads/{thread}/send-manual
      */
-    public function sendManual(Request $request, EcommerceWhatsappThread $thread): RedirectResponse
+    public function sendManual(Request $request, EcommerceWhatsappThread $thread): RedirectResponse|JsonResponse
     {
         $validated = $request->validate([
             'message_body' => 'required|string|max:4000',
@@ -565,6 +569,10 @@ class EcommerceAiAgentController extends Controller
         $thread->last_message_at = now();
         $thread->save();
 
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json($this->buildAjaxThreadPayload($thread, [], $msg));
+        }
+
         return redirect()
             ->route('ecommerce.ai-agent.index', [
                 'region' => strtolower($thread->region),
@@ -576,7 +584,7 @@ class EcommerceAiAgentController extends Controller
     /**
      * POST /ecommerce/hub/ai-agent/threads/{thread}/simulate-inbound
      */
-    public function simulateInbound(Request $request, EcommerceWhatsappThread $thread): RedirectResponse
+    public function simulateInbound(Request $request, EcommerceWhatsappThread $thread): RedirectResponse|JsonResponse
     {
         $validated = $request->validate([
             'customer_reply' => 'required|string|max:2000',
@@ -621,12 +629,146 @@ class EcommerceAiAgentController extends Controller
         $intent = $result['ai_decision']['detected_intent'] ?? 'processed';
         $action = $result['ai_decision']['should_trigger_action'] ?? 'none';
 
+        if ($request->expectsJson() || $request->ajax()) {
+            $appendMessages = array_values(array_filter([
+                $result['system_event'] ?? null,
+                !empty($result['outbound_message']) ? $result['outbound_message']->fresh() : null,
+            ]));
+
+            return response()->json($this->buildAjaxThreadPayload(
+                $result['thread'] ?? $thread->fresh(),
+                $appendMessages,
+                $result['inbound_message'] ?? null
+            ));
+        }
+
         return redirect()
             ->route('ecommerce.ai-agent.index', [
                 'region' => strtolower($thread->region),
                 'thread_id' => $thread->id,
             ])
             ->with('success', "Simulated customer reply processed (Intent: {$intent} | Action: {$action}).");
+    }
+
+    /**
+     * Build a structured JSON payload for zero-reload AJAX chat updates.
+     */
+    protected function buildAjaxThreadPayload(
+        EcommerceWhatsappThread $thread,
+        array $appendMessages = [],
+        ?EcommerceWhatsappMessage $optimisticMessage = null,
+        bool $replaceTimeline = false
+    ): array {
+        $settings = EcommerceAiSetting::current();
+        $personaName = $settings->agent_persona_name ?: 'Zara';
+
+        $messagesHtmlParts = [];
+        $structuredMessages = [];
+
+        if ($optimisticMessage) {
+            $structuredMessages[] = [
+                'id' => $optimisticMessage->id,
+                'direction' => $optimisticMessage->direction,
+                'sender_type' => $optimisticMessage->sender_type,
+                'delivery_status' => $optimisticMessage->delivery_status,
+                'body' => $optimisticMessage->message_body,
+                'html' => $optimisticMessage->formattedHtmlBody(),
+                'time' => $optimisticMessage->created_at?->format('H:i'),
+            ];
+        }
+
+        foreach ($appendMessages as $msg) {
+            if (!$msg instanceof EcommerceWhatsappMessage) {
+                continue;
+            }
+            $htmlBody = $msg->formattedHtmlBody();
+            $timeStr = $msg->created_at?->format('H:i') ?? now()->format('H:i');
+
+            $structuredMessages[] = [
+                'id' => $msg->id,
+                'direction' => $msg->direction,
+                'sender_type' => $msg->sender_type,
+                'delivery_status' => $msg->delivery_status,
+                'body' => $msg->message_body,
+                'html' => $htmlBody,
+                'time' => $timeStr,
+            ];
+
+            if ($msg->sender_type === 'system_event') {
+                $messagesHtmlParts[] = '<div class="d-flex justify-content-center shrink-0 flex-shrink-0 my-1 ai-bubble-animate">'
+                    . '<div class="ai-system-pill shrink-0 flex-shrink-0 my-1 py-1 px-3 leading-normal text-xs rounded-full">'
+                    . $htmlBody
+                    . '</div></div>';
+            } elseif ($msg->direction === 'inbound') {
+                $messagesHtmlParts[] = '<div class="d-flex justify-content-end w-100 ai-bubble-animate">'
+                    . '<div class="ai-msg-bubble ai-msg-inbound ms-auto">'
+                    . '<div class="ai-msg-sender-label is-customer">You (Customer)</div>'
+                    . '<div class="ai-msg-body">' . $htmlBody . '</div>'
+                    . '<div class="ai-msg-time">' . $timeStr . ' &checkmark;&checkmark;</div>'
+                    . '</div></div>';
+            } else {
+                $senderLabel = $msg->sender_type === 'staff'
+                    ? '👩‍💼 ' . e($personaName) . ' (Staff Override)'
+                    : '✨ ' . e($personaName) . ' (Laleen AI)';
+                $timePrefix = $msg->sender_type === 'staff' ? 'Staff · ' : '';
+
+                $messagesHtmlParts[] = '<div class="d-flex justify-content-start w-100 ai-bubble-animate">'
+                    . '<div class="ai-msg-bubble ai-msg-outbound me-auto">'
+                    . '<div class="ai-msg-sender-label is-zara">' . $senderLabel . '</div>'
+                    . '<div class="ai-msg-body">' . $htmlBody . '</div>'
+                    . '<div class="ai-msg-time">' . $timePrefix . $timeStr . '</div>'
+                    . '</div></div>';
+            }
+        }
+
+        // Render updated index view in memory to extract updated right-hand receipt, KPI ribbon, header, and thread list
+        $subRequest = Request::create('/ecommerce/hub/ai-agent', 'GET', [
+            'region' => strtolower($thread->region),
+            'thread_id' => $thread->id,
+        ]);
+        $renderedHtml = $this->index($subRequest)->render();
+
+        return [
+            'status' => 'ok',
+            'thread_id' => $thread->id,
+            'thread_state' => $thread->state,
+            'playbook' => $thread->playbook,
+            'replace_timeline' => $replaceTimeline,
+            'messages_html' => implode("\n", $messagesHtmlParts),
+            'new_messages' => $structuredMessages,
+            'receipt_html' => $this->extractElementInnerHtml($renderedHtml, 'ai-order-receipt-panel'),
+            'kpis_html' => $this->extractElementInnerHtml($renderedHtml, 'ai-kpi-ribbon'),
+            'header_html' => $this->extractElementInnerHtml($renderedHtml, 'ai-chat-header'),
+            'thread_list_html' => $this->extractElementInnerHtml($renderedHtml, 'ai-thread-list-panel'),
+            'chips_html' => $this->extractElementInnerHtml($renderedHtml, 'quick-reply-chips-row'),
+        ];
+    }
+
+    /**
+     * Extract innerHTML of a specific element ID from a rendered Blade HTML string.
+     */
+    protected function extractElementInnerHtml(string $html, string $elementId): ?string
+    {
+        if ($html === '') {
+            return null;
+        }
+
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+
+        $el = $dom->getElementById($elementId);
+        if (!$el) {
+            return null;
+        }
+
+        $inner = '';
+        foreach ($el->childNodes as $child) {
+            $inner .= $dom->saveHTML($child);
+        }
+
+        return $inner;
     }
 
     /**
