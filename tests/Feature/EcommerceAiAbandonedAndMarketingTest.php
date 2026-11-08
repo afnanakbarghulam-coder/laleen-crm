@@ -635,4 +635,103 @@ class EcommerceAiAbandonedAndMarketingTest extends TestCase
         $this->assertStringNotContainsString('PKR 0)', (string) $step4['outbound_message']?->message_body);
         $this->assertStringContainsString(number_format($baseTotal, 0), (string) $step4['outbound_message']?->message_body);
     }
+
+    public function test_inbound_support_10_screenshot_scenarios_and_complementary_offer_guardrails(): void
+    {
+        $this->actingAs($this->adminUser);
+
+        $this->post('/ecommerce/hub/ai-agent/start-cold-chat', [
+            'region' => 'pk',
+        ])->assertRedirect();
+
+        $thread = EcommerceWhatsappThread::where('playbook', 'inbound_support')
+            ->latest('id')
+            ->first();
+        $this->assertNotNull($thread);
+        $customer = $thread->customer;
+        $this->assertNotNull($customer);
+
+        /** @var EcommerceAiSalesAgentService $agent */
+        $agent = app(EcommerceAiSalesAgentService::class);
+
+        // 1. Prompt prefix stripping + Oily Scalp + "kitne ml" without double "Jee bilkul!"
+        $res1 = $agent->handleInboundCustomerMessage(
+            $thread,
+            'Prompt: Aoa, if I apply the oil before showering, will my roots get oily? Also bottle kitne ml ki hai?'
+        );
+        $reply1 = (string) $res1['outbound_message']?->message_body;
+        $this->assertStringNotContainsString('Prompt:', (string) $res1['inbound_message']?->message_body);
+        $this->assertLessThanOrEqual(1, substr_count(strtolower($reply1), 'jee bilkul'));
+        $this->assertStringContainsString('100ml', $reply1);
+        $this->assertStringContainsString('3–4 drops', $reply1);
+
+        // 2. Post-purchase commands sent in a cold thread (before any order exists)
+        $res2 = $agent->handleInboundCustomerMessage($thread, 'Prompt: No thanks, just send my original order.');
+        $reply2 = (string) $res2['outbound_message']?->message_body;
+        $this->assertStringContainsString("don't have an active order booked", $reply2);
+        $this->assertStringContainsString('Full Name, Complete Street Address & City', $reply2);
+
+        // 3. 50% Discount / Buy Both Bundle -> COMPLETE20 20% off
+        $res3 = $agent->handleInboundCustomerMessage(
+            $thread,
+            'Prompt: Your shampoo and oil are too expensive. Can you give me a 50% discount if I take both right now?'
+        );
+        $reply3 = (string) $res3['outbound_message']?->message_body;
+        $this->assertStringContainsString('COMPLETE20', $reply3);
+        $this->assertStringContainsString('/discount/COMPLETE20', $reply3);
+
+        // 4. Asking for Shampoo Link -> matches Sulfate-Free Botanical Shampoo
+        $res4 = $agent->handleInboundCustomerMessage(
+            $thread,
+            'Prompt: Actually, can you send me the link for the shampoo? I want to read about it.'
+        );
+        $reply4 = (string) $res4['outbound_message']?->message_body;
+        $this->assertSame($this->shampooProduct->id, (int) $res4['thread']->offered_product_id);
+        $this->assertStringContainsString('Shampoo', $reply4);
+        $this->assertStringContainsString('COMPLETE20', $reply4);
+
+        // 5. Heavy Hair Troubleshooting -> coaches on 3-4 drops + double cleansing
+        $res5 = $agent->handleInboundCustomerMessage(
+            $thread,
+            'Prompt: Hi, I received my Apricot Oil last week and used it twice, it smells amazing! My hair felt a little heavy after washing though.'
+        );
+        $reply5 = (string) $res5['outbound_message']?->message_body;
+        $this->assertStringContainsString('3–4 drops', $reply5);
+        $this->assertStringContainsString('double-cleansing', $reply5);
+        $this->assertStringNotContainsString('Dealing with stubborn hair stress', $reply5);
+
+        // 6. Refill Discount Link -> VIPREFILL15 15% off
+        $res6 = $agent->handleInboundCustomerMessage(
+            $thread,
+            'Prompt: Hey Zara! My Apricot Oil bottle is almost finished and my hair fall is so much better now. Do you have a refill discount link?'
+        );
+        $reply6 = (string) $res6['outbound_message']?->message_body;
+        $this->assertStringContainsString('VIPREFILL15', $reply6);
+        $this->assertStringContainsString('/discount/VIPREFILL15', $reply6);
+
+        // 7. Native Urdu salary/date note does NOT create a COD order without a physical address
+        $res7 = $agent->handleInboundCustomerMessage(
+            $thread,
+            'Prompt: جی کنفرم کر دیں، لیکن ڈلیوری 2 تاریخ کو تنخواہ کے بعد بھیجیں۔'
+        );
+        $this->assertSame('Deliver on 2nd of the month after salary', $res7['thread']->delivery_notes);
+        $this->assertSame(0, EcommerceSale::where('ecommerce_customer_id', $customer->id)->count());
+
+        // Even if customer says "Send me 1 oil" next while delivery_notes has only a salary timing note, it still requires a physical street address!
+        $res8 = $agent->handleInboundCustomerMessage($thread, 'Filhal sirf 1 Apricot Oil bhej dein');
+        $this->assertSame('send_checkout_link', $res8['ai_decision']['should_trigger_action']);
+        $this->assertSame(0, EcommerceSale::where('ecommerce_customer_id', $customer->id)->count());
+
+        // 8. When Shampoo is deleted from DB, resolveComplementaryOffer auto-provisions Sulfate-Free Botanical Shampoo so Oil is never paired with Oil
+        $this->shampooProduct->delete();
+        $res9 = $agent->handleInboundCustomerMessage(
+            $thread,
+            'Sara Ahmed, House 22, Street 9, F-7/2, Islamabad'
+        );
+        $this->assertSame('convert_abandoned_to_cod_order', $res9['ai_decision']['should_trigger_action']);
+        $reply9 = (string) $res9['outbound_message']?->message_body;
+        $this->assertStringContainsString('📍 Delivery Address: *Sara Ahmed, House 22, Street 9, F-7/2, Islamabad*', $reply9);
+        $this->assertStringNotContainsString('pair it with *Hunza Apricot Oil*', $reply9);
+        $this->assertStringContainsString('Shampoo', $reply9);
+    }
 }

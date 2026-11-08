@@ -751,6 +751,7 @@ class EcommerceAiAgentController extends Controller
                 'body' => $optimisticMessage->message_body,
                 'html' => $optimisticMessage->formattedHtmlBody(),
                 'time' => $optimisticMessage->created_at?->format('H:i'),
+                'timestamp_iso' => $optimisticMessage->created_at?->toIso8601String(),
             ];
         }
 
@@ -760,6 +761,7 @@ class EcommerceAiAgentController extends Controller
             }
             $htmlBody = $msg->formattedHtmlBody();
             $timeStr = $msg->created_at?->format('H:i') ?? now()->format('H:i');
+            $isoTime = e($msg->created_at?->toIso8601String() ?? now()->toIso8601String());
 
             $structuredMessages[] = [
                 'id' => $msg->id,
@@ -769,6 +771,7 @@ class EcommerceAiAgentController extends Controller
                 'body' => $msg->message_body,
                 'html' => $htmlBody,
                 'time' => $timeStr,
+                'timestamp_iso' => $isoTime,
             ];
 
             if ($msg->sender_type === 'system_event') {
@@ -781,7 +784,7 @@ class EcommerceAiAgentController extends Controller
                     . '<div class="ai-msg-bubble ai-msg-inbound ms-auto">'
                     . '<div class="ai-msg-sender-label is-customer">You (Customer)</div>'
                     . '<div class="ai-msg-body">' . $htmlBody . '</div>'
-                    . '<div class="ai-msg-time">' . $timeStr . ' &checkmark;&checkmark;</div>'
+                    . '<div class="ai-msg-time" data-timestamp="' . $isoTime . '" data-time-suffix=" ✓✓">' . $timeStr . ' &checkmark;&checkmark;</div>'
                     . '</div></div>';
             } else {
                 $senderLabel = $msg->sender_type === 'staff'
@@ -793,7 +796,7 @@ class EcommerceAiAgentController extends Controller
                     . '<div class="ai-msg-bubble ai-msg-outbound me-auto">'
                     . '<div class="ai-msg-sender-label is-zara">' . $senderLabel . '</div>'
                     . '<div class="ai-msg-body">' . $htmlBody . '</div>'
-                    . '<div class="ai-msg-time">' . $timePrefix . $timeStr . '</div>'
+                    . '<div class="ai-msg-time" data-timestamp="' . $isoTime . '" data-time-prefix="' . e($timePrefix) . '">' . $timePrefix . $timeStr . '</div>'
                     . '</div></div>';
             }
         }

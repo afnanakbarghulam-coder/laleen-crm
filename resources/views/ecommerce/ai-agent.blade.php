@@ -223,7 +223,7 @@
                                     <div class="ai-msg-bubble ai-msg-inbound ms-auto">
                                         <div class="ai-msg-sender-label is-customer">You (Customer)</div>
                                         <div class="ai-msg-body">{!! $msg->formattedHtmlBody() !!}</div>
-                                        <div class="ai-msg-time">{{ $msg->created_at?->format('H:i') }} &checkmark;&checkmark;</div>
+                                        <div class="ai-msg-time" data-timestamp="{{ $msg->created_at?->toIso8601String() }}" data-time-suffix=" ✓✓">{{ $msg->created_at?->format('H:i') }} &checkmark;&checkmark;</div>
                                     </div>
                                 </div>
                             @else
@@ -237,7 +237,7 @@
                                                     <span style="font-size: 11px; font-weight: 600; color: #deb97c;">
                                                         Co-Pilot Draft &mdash; Review &amp; Send
                                                     </span>
-                                                    <span class="ai-msg-time">{{ $msg->created_at?->format('H:i') }}</span>
+                                                    <span class="ai-msg-time" data-timestamp="{{ $msg->created_at?->toIso8601String() }}">{{ $msg->created_at?->format('H:i') }}</span>
                                                 </div>
                                                 <textarea name="message_body" rows="3" class="form-control form-control-sm mb-2 ai-draft-textarea">{{ $msg->message_body }}</textarea>
                                                 <button type="submit" class="btn btn-sm btn-success fw-semibold px-3">
@@ -253,7 +253,7 @@
                                                 @endif
                                             </div>
                                             <div class="ai-msg-body">{!! $msg->formattedHtmlBody() !!}</div>
-                                            <div class="ai-msg-time">
+                                            <div class="ai-msg-time" data-timestamp="{{ $msg->created_at?->toIso8601String() }}" data-time-prefix="{{ $msg->sender_type === 'staff' ? 'Staff · ' : '' }}">
                                                 {{ $msg->sender_type === 'staff' ? 'Staff · ' : '' }}{{ $msg->created_at?->format('H:i') }}
                                             </div>
                                         @endif
@@ -1545,6 +1545,25 @@
             return hh + ':' + mm;
         }
 
+        function localizeChatTimestamps() {
+            var els = document.querySelectorAll('.ai-msg-time[data-timestamp]');
+            els.forEach(function (el) {
+                var iso = el.getAttribute('data-timestamp');
+                if (!iso) {
+                    return;
+                }
+                var dt = new Date(iso);
+                if (isNaN(dt.getTime())) {
+                    return;
+                }
+                var hh = String(dt.getHours()).padStart(2, '0');
+                var mm = String(dt.getMinutes()).padStart(2, '0');
+                var prefix = el.getAttribute('data-time-prefix') || '';
+                var suffix = el.getAttribute('data-time-suffix') || '';
+                el.textContent = prefix + hh + ':' + mm + suffix;
+            });
+        }
+
         function appendOptimisticCustomerBubble(messageText, isStaffMode, personaName) {
             var container = document.getElementById('chat-messages-container') || document.getElementById('ai-chat-timeline');
             if (!container) {
@@ -1652,6 +1671,7 @@
                 chipsRowEl.innerHTML = payload.chips_html;
             }
 
+            localizeChatTimestamps();
             scrollChatToBottom(true);
             focusUnifiedChatInput();
         }
@@ -1677,6 +1697,7 @@
                 }
             });
 
+            localizeChatTimestamps();
             scrollChatToBottom(true);
             focusUnifiedChatInput();
         }
@@ -1878,6 +1899,7 @@
                     toggleAiSidePanels(true);
                 }
             } catch (err) {}
+            localizeChatTimestamps();
             scrollChatToBottom(false);
             focusUnifiedChatInput();
         });
