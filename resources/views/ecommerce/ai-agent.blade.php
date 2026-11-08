@@ -21,7 +21,7 @@
         <div class="d-flex align-items-baseline gap-2">
             <h4 class="mb-0" style="font-size: 1.05rem; font-weight: 600;">AI Sales &amp; Retention Agent</h4>
             <span class="text-uppercase fw-semibold" style="font-size: 10px; letter-spacing: .08em; color: var(--ec-gold);">
-                WhatsApp Concierge &middot; {{ $region === 'qa' ? 'Qatar (QAR)' : 'Pakistan (PKR)' }}
+                WhatsApp Support &middot; {{ $region === 'qa' ? 'Qatar (QAR)' : 'Pakistan (PKR)' }}
             </span>
         </div>
     </div>
@@ -123,6 +123,9 @@
                     @php
                         $isSelected = $activeThread && $activeThread->id === $t->id;
                         $badge = $t->compactStatusBadge();
+                        if ($t->playbook === 'inbound_support' || stripos((string) ($badge['label'] ?? ''), 'Concierge') !== false) {
+                            $badge['label'] = str_ireplace('Concierge', 'Support', (string) ($badge['label'] ?? 'Support'));
+                        }
                         $lastMsg = $t->messages->last();
                         $previewText = $lastMsg
                             ? preg_replace('/\b([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i', '#$1', str_replace('*', '', $lastMsg->message_body))

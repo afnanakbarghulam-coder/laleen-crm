@@ -48,7 +48,7 @@ class EcommerceAiSalesAgentService
             if ($thread->offeredProduct) {
                 $pct = $thread->playbook === 'day30_refill' ? 15.0 : $discountPercent;
                 $basePrice = $thread->offeredProduct->resolveBasePrice($thread->region);
-                $addonPrice = max(1.0, round($basePrice * (1 - ($pct / 100)), 2));
+                $addonPrice = max(1.0, round($basePrice * (1 - ($pct / 100))));
                 $thread->offered_addon_price = $addonPrice;
                 $thread->save();
             }
@@ -71,7 +71,7 @@ class EcommerceAiSalesAgentService
             $resolvedAddonPrice = (float) ($linkedThread?->offered_addon_price ?? 0);
             if ($resolvedAddonPrice <= 0 && $sale->product) {
                 $basePrice = $sale->product->resolveBasePrice($region);
-                $resolvedAddonPrice = max(1.0, round($basePrice * (1 - ($discountPercent / 100)), 2));
+                $resolvedAddonPrice = max(1.0, round($basePrice * (1 - ($discountPercent / 100))));
             }
             if ($resolvedAddonPrice <= 0) {
                 $resolvedAddonPrice = $isQatar ? 52.00 : 960.00;
@@ -395,7 +395,7 @@ class EcommerceAiSalesAgentService
         }
 
         $basePrice = $selectedProduct->resolveBasePrice($regionUpper);
-        $offeredAddonPrice = max(1.0, round($basePrice * (1 - ($discountPercent / 100)), 2));
+        $offeredAddonPrice = max(1.0, round($basePrice * (1 - ($discountPercent / 100))));
         $isSameProductBundle = in_array((int) $selectedProduct->id, $boughtProductIds, true);
 
         return [
@@ -408,6 +408,19 @@ class EcommerceAiSalesAgentService
             'pairing_reason' => $pairingReason,
             'is_same_product_bundle' => $isSameProductBundle,
         ];
+    }
+
+    /**
+     * Format an order group reference cleanly without truncating COD-RESCUE-XXXXXX to #CODRES.
+     */
+    public function formatOrderReference(?string $orderGroupId): string
+    {
+        $clean = trim((string) $orderGroupId);
+        if ($clean === '' || EcommerceWhatsappThread::isColdChatOrderRef($clean)) {
+            return '#ORDER';
+        }
+
+        return '#' . ltrim($clean, '#');
     }
 
     /**
@@ -893,8 +906,8 @@ class EcommerceAiSalesAgentService
             ? "Welcome back to the Laleen family, {$customerName}! This is {$personaName} from Laleen Rituals ✨"
             : "Assalam-o-Alaikum {$customerName}! This is {$personaName} from Laleen Rituals ✨";
 
-        $body = "{$greeting} I noticed you left {$itemsSummary} waiting in your cart—most women in our Laleen community tell us our pure cold-pressed Hunza botanicals feel noticeably lighter and calmer from the very first wash.\n\n"
-            . "Did you have a quick question about whether it suits your scalp/hair type, or would you like me to reserve your bottle with priority dispatch right here?\n{$abandonedUrl}";
+        $body = "{$greeting} I noticed you left {$itemsSummary} waiting in your cart—cold-pressed from raw kernels handpicked in the Hunza valleys, most women in our Laleen community feel noticeably lighter, calmer roots from the very first wash.\n\n"
+            . "Did you have a quick question about whether it suits your scalp/hair type? You can place your Cash-on-Delivery order in 30 seconds via our official website link below:\n{$abandonedUrl}";
 
         $orderRefTag = 'CART-' . ($checkout->shopify_checkout_token ?: $checkout->shopify_checkout_id);
 
@@ -1036,7 +1049,7 @@ class EcommerceAiSalesAgentService
 
     /**
      * Build the live regional catalog of in-stock EcommerceProduct items and active EcommerceBundle offers
-     * for Inbound Cold Buyer Consultation (`inbound_support`) and general concierge recommendations.
+     * for Inbound Cold Buyer Consultation (`inbound_support`) and general Hair Care Specialist recommendations.
      *
      * @return array{
      *   catalog_text: string,
@@ -1092,30 +1105,38 @@ class EcommerceAiSalesAgentService
 
         $lower = strtolower($customerText);
         $recommendedProduct = null;
-        $concernDiagnosis = "Dealing with stubborn hair stress can feel so frustrating—most women in our Laleen community see calmer, healthier roots within 2–4 weeks of switching to pure botanicals.";
+        $concernDiagnosis = "Dealing with stubborn hair stress can feel so frustrating—cold-pressed from raw kernels handpicked in the Hunza valleys, our formulas help most women in our Laleen community see calmer, healthier roots within 2–4 weeks.";
 
-        if (preg_match('/\b(keratin|color|colour|treated|protein|sulfate|shampoo|buildup|oily scalp|greasy scalp|wash)\b/i', $lower)) {
+        $mentionsHairfall = (bool) preg_match('/\b(hairfall|hair fall|shedding|thinning|bald|baal|girna|growth)\b/i', $lower);
+        $mentionsDandruff = (bool) preg_match('/\b(dandruff|flaky|flakes|itchy|dry scalp)\b/i', $lower);
+
+        if ($mentionsHairfall && $mentionsDandruff) {
+            $recommendedProduct = $inStockProducts->first(
+                fn (EcommerceProduct $p) => str_contains(strtolower($p->name), 'oil')
+            );
+            $concernDiagnosis = "Dealing with both heavy hairfall and stubborn dandruff is so frustrating—our *100% pure Hunza Apricot Oil*, cold-pressed from raw kernels handpicked in the Hunza valleys, deeply nourishes weak roots to reduce shedding and calm flaky scalps without heavy buildup.";
+        } elseif (preg_match('/\b(keratin|color|colour|treated|protein|sulfate|shampoo|buildup|oily scalp|greasy scalp|wash)\b/i', $lower)) {
             $recommendedProduct = $inStockProducts->first(
                 fn (EcommerceProduct $p) => str_contains(strtolower($p->name), 'shampoo')
             );
-            $concernDiagnosis = "Hard-water buildup and harsh commercial sulfates can be so stubborn on your scalp and salon treatments!";
+            $concernDiagnosis = "Hard-water buildup and harsh commercial sulfates can be so stubborn on your scalp and salon treatments! Our gentle *Sulfate-Free Botanical Shampoo* pairs with our botanicals, cold-pressed from raw kernels handpicked in the Hunza valleys, to clear buildup without stripping your roots.";
         } elseif (preg_match('/\b(frizz|frizzy|split ends|heat|humidity|serum|mask|rough|damaged)\b/i', $lower)) {
             $recommendedProduct = $inStockProducts->first(
                 fn (EcommerceProduct $p) => str_contains(strtolower($p->name), 'serum') || str_contains(strtolower($p->name), 'mask')
             );
-            $concernDiagnosis = "Managing daily frizz and humidity dryness can be so exhausting on your strands!";
-        } elseif (preg_match('/\b(dandruff|flaky|flakes|itchy|dry scalp)\b/i', $lower)) {
+            $concernDiagnosis = "Managing daily frizz and humidity dryness can be so exhausting on your strands! Cold-pressed from raw kernels handpicked in the Hunza valleys, our formulas restore smooth, weightless shine.";
+        } elseif ($mentionsDandruff) {
             $recommendedProduct = $inStockProducts->first(
                 fn (EcommerceProduct $p) => str_contains(strtolower($p->name), 'oil')
             );
-            $concernDiagnosis = "Dealing with a dry, flaky scalp is so frustrating, especially when harsh washes strip your natural barrier.";
+            $concernDiagnosis = "Dealing with a dry, flaky scalp is so frustrating—our *100% pure Hunza Apricot Oil*, cold-pressed from raw kernels handpicked in the Hunza valleys, deeply nourishes weak roots and calms flaky scalps without heavy buildup.";
         } else {
             // Default to Hair Oil for hairfall/thinning/shedding/growth or general inquiry
             $recommendedProduct = $inStockProducts->first(
                 fn (EcommerceProduct $p) => str_contains(strtolower($p->name), 'oil')
             );
-            if (preg_match('/\b(hairfall|hair fall|shedding|thinning|bald|baal|girna|growth)\b/i', $lower)) {
-                $concernDiagnosis = "Seeing sudden shedding in the shower is so stressful—most women in our Laleen community dealing with hard-water hairfall start right here.";
+            if ($mentionsHairfall) {
+                $concernDiagnosis = "Seeing sudden shedding in the shower is so stressful—most women in our Laleen community start with our *100% pure Hunza Apricot Oil*, cold-pressed from raw kernels handpicked in the Hunza valleys.";
             }
         }
 
@@ -1275,9 +1296,9 @@ class EcommerceAiSalesAgentService
             ? $offeredProduct->resolveBasePrice($thread->region)
             : ($isQatar ? 65.0 : 1200.0);
 
-        $addonPrice = (float) ($thread->offered_addon_price ?? 0);
+        $addonPrice = round((float) ($thread->offered_addon_price ?? 0));
         if ($addonPrice <= 0) {
-            $addonPrice = max(1.0, round($basePrice * (1 - ($discountPct / 100)), 2));
+            $addonPrice = max(1.0, round($basePrice * (1 - ($discountPct / 100))));
         }
 
         $discountCode = $this->discountCodeForPlaybook($thread->playbook, $settings);
@@ -1309,7 +1330,7 @@ class EcommerceAiSalesAgentService
         $heroProduct = $firstOrderSale?->product;
         $heroProductName = $heroProduct?->name ?? 'Hunza Apricot Oil';
         $heroBasePrice = $heroProduct ? $heroProduct->resolveBasePrice($thread->region) : $basePrice;
-        $heroDiscountPrice = max(1.0, round($heroBasePrice * (1 - ($discountPct / 100)), 2));
+        $heroDiscountPrice = max(1.0, round($heroBasePrice * (1 - ($discountPct / 100))));
 
         $catalogContext = $this->buildRegionalCatalogContext($thread->region, $settings, $customerText);
 
@@ -1412,7 +1433,7 @@ class EcommerceAiSalesAgentService
         $knowledgeBase = trim((string) ($settings->brand_knowledge_base ?: EcommerceAiSetting::DEFAULT_KNOWLEDGE_BASE));
 
         $systemPrompt = <<<PROMPT
-You are {$personaName}, the Master Conversational Sales & Hair Concierge for Laleen Rituals ({$thread->region} region, currency: {$currency}), trained in the combined frameworks of Ezra Firestone, Alex Hormozi, and Andy Elliott.
+You are {$personaName}, the Master Conversational Sales & Hair Care Specialist for Laleen Rituals ({$thread->region} region, currency: {$currency}), trained in the combined frameworks of Ezra Firestone, Alex Hormozi, and Andy Elliott.
 
 LALEEN RITUALS BOTANICAL KNOWLEDGE BASE & EXPANDED FAQ:
 {$knowledgeBase}
@@ -1465,8 +1486,10 @@ PREVIOUS OUTBOUND AI MESSAGE (NEVER REPEAT ITS EXACT GREETING, COST-PER-WASH PHR
 2. STRICT WHATSAPP MOBILE READABILITY & ENERGY MIRRORING (MAX 75–85 WORDS):
    - Keep every WhatsApp reply concise, scannable, and mobile-friendly—strictly UNDER 75–85 WORDS broken into 2 short paragraphs maximum. Never send walls of text.
    - Mirror the customer's energy, brevity, and language: English, Roman Urdu ("Jee bilkul!", "Inshallah"), or native Urdu/Arabic script ("جی", "ہاں", "کنفرم", "نعم", "تأكيد").
-3. EMOTIONAL VALIDATION BEFORE BOTANICAL MECHANISM:
+3. EMOTIONAL VALIDATION, HUNZA PROVENANCE & BOTANICAL MECHANISM:
    - When a customer mentions hairfall, thinning, dandruff, or frizz, validate the emotional stress in 5–8 words first ("Dealing with sudden shedding in the shower is so frustrating..." or "Hard water buildup can be so stubborn on your roots...") before explaining the botanical solution.
+   - Always highlight our signature Hunza heritage with crisp, conversational phrasing: state that our formula is *cold-pressed from raw kernels handpicked in the Hunza valleys*.
+   - When a customer mentions *hairfall + dandruff / flaky scalp* together, address BOTH concerns naturally: `"Dealing with both heavy hairfall and stubborn dandruff is so frustrating—our *100% pure Hunza Apricot Oil*, cold-pressed from raw kernels handpicked in the Hunza valleys, deeply nourishes weak roots to reduce shedding and calm flaky scalps without heavy buildup."`
 4. ZERO REPETITIVE PHRASING ACROSS MULTI-TURN CHATS:
    - Read the last 6 messages carefully. NEVER repeat the exact same opening greeting, cost-per-wash line, or closing call-to-action phrasing used in the previous outbound message.
 5. BOTTLE SIZE & CONCENTRATION CLARITY:
@@ -1485,12 +1508,12 @@ PREVIOUS OUTBOUND AI MESSAGE (NEVER REPEAT ITS EXACT GREETING, COST-PER-WASH PHR
 
 === PART 4: PLAYBOOK & DETERMINISTIC ACTION RULES ===
 - INBOUND COLD BUYER CONSULTATION (`playbook === 'inbound_support'`):
-  * Act as an elite Laleen Rituals Hair Concierge: if the customer sends a simple greeting ("Hi", "Hello", "Salam"), welcome them warmly and ask what hair concern they are looking to solve (hairfall/shedding, frizz/dryness, or sulfate-free daily cleansing) while highlighting our hero botanicals.
+  * Act as an elite Laleen Rituals Hair Care Specialist: if the customer sends a simple greeting ("Hi", "Hello", "Salam"), welcome them warmly and ask what hair concern they are looking to solve (hairfall/shedding, frizz/dryness, or sulfate-free daily cleansing) while highlighting our hero botanicals.
   * When they ask for a 50% discount or want both Oil + Shampoo, politely decline 50% off, explain the 45–60 wash concentration math, and offer our 20% OFF Complete Hair Recovery Bundle (`COMPLETE20`).
   * When they ask for the Shampoo link specifically, send the Sulfate-Free Botanical Shampoo link (never default to Apricot Oil!).
   * When they say their bottle is almost finished and ask for a refill discount link, immediately send the 15% OFF VIP Refill link (`VIPREFILL15`).
-  * CRITICAL ADDRESS GUARDRAIL FOR COLD VISITORS: If a cold customer in `inbound_support` (with no prior orders and no physical street/city address provided yet) says they want to buy/try/send a product, NEVER trigger `convert_abandoned_to_cod_order` without their physical shipping address! (A timing note like "Deliver on 2nd after salary" is NOT a physical street address). Instead, set `should_trigger_action = "send_checkout_link"` and ask for their *Full Name, Complete Street Address & City* (or let them click the direct Shopify checkout link).
-  * ONLY trigger `should_trigger_action = "convert_abandoned_to_cod_order"` in `inbound_support` AFTER the cold customer replies with their actual physical shipping address (House/Flat/Street/Sector/Area/City + Name), and extract that address into `extracted_delivery_note`.
+  * STRICT LINK-ONLY NEW ORDER POLICY: Customers in `inbound_support` (Cold Chat) or `abandoned_checkout` can NEVER book or create a new order inside WhatsApp chat! All new orders must be placed exclusively via our official Shopify website checkout link. Never offer to book an order in chat and never ask for their street address to book in chat. Always close product recommendations with: `"You can place your Cash-on-Delivery order in 30 seconds via our official website link below:"` followed by the direct Shopify checkout URL.
+  * If a customer in `inbound_support` or `abandoned_checkout` asks to book in chat ("Filhal sirf oil bhej dein", "Book 1 Apricot Oil on COD", "Confirm my order here on COD") or sends their name and street address, NEVER trigger `convert_abandoned_to_cod_order`! Instead, set `should_trigger_action = "send_checkout_link"` and warmly reply: `"To ensure fast courier tracking and accurate delivery, we don't book new orders manually inside WhatsApp chat! ✨ Please tap your direct link below to confirm your Cash-on-Delivery order on our official website in just 30 seconds:"` followed by the product/bundle checkout link.
 - LIVE WISMO ("Where is my order?" / "Kab milega?" / "Has it shipped?") & PAYMENT METHODS:
   * Give an accurate status update based on `Live Order Status in DB` (`pending` = confirmed and being hand-packed at warehouse for 3–5 day delivery in PK / same-next day in QA; `shipped` = dispatched with courier and in transit; `delivered` = marked delivered).
   * If they ask about EasyPaisa / JazzCash / Bank Transfer / Card, confirm Cash on Delivery is already active on their parcel, and if they prefer digital prepayment/bank transfer, note it or connect a team member with official account details.
@@ -1505,9 +1528,9 @@ PREVIOUS OUTBOUND AI MESSAGE (NEVER REPEAT ITS EXACT GREETING, COST-PER-WASH PHR
 - PLAYBOOKS 2 & 3 (`day7_cross_sell` & `day30_refill`):
   * Never trigger `execute_order_upgrade` on Day 7 or Day 30; always use `send_checkout_link` and include `{$checkoutUrl}`.
 - PLAYBOOK 4 (`abandoned_checkout`):
-  * If customer asks a product/delivery question: answer warmly with the Master Conversational Mind + include their direct checkout link.
+  * If customer asks a product/delivery question: answer warmly with the Master Conversational Mind + include their direct checkout link (`should_trigger_action = "send_checkout_link"`).
   * If customer hesitates on price or shipping ("Too expensive", "Shipping is high"): offer a VIP 15% savings link (`VIPREFILL15`) and explain the cost-per-wash math (`should_trigger_action = "send_checkout_link"`).
-  * If customer says "Confirm my order here on COD" (or asks to book via Cash on Delivery in WhatsApp): trigger `should_trigger_action = "convert_abandoned_to_cod_order"`.
+  * If customer says "Confirm my order here on COD" (or asks to book via Cash on Delivery in WhatsApp): NEVER trigger `convert_abandoned_to_cod_order`! Trigger `should_trigger_action = "send_checkout_link"` and direct them to confirm their Cash-on-Delivery order on our official website in 30 seconds via their checkout link.
 - FORMATTING:
   * Use single asterisks `*text*` for WhatsApp bolding (never `**text**`). Refer to the order as `{$shortRef}`.
 
@@ -1595,12 +1618,10 @@ PROMPT;
                             ?: ($deterministic['extracted_delivery_note'] ?? null)
                             ?: ($thread->delivery_notes ?? null);
 
-                        // Cold Visitor Address Guardrail: Never allow Gemini to create a DB order in inbound_support without a PHYSICAL shipping address
+                        // Link-Only New Order Guardrail: Never allow Gemini to create a DB order in inbound_support or abandoned_checkout
                         if (
-                            $thread->playbook === 'inbound_support'
+                            in_array($thread->playbook, ['inbound_support', 'abandoned_checkout'], true)
                             && $action === 'convert_abandoned_to_cod_order'
-                            && !$this->isPhysicalShippingAddress($combinedCandidateAddress)
-                            && $this->extractColdCustomerShippingAddress($customerText, $thread) === null
                         ) {
                             $action = 'send_checkout_link';
                         }
@@ -1697,6 +1718,7 @@ PROMPT;
 
         // Native Urdu script salary-date / future dispatch hold (e.g., "ڈلیوری 2 تاریخ کو تنخواہ کے بعد بھیجیں")
         if (preg_match('/(تنخواہ|تاریخ)/u', $clean)) {
+            $baseNote = 'Deliver after salary';
             if (preg_match('/(\d+)\s*تاریخ/u', $clean, $dayMatch)) {
                 $dayNum = (int) $dayMatch[1];
                 $suffix = match ($dayNum) {
@@ -1705,11 +1727,22 @@ PROMPT;
                     3, 23 => 'rd',
                     default => 'th',
                 };
-                return "Deliver on {$dayNum}{$suffix} of the month" . (str_contains($clean, 'تنخواہ') ? ' after salary' : '');
+                $baseNote = "Deliver on {$dayNum}{$suffix} of the month" . (str_contains($clean, 'تنخواہ') ? ' after salary' : '');
             }
-            if (str_contains($clean, 'تنخواہ')) {
-                return 'Deliver after salary';
+
+            if (preg_match('/شام\s*(\d+)\s*بجے/u', $clean, $timeMatch)) {
+                $baseNote .= ', after ' . (int) $timeMatch[1] . 'pm';
+            } elseif (preg_match('/صبح\s*(\d+)\s*بجے/u', $clean, $timeMatch)) {
+                $baseNote .= ', after ' . (int) $timeMatch[1] . 'am';
+            } elseif (preg_match('/\bafter\s+(\d+\s*(?:am|pm))\b/i', $clean, $timeMatch)) {
+                $baseNote .= ', after ' . strtolower(str_replace(' ', '', $timeMatch[1]));
             }
+
+            if (preg_match('/\b(near\s+[A-Za-z0-9\s#\-]{2,30}?)(?:[.,;!\n]|$)/i', $clean, $nearMatch)) {
+                $baseNote .= ' (' . trim($nearMatch[1]) . ')';
+            }
+
+            return $baseNote;
         }
 
         // Match salary-date / future dispatch hold, timing instructions, landmarks, house/street/flat/gate/sector, or call instructions
@@ -1810,7 +1843,12 @@ PROMPT;
         );
 
         if ($hasStreetOrBuildingMarker) {
-            return preg_replace('/^(?:my\s+address\s+is|delivery\s+address\s*[:\-]?|address\s*[:\-]?)\s*/i', '', $clean) ?: $clean;
+            $addr = preg_replace('/^(?:my\s+address\s+is|delivery\s+address\s*[:\-]?|address\s*[:\-]?)\s*/i', '', $clean) ?: $clean;
+            $addr = preg_replace('/^(?:(?:assalam[^,!\n]*|aoa|salam|hi|hello)\s*[,!\-]?\s*)?(?:my\s+name\s+is|i\s+am|this\s+is|mera\s+naam)\s+[A-Za-z][A-Za-z\s.\'-]{1,35}?(?:\s+hai)?\s*[,.\-:]+\s*/i', '', $addr) ?: $addr;
+            $addr = preg_replace('/(?:\s*[.;!]+\s*|\s*,\s*)(?:filhal|sirf|please\s+book|please\s+send|please\s+deliver|cod\s+pe|book\s+kr|bhej\s*dein|deliver\s+on|deliver\s+after|لیکن|ڈلیوری|تنخواہ).*$/iu', '', $addr) ?: $addr;
+            $addr = preg_replace('/\s+(?:لیکن|ڈلیوری|تنخواہ).*$/u', '', $addr) ?: $addr;
+
+            return trim($addr, " \t\n\r\0\x0B,.;:-");
         }
 
         // If Zara's previous message explicitly asked for "Full Name, Complete Delivery Address & City" (or "Complete Street Address & City")
@@ -1821,6 +1859,42 @@ PROMPT;
 
         if ($askedForAddressInThread && $hasCityName && str_word_count($clean) >= 3) {
             return $clean;
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract a clean customer name from a message (stripping leading "My name is", "I am", "This is", "Mera naam" and trailing "hai").
+     */
+    public function extractCustomerNameFromText(string $customerText): ?string
+    {
+        $clean = trim((string) preg_replace('/^\s*prompt\s*[:\-]\s*/i', '', trim($customerText)));
+        if ($clean === '') {
+            return null;
+        }
+
+        if (preg_match('/(?:^(?:assalam[^,!\n]*|aoa|salam|hi|hello|hey)\s*[,!\-]?\s*)?(?:my\s+name\s+is|i\s+am|this\s+is|mera\s+naam)\s+([A-Za-z][A-Za-z\s.\'-]{1,35}?)(?:\s+hai\b|\s*[,.\-!]|\s+(?:house|flat|street|road|sector|phase|block|from|and)\b|$)/i', $clean, $m)) {
+            $candidate = trim((string) preg_replace('/\s+hai$/i', '', trim($m[1])));
+            if ($candidate !== '' && !preg_match('/\b(house|flat|street|road|sector|phase|block|dha|gulberg|lahore|karachi|islamabad|doha|confirm|order|book|oil|shampoo|aoa|salam|hello|hi)\b/i', $candidate)) {
+                return $candidate;
+            }
+        }
+
+        if (!$this->isPhysicalShippingAddress($clean)) {
+            return null;
+        }
+
+        $parts = array_map('trim', explode(',', $clean));
+        if (!empty($parts[0])) {
+            $firstPart = trim((string) preg_replace('/^(?:(?:assalam[^,!\n]*|aoa|salam|hi|hello|hey)\s*[,!\-]?\s*)?(?:my\s+name\s+is|i\s+am|this\s+is|mera\s+naam)\s+/i', '', $parts[0]));
+            $firstPart = trim((string) preg_replace('/\s+hai$/i', '', $firstPart));
+            if (
+                preg_match('/^[A-Za-z][A-Za-z\s.\'-]{2,35}$/', $firstPart)
+                && !preg_match('/\b(house|flat|street|road|sector|phase|block|dha|gulberg|lahore|karachi|islamabad|doha|filhal|sirf|order|confirm|yes|book|send|no\s+thanks|wait|aoa|salam|assalam|hi|hello|hey|jee|haan)\b/i', $firstPart)
+            ) {
+                return $firstPart;
+            }
         }
 
         return null;
@@ -1864,6 +1938,43 @@ PROMPT;
         $isRomanUrdu = $this->isRomanUrduMessage($customerText);
         $greetingPrefix = $isRomanUrdu ? 'Jee bilkul! ' : '';
         $costPerWash = $isQatar ? 'QAR 1.5' : 'PKR 40';
+        $isPlaceholderRef = $shortRef === ''
+            || strtoupper($shortRef) === '#ORDER'
+            || str_starts_with(strtoupper(ltrim($shortRef, '#')), 'COLD');
+        $orderRefLabel = $isPlaceholderRef ? 'your order' : "Order {$shortRef}";
+
+        $asksBottleSize = (bool) preg_match('/\b(kitne ml|how many ml|bottle size|size of bottle|how big|how long does.*last|kitna chalta|how many washes|quantity in bottle|longevity)\b/i', $lower);
+        $asksOilyOrApplication = (bool) preg_match('/\b(oily|oily scalp|roots.*oily|oily.*roots|jaldi oily|dry scalp|how to apply|how to use|apply|application|routine|overnight|minutes|drops|kaise lagana|kaise use|tarika)\b/i', $lower);
+
+        // Multi-question / numbered consultation collector: do not stop at the first matching if/return when 2+ distinct topics are asked
+        $points = [];
+
+        if (preg_match('/\b(cooking oil|normal oil|regular oil|other oil|other oils|sarson|mustard|coconut|mineral oil|tried many|didn\'t work|did not work|failed|waste|sticky|chipchipa|pehle\s+bhi)\b/i', $lower)) {
+            $points[] = "• *100% Pure Cold-Pressed vs. Cooking/Mineral Oil:* Unlike heavy cooking or mineral oil blends that sit on top of the scalp, Laleen is *100% pure cold-pressed Hunza Apricot Kernel Oil*—cold-pressed from raw kernels handpicked in the Hunza valleys so it absorbs cleanly into the roots within minutes.";
+        }
+
+        if (
+            $asksBottleSize
+            || preg_match('/\b(oily scalp|roots.*oily|oily.*roots|jaldi oily|dry scalp|how to apply|how to use|before showering|overnight|kaise lagana|kaise use|tarika)\b/i', $lower)
+        ) {
+            $points[] = "• *100ml Bottle, 45–60 Washes & Oily Roots:* Each concentrated *100ml* bottle (Shampoo is *200ml*) lasts *45–60 washes* (under *{$costPerWash}/wash*)—for oily roots, massage just *3–4 drops* pre-wash (1–2 hours before showering) and wash with our *Sulfate-Free Botanical Shampoo*.";
+        }
+
+        if (preg_match('/\b(used it|used twice|received my|tried it|last week|felt heavy|little heavy|hair felt heavy)\b/i', $lower) && preg_match('/\b(heavy|greasy|weigh|tips|wash|washing)\b/i', $lower)) {
+            $points[] = "• *Heavy Feel After Washing Fix:* If your hair felt heavy, warm just *3–4 drops* between your palms for your roots and *double-cleanse* with lukewarm water + our *Sulfate-Free Botanical Shampoo* to lift excess oil cleanly.";
+        }
+
+        if (preg_match('/\b(leak|leakage|spill|seal|sealed|packaging|packing|rider call|courier|kab milega|kab aayega|kab tak|kitne din|how many days|deliver|delivery|shipping|easypaisa|easy paisa|jazzcash|jazz cash|bank transfer|ibft|sadapay|nayapay|online payment|prepay)\b/i', $lower)) {
+            $points[] = "• *Leak-Proof Packaging, 3–5 Days Delivery & Payment:* Every bottle is *triple-sealed in leak-proof packaging*, delivers in *3–5 working days* (rider calls ahead), and supports *Cash on Delivery (COD), EasyPaisa, JazzCash & Bank Transfer* on {$orderRefLabel}.";
+        }
+
+        if (preg_match('/\b(50%|50\s*percent|half price|take both|buy both|best bundle|bundle link|bundle|expensive|costly|price is high|high price|more discount|extra discount|bigger discount|mehenga|kam krein|kam karein)\b/i', $lower)) {
+            $points[] = "• *Bundle Discount (COMPLETE20):* Because our concentrated formula is already *< {$costPerWash}/wash* across 45–60 washes, we cannot offer 50% off—but you can grab both at *20% OFF* with code *COMPLETE20* via the bundle link below.";
+        }
+
+        if (count($points) >= 2) {
+            return implode("\n", $points);
+        }
 
         // 1. Cultural Instinct — Family / Husband / Sister Consultation ("Let me ask my sister/mom/husband")
         if (preg_match('/\b(ask my|consult my|check with my|sister|mom|mother|husband|wife|family|ammi|ami|baji|api|bhai|shohar|ghar\s+walon|pooch)\b/i', $lower)) {
@@ -1875,9 +1986,12 @@ PROMPT;
             return $greetingPrefix . "When pure *Hunza Apricot Oil* feels slightly heavy after washing, warming just *3–4 drops* between your palms for your roots (1–2 hours before showering) and double-cleansing with lukewarm water + our *Sulfate-Free Botanical Shampoo* lifts excess oil cleanly in one gentle wash without stripping moisture!";
         }
 
-        // 3. Cultural Instinct — Past Bad Experience Contrast ("Other oils didn't work / felt heavy or greasy")
-        if (preg_match('/\b(other oil|other oils|tried many|didn\'t work|did not work|failed|waste|sticky|greasy|heavy|chipchipa|mineral oil|pehle\s+bhi)\b/i', $lower) && !preg_match('/\b(oily scalp|roots.*oily|oily.*roots|kitne ml|how many ml)\b/i', $lower)) {
-            return $greetingPrefix . "So many commercial hair oils fail because they are diluted with heavy mineral oil and synthetic fragrance that sit on top of the scalp. Laleen is *100% pure cold-pressed Hunza Apricot Kernel Oil*—it absorbs cleanly into the follicle within minutes without any grease!";
+        // 3. Cultural Instinct — Differentiation & Past Bad Experience Contrast ("How is your product different than others?", "Other oils didn't work / felt heavy or greasy")
+        if (
+            preg_match('/\b(other oil|other oils|other products|than others|from others|different|differ|better than|special about|unique|compare|comparison|why laleen|cooking oil|normal oil|regular oil|sarson|mustard|coconut|tried many|didn\'t work|did not work|failed|waste|sticky|greasy|heavy|chipchipa|mineral oil|pehle\s+bhi)\b/i', $lower)
+            && !preg_match('/\b(oily scalp|roots.*oily|oily.*roots|kitne ml|how many ml)\b/i', $lower)
+        ) {
+            return $greetingPrefix . "Unlike ordinary commercial oils diluted with heavy mineral oil and synthetic fragrances that sit greasily on your scalp, Laleen is *100% pure, single-origin Hunza Apricot Oil*—cold-pressed in small batches so every drop absorbs deeply into your roots within minutes with zero sticky buildup.";
         }
 
         // 4. Cultural Instinct — Logistical Buying Signals (Leakage, Courier Calls Ahead, Paying Cash at Door)
@@ -1949,19 +2063,26 @@ PROMPT;
             return $greetingPrefix . "Inshallah Order {$shortRef} is *confirmed and being hand-packed* at our warehouse right now for *3–5 working day delivery* nationwide via Cash on Delivery!";
         }
 
-        // 13. Hairfall / Thinning / Dandruff -> Emotional Validation FIRST + Botanical Mechanism
-        if (preg_match('/\b(hairfall|hair fall|shedding|thinning|dandruff|flaky|roots|apricot|baal|girna)\b/i', $lower)) {
-            return $greetingPrefix . "Dealing with sudden shedding in the shower is so frustrating—most women in our Laleen community use our *100% pure cold-pressed Hunza Apricot Oil* (rich in Vitamin E & oleic acid) because it absorbs deeply without grease to nourish roots and visibly reduce hairfall in 2–4 weeks.";
+        // 13. Hairfall / Thinning / Dandruff -> Emotional Validation FIRST + Hunza Valley Provenance & Botanical Mechanism
+        $mentionsHairfall = (bool) preg_match('/\b(hairfall|hair fall|shedding|thinning|bald|baal|girna)\b/i', $lower);
+        $mentionsDandruff = (bool) preg_match('/\b(dandruff|flaky|flakes|itchy|dry scalp)\b/i', $lower);
+
+        if ($mentionsHairfall && $mentionsDandruff) {
+            return $greetingPrefix . "Dealing with both heavy hairfall and stubborn dandruff is so frustrating—our *100% pure Hunza Apricot Oil*, cold-pressed from raw kernels handpicked in the Hunza valleys, deeply nourishes weak roots to reduce shedding and calm flaky scalps without heavy buildup.";
+        }
+
+        if ($mentionsHairfall || $mentionsDandruff || preg_match('/\b(roots|apricot)\b/i', $lower)) {
+            return $greetingPrefix . "Dealing with sudden shedding in the shower is so frustrating—most women in our Laleen community use our *100% pure Hunza Apricot Oil*, cold-pressed from raw kernels handpicked in the Hunza valleys, because it deeply nourishes weak roots, calms flaky scalps without heavy buildup, and visibly reduces hairfall in 2–4 weeks.";
         }
 
         // 14. Sulfates / Keratin / Color-Treated Hair -> Emotional Validation FIRST + Biological Mechanism
         if (preg_match('/\b(sulfate|sulfates|paraben|parabens|silicone|keratin|color|colour|protein|chemical|gentle)\b/i', $lower)) {
-            return $greetingPrefix . "Hard water and harsh commercial sulfates can be so stubborn on treated hair! Our *Sulfate-Free Botanical Shampoo* (0% sulfates, parabens, or harsh salts) protects keratin/color treatments while clearing follicle buildup so *Hunza Apricot Oil* absorbs 2x deeper.";
+            return $greetingPrefix . "Hard water and harsh commercial sulfates can be so stubborn on treated hair! Our *Sulfate-Free Botanical Shampoo* (0% sulfates, parabens, or harsh salts) pairs with our *Hunza Apricot Oil*, cold-pressed from raw kernels handpicked in the Hunza valleys, to protect keratin/color treatments while clearing follicle buildup so it absorbs 2x deeper.";
         }
 
         // 15. Frizz / Serum / Mask -> Emotional Validation FIRST + Botanical Mechanism
         if (preg_match('/\b(serum|mask|frizz|frizzy|humidity|heat|split ends)\b/i', $lower)) {
-            return $greetingPrefix . "Fighting daily frizz and humidity dryness can be so exhausting—our *Hair Serum & Hair Mask* seal the cuticle for effortless shine, heat protection, and deep weekly repair.";
+            return $greetingPrefix . "Fighting daily frizz and humidity dryness can be so exhausting—cold-pressed from raw kernels handpicked in the Hunza valleys, our *Hair Serum & Hair Mask* seal the cuticle for effortless shine, heat protection, and deep weekly repair.";
         }
 
         return null;
@@ -1996,17 +2117,27 @@ PROMPT;
         $trimmed = trim($customerText);
         $lower = strtolower($trimmed);
         $customer = $thread->customer;
-        $customerName = $customer?->name ?: 'there';
+        $extractedCustomerName = $this->extractCustomerNameFromText($customerText);
+        if (
+            $extractedCustomerName !== null
+            && $customer
+            && (str_starts_with((string) $customer->name, 'New WhatsApp Visitor') || str_starts_with((string) $customer->name, 'Valued '))
+        ) {
+            $customer->name = $extractedCustomerName;
+            $customer->save();
+        }
+        $customerName = $customer?->name ?: ($extractedCustomerName ?: 'there');
         $ordersCount = (int) ($customer?->orders_count ?? 0);
         $isRepeatVip = $ordersCount >= 2;
         $personaName = $settings->agent_persona_name ?: 'Zara';
         $offeredName = $offeredProduct?->name ?? 'Sulfate-Free Botanical Shampoo';
-        $shortRef = $thread->shortOrderRef();
+        $shortRef = $this->formatOrderReference($thread->order_group_id);
         $isQatar = strtoupper($thread->region) === 'QA';
         $costPerWash = $isQatar ? 'QAR 1.5' : 'PKR 40';
 
+        $addonPrice = round($addonPrice);
         $requestedQty = $this->extractRequestedQuantity($customerText);
-        $totalAddonForQty = round($addonPrice * $requestedQty, 2);
+        $totalAddonForQty = round($addonPrice * $requestedQty);
         $upgradedTotalForQty = round($currentOrderTotal + $totalAddonForQty, 2);
 
         $fmtCurrentTotal = number_format($currentOrderTotal, 0);
@@ -2113,8 +2244,31 @@ PROMPT;
             ];
         }
 
-        // 2. Duplicate Order Deduplication (`cancel_duplicate_orders`)
+        // 2. Duplicate Order Deduplication (`cancel_duplicate_orders`) + Optional Compound Upsell Reversal (`revert_upsell`)
         if (preg_match('/\b(two orders|2 orders|duplicate order|duplicate orders|ordered twice|placed twice|placed two|double order|do order|2 dafa|do dafa|cancel duplicate|cancel extra order|accidentally ordered)\b/i', $lower)) {
+            $alsoRevertUpsell = (bool) preg_match(
+                '/\b(remove\s+(?:the\s+)?(?:extra|shampoo|oil|upgrade|add-on|addon|bottles|bottle)|revert|take\s+off|cancel\s+(?:the\s+)?upgrade|remove\s+upgrade|only\s+send\s+(?:my\s+)?original|only\s+send\s+(?:the\s+)?oil|just\s+send\s+(?:the\s+)?oil|only\s+original)\b/i',
+                $lower
+            );
+
+            if ($alsoRevertUpsell && !EcommerceWhatsappThread::isColdChatOrderRef($thread->order_group_id)) {
+                return [
+                    'detected_intent' => 'revert_upsell',
+                    'sentiment' => 'neutral',
+                    'should_trigger_action' => 'revert_upsell',
+                    'also_cancel_duplicate_orders' => true,
+                    'requested_quantity' => 1,
+                    'extracted_delivery_note' => $extractedDeliveryNote,
+                    'is_high_confidence_keyword' => true,
+                    'force_deterministic' => true,
+                    'hard_safety_override' => true,
+                    'source' => 'deterministic_playbook',
+                    'model' => 'master-closer-engine',
+                    'tokens' => 0,
+                    'reply_message' => "All taken care of, {$customerName}! 🧹 I have removed the extra upsell bottles from Order {$shortRef} so only your original order will ship, and cancelled your duplicate order!",
+                ];
+            }
+
             return [
                 'detected_intent' => 'cancel_duplicate_orders',
                 'sentiment' => 'positive',
@@ -2209,6 +2363,48 @@ PROMPT;
                 ? $extractedDeliveryNote
                 : ((!$this->isPhysicalShippingAddress($existingThreadNote) && $existingThreadNote !== '') ? $existingThreadNote : null);
 
+            // 4.0 Multi-Question / Numbered Consultation Inquiry -> call resolveBotanicalKnowledgeAnswer() FIRST and return all matched bullets before single-topic branches
+            $isMultiQuestionInquiry = (
+                (preg_match('/\b1\s*[\.\)]/', $customerText) && preg_match('/\b2\s*[\.\)]/', $customerText))
+                || substr_count($customerText, '?') >= 2
+            );
+
+            if ($isMultiQuestionInquiry) {
+                $multiBotanicalAnswer = $this->resolveBotanicalKnowledgeAnswer($customerText, $thread->region, $liveOrderStatus, $shortRef);
+                if ($multiBotanicalAnswer !== null && str_contains($multiBotanicalAnswer, '•')) {
+                    $bundleCode = $settings->day7_discount_code ?: 'COMPLETE20';
+                    $bundleUrl = $recProduct
+                        ? $recProduct->getShopifyCheckoutUrl($bundleCode, $settings->shopify_store_domain)
+                        : ('https://' . ($settings->shopify_store_domain ?: 'laleenrituals.com') . "/discount/{$bundleCode}");
+
+                    $leadText = $multiBotanicalAnswer;
+                    if (stripos($vipWelcome, 'jee bilkul') !== false && stripos($leadText, 'jee bilkul') === 0) {
+                        $leadText = ltrim((string) preg_replace('/^jee\s+bilkul[!,\s]*/i', '', $leadText));
+                    }
+
+                    $reply = "{$vipWelcome}Here is the complete breakdown for your hair ritual questions:\n\n{$leadText}\n\n"
+                        . "You can place your Cash-on-Delivery order in 30 seconds (with *20% OFF* our *Complete Hair Recovery Bundle* using code *{$bundleCode}*) via our official website link below:\n{$bundleUrl}";
+
+                    return [
+                        'detected_intent' => 'ask_question',
+                        'sentiment' => 'positive',
+                        'should_trigger_action' => 'send_checkout_link',
+                        'requested_quantity' => $requestedQty,
+                        'extracted_delivery_note' => $extractedDeliveryNote,
+                        'resolved_checkout_url' => $bundleUrl,
+                        'resolved_discount_code' => $bundleCode,
+                        'resolved_discount_pct' => 20.0,
+                        'is_high_confidence_keyword' => true,
+                        'force_deterministic' => true,
+                        'hard_safety_override' => true,
+                        'source' => 'deterministic_playbook',
+                        'model' => 'master-closer-engine',
+                        'tokens' => 0,
+                        'reply_message' => $reply,
+                    ];
+                }
+            }
+
             // 4.0A Post-Purchase Commands Sent in a Cold Thread (when no order has been booked yet)
             $isPostPurchaseCommandOnColdThread = $coldShippingAddress === null
                 && (bool) preg_match(
@@ -2218,7 +2414,7 @@ PROMPT;
 
             if ($isPostPurchaseCommandOnColdThread) {
                 $noteReminder = $pendingTimingNote ? " (📌 Delivery Note saved: *{$pendingTimingNote}*)" : '';
-                $reply = "You don't have an active order booked in this chat yet, {$customerName}!{$noteReminder} ✨ Simply reply here with your *Full Name, Complete Street Address & City* (or click your direct checkout link below) so I can lock in your Cash-on-Delivery order first:\n{$recUrl}";
+                $reply = "You don't have an active order booked in this chat yet, {$customerName}!{$noteReminder} ✨ To ensure fast courier tracking and accurate delivery, we don't book new orders manually inside WhatsApp chat. You can place your Cash-on-Delivery order in 30 seconds via our official website link below:\n{$recUrl}";
 
                 return [
                     'detected_intent' => 'ask_question',
@@ -2329,7 +2525,7 @@ PROMPT;
                     ? $recProduct->getShopifyCheckoutUrl($bundleCode, $settings->shopify_store_domain)
                     : ('https://' . ($settings->shopify_store_domain ?: 'laleenrituals.com') . "/discount/{$bundleCode}");
 
-                $reply = "Because our pure cold-pressed Hunza botanicals are small-batch and concentrated (1 bottle lasts *45–60 washes* — under *{$costPerWash} per wash*), we aren't able to do a 50% discount—but since you'd like *both the Hunza Apricot Oil & Sulfate-Free Botanical Shampoo*, I've unlocked our *20% OFF Complete Hair Recovery Bundle* with code *{$bundleCode}*! ✨\n\nClaim both at *20% OFF* via your direct link below, or reply with your *Full Name, Complete Street Address & City* to book on Cash-on-Delivery:\n{$bundleUrl}";
+                $reply = "Because our formulas are cold-pressed from raw kernels handpicked in the Hunza valleys (1 concentrated bottle lasts *45–60 washes* — under *{$costPerWash} per wash*), we aren't able to do a 50% discount—but since you'd like *both the Hunza Apricot Oil & Sulfate-Free Botanical Shampoo*, I've unlocked our *20% OFF Complete Hair Recovery Bundle* with code *{$bundleCode}*! ✨\n\nYou can place your Cash-on-Delivery order in 30 seconds via our official website link below:\n{$bundleUrl}";
 
                 return [
                     'detected_intent' => 'ask_question',
@@ -2368,7 +2564,7 @@ PROMPT;
                 $thread->offered_addon_price = $shampooPrice;
                 $thread->save();
 
-                $reply = "Here is the direct link for our *{$shampooName}* (*{$currency} {$fmtShampooPrice}* — 200ml, 100% free of harsh sulfates, parabens & silicones so it gently clears hard-water buildup without stripping your roots):\n{$shampooUrl}\n\n*(Tip: You can also use code *COMPLETE20* at checkout for *20% OFF* when pairing it with our Hunza Apricot Oil, or reply with your *Full Name, Complete Street Address & City* to book on COD!)*";
+                $reply = "Here is the direct link for our *{$shampooName}* (*{$currency} {$fmtShampooPrice}* — 200ml, 100% free of harsh sulfates, parabens & silicones so it gently clears hard-water buildup without stripping your roots). You can place your Cash-on-Delivery order in 30 seconds via our official website link below:\n{$shampooUrl}\n\n*(Tip: You can also use code *COMPLETE20* at checkout for *20% OFF* when pairing it with our Hunza Apricot Oil!)*";
 
                 return [
                     'detected_intent' => 'ask_question',
@@ -2391,53 +2587,29 @@ PROMPT;
                 $lower
             ) || ($hasNativeConfirm && $extractedDeliveryNote !== null);
 
-            // 4.1 ONLY create an in-chat COD order for cold visitors AFTER they provide their PHYSICAL street/city delivery address!
-            if ($coldShippingAddress !== null || ($wantsToBuyOrOrder && $resolvedShippingAddress !== null)) {
-                $totalBookingPrice = round($recPrice * $requestedQty, 2);
-                $fmtBookingTotal = number_format($totalBookingPrice, 0);
-                $qtyLabel = $requestedQty > 1 ? "{$requestedQty}x " : '1x ';
+            // 4.1 & 4.2 Link-Only New Order Policy: Cold visitors in inbound_support CANNOT book an order inside WhatsApp chat.
+            // Direct them warmly to complete their Cash-on-Delivery order via our official Shopify website link!
+            if ($coldShippingAddress !== null || $wantsToBuyOrOrder || $pendingTimingNote !== null) {
+                $bundleCode = $settings->day7_discount_code ?: 'COMPLETE20';
+                $bundleUrl = $recProduct
+                    ? $recProduct->getShopifyCheckoutUrl($bundleCode, $settings->shopify_store_domain)
+                    : ('https://' . ($settings->shopify_store_domain ?: 'laleenrituals.com') . "/discount/{$bundleCode}");
+                $asksForBothOrBundle = (bool) preg_match('/\b(both|bundle|complete20|oil\s+and\s+shampoo|shampoo\s+and\s+oil)\b/i', $lower);
+                $targetCheckoutUrl = $asksForBothOrBundle ? $bundleUrl : $recUrl;
 
-                return [
-                    'detected_intent' => 'confirm_cod',
-                    'sentiment' => 'positive',
-                    'should_trigger_action' => 'convert_abandoned_to_cod_order',
-                    'requested_quantity' => $requestedQty,
-                    'extracted_delivery_note' => $resolvedShippingAddress,
-                    'is_high_confidence_keyword' => true,
-                    'force_deterministic' => true,
-                    'hard_safety_override' => true,
-                    'source' => 'deterministic_playbook',
-                    'model' => 'master-closer-engine',
-                    'tokens' => 0,
-                    'reply_message' => "JazakAllah {$customerName}! 🎉 I have booked your Cash-on-Delivery order for *{$qtyLabel}{$recName}* (Total: *{$currency} {$fmtBookingTotal}*) to *{$resolvedShippingAddress}* right here in WhatsApp and locked your parcel for priority warehouse dispatch today! 📦✨",
-                ];
-            }
-
-            // 4.2 Cold customer wants to buy/try a product OR gave a delivery timing/salary note WITHOUT a physical street address yet
-            if ($wantsToBuyOrOrder || $pendingTimingNote !== null) {
-                $totalBookingPrice = round($recPrice * $requestedQty, 2);
-                $fmtBookingTotal = number_format($totalBookingPrice, 0);
-                $qtyLabel = $requestedQty > 1 ? "{$requestedQty}x " : '1x ';
-                $opener = ($isRomanUrdu || $hasNativeConfirm)
-                    ? "Jee bilkul, wonderful choice {$customerName}! ✨"
-                    : "Wonderful choice, {$customerName}! ✨";
-                $timingAck = $pendingTimingNote !== null
-                    ? " I've saved your delivery instruction (*📌 Delivery Note: {$pendingTimingNote}*)."
-                    : '';
-
-                $reply = "{$opener}{$timingAck} Here is your direct checkout link for *{$qtyLabel}{$recName}* (*{$currency} {$fmtBookingTotal}* — lasts 45–60 washes, under {$costPerWash} per wash):\n{$recUrl}\n\n"
-                    . "*(Tip: You can also grab our **Complete Hair Recovery Bundle** with code **COMPLETE20** for **20% OFF** at checkout if you'd like both the Oil + Sulfate-Free Shampoo!)*\n\n"
-                    . "Click your direct link above to confirm your delivery address—or simply reply here with your *Full Name, Complete Delivery Address & City* and I'll book your Cash-on-Delivery parcel right here in chat!";
+                $reply = "To ensure fast courier tracking and accurate delivery, we don't book new orders manually inside WhatsApp chat! ✨ Please tap your direct link below to confirm your Cash-on-Delivery order on our official website in just 30 seconds:\n{$targetCheckoutUrl}\n\n"
+                    . "*(Tip: Want both the Hunza Apricot Oil & Sulfate-Free Botanical Shampoo at **20% OFF**? Grab our **Complete Hair Recovery Bundle** with code **{$bundleCode}** here: {$bundleUrl})*";
 
                 return [
                     'detected_intent' => 'ask_question',
                     'sentiment' => 'positive',
                     'should_trigger_action' => 'send_checkout_link',
                     'requested_quantity' => $requestedQty,
-                    'extracted_delivery_note' => $extractedDeliveryNote,
-                    'resolved_checkout_url' => $recUrl,
+                    'extracted_delivery_note' => $coldShippingAddress ?: $extractedDeliveryNote,
+                    'resolved_checkout_url' => $targetCheckoutUrl,
                     'is_high_confidence_keyword' => true,
                     'force_deterministic' => true,
+                    'hard_safety_override' => true,
                     'source' => 'deterministic_playbook',
                     'model' => 'master-closer-engine',
                     'tokens' => 0,
@@ -2449,7 +2621,7 @@ PROMPT;
             $isPureGreeting = (bool) preg_match('/^(hi|hello|hey|salam|assalam\s*o\s*alaikum|assalamualaikum|aoa|asalam\s*o\s*alaikum|good\s+morning|good\s+evening)[\s!?.]*$/i', $trimmed);
             if ($isPureGreeting) {
                 $personaName = $settings->agent_persona_name ?: 'Zara';
-                $greetingReply = "{$vipWelcome}I'm {$personaName}, your personal Hair Concierge at Laleen Rituals.\n\n"
+                $greetingReply = "{$vipWelcome}I'm {$personaName}, your personal Hair Care Specialist at Laleen Rituals.\n\n"
                     . "Are you looking to solve *hairfall & root thinning*, *frizz & dryness*, or switch to a *100% sulfate-free daily wash*? Share your hair goal (or ask about our *{$recName}* at *{$currency} {$fmtRecPrice}*) and I'll guide you right away!";
 
                 return [
@@ -2466,7 +2638,23 @@ PROMPT;
                 ];
             }
 
+            $outboundAiMessages = $thread->messages
+                ->where('direction', 'outbound')
+                ->where('sender_type', 'ai');
+
+            $alreadyUsedDealingWith = $outboundAiMessages->contains(
+                fn ($m) => stripos((string) $m->message_body, 'Dealing with') !== false
+                    || stripos((string) $m->message_body, 'so frustrating') !== false
+            );
+
+            if ($hasPriorAiReply || $alreadyUsedDealingWith) {
+                $diagnosis = "Our *100% pure, single-origin Hunza Apricot Oil* and *Sulfate-Free Botanical Shampoo* are cold-pressed in small batches from raw kernels handpicked in the Hunza valleys, delivering pure Vitamin E and oleic acid directly into your roots with zero sticky mineral-oil buildup.";
+            }
+
             $leadText = $botanicalAnswer ?: $diagnosis;
+            if ($alreadyUsedDealingWith && preg_match('/^((?:Jee bilkul!\s*)?)Dealing with [^—]+—\s*(.+)$/is', $leadText, $dealingMatches)) {
+                $leadText = $dealingMatches[1] . ucfirst(trim($dealingMatches[2]));
+            }
             // Prevent duplicate "Jee bilkul!" when both $vipWelcome and $leadText start with "Jee bilkul"
             if (stripos($vipWelcome, 'jee bilkul') !== false && stripos($leadText, 'jee bilkul') === 0) {
                 $leadText = ltrim((string) preg_replace('/^jee\s+bilkul[!,\s]*/i', '', $leadText));
@@ -2478,8 +2666,8 @@ PROMPT;
                 ->last()?->message_body ?? '');
 
             $closingCta = str_contains($lastAiText, 'I recommend starting with our concentrated')
-                ? "You can order *{$recName}* (*{$currency} {$fmtRecPrice}*) directly via the link below, or reply with your *Full Name, Complete Street Address & City* to book on Cash-on-Delivery:\n{$recUrl}"
-                : "I recommend starting with our concentrated *{$recName}* (*{$currency} {$fmtRecPrice}* — lasts 45–60 washes, under {$costPerWash} per wash). Would you like me to book *{$recName}* for you on Cash-on-Delivery right here, or grab it via your direct link below?\n{$recUrl}";
+                ? "You can place your Cash-on-Delivery order for *{$recName}* (*{$currency} {$fmtRecPrice}*) in 30 seconds via our official website link below:\n{$recUrl}"
+                : "I recommend starting with our concentrated *{$recName}* (*{$currency} {$fmtRecPrice}* — lasts 45–60 washes, under {$costPerWash} per wash). You can place your Cash-on-Delivery order in 30 seconds via our official website link below:\n{$recUrl}";
 
             $reply = "{$vipWelcome}{$leadText}\n\n{$closingCta}";
 
@@ -2519,9 +2707,38 @@ PROMPT;
             $fmtCartSubtotal = number_format($cartSubtotal, 0);
             $fmtVip15Price = number_format($vip15Price, 0);
 
-            // Check if customer asks for the checkout link or says "Filhal sirf oil bhej dein" -> share direct checkout link first
+            $abandonedColdAddress = $this->extractColdCustomerShippingAddress($customerText, $thread);
+
+            // Check if customer asks to book/confirm in chat ("Confirm my order here on COD", "Filhal sirf oil bhej dein", or sends street address) -> Link-Only Policy
+            $wantsCodConversion = $abandonedColdAddress !== null
+                || (bool) preg_match(
+                    '/\b(confirm my order|confirm order|confirm here|on cod|cash on delivery|cod kr|cod kar|reserve my bottle|reserve it|book my order|book here|send on cod|dispatch on cod|filhal|sirf\s+oil|bhej\s*dein)\b/i',
+                    $lower
+                ) || (
+                    $hasNativeConfirm && !preg_match('/\b(link|discount|expensive)\b/i', $lower)
+                );
+
+            if ($wantsCodConversion) {
+                return [
+                    'detected_intent' => 'ask_question',
+                    'sentiment' => 'positive',
+                    'should_trigger_action' => 'send_checkout_link',
+                    'requested_quantity' => $requestedQty,
+                    'extracted_delivery_note' => $abandonedColdAddress ?: $extractedDeliveryNote,
+                    'resolved_checkout_url' => $abandonedUrl,
+                    'is_high_confidence_keyword' => true,
+                    'force_deterministic' => true,
+                    'hard_safety_override' => true,
+                    'source' => 'deterministic_playbook',
+                    'model' => 'master-closer-engine',
+                    'tokens' => 0,
+                    'reply_message' => "To ensure fast courier tracking and accurate delivery, we don't book new orders manually inside WhatsApp chat! ✨ Please tap your direct link below to confirm your Cash-on-Delivery order on our official website in just 30 seconds:\n{$abandonedUrl}",
+                ];
+            }
+
+            // Check if customer asks for the checkout link
             $wantsLinkInAbandoned = (bool) preg_match(
-                '/\b(send\s+(?:me\s+)?(?:the\s+)?link|share\s+(?:the\s+)?link|checkout\s+link|cart\s+link|filhal|sirf\s+oil|try\s+(?:the\s+)?oil\s+first|only\s+oil)\b/i',
+                '/\b(send\s+(?:me\s+)?(?:the\s+)?link|share\s+(?:the\s+)?link|checkout\s+link|cart\s+link|try\s+(?:the\s+)?oil\s+first|only\s+oil)\b/i',
                 $lower
             );
 
@@ -2534,40 +2751,13 @@ PROMPT;
                     'should_trigger_action' => 'send_checkout_link',
                     'requested_quantity' => 1,
                     'extracted_delivery_note' => $extractedDeliveryNote,
+                    'resolved_checkout_url' => $abandonedUrl,
                     'is_high_confidence_keyword' => true,
                     'force_deterministic' => true,
                     'source' => 'deterministic_playbook',
                     'model' => 'master-closer-engine',
                     'tokens' => 0,
-                    'reply_message' => "{$opener} Here is your direct checkout link for {$cartItemsSummary} (*{$currency} {$fmtCartSubtotal}*):\n{$abandonedUrl}\n\nOr if you'd like me to convert your cart into a confirmed Cash-on-Delivery order right here in WhatsApp, just reply *CONFIRM ON COD*!",
-                ];
-            }
-
-            // Check if customer wants to confirm/book their abandoned cart directly on Cash on Delivery (COD)
-            $wantsCodConversion = (bool) preg_match(
-                '/\b(confirm my order|confirm order|confirm here|on cod|cash on delivery|cod kr|cod kar|reserve my bottle|reserve it|book my order|book here|send on cod|dispatch on cod)\b/i',
-                $lower
-            ) || (
-                $hasNativeConfirm && !preg_match('/\b(link|discount|expensive)\b/i', $lower)
-            );
-
-            if ($wantsCodConversion) {
-                $opener = $isRomanUrdu
-                    ? "Jee bilkul, JazakAllah {$customerName}! 🎉 Inshallah I"
-                    : "JazakAllah {$customerName}! 🎉 I";
-
-                return [
-                    'detected_intent' => 'confirm_cod',
-                    'sentiment' => 'positive',
-                    'should_trigger_action' => 'convert_abandoned_to_cod_order',
-                    'requested_quantity' => $requestedQty,
-                    'extracted_delivery_note' => $extractedDeliveryNote,
-                    'is_high_confidence_keyword' => true,
-                    'force_deterministic' => true,
-                    'source' => 'deterministic_playbook',
-                    'model' => 'master-closer-engine',
-                    'tokens' => 0,
-                    'reply_message' => "{$opener} have converted your cart ({$cartItemsSummary} — Total: *{$currency} {$fmtCartSubtotal}*) into a confirmed *Cash-on-Delivery* order right here and locked your bottle for priority warehouse dispatch today! 📦✨",
+                    'reply_message' => "{$opener} You can place your Cash-on-Delivery order for {$cartItemsSummary} (*{$currency} {$fmtCartSubtotal}*) in 30 seconds via our official website link below:\n{$abandonedUrl}",
                 ];
             }
 
@@ -2586,12 +2776,13 @@ PROMPT;
                     'should_trigger_action' => 'send_checkout_link',
                     'requested_quantity' => 1,
                     'extracted_delivery_note' => $extractedDeliveryNote,
+                    'resolved_checkout_url' => $vip15Url,
                     'is_high_confidence_keyword' => true,
                     'force_deterministic' => true,
                     'source' => 'deterministic_playbook',
                     'model' => 'master-closer-engine',
                     'tokens' => 0,
-                    'reply_message' => "{$opener} Because our pure Hunza botanical formula is concentrated, 1 bottle lasts *45–60 washes* (under *{$costPerWash} per wash* to protect your roots from harsh sulfates)—and to help with shipping, I've unlocked a *VIP 15% OFF* savings link (*{$currency} {$fmtVip15Price}* instead of {$currency} {$fmtCartSubtotal} with code *VIPREFILL15*).\n\nWould you like to claim your 15% savings via the link below, or reply *CONFIRM ON COD* so I can lock it for you right here?\n{$vip15Url}",
+                    'reply_message' => "{$opener} Because our pure Hunza botanical formula (cold-pressed from raw kernels handpicked in the Hunza valleys) is concentrated, 1 bottle lasts *45–60 washes* (under *{$costPerWash} per wash* to protect your roots from harsh sulfates)—and to help with shipping, I've unlocked a *VIP 15% OFF* savings link (*{$currency} {$fmtVip15Price}* instead of {$currency} {$fmtCartSubtotal} with code *VIPREFILL15*).\n\nYou can place your Cash-on-Delivery order in 30 seconds via our official website link below:\n{$vip15Url}",
                 ];
             }
 
@@ -2614,7 +2805,7 @@ PROMPT;
 
             // Product / Delivery Q&A in Playbook 4
             $answerLead = $botanicalAnswer
-                ?: "Most women in our Laleen community love how lightweight and non-greasy our cold-pressed Hunza botanicals feel from the very first wash (1 bottle lasts *45–60 washes* — under *{$costPerWash} per wash*).";
+                ?: "Cold-pressed from raw kernels handpicked in the Hunza valleys, most women in our Laleen community love how lightweight and non-greasy our formulas feel from the very first wash (1 bottle lasts *45–60 washes* — under *{$costPerWash} per wash*).";
 
             return [
                 'detected_intent' => 'ask_question',
@@ -2627,7 +2818,7 @@ PROMPT;
                 'source' => 'deterministic_playbook',
                 'model' => 'master-closer-engine',
                 'tokens' => 0,
-                'reply_message' => "{$answerLead}\n\nWould you like to complete your order for {$cartItemsSummary} via your direct cart link below, or reply *CONFIRM ON COD* so I can reserve your bottle right here?\n{$abandonedUrl}",
+                'reply_message' => "{$answerLead}\n\nYou can place your Cash-on-Delivery order for {$cartItemsSummary} in 30 seconds via our official website link below:\n{$abandonedUrl}",
             ];
         }
 
@@ -2638,7 +2829,7 @@ PROMPT;
                 $lower
             );
 
-            if ($isRevertRequest && ($thread->state === 'upsell_accepted' || (float) $thread->upsell_revenue_generated > 0 || $thread->state === 'cod_confirmed_upsell_pitched' || $thread->state === 'upsell_declined')) {
+            if ($isRevertRequest && ($thread->state === 'upsell_accepted' || (float) $thread->upsell_revenue_generated > 0 || $thread->state === 'upsell_declined')) {
                 $upsellAmount = (float) ($thread->upsell_revenue_generated > 0 ? $thread->upsell_revenue_generated : 0.0);
                 $originalTotal = max(0.0, round($currentOrderTotal - $upsellAmount, 2));
                 if ($originalTotal <= 0 && $currentOrderTotal > 0) {
@@ -2839,6 +3030,32 @@ PROMPT;
 
         // 8. PLAYBOOK 1 (`cod_upsell`) — State: cod_confirmed_upsell_pitched
         if ($thread->state === 'cod_confirmed_upsell_pitched') {
+            // 8A. Prioritize Household / Sister / Family Consultation Hold ("let me ask my sister", "tell you in the evening")
+            // even if the message starts with "No thanks, just send my original order first..."
+            $isHouseholdHold = (bool) preg_match(
+                '/\b(ask my|consult my|check with my|sister|mom|mother|husband|wife|family|ammi|ami|baji|api|bhai|shohar|ghar\s+walon|pooch|tell you later|in the evening|till evening|until evening)\b/i',
+                $lower
+            );
+
+            if ($isHouseholdHold) {
+                $opener = $isRomanUrdu ? "Jee bilkul, take your time {$customerName}! ✨" : "Take your time checking with your family, {$customerName}! ✨";
+
+                return [
+                    'detected_intent' => 'ask_question',
+                    'sentiment' => 'positive',
+                    'should_trigger_action' => 'none',
+                    'requested_quantity' => 1,
+                    'extracted_delivery_note' => $extractedDeliveryNote,
+                    'is_high_confidence_keyword' => true,
+                    'force_deterministic' => true,
+                    'hard_safety_override' => true,
+                    'source' => 'deterministic_playbook',
+                    'model' => 'master-closer-engine',
+                    'tokens' => 0,
+                    'reply_message' => "{$opener} Many households in our Laleen community share the *{$offeredName}* in the shower while keeping individual oils—or you can add a *2nd bottle of {$heroProductName} at {$fmtDiscountPct}% OFF* (*+{$currency} {$fmtHeroDiscountPrice}*) for your sister or next month's supply.\n\nI will *hold your open box for Order {$shortRef}* and keep your *{$fmtDiscountPct}% OFF* discount (with free extra shipping) reserved until the evening—just reply *UPGRADE* or *NO THANKS* once you check with her!",
+                ];
+            }
+
             $isAccept = $hasNativeConfirm
                 || (bool) preg_match(
                     '/\b(upgrade|add it|yes add|add to box|yes please|sure add|add shampoo|add oil|shampoo add|oil add|book it|include it|2nd bottle|second bottle|add 2|add two|do shampoo|do bottle)\b/i',
@@ -2866,17 +3083,18 @@ PROMPT;
             }
 
             // Andy Elliott + Alex Hormozi 1-Pivot Downsell Rule:
-            // On 1st objection ("I'll try the oil first", "Filhal sirf oil bhej dein", "Too expensive"),
+            // On 1st objection or first "No thanks" ("I'll try the oil first", "Filhal sirf oil bhej dein", "Too expensive", "No thanks"),
             // validate warmly, give 1-sentence Hormozi cost-per-wash + biological mechanism rebuttal,
             // and offer an A/B Pivot: 20% off complementary item OR 2nd bottle of their hero product at 20% off!
             $isFirstPivotObjection = (bool) preg_match(
-                '/\b(try the oil first|try oil first|try it first|try first|filhal|sirf oil|only oil for now|pehle oil|test first|too expensive|expensive|mehenga|costly)\b/i',
+                '/\b(try the oil first|try oil first|try it first|try first|filhal|sirf oil|only oil for now|pehle oil|test first|too expensive|expensive|mehenga|costly|no|no thanks|nope|nahi|skip|as is|as-is|original only|just send my original|only send my original|just the|just ship|ship just|khallas|khalas)\b/i',
                 $lower
             );
 
             $alreadyOfferedDownsellPivot = $thread->messages
                 ->where('direction', 'outbound')
-                ->contains(fn (EcommerceWhatsappMessage $m) => str_contains(strtolower((string) $m->message_body), '2nd bottle'));
+                ->contains(fn (EcommerceWhatsappMessage $m) => str_contains(strtolower((string) $m->message_body), 'protects your hair investment')
+                    || str_contains(strtolower((string) $m->message_body), 'would you prefer adding a'));
 
             if ($isFirstPivotObjection && !$alreadyOfferedDownsellPivot) {
                 $opener = $isRomanUrdu ? "Jee bilkul, totally fair {$customerName}! ✨" : "Totally fair, {$customerName}! ✨";
@@ -2889,6 +3107,7 @@ PROMPT;
                     'extracted_delivery_note' => $extractedDeliveryNote,
                     'is_high_confidence_keyword' => true,
                     'force_deterministic' => true,
+                    'hard_safety_override' => true,
                     'source' => 'deterministic_playbook',
                     'model' => 'master-closer-engine',
                     'tokens' => 0,
@@ -2967,7 +3186,7 @@ PROMPT;
     ): array {
         $action = (string) ($aiDecision['should_trigger_action'] ?? 'none');
         $currency = $thread->currency();
-        $shortRef = $thread->shortOrderRef();
+        $shortRef = $this->formatOrderReference($thread->order_group_id);
         $systemEvent = null;
         $overrideReply = null;
 
@@ -2992,7 +3211,12 @@ PROMPT;
         }
 
         // Safety invariant: Playbooks 2 & 3 NEVER auto-create a DB order; they send a checkout link instead.
+        // And inbound_support / abandoned_checkout NEVER create an in-chat COD order (Link-Only New Order Policy).
         if (in_array($thread->playbook, ['day7_cross_sell', 'day30_refill'], true) && $action === 'execute_order_upgrade') {
+            $action = 'send_checkout_link';
+            $aiDecision['should_trigger_action'] = 'send_checkout_link';
+        }
+        if (in_array($thread->playbook, ['inbound_support', 'abandoned_checkout'], true) && $action === 'convert_abandoned_to_cod_order') {
             $action = 'send_checkout_link';
             $aiDecision['should_trigger_action'] = 'send_checkout_link';
         }
@@ -3168,6 +3392,7 @@ PROMPT;
                 // Hard Safety Guardrail: Cold visitors (`inbound_support`) with no prior orders and no checkout
                 // MUST have a physical street/city shipping address before creating a database COD order!
                 $shippingAddress = trim((string) ($lockedThread->delivery_notes ?: ($aiDecision['extracted_delivery_note'] ?? '')));
+                $timingNote = trim((string) ($aiDecision['extracted_timing_note'] ?? ''));
                 $hasPhysicalAddress = $this->isPhysicalShippingAddress($shippingAddress);
                 if ($wasInboundColdChat && !$checkout && (int) ($lockedThread->customer?->orders_count ?? 0) === 0 && !$hasPhysicalAddress) {
                     return;
@@ -3177,12 +3402,15 @@ PROMPT;
                     $lockedThread->delivery_notes = $shippingAddress;
                     $thread->delivery_notes = $shippingAddress;
 
-                    // If customer record has a generic visitor name and they wrote "Full Name, Address...", extract their name
-                    if ($hasPhysicalAddress && $lockedThread->customer && str_starts_with((string) $lockedThread->customer->name, 'New WhatsApp Visitor')) {
-                        $parts = array_map('trim', explode(',', $shippingAddress));
-                        if (!empty($parts[0]) && preg_match('/^[A-Za-z][A-Za-z\s.\'-]{2,35}$/', $parts[0]) && !preg_match('/\b(house|flat|street|road|sector|phase|block|dha|gulberg|lahore|karachi|islamabad|doha)\b/i', $parts[0])) {
-                            $lockedThread->customer->name = $parts[0];
+                    // If customer record has a generic visitor name and they wrote "My name is X, Address..." or "Full Name, Address...", extract their clean name
+                    if ($hasPhysicalAddress && $lockedThread->customer && (str_starts_with((string) $lockedThread->customer->name, 'New WhatsApp Visitor') || str_starts_with((string) $lockedThread->customer->name, 'Valued '))) {
+                        $extractedName = $this->extractCustomerNameFromText($customerText !== '' ? $customerText : $shippingAddress);
+                        if ($extractedName !== null) {
+                            $lockedThread->customer->name = $extractedName;
                             $lockedThread->customer->save();
+                            if ($thread->customer) {
+                                $thread->customer->name = $extractedName;
+                            }
                         }
                     }
                 }
@@ -3343,13 +3571,13 @@ PROMPT;
 
                 // Build Ezra + Hormozi + Elliott Open-Box Upgrade / 1-Pivot pitch
                 $customerName = $lockedThread->customer?->name ?: 'there';
-                $shortNewRef = EcommerceWhatsappThread::formatShortOrderRef($newOrderGroupId);
+                $shortNewRef = $this->formatOrderReference($newOrderGroupId);
                 $createdSummary = $createdOrderSales->isNotEmpty()
                     ? $createdOrderSales->map(fn (EcommerceSale $s) => $s->quantity . 'x ' . ($s->product?->name ?? 'Product'))->implode(', ')
                     : ('1x ' . ($primaryProduct?->name ?? 'Hunza Apricot Oil'));
                 $heroName = $primaryProduct?->name ?? 'Hunza Apricot Oil';
                 $heroBasePrice = $primaryProduct ? $primaryProduct->resolveBasePrice($lockedThread->region) : $orderTotal;
-                $heroDiscountPrice = max(1.0, round($heroBasePrice * (1 - ($compDiscountPct / 100)), 2));
+                $heroDiscountPrice = max(1.0, round($heroBasePrice * (1 - ($compDiscountPct / 100))));
 
                 if ($compProduct && $compAddonPrice > 0) {
                     $compName = $compProduct->name;
@@ -3359,7 +3587,9 @@ PROMPT;
                     $fmtHeroDisc = number_format($heroDiscountPrice, 0);
                     $costPerWash = $isQatar ? 'QAR 1.5' : 'PKR 40';
                     $addressBadge = '';
-                    if ($shippingAddress !== '') {
+                    if ($shippingAddress !== '' && $timingNote !== '' && $shippingAddress !== $timingNote) {
+                        $addressBadge = " (📍 Delivery Address: *{$shippingAddress}* · 📌 Delivery Note: *{$timingNote}*)";
+                    } elseif ($shippingAddress !== '') {
                         $addressBadge = $hasPhysicalAddress
                             ? " (📍 Delivery Address: *{$shippingAddress}*)"
                             : " (📌 Delivery Note: *{$shippingAddress}*)";
@@ -3441,16 +3671,16 @@ PROMPT;
 
                 $discountPct = max(0.0, min(90.0, (float) ($settings->upsell_discount_percent ?? 20.0)));
                 if ((int) $lockedThread->offered_product_id === (int) $product->id && (float) ($lockedThread->offered_addon_price ?? 0) > 0) {
-                    $addonPrice = round((float) $lockedThread->offered_addon_price, 2);
+                    $addonPrice = round((float) $lockedThread->offered_addon_price);
                 } else {
                     $basePrice = $product->resolveBasePrice($lockedThread->region);
-                    $addonPrice = max(1.0, round($basePrice * (1 - ($discountPct / 100)), 2));
+                    $addonPrice = max(1.0, round($basePrice * (1 - ($discountPct / 100))));
                 }
 
                 $lockedThread->offered_product_id = $product->id;
                 $lockedThread->offered_addon_price = $addonPrice;
 
-                $totalUpsellPrice = round($addonPrice * $qty, 2);
+                $totalUpsellPrice = round($addonPrice * $qty);
 
                 $pricingModel = EcommercePricingModel::where('ecommerce_product_id', $product->id)->first();
                 $unitCogs = $pricingModel?->bomUnitCost() ?? 0.0;
@@ -3531,11 +3761,11 @@ PROMPT;
                     2
                 );
 
-                $formattedPrice = number_format($totalUpsellPrice, 2);
+                $formattedPrice = number_format($totalUpsellPrice, 0);
                 $fmtUpsellNoDec = number_format($totalUpsellPrice, 0);
                 $fmtCombinedNoDec = number_format($combinedOrderTotal, 0);
                 $fmtDiscountPct = number_format($discountPct, 0);
-                $shortOrderRef = EcommerceWhatsappThread::formatShortOrderRef($targetOrderGroupId);
+                $shortOrderRef = $this->formatOrderReference($targetOrderGroupId);
                 $qtyPrefix = $qty > 1 ? "{$qty}x " : '';
                 $customerName = $lockedThread->customer?->name ?: 'there';
 
@@ -3550,7 +3780,10 @@ PROMPT;
                 ]);
             });
         } elseif ($action === 'revert_upsell') {
-            DB::transaction(function () use ($thread, $currency, $shortRef, &$systemEvent, &$overrideReply) {
+            $alsoCancelDuplicates = !empty($aiDecision['also_cancel_duplicate_orders'])
+                || (bool) preg_match('/\b(two orders|2 orders|duplicate order|duplicate orders|ordered twice|placed twice|placed two|double order|do order|2 dafa|do dafa|cancel duplicate|cancel extra order|accidentally ordered)\b/i', strtolower($customerText));
+
+            DB::transaction(function () use ($thread, $currency, $shortRef, $alsoCancelDuplicates, &$systemEvent, &$overrideReply) {
                 $lockedThread = EcommerceWhatsappThread::lockForUpdate()->find($thread->id);
                 if (!$lockedThread || !$lockedThread->order_group_id) {
                     return;
@@ -3578,6 +3811,10 @@ PROMPT;
                     $upsellRows = $allOrderRows->filter(fn (EcommerceSale $r) => $r->id !== $primaryRow->id && (bool) $r->is_ai_upsell);
                 }
 
+                $removedSummary = $upsellRows->isNotEmpty()
+                    ? $upsellRows->map(fn (EcommerceSale $r) => $r->quantity . 'x ' . ($r->product?->name ?? 'Shampoo'))->implode(', ')
+                    : 'extra upsell';
+
                 $removedAnyUpsell = false;
                 foreach ($upsellRows as $row) {
                     if ($row->stock_deducted && $row->ecommerce_product_id) {
@@ -3590,6 +3827,31 @@ PROMPT;
                     }
                     $row->delete();
                     $removedAnyUpsell = true;
+                }
+
+                if ($alsoCancelDuplicates) {
+                    $dupQuery = EcommerceSale::query()
+                        ->where('order_status', 'pending')
+                        ->where('payment_status', 'unpaid_cod')
+                        ->where('created_at', '>=', now()->subHours(48))
+                        ->whereNotNull('order_group_id')
+                        ->where('order_group_id', '!=', $lockedThread->order_group_id)
+                        ->where(function ($q) use ($lockedThread) {
+                            if ($lockedThread->ecommerce_customer_id) {
+                                $q->where('ecommerce_customer_id', $lockedThread->ecommerce_customer_id);
+                            }
+                            if ($lockedThread->customer?->phone) {
+                                $q->orWhere('customer_phone', $lockedThread->customer->phone);
+                            }
+                        });
+
+                    $duplicateGroupIds = $dupQuery->pluck('order_group_id')->unique()->values();
+                    foreach ($duplicateGroupIds as $dupGroupId) {
+                        EcommerceSale::transitionOrderGroup((string) $dupGroupId, 'cancelled', 'refunded');
+                        EcommerceWhatsappThread::where('order_group_id', (string) $dupGroupId)
+                            ->where('id', '!=', $lockedThread->id)
+                            ->update(['state' => 'completed', 'unread_count' => 0]);
+                    }
                 }
 
                 $lockedThread->upsell_revenue_generated = 0;
@@ -3620,9 +3882,11 @@ PROMPT;
                     ? $remainingRows->map(fn (EcommerceSale $s) => $s->quantity . 'x ' . ($s->product?->name ?? 'Product'))->implode(', ')
                     : 'your original item';
                 $customerName = $lockedThread->customer?->name ?: 'there';
-                $shortOrderRef = EcommerceWhatsappThread::formatShortOrderRef($lockedThread->order_group_id);
+                $shortOrderRef = $this->formatOrderReference($lockedThread->order_group_id);
 
-                if ($removedAnyUpsell) {
+                if ($alsoCancelDuplicates) {
+                    $overrideReply = "All taken care of, {$customerName}! 🧹 I have removed the extra *{$removedSummary}* bottles from Order {$shortOrderRef} so only your original *{$remainingSummary}* (Total: *{$currency} {$fmtRemainingTotal}*) will ship, and I have cancelled your duplicate order so you won't be double-charged! ✨";
+                } elseif ($removedAnyUpsell) {
                     $overrideReply = "All taken care of, {$customerName}! I have removed the extra upsell bottles from Order {$shortOrderRef}. Your original order for *{$remainingSummary}* (Total: *{$currency} {$fmtRemainingTotal}*) is locked and ready for dispatch today ✨";
                 } else {
                     $overrideReply = "All set, {$customerName}! No extra bottles are attached—your original order {$shortOrderRef} for *{$remainingSummary}* (Total: *{$currency} {$fmtRemainingTotal}*) is locked and ready for dispatch today ✨";
@@ -3633,7 +3897,9 @@ PROMPT;
                     'direction' => 'outbound',
                     'sender_type' => 'system_event',
                     'delivery_status' => 'sent',
-                    'message_body' => "↩️ Removed AI upsell item per customer request ({$shortOrderRef})",
+                    'message_body' => $alsoCancelDuplicates
+                        ? "↩️ Removed AI upsell ({$removedSummary}) & 🧹 cancelled duplicate order(s) ({$shortOrderRef})"
+                        : "↩️ Removed AI upsell item per customer request ({$shortOrderRef})",
                 ]);
             });
         } elseif ($action === 'lock_order_without_upsell') {

@@ -269,28 +269,21 @@ class EcommerceAiAbandonedAndMarketingTest extends TestCase
         $thread = $agent->initiateAbandonedCheckoutRescue($checkout);
         $this->assertNotNull($thread);
 
-        // Customer replies asking to confirm on COD right inside WhatsApp
+        // Customer replies asking to confirm on COD right inside WhatsApp -> Link-Only Order Policy directs them to official website checkout link
         $result = $agent->handleInboundCustomerMessage($thread, 'Confirm my order here on COD');
 
-        $this->assertSame('convert_abandoned_to_cod_order', $result['ai_decision']['should_trigger_action']);
-        $this->assertSame('cod_confirmed_upsell_pitched', $result['thread']->state);
-        $this->assertEquals(3000.00, (float) $result['thread']->upsell_revenue_generated);
+        $this->assertSame('send_checkout_link', $result['ai_decision']['should_trigger_action']);
+        $this->assertSame('checkout_link_sent', $result['thread']->state);
+        $this->assertEquals(0.00, (float) $result['thread']->upsell_revenue_generated);
 
-        // Verify checkout is marked recovered
-        $checkout->refresh();
-        $this->assertSame('recovered', $checkout->status);
-        $this->assertNotNull($checkout->recovered_order_group_id);
+        $replyBody = (string) $result['outbound_message']?->message_body;
+        $this->assertStringContainsString("we don't book new orders manually inside WhatsApp chat", $replyBody);
+        $this->assertStringContainsString('https://laleenrituals.com/checkouts/ac/tok_cod_202/recover', $replyBody);
 
-        // Verify EcommerceSale COD order was created with is_ai_upsell = false and warehouse stock deducted by 2
-        $createdSale = EcommerceSale::where('order_group_id', $checkout->recovered_order_group_id)->first();
-        $this->assertNotNull($createdSale);
-        $this->assertFalse((bool) $createdSale->is_ai_upsell);
-        $this->assertSame('unpaid_cod', $createdSale->payment_status);
-        $this->assertSame(2, (int) $createdSale->quantity);
-        $this->assertEquals(3000.00, (float) $createdSale->total_price);
-
+        // Verify no in-chat #COD-RESCUE order was created in DB and warehouse stock was not deducted
+        $this->assertSame(0, EcommerceSale::count());
         $this->oilProduct->refresh();
-        $this->assertEquals($initialStock - 2, (float) $this->oilProduct->stock_pakistan);
+        $this->assertEquals($initialStock, (float) $this->oilProduct->stock_pakistan);
     }
 
     public function test_ai_marketing_generator_creates_20_ad_scripts_and_28_calendar_slots(): void
@@ -558,8 +551,8 @@ class EcommerceAiAbandonedAndMarketingTest extends TestCase
         /** @var EcommerceAiSalesAgentService $agent */
         $agent = app(EcommerceAiSalesAgentService::class);
 
-        // Step 1: Cold customer says "Filhal sirf oil bhej dein, let me try the oil first" WITHOUT providing an address
-        // -> Zara must NOT create an address-less DB order! She shares the Shopify link + COMPLETE20 bundle tip + asks for Full Name, Complete Delivery Address & City
+        // Step 1: Cold customer says "Filhal sirf oil bhej dein, let me try the oil first"
+        // -> Link-Only Order Policy: Zara never creates an in-chat order and directs them to the official Shopify website link
         $step1 = $agent->handleInboundCustomerMessage($thread, 'Filhal sirf oil bhej dein, let me try the oil first');
         $thread = $step1['thread'];
 
@@ -570,34 +563,46 @@ class EcommerceAiAbandonedAndMarketingTest extends TestCase
         $this->assertSame($this->oilProduct->id, (int) $thread->offered_product_id);
 
         $step1Reply = (string) $step1['outbound_message']?->message_body;
+        $this->assertStringContainsString("we don't book new orders manually inside WhatsApp chat", $step1Reply);
         $this->assertStringContainsString('https://', $step1Reply);
         $this->assertStringContainsString('COMPLETE20', $step1Reply);
-        $this->assertStringContainsString('Full Name, Complete Delivery Address & City', $step1Reply);
 
-        // Step 2: Cold customer replies with their actual shipping address
-        // -> Now Zara extracts & saves their address, creates the base COD order (is_ai_upsell = false), and pitches the 20% off Open-Box upgrade!
+        // Step 2: Even if a cold customer replies with their physical street address, Zara still enforces the Link-Only Order Policy
         $step2 = $agent->handleInboundCustomerMessage($thread, 'Ayesha Khan, House 14, Street 5, DHA Phase 6, Lahore');
         $thread = $step2['thread'];
 
-        $this->assertSame('convert_abandoned_to_cod_order', $step2['ai_decision']['should_trigger_action']);
-        $this->assertNotNull($thread->order_group_id);
-        $this->assertSame('cod_upsell', $thread->playbook);
-        $this->assertSame('cod_confirmed_upsell_pitched', $thread->state);
-        $this->assertSame('Ayesha Khan, House 14, Street 5, DHA Phase 6, Lahore', $thread->delivery_notes);
+        $this->assertSame('send_checkout_link', $step2['ai_decision']['should_trigger_action']);
+        $this->assertSame('inbound_support', $thread->playbook);
+        $this->assertSame('inbound_active', $thread->state);
         $this->assertSame('Ayesha Khan', $thread->customer?->name);
-        $this->assertSame($this->shampooProduct->id, (int) $thread->offered_product_id);
-        $this->assertStringContainsString('New WhatsApp COD Order Created!', (string) $step2['system_event']?->message_body);
-        $this->assertStringContainsString('UPGRADE', (string) $step2['outbound_message']?->message_body);
+        $this->assertSame(0, EcommerceSale::count());
+        $this->assertStringContainsString("we don't book new orders manually inside WhatsApp chat", (string) $step2['outbound_message']?->message_body);
 
-        $baseRows = EcommerceSale::where('order_group_id', $thread->order_group_id)->get();
-        $this->assertCount(1, $baseRows);
-        $baseRow = $baseRows->first();
-        $this->assertFalse((bool) $baseRow->is_ai_upsell);
-        $this->assertSame($this->oilProduct->id, (int) $baseRow->ecommerce_product_id);
-        $this->assertSame(1, (int) $baseRow->quantity);
-        $this->assertSame('Ayesha Khan, House 14, Street 5, DHA Phase 6, Lahore', $baseRow->delivery_notes);
-        $baseTotal = (float) $baseRow->total_price;
-        $this->assertGreaterThan(0, $baseTotal);
+        // Now simulate the customer placing their order on the website and entering Playbook 1 (cod_upsell)
+        $orderGroupId = 'ORD-WEB-1001';
+        $baseSale = EcommerceSale::create([
+            'ecommerce_product_id' => $this->oilProduct->id,
+            'ecommerce_customer_id' => $thread->ecommerce_customer_id,
+            'order_group_id' => $orderGroupId,
+            'reference_id' => '#WEB1001',
+            'customer_name' => 'Ayesha Khan',
+            'customer_phone' => $thread->customer?->phone,
+            'quantity' => 1,
+            'channel' => 'Shopify (Pakistan)',
+            'order_status' => 'pending',
+            'payment_status' => 'unpaid_cod',
+            'stock_deducted' => true,
+            'is_ai_upsell' => false,
+            'delivery_notes' => 'Ayesha Khan, House 14, Street 5, DHA Phase 6, Lahore',
+            'unit_price' => 1500,
+            'total_price' => 1500,
+        ]);
+        $baseTotal = (float) $baseSale->total_price;
+        $thread = $agent->initiateCodConfirmation($orderGroupId);
+        $this->assertNotNull($thread);
+        $agent->handleInboundCustomerMessage($thread, 'YES');
+        $thread->refresh();
+        $this->assertSame('cod_confirmed_upsell_pitched', $thread->state);
 
         // Step 3: Customer says "Okay add 2 bottles to my box"
         $step3 = $agent->handleInboundCustomerMessage($thread, 'Okay add 2 bottles to my box');
@@ -654,6 +659,26 @@ class EcommerceAiAbandonedAndMarketingTest extends TestCase
         /** @var EcommerceAiSalesAgentService $agent */
         $agent = app(EcommerceAiSalesAgentService::class);
 
+        // 0. Pure greeting introduces Zara as "your personal Hair Care Specialist at Laleen Rituals."
+        $resGreeting = $agent->handleInboundCustomerMessage($thread, 'Salam');
+        $replyGreeting = (string) $resGreeting['outbound_message']?->message_body;
+        $this->assertStringContainsString("I'm Zara, your personal Hair Care Specialist at Laleen Rituals.", $replyGreeting);
+        $this->assertStringNotContainsString('Concierge', $replyGreeting);
+
+        // 0B. Hairfall + Dandruff consultation uses Option A's crisp Hunza phrasing & link-exclusive CTA
+        $resHunza = $agent->handleInboundCustomerMessage($thread, 'I have alot of hairfall and dandruff');
+        $replyHunza = (string) $resHunza['outbound_message']?->message_body;
+        $this->assertStringContainsString('Dealing with both heavy hairfall and stubborn dandruff is so frustrating—our *100% pure Hunza Apricot Oil*, cold-pressed from raw kernels handpicked in the Hunza valleys, deeply nourishes weak roots to reduce shedding and calm flaky scalps without heavy buildup.', $replyHunza);
+        $this->assertStringContainsString('You can place your Cash-on-Delivery order in 30 seconds via our official website link below:', $replyHunza);
+
+        // 0C. Follow-up "How is your product different than others?" hits the Differentiation response and does NOT repeat "Dealing with..."
+        $resDiff = $agent->handleInboundCustomerMessage($thread, 'How is your product different than others?');
+        $replyDiff = (string) $resDiff['outbound_message']?->message_body;
+        $this->assertStringStartsNotWith('Dealing with', $replyDiff);
+        $this->assertStringNotContainsString('Dealing with stubborn hair stress', $replyDiff);
+        $this->assertStringContainsString('Unlike ordinary commercial oils diluted with heavy mineral oil', $replyDiff);
+        $this->assertStringContainsString('100% pure, single-origin Hunza Apricot Oil', $replyDiff);
+
         // 1. Prompt prefix stripping + Oily Scalp + "kitne ml" without double "Jee bilkul!"
         $res1 = $agent->handleInboundCustomerMessage(
             $thread,
@@ -669,7 +694,7 @@ class EcommerceAiAbandonedAndMarketingTest extends TestCase
         $res2 = $agent->handleInboundCustomerMessage($thread, 'Prompt: No thanks, just send my original order.');
         $reply2 = (string) $res2['outbound_message']?->message_body;
         $this->assertStringContainsString("don't have an active order booked", $reply2);
-        $this->assertStringContainsString('Full Name, Complete Street Address & City', $reply2);
+        $this->assertStringContainsString('You can place your Cash-on-Delivery order in 30 seconds via our official website link below:', $reply2);
 
         // 3. 50% Discount / Buy Both Bundle -> COMPLETE20 20% off
         $res3 = $agent->handleInboundCustomerMessage(
@@ -722,16 +747,119 @@ class EcommerceAiAbandonedAndMarketingTest extends TestCase
         $this->assertSame('send_checkout_link', $res8['ai_decision']['should_trigger_action']);
         $this->assertSame(0, EcommerceSale::where('ecommerce_customer_id', $customer->id)->count());
 
-        // 8. When Shampoo is deleted from DB, resolveComplementaryOffer auto-provisions Sulfate-Free Botanical Shampoo so Oil is never paired with Oil
-        $this->shampooProduct->delete();
-        $res9 = $agent->handleInboundCustomerMessage(
+        // 8. 5-Point Mega-Question in inbound_support returns all 5 matched bullet points + COMPLETE20 bundle link without being intercepted early by single-topic if blocks
+        $resMega = $agent->handleInboundCustomerMessage(
             $thread,
-            'Sara Ahmed, House 22, Street 9, F-7/2, Islamabad'
+            '1. My hair falls out and I use regular cooking oil—how is pure Hunza Apricot Oil different? 2. My roots get oily—kitne ml and how many washes? 3. If I already used it twice and my hair felt slightly heavy after washing, what should I do? 4. Will the bottle leak in courier, kab milega, and EasyPaisa/Bank Transfer? 5. The shampoo feels expensive—can you give me a 50% discount if I take both or send your best bundle link?'
         );
-        $this->assertSame('convert_abandoned_to_cod_order', $res9['ai_decision']['should_trigger_action']);
-        $reply9 = (string) $res9['outbound_message']?->message_body;
-        $this->assertStringContainsString('📍 Delivery Address: *Sara Ahmed, House 22, Street 9, F-7/2, Islamabad*', $reply9);
-        $this->assertStringNotContainsString('pair it with *Hunza Apricot Oil*', $reply9);
-        $this->assertStringContainsString('Shampoo', $reply9);
+        $this->assertSame('send_checkout_link', $resMega['ai_decision']['should_trigger_action']);
+        $replyMega = (string) $resMega['outbound_message']?->message_body;
+        $this->assertStringContainsString('100% pure cold-pressed', $replyMega);
+        $this->assertStringContainsString('45–60 washes', $replyMega);
+        $this->assertStringContainsString('double-cleanse', $replyMega);
+        $this->assertStringContainsString('triple-sealed in leak-proof packaging', $replyMega);
+        $this->assertStringNotContainsString('#ORDER', $replyMega);
+        $this->assertStringNotContainsString('Jee bilkul! •', $replyMega);
+        $this->assertSame(1, substr_count($replyMega, '/discount/COMPLETE20'));
+
+        // 9. In inbound_support (Cold Chat), sending name + street address + COD booking request enforces Link-Only Policy (send_checkout_link, no #COD-RESCUE order created)
+        $this->shampooProduct->delete();
+        $thread->delivery_notes = null;
+        $thread->save();
+
+        $resBlock2 = $agent->handleInboundCustomerMessage(
+            $thread,
+            'My name is Afnan, House 14, Street 5, DHA Phase 2, Islamabad. Filhal sirf 1 Apricot Oil COD pe book kr dein, لیکن ڈلیوری 2 تاریخ کو تنخواہ کے بعد شام 6 بجے کے بعد بھیجیں near Gate 2'
+        );
+        $thread = $resBlock2['thread'];
+        $this->assertSame('send_checkout_link', $resBlock2['ai_decision']['should_trigger_action']);
+        $this->assertSame('Afnan', $thread->customer?->name);
+        $this->assertSame('House 14, Street 5, DHA Phase 2, Islamabad', $thread->delivery_notes);
+        $this->assertSame(0, EcommerceSale::where('ecommerce_customer_id', $customer->id)->count());
+        $replyBlock2 = (string) $resBlock2['outbound_message']?->message_body;
+        $this->assertStringContainsString("we don't book new orders manually inside WhatsApp chat", $replyBlock2);
+        $this->assertStringContainsString('https://', $replyBlock2);
+        $this->assertStringContainsString('COMPLETE20', $replyBlock2);
+
+        // Transition thread to an active website COD order (Playbook 1 cod_upsell) to verify Blocks 3, 4 & 5
+        $webOrderGroupId = 'COD-RESCUE-DVRS2M';
+        EcommerceSale::create([
+            'ecommerce_product_id' => $this->oilProduct->id,
+            'ecommerce_customer_id' => $customer->id,
+            'order_group_id' => $webOrderGroupId,
+            'reference_id' => $webOrderGroupId,
+            'customer_name' => 'Afnan',
+            'customer_phone' => $customer->phone,
+            'quantity' => 1,
+            'channel' => 'Shopify (Pakistan)',
+            'order_status' => 'pending',
+            'payment_status' => 'unpaid_cod',
+            'stock_deducted' => true,
+            'is_ai_upsell' => false,
+            'unit_price' => 900,
+            'total_price' => 900,
+        ]);
+        $thread = $agent->initiateCodConfirmation($webOrderGroupId);
+        $this->assertNotNull($thread);
+        $resConfirm = $agent->handleInboundCustomerMessage($thread, 'YES');
+        $thread = $resConfirm['thread'];
+        $this->assertSame('cod_confirmed_upsell_pitched', $thread->state);
+        $this->assertStringContainsString('1,685', (string) $resConfirm['outbound_message']?->message_body);
+
+        // 10. Block 3: Household Hold ("ask my sister... in the evening") is prioritized even when message starts with "No thanks, just send my original order first"
+        $resBlock3 = $agent->handleInboundCustomerMessage(
+            $thread,
+            "No thanks, just send my original order first, I'll try the oil first... or actually let me ask my sister if she wants the shampoo and tell you in the evening"
+        );
+        $thread = $resBlock3['thread'];
+        $this->assertSame('none', $resBlock3['ai_decision']['should_trigger_action']);
+        $this->assertSame('cod_confirmed_upsell_pitched', $thread->state);
+        $replyBlock3 = (string) $resBlock3['outbound_message']?->message_body;
+        $this->assertStringContainsString('hold your open box', $replyBlock3);
+
+        // 11. Block 4: Add 2x Sulfate-Free Botanical Shampoo -> 1,685 * 2 = PKR 3,370 (zero decimals)
+        $resBlock4 = $agent->handleInboundCustomerMessage(
+            $thread,
+            'Okay my sister wants one too! Please add 2 bottles of the Sulfate-Free Shampoo to my open box'
+        );
+        $thread = $resBlock4['thread'];
+        $this->assertSame('execute_order_upgrade', $resBlock4['ai_decision']['should_trigger_action']);
+        $this->assertSame(2, (int) $resBlock4['ai_decision']['requested_quantity']);
+        $this->assertEquals(3370.0, (float) $thread->upsell_revenue_generated);
+        $replyBlock4 = (string) $resBlock4['outbound_message']?->message_body;
+        $this->assertStringContainsString('+PKR 3,370', $replyBlock4);
+        $this->assertStringNotContainsString('3,370.24', (string) $resBlock4['system_event']?->message_body);
+
+        // 12. Block 5: Compound revert_upsell + cancel_duplicate_orders in a single message executes BOTH actions and restores original order total
+        EcommerceSale::create([
+            'ecommerce_product_id' => $this->oilProduct->id,
+            'ecommerce_customer_id' => $customer->id,
+            'order_group_id' => 'DUP-ORDER-999',
+            'reference_id' => '#DUP999',
+            'customer_name' => 'Afnan',
+            'customer_phone' => $customer->phone,
+            'quantity' => 1,
+            'channel' => 'Shopify (Pakistan)',
+            'order_status' => 'pending',
+            'payment_status' => 'unpaid_cod',
+            'stock_deducted' => true,
+            'unit_price' => 1500,
+            'total_price' => 1500,
+        ]);
+
+        $resBlock5 = $agent->handleInboundCustomerMessage(
+            $thread,
+            'Wait sorry, please remove the extra shampoo bottles and only send my original order. Also I accidentally placed a duplicate order on the website earlier, please cancel the duplicate order!'
+        );
+        $thread = $resBlock5['thread'];
+        $this->assertSame('revert_upsell', $resBlock5['ai_decision']['should_trigger_action']);
+        $this->assertSame('upsell_declined', $thread->state);
+        $this->assertEquals(0.0, (float) $thread->upsell_revenue_generated);
+        $this->assertSame(1, EcommerceSale::where('order_group_id', $thread->order_group_id)->count());
+        $this->assertSame('cancelled', EcommerceSale::where('order_group_id', 'DUP-ORDER-999')->value('order_status'));
+        $replyBlock5 = (string) $resBlock5['outbound_message']?->message_body;
+        $this->assertStringContainsString('removed the extra *2x Sulfate-Free Botanical Shampoo* bottles', $replyBlock5);
+        $this->assertStringContainsString('cancelled your duplicate order', $replyBlock5);
+        $this->assertStringNotContainsString('While your box', $replyBlock5);
     }
 }

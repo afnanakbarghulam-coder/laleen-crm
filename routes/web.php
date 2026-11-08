@@ -19,6 +19,7 @@ use App\Http\Controllers\Ecommerce\EcommercePricingController;
 use App\Http\Controllers\Ecommerce\EcommerceProductController;
 use App\Http\Controllers\Ecommerce\EcommerceProductionController;
 use App\Http\Controllers\Ecommerce\EcommerceSalesController;
+use App\Http\Controllers\Ecommerce\EcommerceSeoAgentController;
 use App\Http\Controllers\Ecommerce\EcommerceStockController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\Kpi\AdLeadEntryController;
@@ -323,6 +324,7 @@ Route::middleware(['auth'])->group(function () {
                 Route::get('/profit', [EcommerceNetProfitController::class, 'index'])->name('net-profit.index');
                 Route::get('/profit/transactions', [EcommerceNetProfitController::class, 'transactions'])->name('profit.transactions');
                 Route::get('/ai-agent', [EcommerceAiAgentController::class, 'index'])->name('ai-agent.index');
+                Route::get('/seo-agent', [EcommerceSeoAgentController::class, 'index'])->name('seo-agent.index');
                 Route::get('/marketing', [EcommerceMarketingController::class, 'index'])->name('hub.marketing');
             });
         });
@@ -373,6 +375,20 @@ Route::middleware(['auth'])->group(function () {
                 // AI Ad Script (20-Video Kanban) & 4x7 Content Calendar Generator routes
                 Route::post('/marketing/ai-generate-ads', [EcommerceMarketingController::class, 'generateMonthlyAdsWithAi'])->name('hub.marketing.ai-generate-ads');
                 Route::post('/marketing/ai-generate-calendar', [EcommerceMarketingController::class, 'generateContentCalendarWithAi'])->name('hub.marketing.ai-generate-calendar');
+
+                // SEO Command Center & AI Agent write routes
+                Route::post('/seo-agent/optimize', [EcommerceSeoAgentController::class, 'optimizeTarget'])->name('seo-agent.optimize');
+                Route::post('/seo-agent/optimize-all', [EcommerceSeoAgentController::class, 'optimizeAll'])->name('seo-agent.optimize-all');
+                Route::post('/seo-agent/topical-map', [EcommerceSeoAgentController::class, 'generateTopicalMap'])->name('seo-agent.topical-map');
+                Route::post('/seo-agent/articles/{article}/generate', [EcommerceSeoAgentController::class, 'generateArticle'])->name('seo-agent.articles.generate');
+                Route::post('/seo-agent/generate-article', [EcommerceSeoAgentController::class, 'generateArticle'])->name('seo-agent.generate-article');
+                Route::post('/seo-agent/sync-gsc', [EcommerceSeoAgentController::class, 'syncSearchConsole'])->name('seo-agent.sync-gsc');
+                Route::post('/seo-agent/create-from-query', [EcommerceSeoAgentController::class, 'createArticleFromQuery'])->name('seo-agent.create-from-query');
+                Route::post('/seo-agent/queries/{searchQuery}/create-article', [EcommerceSeoAgentController::class, 'createArticleFromQuery'])->name('seo-agent.queries.create-article');
+                Route::post('/seo-agent/publish-product', [EcommerceSeoAgentController::class, 'publishProduct'])->name('seo-agent.publish-product');
+                Route::post('/seo-agent/audits/{audit}/publish', [EcommerceSeoAgentController::class, 'publishProduct'])->name('seo-agent.audits.publish');
+                Route::post('/seo-agent/publish-article', [EcommerceSeoAgentController::class, 'publishArticle'])->name('seo-agent.publish-article');
+                Route::post('/seo-agent/articles/{article}/publish', [EcommerceSeoAgentController::class, 'publishArticle'])->name('seo-agent.articles.publish');
             });
 
             Route::post('/marketing/ai-generate-ads', [EcommerceMarketingController::class, 'generateMonthlyAdsWithAi'])->name('marketing.ai-generate-ads');

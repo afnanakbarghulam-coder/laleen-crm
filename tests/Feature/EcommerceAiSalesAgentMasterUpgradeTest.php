@@ -296,6 +296,8 @@ class EcommerceAiSalesAgentMasterUpgradeTest extends TestCase
         $outbound = $thread->messages()->where('direction', 'outbound')->latest('id')->first();
         $this->assertNotNull($outbound);
         $this->assertStringContainsString('Hunza Apricot Oil', $outbound->message_body);
+        $this->assertStringContainsString('cold-pressed from raw kernels handpicked in the Hunza valleys', $outbound->message_body);
+        $this->assertStringContainsString('You can place your Cash-on-Delivery order in 30 seconds via our official website link below:', $outbound->message_body);
         $this->assertStringContainsString('PKR 1,500', $outbound->message_body);
         $this->assertStringContainsString('https://laleenrituals.com/products/hunza-apricot-oil', $outbound->message_body);
 
