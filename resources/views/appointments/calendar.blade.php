@@ -1508,8 +1508,25 @@
     <!-- Appointment Drawer -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="apptDrawer">
         <div class="offcanvas-header border-bottom">
-            <div>
-                <h5 class="offcanvas-title mb-0" id="drawerCustomer">&nbsp;</h5>
+            <div class="flex-grow-1 me-2">
+                <div class="d-flex align-items-center gap-2" id="drawerCustomerNameRow">
+                    <h5 class="offcanvas-title mb-0" id="drawerCustomer">&nbsp;</h5>
+                    <button type="button"
+                        class="btn btn-sm py-0 px-1 d-none"
+                        id="drawerEditCustomerNameBtn"
+                        title="Edit client name"
+                        style="border: 1px solid rgba(217, 143, 131, 0.28); background: rgba(217, 143, 131, 0.08); color: #e79a91; font-size: 11px;">✏️</button>
+                </div>
+                <div class="d-none align-items-center gap-1 my-1" id="drawerCustomerEditWrap">
+                    <input type="text"
+                        id="drawerCustomerNameInput"
+                        class="form-control form-control-sm"
+                        maxlength="120"
+                        placeholder="Client name"
+                        style="background: #1a1514; border: 1px solid rgba(217, 143, 131, 0.45); color: #f3e5e0;">
+                    <button type="button" class="btn btn-sm py-1 px-2" id="drawerSaveCustomerNameBtn" title="Save name" style="background: rgba(142, 168, 138, 0.22); border: 1px solid rgba(142, 168, 138, 0.5); color: #b8d8b3; font-weight: 700;">✓</button>
+                    <button type="button" class="btn btn-sm py-1 px-2" id="drawerCancelCustomerNameBtn" title="Cancel" style="background: rgba(168, 82, 74, 0.18); border: 1px solid rgba(168, 82, 74, 0.45); color: #e09b95; font-weight: 700;">✕</button>
+                </div>
                 <div class="text-muted small" id="drawerPhone"></div>
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
@@ -2393,6 +2410,10 @@
             selectedAppointmentId = appointmentId;
 
             document.getElementById('drawerCustomer').textContent = 'Loading…';
+            document.getElementById('drawerEditCustomerNameBtn').classList.add('d-none');
+            document.getElementById('drawerCustomerEditWrap').classList.add('d-none');
+            document.getElementById('drawerCustomerEditWrap').classList.remove('d-flex');
+            document.getElementById('drawerCustomerNameRow').classList.remove('d-none');
             document.getElementById('drawerServices').innerHTML = '';
             document.getElementById('drawerUpsells').innerHTML = '';
             document.getElementById('drawerStatusRow').innerHTML = '';
@@ -2419,6 +2440,10 @@
             const isFinal = isCancelledOrNoShow || (a.status === 'completed' && isPaid);
 
             document.getElementById('drawerCustomer').textContent = a.customer_name || 'Walk-in';
+            document.getElementById('drawerEditCustomerNameBtn').classList.toggle('d-none', !CAN_EDIT_BOOKINGS || !a.customer_id);
+            document.getElementById('drawerCustomerEditWrap').classList.add('d-none');
+            document.getElementById('drawerCustomerEditWrap').classList.remove('d-flex');
+            document.getElementById('drawerCustomerNameRow').classList.remove('d-none');
             document.getElementById('drawerPhone').textContent = a.phone;
             document.getElementById('drawerDatetime').textContent = a.appointment_datetime;
             document.getElementById('drawerBranch').textContent = a.branch;
@@ -2497,6 +2522,87 @@
             document.getElementById('drawerRescheduleTime').value = a.time;
             if (a.staff_id) document.getElementById('drawerRescheduleStaff').value = a.staff_id;
         }
+
+        (function initDrawerCustomerRename() {
+            const editBtn = document.getElementById('drawerEditCustomerNameBtn');
+            const nameRow = document.getElementById('drawerCustomerNameRow');
+            const editWrap = document.getElementById('drawerCustomerEditWrap');
+            const nameInput = document.getElementById('drawerCustomerNameInput');
+            const saveBtn = document.getElementById('drawerSaveCustomerNameBtn');
+            const cancelBtn = document.getElementById('drawerCancelCustomerNameBtn');
+
+            if (!editBtn || !editWrap || !nameInput) return;
+
+            function openEdit() {
+                if (!lastDrawerData || !lastDrawerData.customer_id) return;
+                nameInput.value = lastDrawerData.customer_name || '';
+                nameRow.classList.add('d-none');
+                editWrap.classList.remove('d-none');
+                editWrap.classList.add('d-flex');
+                nameInput.focus();
+                nameInput.select();
+            }
+
+            function closeEdit() {
+                editWrap.classList.add('d-none');
+                editWrap.classList.remove('d-flex');
+                nameRow.classList.remove('d-none');
+            }
+
+            function submitEdit() {
+                if (!lastDrawerData || !lastDrawerData.customer_id) return;
+                const trimmed = nameInput.value.trim();
+                if (trimmed.length < 2) {
+                    showCalToast('Client name must be at least 2 characters.', 'error');
+                    nameInput.focus();
+                    return;
+                }
+
+                saveBtn.disabled = true;
+                fetch(`/enhanced-calendar/clients/${encodeURIComponent(lastDrawerData.customer_id)}/update-name`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ name: trimmed })
+                })
+                .then(async r => {
+                    const data = await r.json().catch(() => ({}));
+                    if (!r.ok || !data.success) {
+                        const msg = (data.errors && data.errors.name && data.errors.name[0])
+                            || data.message
+                            || 'Could not update client name.';
+                        throw new Error(msg);
+                    }
+                    lastDrawerData.customer_name = data.customer.name;
+                    document.getElementById('drawerCustomer').textContent = data.customer.name;
+                    closeEdit();
+                    showCalToast('Client name updated');
+                    loadCalendar();
+                })
+                .catch(err => {
+                    showCalToast(err.message || 'Could not update client name.', 'error');
+                })
+                .finally(() => {
+                    saveBtn.disabled = false;
+                });
+            }
+
+            editBtn.addEventListener('click', openEdit);
+            cancelBtn.addEventListener('click', closeEdit);
+            saveBtn.addEventListener('click', submitEdit);
+            nameInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submitEdit();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    closeEdit();
+                }
+            });
+        })();
 
         /* ---------------- DRAWER: SERVICE LIST / ADD / EDIT ---------------- */
         let editingServiceLineId = null;

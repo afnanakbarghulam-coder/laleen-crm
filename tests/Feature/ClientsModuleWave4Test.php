@@ -472,4 +472,116 @@ class ClientsModuleWave4Test extends TestCase
         $this->assertNotNull($scheduleAfter->first()->upcoming_appointment_date);
         $this->assertFalse($planner->dueQueue()->pluck('customer_id')->contains($customer->id));
     }
+
+    public function test_enhanced_calendar_quick_rename_updates_customer_and_syncs_leads_and_bookings_and_validates_empty_name(): void
+    {
+        $customer = Customer::create([
+            'name' => 'IG Lead #4821',
+            'phone' => '55994411',
+        ]);
+
+        // Linked Booking (by customer_id) and unlinked Booking (matched by phone)
+        $linkedBooking = Appointment::create([
+            'customer_id' => $customer->id,
+            'customer_name' => 'IG Lead #4821',
+            'phone' => '55994411',
+            'service_name' => 'HydraFacial',
+            'appointment_datetime' => Carbon::parse('2026-11-20 14:00:00'),
+            'booking_date' => '2026-11-20',
+            'start_time' => '14:00:00',
+            'status' => 'pending',
+            'branch' => 'old_airport',
+            'price' => 300,
+        ]);
+
+        $phoneMatchedBooking = Appointment::create([
+            'customer_id' => null,
+            'customer_name' => 'Random Placeholder',
+            'phone' => '+97455994411',
+            'service_name' => 'Blowdry',
+            'appointment_datetime' => Carbon::parse('2026-11-22 16:00:00'),
+            'booking_date' => '2026-11-22',
+            'start_time' => '16:00:00',
+            'status' => 'pending',
+            'branch' => 'old_airport',
+            'price' => 150,
+        ]);
+
+        // Unlinked Lead (matched by phone)
+        $lead = Lead::create([
+            'customer_id' => null,
+            'phone' => '55994411',
+            'category' => 'inquiry',
+            'service_interest' => ['HydraFacial'],
+        ]);
+
+        // Paid Ad Lead Entry (matched by phone)
+        $adLead = \App\Models\AdLeadEntry::create([
+            'date' => '2026-11-08',
+            'customer_id' => null,
+            'customer_name' => 'IG Lead #4821',
+            'phone' => '55994411',
+            'category' => 'Facial',
+            'ticket_amount' => 0,
+        ]);
+
+        // 1. Rejects empty or 1-character names with 422 validation errors
+        $this->actingAs($this->admin)
+            ->patchJson(route('enhanced-calendar.clients.update-name', $customer), [
+                'name' => '   ',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['name']);
+
+        $this->actingAs($this->admin)
+            ->patchJson(route('clients.quick-rename', $customer), [
+                'name' => 'A',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['name']);
+
+        // Name remains unchanged after invalid requests
+        $this->assertSame('IG Lead #4821', $customer->fresh()->name);
+
+        // 2. Valid inline quick-rename updates Customer profile + syncs Lead, AdLeadEntry, and Booking records
+        $response = $this->actingAs($this->admin)
+            ->patchJson(route('enhanced-calendar.clients.update-name', $customer), [
+                'name' => 'Sheikha Al-Thani',
+            ]);
+
+        $response->assertOk()
+            ->assertJson([
+                'success' => true,
+                'customer' => [
+                    'id' => $customer->id,
+                    'name' => 'Sheikha Al-Thani',
+                    'phone' => '55994411',
+                    'initials' => 'S',
+                ],
+            ]);
+
+        $customer->refresh();
+        $linkedBooking->refresh();
+        $phoneMatchedBooking->refresh();
+        $lead->refresh();
+        $adLead->refresh();
+
+        $this->assertSame('Sheikha Al-Thani', $customer->name);
+        $this->assertSame('Sheikha Al-Thani', $linkedBooking->customer_name);
+        $this->assertSame('Sheikha Al-Thani', $phoneMatchedBooking->customer_name);
+        $this->assertSame($customer->id, $phoneMatchedBooking->customer_id);
+        $this->assertSame($customer->id, $lead->customer_id);
+        $this->assertSame('Sheikha Al-Thani', $lead->customer->name);
+        $this->assertSame('Sheikha Al-Thani', $lead->customer_name);
+        $this->assertSame('Sheikha Al-Thani', $adLead->customer_name);
+        $this->assertSame($customer->id, $adLead->customer_id);
+
+        // 3. Verify Enhanced Calendar page renders the inline edit controls
+        $calPage = $this->actingAs($this->admin)->get(route('appointments.calendar'));
+        $calPage->assertOk()
+            ->assertSee('fbRailEditNameBtn', false)
+            ->assertSee('fbRailInlineNameInput', false)
+            ->assertSee('quickRenameCalendarClient', false)
+            ->assertSee('drawerEditCustomerNameBtn', false);
+    }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AdLeadEntry;
 use App\Models\Appointment;
 use App\Models\ClientPackage;
 use App\Models\Combo;
@@ -16,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class CustomerController extends Controller
@@ -879,6 +881,8 @@ class CustomerController extends Controller
 
     public function update(Request $request, Customer $customer)
     {
+        $previousPhone = (string) $customer->phone;
+
         if ($request->filled('phone')) {
             $normalizedPhone = Customer::normalizePhone($request->input('phone'));
             if ($normalizedPhone !== '') {
@@ -891,24 +895,144 @@ class CustomerController extends Controller
             'phone' => ['required', 'string', 'max:255', Rule::unique('customers', 'phone')->ignore($customer->id)],
         ]);
 
-        $customer->update($validated);
-
-        // Propagate updated client name and normalized phone to linked Appointments, Leads, and Complaints
-        Appointment::where('customer_id', $customer->id)->update([
-            'customer_name' => $customer->name,
-            'phone' => $customer->phone,
-        ]);
-
-        Lead::where('customer_id', $customer->id)->update([
-            'phone' => $customer->phone,
-        ]);
-
-        StaffComplaint::where('customer_id', $customer->id)->update([
-            'customer_name' => $customer->name,
-            'customer_phone' => $customer->phone,
-        ]);
+        DB::transaction(function () use ($customer, $validated, $previousPhone) {
+            $customer->update($validated);
+            $this->syncCustomerProfileAcrossModules($customer, $previousPhone);
+        });
 
         return back()->with('success', 'Client profile updated successfully.');
+    }
+
+    /**
+     * Inline quick-rename endpoint used by the Enhanced Calendar booking drawer
+     * ("Select a client" search list and selected client rail) and appointment drawer.
+     * Immediately updates the Customer's permanent profile and syncs linked Lead,
+     * Appointment/Booking, AdLeadEntry, and StaffComplaint records.
+     */
+    public function quickRename(Request $request, Customer|int|string $customer)
+    {
+        $user = $request->user();
+        if (!$user || (!$user->canEdit('bookings') && !$user->canEdit('clients'))) {
+            abort(403, 'You do not have permission to edit client profiles.');
+        }
+
+        $customerModel = $customer instanceof Customer
+            ? $customer
+            : Customer::findOrFail($customer);
+
+        if ($request->has('name')) {
+            $request->merge(['name' => trim((string) $request->input('name'))]);
+        }
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'min:2', 'max:120'],
+        ]);
+
+        DB::transaction(function () use ($customerModel, $validated) {
+            $customerModel->update([
+                'name' => $validated['name'],
+            ]);
+
+            $this->syncCustomerProfileAcrossModules($customerModel);
+        });
+
+        $customerModel->refresh();
+        $initials = $customerModel->name !== '' ? mb_strtoupper(mb_substr($customerModel->name, 0, 1)) : '?';
+
+        return response()->json([
+            'success' => true,
+            'customer' => [
+                'id' => $customerModel->id,
+                'name' => $customerModel->name,
+                'phone' => $customerModel->phone,
+                'initials' => $initials,
+            ],
+        ]);
+    }
+
+    /**
+     * Propagate a customer's real name and normalized phone across all linked
+     * Appointments/Bookings, Leads, AdLeadEntries, and StaffComplaints matched
+     * either by customer_id or normalized phone number.
+     */
+    private function syncCustomerProfileAcrossModules(Customer $customer, ?string $previousPhone = null): void
+    {
+        $normalizedPhone = Customer::normalizePhone($customer->phone);
+        $rawDigits = preg_replace('/\D+/', '', (string) $customer->phone);
+        $prevNormalized = $previousPhone ? Customer::normalizePhone($previousPhone) : '';
+        $prevRawDigits = $previousPhone ? preg_replace('/\D+/', '', $previousPhone) : '';
+
+        $phoneCandidates = array_values(array_unique(array_filter([
+            (string) $customer->phone,
+            $normalizedPhone,
+            $rawDigits,
+            $normalizedPhone !== '' ? '+974' . $normalizedPhone : null,
+            $normalizedPhone !== '' ? '974' . $normalizedPhone : null,
+            $previousPhone,
+            $prevNormalized,
+            $prevRawDigits,
+            $prevNormalized !== '' ? '+974' . $prevNormalized : null,
+            $prevNormalized !== '' ? '974' . $prevNormalized : null,
+        ])));
+
+        $canonicalPhone = $normalizedPhone !== '' ? $normalizedPhone : (string) $customer->phone;
+
+        // 1. Appointments / Bookings
+        Appointment::where(function ($q) use ($customer, $phoneCandidates) {
+            $q->where('customer_id', $customer->id);
+            if (!empty($phoneCandidates)) {
+                $q->orWhereIn('phone', $phoneCandidates);
+            }
+        })->update([
+            'customer_id' => $customer->id,
+            'customer_name' => $customer->name,
+            'phone' => $canonicalPhone,
+        ]);
+
+        // 2. Leads (link customer_id + normalize phone + update cached name columns if present)
+        $leadUpdate = [
+            'customer_id' => $customer->id,
+            'phone' => $canonicalPhone,
+        ];
+        if (Schema::hasColumn('leads', 'customer_name')) {
+            $leadUpdate['customer_name'] = $customer->name;
+        }
+        if (Schema::hasColumn('leads', 'name')) {
+            $leadUpdate['name'] = $customer->name;
+        }
+
+        Lead::where(function ($q) use ($customer, $phoneCandidates) {
+            $q->where('customer_id', $customer->id);
+            if (!empty($phoneCandidates)) {
+                $q->orWhereIn('phone', $phoneCandidates);
+            }
+        })->update($leadUpdate);
+
+        // 3. Paid Ad Lead Entries
+        if (Schema::hasTable('ad_lead_entries')) {
+            AdLeadEntry::where(function ($q) use ($customer, $phoneCandidates) {
+                $q->where('customer_id', $customer->id);
+                if (!empty($phoneCandidates)) {
+                    $q->orWhereIn('phone', $phoneCandidates);
+                }
+            })->update([
+                'customer_id' => $customer->id,
+                'customer_name' => $customer->name,
+                'phone' => $canonicalPhone,
+            ]);
+        }
+
+        // 4. Staff Complaints
+        StaffComplaint::where(function ($q) use ($customer, $phoneCandidates) {
+            $q->where('customer_id', $customer->id);
+            if (!empty($phoneCandidates)) {
+                $q->orWhereIn('customer_phone', $phoneCandidates);
+            }
+        })->update([
+            'customer_id' => $customer->id,
+            'customer_name' => $customer->name,
+            'customer_phone' => $canonicalPhone,
+        ]);
     }
 
     public function destroy(Customer $customer)

@@ -56,7 +56,7 @@
                          </div>
 
                          <div class="col-md-6">
-                             @include('leads._service-interest-select', ['uid' => 'add', 'services' => $services ?? [], 'selected' => []])
+                             @include('leads._service-interest-select', ['uid' => 'add', 'services' => $services ?? [], 'serviceCombos' => $serviceCombos ?? collect(), 'selected' => []])
                          </div>
                          <div class="col-md-6">
                              <label class="form-label">Next Follow-up Date <span class="text-danger">*</span></label>

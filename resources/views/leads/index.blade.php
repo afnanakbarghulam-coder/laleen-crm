@@ -79,6 +79,7 @@
     .lead-badge.cat-inquiry { background: rgba(138,166,171,.15); color: #8aa6ab; }
     .lead-badge.cat-no_show { background: rgba(201,166,107,.15); color: #c9a66b; }
     .lead-badge.cat-cancel { background: rgba(168,82,74,.15); color: #a8524a; }
+    .lead-badge.cat-combos_packages { background: rgba(201,166,107,.20); color: #f3d9a4; border: 1px solid rgba(201,166,107,.35); }
     .lead-badge.cat-more { background: rgba(201,166,107,.18); color: #f3d9a4; padding: 2px 6px; }
 
     .leads-compact-table {

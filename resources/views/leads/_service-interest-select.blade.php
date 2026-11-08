@@ -1,5 +1,7 @@
 @php
-    $selected = $selected ?? [];
+    $selected = is_array($selected ?? null) ? array_values(array_filter($selected)) : [];
+    $combosList = collect($serviceCombos ?? []);
+    $servicesList = collect($services ?? []);
 @endphp
 
 @once
@@ -52,11 +54,17 @@
         white-space: nowrap;
     }
 
+    .service-interest-pill.is-combo-pill {
+        background: rgba(201, 166, 107, 0.22);
+        color: #f3d9a4;
+        border: 1px solid rgba(201, 166, 107, 0.35);
+    }
+
     .service-interest-pill button {
         background: none;
         border: none;
-        color: #e79a91;
-        opacity: .7;
+        color: inherit;
+        opacity: .75;
         line-height: 1;
         padding: 0 2px;
         font-size: 15px;
@@ -110,8 +118,21 @@
     }
 
     .service-interest-list {
-        max-height: 240px;
+        max-height: 280px;
         overflow-y: auto;
+    }
+
+    .service-interest-section-header {
+        padding: 7px 14px 5px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #c9a66b;
+        background: rgba(201, 166, 107, 0.08);
+        border-top: 1px solid rgba(201, 166, 107, 0.16);
+        border-bottom: 1px solid rgba(201, 166, 107, 0.16);
+        user-select: none;
     }
 
     .service-interest-option {
@@ -134,6 +155,11 @@
         background: rgba(217, 143, 131, 0.1);
     }
 
+    .service-interest-option.is-combo-option.is-selected {
+        color: #f3d9a4;
+        background: rgba(201, 166, 107, 0.14);
+    }
+
     .service-interest-option .service-interest-check {
         display: none;
         color: #d98f83;
@@ -141,6 +167,14 @@
 
     .service-interest-option.is-selected .service-interest-check {
         display: inline;
+    }
+
+    .service-interest-combo-sub {
+        display: block;
+        font-size: 11px;
+        font-weight: 400;
+        color: #9b8b84;
+        margin-top: 1px;
     }
 
     .service-interest-empty {
@@ -187,16 +221,69 @@
 
     <div class="service-interest-panel" id="serviceInterestPanel-{{ $uid }}">
         <div class="service-interest-search-wrap">
-            <input type="text" id="serviceInterestSearch-{{ $uid }}" placeholder="Search services...">
+            <input type="text" id="serviceInterestSearch-{{ $uid }}" placeholder="Search combos or services...">
         </div>
         <div class="service-interest-list" id="serviceInterestList-{{ $uid }}">
-            @forelse ($services ?? [] as $serviceName)
-                <div class="service-interest-option {{ in_array($serviceName, $selected, true) ? 'is-selected' : '' }}" data-value="{{ $serviceName }}">
+            {{-- Section 1: 🎁 Service Combos (always visible and selectable alongside individual services) --}}
+            <div class="service-interest-section-header" data-section-header="combos">🎁 Service Combos</div>
+            @forelse ($combosList as $combo)
+                @php
+                    $comboName = is_object($combo) ? (string) $combo->name : (string) ($combo['name'] ?? $combo);
+                    $comboPrice = is_object($combo) ? (float) ($combo->price ?? 0) : (float) ($combo['price'] ?? 0);
+                    $formattedPrice = rtrim(rtrim(number_format($comboPrice, 2, '.', ''), '0'), '.');
+                    $comboLabel = "[Combo] {$comboName}" . ($comboPrice > 0 ? " ({$formattedPrice} QAR)" : '');
+                    $shortComboAlias = "[Combo] {$comboName}";
+                    $includedNames = (is_object($combo) && isset($combo->services) && $combo->services instanceof \Illuminate\Support\Collection)
+                        ? $combo->services->pluck('name')->filter()->values()->all()
+                        : [];
+
+                    // Support matching whether stored as full "[Combo] Name (Price QAR)", "[Combo] Name", or raw "Name"
+                    $matchedSelectedValue = null;
+                    foreach ($selected as $selItem) {
+                        $trimmedSel = trim((string) $selItem);
+                        if (
+                            strcasecmp($trimmedSel, $comboLabel) === 0
+                            || strcasecmp($trimmedSel, $shortComboAlias) === 0
+                            || strcasecmp($trimmedSel, $comboName) === 0
+                        ) {
+                            $matchedSelectedValue = $trimmedSel;
+                            break;
+                        }
+                    }
+                    $effectiveValue = $matchedSelectedValue ?: $comboLabel;
+                @endphp
+                <div class="service-interest-option is-combo-option {{ $matchedSelectedValue !== null ? 'is-selected' : '' }}"
+                    data-section="combos"
+                    data-type="combo"
+                    data-combo-name="{{ $comboName }}"
+                    data-value="{{ $effectiveValue }}">
+                    <div>
+                        <span>{{ $comboLabel }}</span>
+                        @if (!empty($includedNames))
+                            <small class="service-interest-combo-sub">Includes: {{ implode(', ', $includedNames) }}</small>
+                        @endif
+                    </div>
+                    <span class="service-interest-check"><i class="bx bx-check"></i></span>
+                </div>
+            @empty
+                <div class="service-interest-empty service-interest-combos-empty" data-section="combos">No combos configured yet.</div>
+            @endforelse
+
+            {{-- Section 2: ✂️ Individual Services --}}
+            <div class="service-interest-section-header" data-section-header="services">✂️ Individual Services</div>
+            @forelse ($servicesList as $serviceItem)
+                @php
+                    $serviceName = is_object($serviceItem) ? (string) $serviceItem->name : (string) $serviceItem;
+                @endphp
+                <div class="service-interest-option {{ in_array($serviceName, $selected, true) ? 'is-selected' : '' }}"
+                    data-section="services"
+                    data-type="service"
+                    data-value="{{ $serviceName }}">
                     <span>{{ $serviceName }}</span>
                     <span class="service-interest-check"><i class="bx bx-check"></i></span>
                 </div>
             @empty
-                <div class="service-interest-empty">No services available.</div>
+                <div class="service-interest-empty" data-section="services">No services available.</div>
             @endforelse
         </div>
         <div class="service-interest-footer">
@@ -244,7 +331,11 @@
 
                 selected.forEach(function (value) {
                     const pill = document.createElement('span');
-                    pill.className = 'service-interest-pill';
+                    const isCombo = value.toLowerCase().startsWith('[combo]') ||
+                        Array.from(list.querySelectorAll('.service-interest-option.is-combo-option')).some(function (opt) {
+                            return opt.dataset.value === value || opt.dataset.comboName === value;
+                        });
+                    pill.className = 'service-interest-pill' + (isCombo ? ' is-combo-pill' : '');
                     pill.innerHTML = '<span></span><button type="button" aria-label="Remove">&times;</button>';
                     pill.querySelector('span').textContent = value;
                     pill.querySelector('button').addEventListener('click', function (e) {
@@ -303,10 +394,28 @@
                 let anyVisible = false;
 
                 list.querySelectorAll('.service-interest-option').forEach(function (option) {
-                    const matches = option.dataset.value.toLowerCase().includes(normalized);
+                    const hay = (option.dataset.value + ' ' + option.textContent).toLowerCase();
+                    const matches = normalized === '' || hay.includes(normalized);
                     option.style.display = matches ? '' : 'none';
                     if (matches) {
                         anyVisible = true;
+                    }
+                });
+
+                // Always keep section headers visible when searching is blank or when options in that section match
+                list.querySelectorAll('[data-section-header]').forEach(function (header) {
+                    const sec = header.dataset.sectionHeader;
+                    if (sec === 'combos') {
+                        // Always keep 🎁 Service Combos section visible when search is empty or matches a combo
+                        const hasMatchingCombo = normalized === '' || Array.from(list.querySelectorAll('.service-interest-option[data-section="combos"]')).some(function (o) {
+                            return o.style.display !== 'none';
+                        });
+                        header.style.display = hasMatchingCombo ? '' : 'none';
+                    } else {
+                        const hasMatchingService = normalized === '' || Array.from(list.querySelectorAll('.service-interest-option[data-section="services"]')).some(function (o) {
+                            return o.style.display !== 'none';
+                        });
+                        header.style.display = hasMatchingService ? '' : 'none';
                     }
                 });
 
@@ -315,7 +424,7 @@
                     if (!emptyEl) {
                         emptyEl = document.createElement('div');
                         emptyEl.className = 'service-interest-empty service-interest-no-results';
-                        emptyEl.textContent = 'No matching services.';
+                        emptyEl.textContent = 'No matching combos or services.';
                         list.appendChild(emptyEl);
                     }
                 } else if (emptyEl) {
@@ -389,12 +498,6 @@
             document.querySelectorAll('.service-interest-multiselect').forEach(initServiceInterestMultiselect);
         }
 
-        // This deduplicated script block is emitted at the position of
-        // whichever instance of this partial appears FIRST in the document -
-        // which may be an edit-modal instance that comes before the Add Lead
-        // modal's markup. Running the query immediately would miss any
-        // instance that hasn't been parsed into the DOM yet, so wait for the
-        // full document instead.
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initAll);
         } else {

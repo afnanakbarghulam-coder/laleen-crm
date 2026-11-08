@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Appointment;
+use App\Models\Combo;
 use App\Models\Customer;
 use App\Models\Lead;
 use App\Models\Service;
@@ -1019,5 +1020,92 @@ class LeadsModulePatchesTest extends TestCase
         $this->assertStringContainsString('Balayage', (string) $apiResponse->json('bottleneck'));
         $this->assertStringContainsString('overdue', (string) $apiResponse->json('speed_alert'));
         $this->assertStringContainsString('1,550 QAR', (string) $apiResponse->json('recovery_play'));
+    }
+
+    public function test_leads_module_loads_service_combos_and_saves_combo_plus_individual_service_interest(): void
+    {
+        $user = $this->createAdminUser();
+
+        $service1 = Service::create(['name' => 'Hydra Facial', 'price' => 250, 'duration' => 60]);
+        $service2 = Service::create(['name' => 'Signature Blowdry', 'price' => 150, 'duration' => 45]);
+
+        $activeCombo = Combo::create([
+            'name' => 'Bridal Glow Package',
+            'price' => 550,
+            'quantity_included' => 2,
+            'validity_days' => 30,
+            'status' => 'active',
+        ]);
+        $activeCombo->services()->attach([$service1->id, $service2->id]);
+
+        $inactiveCombo = Combo::create([
+            'name' => 'Archived Winter Package',
+            'price' => 300,
+            'quantity_included' => 1,
+            'validity_days' => 15,
+            'status' => 'inactive',
+        ]);
+
+        // 1. Verify GET /leads loads both active combos and individual services into the Service Interest selector + Category dropdown
+        $indexResponse = $this->actingAs($user)->get(route('leads.index'));
+        $indexResponse->assertOk()
+            ->assertViewHas('serviceCombos', fn ($combos) => $combos->count() === 1 && $combos->first()->id === $activeCombo->id)
+            ->assertViewHas('services', fn ($services) => $services->count() === 2)
+            ->assertSee('🎁 Service Combos')
+            ->assertSee('✂️ Individual Services')
+            ->assertSee('[Combo] Bridal Glow Package (550 QAR)')
+            ->assertSee('Includes: Hydra Facial, Signature Blowdry')
+            ->assertDontSee('Archived Winter Package')
+            ->assertSee('Combos / Packages');
+
+        // 2. Create a lead with Category = 'combos_packages' and BOTH a Service Combo + an Individual Service
+        $storeResponse = $this->actingAs($user)->post(route('leads.store'), [
+            'country_code' => '974',
+            'phone_number' => '55889900',
+            'customer_name' => 'Noora Al-Thani',
+            'category' => 'combos_packages',
+            'service_interest' => [
+                '[Combo] Bridal Glow Package (550 QAR)',
+                'Hydra Facial',
+            ],
+            'customer_remarks' => 'Interested in Bridal Glow Package plus an extra Hydra Facial',
+            'next_followup_date' => now()->addDay()->format('Y-m-d'),
+        ]);
+
+        $storeResponse->assertRedirect(route('leads.index'));
+
+        $lead = Lead::where('phone', '55889900')->firstOrFail();
+        $this->assertEquals('combos_packages', $lead->category);
+        $this->assertEquals(['combos_packages'], $lead->categories);
+        $this->assertEquals([
+            '[Combo] Bridal Glow Package (550 QAR)',
+            'Hydra Facial',
+        ], $lead->service_interest);
+
+        // Verify the Leads list displays the saved combo and individual service and the Combos / Packages badge
+        $afterCreateResponse = $this->actingAs($user)->get(route('leads.index'));
+        $afterCreateResponse->assertOk()
+            ->assertSee('<span class="lead-badge cat-combos_packages">Combos / Packages</span>', false)
+            ->assertSee('[Combo] Bridal Glow Package (550 QAR)')
+            ->assertSee('Hydra Facial');
+
+        // 3. Update the lead with a combo alone and verify it saves cleanly
+        $updateResponse = $this->actingAs($user)->put(route('leads.update', $lead), [
+            'country_code' => '974',
+            'phone_number' => '55889900',
+            'customer_name' => 'Noora Al-Thani',
+            'categories' => ['combos_packages', 'inquiry'],
+            'service_interest' => [
+                '[Combo] Bridal Glow Package (550 QAR)',
+            ],
+            'customer_remarks' => 'Confirmed she wants the Bridal Glow Package only',
+            'next_followup_date' => now()->addDays(2)->format('Y-m-d'),
+        ]);
+
+        $updateResponse->assertRedirect();
+
+        $lead->refresh();
+        $this->assertEquals(['[Combo] Bridal Glow Package (550 QAR)'], $lead->service_interest);
+        $this->assertContains('combos_packages', $lead->categories);
     }
 }

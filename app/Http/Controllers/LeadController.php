@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AdLeadEntry;
 use App\Models\Appointment;
+use App\Models\Combo;
 use App\Models\Customer;
 use App\Models\Lead;
 use App\Models\Service;
@@ -83,6 +84,12 @@ class LeadController extends Controller
         $leads = $query->orderBy('created_at', 'desc')->get();
         $agents = User::where('role', 'agent')->get();
         $services = Service::orderBy('name')->pluck('name');
+        $serviceCombos = Combo::with('services:id,name')
+            ->where(function ($q) {
+                $q->whereNull('status')->orWhere('status', 'active');
+            })
+            ->orderBy('name')
+            ->get();
         $overdueLeads = $this->overdueLeadsQuery()->orderBy('next_followup_date')->get();
         $unscheduledLeads = $this->unscheduledLeadsQuery()->orderByDesc('created_at')->get();
         $overdueCount = $overdueLeads->count();
@@ -99,6 +106,7 @@ class LeadController extends Controller
             'leads',
             'agents',
             'services',
+            'serviceCombos',
             'overdueLeads',
             'unscheduledLeads',
             'overdueCount',
@@ -140,6 +148,11 @@ class LeadController extends Controller
 
     public function store(Request $request)
     {
+        if ($request->filled('category')) {
+            $normalizedCat = Lead::normalizeCategories([$request->input('category')])[0] ?? $request->input('category');
+            $request->merge(['category' => $normalizedCat]);
+        }
+
         $request->validate([
             'country_code' => 'required|string|max:5',
             'phone_number' => 'required|string|max:20',
@@ -231,6 +244,14 @@ class LeadController extends Controller
 
     public function update(Request $request, Lead $lead)
     {
+        if ($request->filled('category')) {
+            $normalizedCat = Lead::normalizeCategories([$request->input('category')])[0] ?? $request->input('category');
+            $request->merge(['category' => $normalizedCat]);
+        }
+        if ($request->filled('categories') && is_array($request->input('categories'))) {
+            $request->merge(['categories' => Lead::normalizeCategories($request->input('categories'))]);
+        }
+
         $allowedCategories = array_unique(array_merge(
             array_keys(Lead::CATEGORIES),
             array_keys(Lead::MANUAL_CATEGORIES),
@@ -536,6 +557,17 @@ class LeadController extends Controller
                 $map[$key] = $service->price !== null && (float) $service->price > 0
                     ? (int) round((float) $service->price)
                     : 150;
+            }
+        }
+
+        foreach (Combo::query()->get(['name', 'price']) as $combo) {
+            $key = strtolower(trim((string) $combo->name));
+            if ($key !== '') {
+                $comboPrice = $combo->price !== null && (float) $combo->price > 0
+                    ? (int) round((float) $combo->price)
+                    : 250;
+                $map[$key] = $comboPrice;
+                $map['[combo] ' . $key] = $comboPrice;
             }
         }
 

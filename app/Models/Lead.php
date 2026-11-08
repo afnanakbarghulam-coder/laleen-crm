@@ -11,6 +11,7 @@ class Lead extends Model
         'follow_up' => 'Follow up',
         'no_show' => 'No Show',
         'cancel' => 'Cancelled',
+        'combos_packages' => 'Combos / Packages',
     ];
 
     /**
@@ -21,6 +22,7 @@ class Lead extends Model
         'no_show',
         'cancel',
         'follow_up',
+        'combos_packages',
         'inquiry',
     ];
 
@@ -32,6 +34,7 @@ class Lead extends Model
         'follow_up' => 'Follow up',
         'no_show' => 'No Show',
         'cancel' => 'Cancelled',
+        'combos_packages' => 'Combos / Packages',
     ];
 
     const NEEDFUL_STATUSES = [
@@ -156,7 +159,14 @@ class Lead extends Model
                     return '';
                 }
                 $trimmed = trim($c);
-                return strtolower($trimmed) === 'followup' ? 'follow_up' : $trimmed;
+                $lower = strtolower($trimmed);
+                if ($lower === 'followup') {
+                    return 'follow_up';
+                }
+                if (in_array($lower, ['combos / packages', 'combos_packages', 'combos', 'packages', 'combo'], true)) {
+                    return 'combos_packages';
+                }
+                return $trimmed;
             },
             $items
         ))));
@@ -292,6 +302,32 @@ class Lead extends Model
     public function customer()
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function getCustomerNameAttribute($value): ?string
+    {
+        if (is_string($value) && trim($value) !== '') {
+            return $value;
+        }
+
+        if ($this->customer_id) {
+            return $this->customer?->name;
+        }
+
+        if ($this->phone) {
+            return Customer::where('phone', $this->phone)->value('name');
+        }
+
+        return null;
+    }
+
+    public function getNameAttribute($value): ?string
+    {
+        if (is_string($value) && trim($value) !== '') {
+            return $value;
+        }
+
+        return $this->customer_name;
     }
 
     /**

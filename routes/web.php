@@ -194,6 +194,10 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // ---- Clients ----
+    Route::match(['patch', 'post', 'put'], '/enhanced-calendar/clients/{customer}/update-name', [CustomerController::class, 'quickRename'])->name('enhanced-calendar.clients.update-name');
+    Route::match(['patch', 'post', 'put'], '/clients/{customer}/quick-rename', [CustomerController::class, 'quickRename'])->name('clients.quick-rename');
+    Route::match(['patch', 'post', 'put'], '/customers/{customer}/quick-rename', [CustomerController::class, 'quickRename'])->name('customers.quick-rename');
+
     Route::middleware('module:clients')->group(function () {
         Route::get('/customers-lookup', [CustomerController::class, 'lookup'])->name('customers.lookup');
         Route::get('/customers-search', [CustomerController::class, 'search'])->name('customers.search');

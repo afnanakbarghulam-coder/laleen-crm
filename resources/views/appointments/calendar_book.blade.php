@@ -20,7 +20,7 @@
     }
 
     .fb-rail {
-        width: 108px;
+        width: 132px;
         flex-shrink: 0;
         border-right: 1px solid rgba(217, 143, 131,0.16);
         padding: 22px 10px;
@@ -52,11 +52,19 @@
         object-fit: cover;
     }
 
+    .fb-rail-label-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+    }
+
     .fb-rail .client-label {
         font-weight: 700;
         font-size: 12.5px;
         color: #e79a91;
         line-height: 1.2;
+        word-break: break-word;
     }
 
     .fb-rail .client-sub {
@@ -64,6 +72,66 @@
         color: #c9a39a;
         line-height: 1.2;
         margin-top: 2px;
+    }
+
+    .fb-rail-edit-btn,
+    .fb-client-edit-btn {
+        border: 1px solid rgba(217, 143, 131, 0.24);
+        background: rgba(217, 143, 131, 0.08);
+        color: #e79a91;
+        border-radius: 6px;
+        padding: 2px 5px;
+        font-size: 11px;
+        line-height: 1;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: all .15s ease;
+    }
+
+    .fb-rail-edit-btn:hover,
+    .fb-client-edit-btn:hover {
+        background: rgba(217, 143, 131, 0.2);
+        border-color: rgba(217, 143, 131, 0.45);
+    }
+
+    .fb-inline-name-input {
+        background: #1a1514 !important;
+        border: 1px solid rgba(217, 143, 131, 0.45) !important;
+        color: #f3e5e0 !important;
+        font-size: 12.5px !important;
+        padding: 4px 8px !important;
+        border-radius: 6px !important;
+    }
+
+    .fb-inline-save-btn,
+    .fb-inline-cancel-btn {
+        border: 1px solid rgba(217, 143, 131, 0.3);
+        border-radius: 6px;
+        padding: 3px 8px;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.1;
+        cursor: pointer;
+    }
+
+    .fb-inline-save-btn {
+        background: rgba(142, 168, 138, 0.22);
+        border-color: rgba(142, 168, 138, 0.5);
+        color: #b8d8b3;
+    }
+
+    .fb-inline-save-btn:hover {
+        background: rgba(142, 168, 138, 0.35);
+    }
+
+    .fb-inline-cancel-btn {
+        background: rgba(168, 82, 74, 0.18);
+        border-color: rgba(168, 82, 74, 0.45);
+        color: #e09b95;
+    }
+
+    .fb-inline-cancel-btn:hover {
+        background: rgba(168, 82, 74, 0.3);
     }
 
     .fb-content-col {
@@ -616,7 +684,24 @@
                         <i class="bx bx-user-plus"></i>
                     @endif
                 </div>
-                <div class="client-label" id="fbRailLabel">{{ !empty($bookingPrefill['customer_name']) ? $bookingPrefill['customer_name'] : 'Add client' }}</div>
+                <div class="fb-rail-label-row" id="fbRailLabelRow">
+                    <div class="client-label" id="fbRailLabel">{{ !empty($bookingPrefill['customer_name']) ? $bookingPrefill['customer_name'] : 'Add client' }}</div>
+                    <button type="button"
+                        class="fb-rail-edit-btn {{ !empty($bookingPrefill['customer_name']) ? '' : 'd-none' }}"
+                        id="fbRailEditNameBtn"
+                        title="Edit client name">✏️</button>
+                </div>
+                <div id="fbRailInlineEditWrap" class="d-none mt-1" onclick="event.stopPropagation()">
+                    <input type="text"
+                        id="fbRailInlineNameInput"
+                        class="form-control form-control-sm fb-inline-name-input text-center"
+                        maxlength="120"
+                        placeholder="Client name">
+                    <div class="d-flex justify-content-center gap-1 mt-1">
+                        <button type="button" class="fb-inline-save-btn" id="fbRailSaveNameBtn" title="Save name">✓</button>
+                        <button type="button" class="fb-inline-cancel-btn" id="fbRailCancelNameBtn" title="Cancel">✕</button>
+                    </div>
+                </div>
                 <div class="client-sub" id="fbRailSub">{{ !empty($bookingPrefill['phone']) ? $bookingPrefill['phone'] : 'Search or add a new client' }}</div>
             </div>
 
@@ -985,23 +1070,141 @@
             const icon = document.getElementById('fbRailIcon');
             const label = document.getElementById('fbRailLabel');
             const sub = document.getElementById('fbRailSub');
+            const editBtn = document.getElementById('fbRailEditNameBtn');
+            const inlineEditWrap = document.getElementById('fbRailInlineEditWrap');
+            const labelRow = document.getElementById('fbRailLabelRow');
 
             document.getElementById('bookCustomerNameHidden').value = selectedClient ? (selectedClient.name || '') : '';
             document.getElementById('bookPhoneHidden').value = selectedClient ? (selectedClient.phone || '') : '';
+
+            if (inlineEditWrap) inlineEditWrap.classList.add('d-none');
+            if (labelRow) labelRow.classList.remove('d-none');
 
             if (!selectedClient) {
                 icon.innerHTML = '<i class="bx bx-user-plus"></i>';
                 label.textContent = 'Add client';
                 sub.textContent = 'Search or add a new client';
+                if (editBtn) editBtn.classList.add('d-none');
                 return;
             }
 
             icon.innerHTML = selectedClient.name ? selectedClient.name.charAt(0).toUpperCase() : '?';
             label.textContent = selectedClient.name || 'Client';
             sub.textContent = selectedClient.phone || '';
+            if (editBtn) editBtn.classList.remove('d-none');
         }
 
+        window.quickRenameCalendarClient = function(customerId, newName) {
+            const trimmed = String(newName || '').trim();
+            return fetch(`/enhanced-calendar/clients/${encodeURIComponent(customerId)}/update-name`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ name: trimmed })
+            }).then(async r => {
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok || !data.success) {
+                    const msg = (data.errors && data.errors.name && data.errors.name[0])
+                        || data.message
+                        || 'Please enter a valid client name (at least 2 characters).';
+                    throw new Error(msg);
+                }
+                const updated = data.customer;
+                if (selectedClient && String(selectedClient.id) === String(updated.id)) {
+                    selectedClient.name = updated.name;
+                    fbUpdateRail();
+                }
+                if (typeof loadCalendar === 'function') {
+                    loadCalendar();
+                }
+                return updated;
+            });
+        };
+
         document.getElementById('fbRail').addEventListener('click', () => fbShowPanel('client'));
+
+        (function initRailInlineRename() {
+            const editBtn = document.getElementById('fbRailEditNameBtn');
+            const labelRow = document.getElementById('fbRailLabelRow');
+            const editWrap = document.getElementById('fbRailInlineEditWrap');
+            const nameInput = document.getElementById('fbRailInlineNameInput');
+            const saveBtn = document.getElementById('fbRailSaveNameBtn');
+            const cancelBtn = document.getElementById('fbRailCancelNameBtn');
+
+            if (!editBtn || !editWrap || !nameInput) return;
+
+            function openRailEdit(e) {
+                if (e) e.stopPropagation();
+                if (!selectedClient) return;
+                nameInput.value = selectedClient.name || '';
+                labelRow.classList.add('d-none');
+                editWrap.classList.remove('d-none');
+                nameInput.focus();
+                nameInput.select();
+            }
+
+            function closeRailEdit(e) {
+                if (e) e.stopPropagation();
+                editWrap.classList.add('d-none');
+                labelRow.classList.remove('d-none');
+            }
+
+            function submitRailEdit(e) {
+                if (e) e.stopPropagation();
+                if (!selectedClient) return;
+                const trimmed = nameInput.value.trim();
+                if (trimmed.length < 2) {
+                    if (typeof showCalToast === 'function') {
+                        showCalToast('Client name must be at least 2 characters.', 'error');
+                    }
+                    nameInput.focus();
+                    return;
+                }
+
+                if (selectedClient.id) {
+                    saveBtn.disabled = true;
+                    window.quickRenameCalendarClient(selectedClient.id, trimmed)
+                        .then(updated => {
+                            selectedClient.name = updated.name;
+                            fbUpdateRail();
+                            if (typeof showCalToast === 'function') {
+                                showCalToast('Client name updated');
+                            }
+                        })
+                        .catch(err => {
+                            if (typeof showCalToast === 'function') {
+                                showCalToast(err.message || 'Could not update client name.', 'error');
+                            }
+                        })
+                        .finally(() => {
+                            saveBtn.disabled = false;
+                        });
+                } else {
+                    selectedClient.name = trimmed;
+                    fbUpdateRail();
+                    if (typeof showCalToast === 'function') {
+                        showCalToast('Client name updated');
+                    }
+                }
+            }
+
+            editBtn.addEventListener('click', openRailEdit);
+            cancelBtn.addEventListener('click', closeRailEdit);
+            saveBtn.addEventListener('click', submitRailEdit);
+            nameInput.addEventListener('keydown', function(e) {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submitRailEdit(e);
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    closeRailEdit(e);
+                }
+            });
+        })();
 
         window.fbShowAddClientForm = function() {
             document.getElementById('fbAddClientForm').classList.remove('d-none');
@@ -1193,20 +1396,121 @@
                         box.innerHTML = '<div class="text-muted small px-2">No clients found.</div>';
                         return;
                     }
-                    box.innerHTML = list.map(c => `
-                        <div class="fb-client-row" data-id="${c.id}" data-name="${c.name.replace(/"/g,'&quot;')}" data-phone="${c.phone}">
-                            <div class="fb-client-avatar">${c.initials}</div>
-                            <div>
-                                <div class="fb-client-name">${c.name}</div>
-                                <div class="fb-client-phone">${c.phone}</div>
+                    box.innerHTML = list.map(c => {
+                        const safeName = String(c.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                        const safePhone = String(c.phone || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                        const safeInitials = String(c.initials || '?').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        return `
+                        <div class="fb-client-row" data-id="${c.id}" data-name="${safeName}" data-phone="${safePhone}">
+                            <div class="fb-client-avatar">${safeInitials}</div>
+                            <div class="flex-grow-1 min-w-0 fb-client-view-mode">
+                                <div class="fb-client-name">${safeName}</div>
+                                <div class="fb-client-phone">${safePhone}</div>
+                            </div>
+                            <button type="button" class="fb-client-edit-btn ms-auto" title="Edit name" aria-label="Edit client name">✏️</button>
+                            <div class="fb-client-edit-mode d-none flex-grow-1 d-flex align-items-center gap-1" onclick="event.stopPropagation()">
+                                <input type="text" class="form-control form-control-sm fb-inline-name-input fb-client-edit-input" value="${safeName}" maxlength="120" placeholder="Client name">
+                                <button type="button" class="fb-inline-save-btn fb-client-save-btn" title="Save name">✓</button>
+                                <button type="button" class="fb-inline-save-btn fb-client-save-select-btn" title="Save &amp; Select">✓ Select</button>
+                                <button type="button" class="fb-inline-cancel-btn fb-client-cancel-btn" title="Cancel">✕</button>
                             </div>
                         </div>
-                    `).join('');
+                        `;
+                    }).join('');
 
                     box.querySelectorAll('.fb-client-row').forEach(row => {
-                        row.addEventListener('click', () => fbSelectExistingClient({
-                            id: row.dataset.id, name: row.dataset.name, phone: row.dataset.phone
-                        }));
+                        const viewMode = row.querySelector('.fb-client-view-mode');
+                        const editBtn = row.querySelector('.fb-client-edit-btn');
+                        const editMode = row.querySelector('.fb-client-edit-mode');
+                        const editInput = row.querySelector('.fb-client-edit-input');
+                        const saveBtn = row.querySelector('.fb-client-save-btn');
+                        const saveSelectBtn = row.querySelector('.fb-client-save-select-btn');
+                        const cancelBtn = row.querySelector('.fb-client-cancel-btn');
+                        const nameEl = row.querySelector('.fb-client-name');
+                        const avatarEl = row.querySelector('.fb-client-avatar');
+
+                        row.addEventListener('click', () => {
+                            if (editMode && !editMode.classList.contains('d-none')) return;
+                            fbSelectExistingClient({
+                                id: row.dataset.id, name: row.dataset.name, phone: row.dataset.phone
+                            });
+                        });
+
+                        function enterEdit(e) {
+                            if (e) e.stopPropagation();
+                            editInput.value = row.dataset.name || '';
+                            viewMode.classList.add('d-none');
+                            editBtn.classList.add('d-none');
+                            editMode.classList.remove('d-none');
+                            editInput.focus();
+                            editInput.select();
+                        }
+
+                        function exitEdit(e) {
+                            if (e) e.stopPropagation();
+                            editMode.classList.add('d-none');
+                            viewMode.classList.remove('d-none');
+                            editBtn.classList.remove('d-none');
+                        }
+
+                        function performSave(e, selectAfterSave) {
+                            if (e) e.stopPropagation();
+                            const newName = editInput.value.trim();
+                            if (newName.length < 2) {
+                                if (typeof showCalToast === 'function') {
+                                    showCalToast('Client name must be at least 2 characters.', 'error');
+                                }
+                                editInput.focus();
+                                return;
+                            }
+
+                            saveBtn.disabled = true;
+                            if (saveSelectBtn) saveSelectBtn.disabled = true;
+
+                            window.quickRenameCalendarClient(row.dataset.id, newName)
+                                .then(updated => {
+                                    row.dataset.name = updated.name;
+                                    nameEl.textContent = updated.name;
+                                    avatarEl.textContent = updated.initials || (updated.name ? updated.name.charAt(0).toUpperCase() : '?');
+                                    exitEdit();
+                                    if (typeof showCalToast === 'function') {
+                                        showCalToast('Client name updated');
+                                    }
+                                    if (selectAfterSave) {
+                                        fbSelectExistingClient({
+                                            id: updated.id,
+                                            name: updated.name,
+                                            phone: updated.phone
+                                        });
+                                    }
+                                })
+                                .catch(err => {
+                                    if (typeof showCalToast === 'function') {
+                                        showCalToast(err.message || 'Could not update client name.', 'error');
+                                    }
+                                })
+                                .finally(() => {
+                                    saveBtn.disabled = false;
+                                    if (saveSelectBtn) saveSelectBtn.disabled = false;
+                                });
+                        }
+
+                        editBtn.addEventListener('click', enterEdit);
+                        cancelBtn.addEventListener('click', exitEdit);
+                        saveBtn.addEventListener('click', e => performSave(e, false));
+                        if (saveSelectBtn) {
+                            saveSelectBtn.addEventListener('click', e => performSave(e, true));
+                        }
+                        editInput.addEventListener('keydown', function(e) {
+                            e.stopPropagation();
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                performSave(e, false);
+                            } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                exitEdit(e);
+                            }
+                        });
                     });
                 });
         }

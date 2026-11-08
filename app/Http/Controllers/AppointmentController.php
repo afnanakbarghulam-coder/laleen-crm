@@ -2345,6 +2345,15 @@ class AppointmentController extends Controller
         $upsellLines = $appointment->upsells->map(fn($u) => $this->formatUpsellLine($u))->values()->all();
 
         $customer = $appointment->customer;
+        if (!$customer && $appointment->phone) {
+            $normalizedPhone = Customer::normalizePhone($appointment->phone);
+            $customer = Customer::where('phone', $normalizedPhone)
+                ->orWhere('phone', $appointment->phone)
+                ->first();
+            if ($customer && !$appointment->customer_id) {
+                $appointment->update(['customer_id' => $customer->id]);
+            }
+        }
         $recentVisits = [];
         if ($customer) {
             $recentVisits = $customer->appointments()
