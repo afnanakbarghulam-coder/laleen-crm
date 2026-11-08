@@ -16,6 +16,7 @@ use App\Models\StaffOvertimeEntry;
 use App\Support\StaffPayrollCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -288,45 +289,48 @@ class StaffController extends Controller
 
     public function destroy(Staff $staff)
     {
-        if ($staff->user_id) {
-            User::where('id', $staff->user_id)->update(['is_active' => false]);
-        }
-
-        // Move any open/upcoming appointments assigned to this staff member
-        // into the Unscheduled Queue (start_time = null) so deleting a staff
-        // member never leaves invisible ghost bookings on the Calendar.
-        $openAppointments = Appointment::with('appointmentServices')
-            ->whereNotIn('status', ['completed', 'cancelled', 'no_show'])
-            ->where(function ($q) use ($staff) {
-                $q->where('staff_id', $staff->id)
-                    ->orWhereHas('appointmentServices', fn ($sq) => $sq->where('staff_id', $staff->id));
-            })
-            ->get();
-
-        foreach ($openAppointments as $appointment) {
-            AppointmentService::where('appointment_id', $appointment->id)
-                ->where('staff_id', $staff->id)
-                ->update(['staff_id' => null]);
-
-            $remainingStaffId = AppointmentService::where('appointment_id', $appointment->id)
-                ->whereNotNull('staff_id')
-                ->value('staff_id');
-
-            if ($remainingStaffId) {
-                $appointment->update(['staff_id' => $remainingStaffId]);
-            } else {
-                $bookingDate = $appointment->booking_date
-                    ?: ($appointment->appointment_datetime ? Carbon::parse($appointment->appointment_datetime)->toDateString() : now()->toDateString());
-
-                $appointment->update([
-                    'staff_id' => null,
-                    'start_time' => null,
-                    'booking_date' => $bookingDate,
-                ]);
+        DB::transaction(function () use ($staff) {
+            if ($staff->user_id) {
+                User::where('id', $staff->user_id)->update(['is_active' => false]);
             }
-        }
 
-        $staff->delete();
+            // Move any open/upcoming appointments assigned to this staff member
+            // into the Unscheduled Queue (start_time = null) so deleting a staff
+            // member never leaves invisible ghost bookings on the Calendar.
+            $openAppointments = Appointment::with('appointmentServices')
+                ->whereNotIn('status', ['completed', 'cancelled', 'no_show'])
+                ->where(function ($q) use ($staff) {
+                    $q->where('staff_id', $staff->id)
+                        ->orWhereHas('appointmentServices', fn ($sq) => $sq->where('staff_id', $staff->id));
+                })
+                ->get();
+
+            foreach ($openAppointments as $appointment) {
+                AppointmentService::where('appointment_id', $appointment->id)
+                    ->where('staff_id', $staff->id)
+                    ->update(['staff_id' => null]);
+
+                $remainingStaffId = AppointmentService::where('appointment_id', $appointment->id)
+                    ->whereNotNull('staff_id')
+                    ->value('staff_id');
+
+                if ($remainingStaffId) {
+                    $appointment->update(['staff_id' => $remainingStaffId]);
+                } else {
+                    $bookingDate = $appointment->booking_date
+                        ?: ($appointment->appointment_datetime ? Carbon::parse($appointment->appointment_datetime)->toDateString() : now()->toDateString());
+
+                    $appointment->update([
+                        'staff_id' => null,
+                        'start_time' => null,
+                        'booking_date' => $bookingDate,
+                    ]);
+                }
+            }
+
+            $staff->delete();
+        });
+
         return redirect()->back()->with('success', 'Staff removed.');
     }
 
@@ -361,25 +365,28 @@ class StaffController extends Controller
             : ($payrollBranch === 'wakrah' ? 'Al Wakrah' : 'All Branches');
         $description = sprintf('%s Staff Payroll (%d staff) %s', $branchLabel, $rows->count(), $tag);
 
-        $existingQuery = Expense::where('category', 'Salaries & Wages')
-            ->where('description', 'like', '%' . $tag . '%');
+        $expense = DB::transaction(function () use ($tag, $payrollBranch, $totalNetPayroll, $to, $description) {
+            $existingQuery = Expense::where('category', 'Salaries & Wages')
+                ->where('description', 'like', '%' . $tag . '%');
 
-        if ($payrollBranch) {
-            $existingQuery->where('branch', $payrollBranch);
-        } else {
-            $existingQuery->whereNull('branch');
-        }
+            if ($payrollBranch) {
+                $existingQuery->where('branch', $payrollBranch);
+            } else {
+                $existingQuery->whereNull('branch');
+            }
 
-        $expense = $existingQuery->first();
+            $existing = $existingQuery->lockForUpdate()->first();
 
-        if ($expense) {
-            $expense->update([
-                'amount' => $totalNetPayroll,
-                'expense_date' => $to->toDateString(),
-                'description' => $description,
-            ]);
-        } else {
-            $expense = Expense::create([
+            if ($existing) {
+                $existing->update([
+                    'amount' => $totalNetPayroll,
+                    'expense_date' => $to->toDateString(),
+                    'description' => $description,
+                ]);
+                return $existing;
+            }
+
+            return Expense::create([
                 'branch' => $payrollBranch,
                 'category' => 'Salaries & Wages',
                 'amount' => $totalNetPayroll,
@@ -387,7 +394,7 @@ class StaffController extends Controller
                 'description' => $description,
                 'created_by' => auth()->id(),
             ]);
-        }
+        });
 
         if ($request->wantsJson()) {
             return response()->json([

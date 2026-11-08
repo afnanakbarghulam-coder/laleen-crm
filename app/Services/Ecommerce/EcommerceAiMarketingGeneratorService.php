@@ -486,7 +486,7 @@ class EcommerceAiMarketingGeneratorService
                 . "Knowledge Base:\n{$kb}\n\n"
                 . "Return a JSON array of 3 punchy 3-second hook variations for our top SKU. Keep each under 22 words.";
 
-            $response = Http::connectTimeout(4)
+            $response = Http::connectTimeout(5)
                 ->timeout(8)
                 ->when(app()->environment('local'), fn ($h) => $h->withoutVerifying())
                 ->post($endpoint, [

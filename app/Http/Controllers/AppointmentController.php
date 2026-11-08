@@ -537,7 +537,8 @@ class AppointmentController extends Controller
         $rawPhone = preg_replace('/\D/', '', (string) $phone);
         [$countryCode, $localNumber] = Lead::splitPhone($rawPhone);
         $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
-        $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $rawPhone])));
+        $withQatarCode = strlen($normalizedPhone) === 8 ? '974' . $normalizedPhone : null;
+        $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $rawPhone, $withQatarCode])));
 
         if (empty($phoneCandidates)) {
             return null;

@@ -583,6 +583,7 @@ PROMPT;
             try {
                 $model = config('services.openai.model', 'gpt-4o-mini');
                 $response = Http::withToken($openAiKey)
+                    ->connectTimeout(5)
                     ->timeout(20)
                     ->post('https://api.openai.com/v1/chat/completions', [
                         'model' => $model,
@@ -615,7 +616,7 @@ PROMPT;
         if (!empty($geminiKey)) {
             try {
                 $model = config('services.gemini.model', 'gemini-3.5-flash-lite');
-                $response = Http::timeout(20)->post(
+                $response = Http::connectTimeout(5)->timeout(20)->post(
                     "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$geminiKey}",
                     [
                         'contents' => [
@@ -784,6 +785,7 @@ Start with "🧠 Today's Top Money Moves:".
 PROMPT;
                 $model = config('services.openai.model', 'gpt-4o-mini');
                 $response = Http::withToken($openAiKey)
+                    ->connectTimeout(5)
                     ->timeout(15)
                     ->post('https://api.openai.com/v1/chat/completions', [
                         'model' => $model,
@@ -853,6 +855,7 @@ Return ONLY valid JSON with these exact 3 keys (1-2 punchy sentences per key, ci
 PROMPT;
                 $model = config('services.openai.model', 'gpt-4o-mini');
                 $response = Http::withToken($openAiKey)
+                    ->connectTimeout(5)
                     ->timeout(20)
                     ->post('https://api.openai.com/v1/chat/completions', [
                         'model' => $model,
@@ -976,6 +979,7 @@ PROMPT;
             try {
                 $model = config('services.openai.model', 'gpt-4o-mini');
                 $response = Http::withToken($openAiKey)
+                    ->connectTimeout(5)
                     ->timeout(15)
                     ->post('https://api.openai.com/v1/chat/completions', [
                         'model' => $model,

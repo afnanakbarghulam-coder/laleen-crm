@@ -1625,7 +1625,7 @@ HTML;
         if ($allowExternalApi) {
             foreach ($seeds as $seed) {
                 try {
-                    $response = Http::withoutVerifying()->timeout(5)->get('https://suggestqueries.google.com/complete/search', [
+                    $response = Http::withoutVerifying()->connectTimeout(5)->timeout(5)->get('https://suggestqueries.google.com/complete/search', [
                         'client' => 'firefox',
                         'gl' => $gl,
                         'hl' => 'en',
@@ -1643,7 +1643,7 @@ HTML;
                         }
                     }
                 } catch (\Throwable $e) {
-                    Log::info("Google Autocomplete discovery fallback for seed [{$seed}]: " . $e->getMessage());
+                    Log::warning("Google Autocomplete discovery fallback for seed [{$seed}]: " . $e->getMessage());
                 }
             }
         }
@@ -2283,7 +2283,7 @@ HTML;
             // 1. First attempt Google Imagen 3 (imagen-3.0-generate-002 with aspectRatio 16:9 and personGeneration dont_allow)
             try {
                 $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key={$apiKey}";
-                $response = Http::withoutVerifying()->timeout(20)->post($endpoint, [
+                $response = Http::withoutVerifying()->connectTimeout(5)->timeout(20)->post($endpoint, [
                     'instances' => [
                         ['prompt' => $prompt],
                     ],
@@ -2305,7 +2305,7 @@ HTML;
                     }
                 }
             } catch (\Throwable $e) {
-                Log::info("Imagen API cover generation fallback for Article #{$article->id}: " . $e->getMessage());
+                Log::warning("Imagen API cover generation fallback for Article #{$article->id}: " . $e->getMessage());
             }
 
             // 2. Secondary Google API check: Gemini 2.0 Flash Image Generation
@@ -2316,7 +2316,7 @@ HTML;
                     }
                     try {
                         $flashEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$flashModel}:generateContent?key={$apiKey}";
-                        $flashResponse = Http::withoutVerifying()->timeout(20)->post($flashEndpoint, [
+                        $flashResponse = Http::withoutVerifying()->connectTimeout(5)->timeout(20)->post($flashEndpoint, [
                             'contents' => [
                                 [
                                     'parts' => [
@@ -2343,7 +2343,7 @@ HTML;
                             }
                         }
                     } catch (\Throwable $e) {
-                        Log::info("Gemini Flash ({$flashModel}) image generation fallback for Article #{$article->id}: " . $e->getMessage());
+                        Log::warning("Gemini Flash ({$flashModel}) image generation fallback for Article #{$article->id}: " . $e->getMessage());
                     }
                 }
             }
@@ -2358,6 +2358,7 @@ HTML;
                     . '?width=1920&height=1140&model=flux-realism&nologo=true&enhance=false&seed='
                     . $seed;
                 $pollinationsResp = Http::withoutVerifying()
+                    ->connectTimeout(5)
                     ->retry(2, 1500, throw: false)
                     ->timeout(35)
                     ->get($pollinationsUrl);
@@ -2369,7 +2370,7 @@ HTML;
                     $imageBytes = $this->cropBottomWatermarkFromImageBytes($pollinationsResp->body(), 60);
                 }
             } catch (\Throwable $e) {
-                Log::info("Pollinations Flux Realism cover generation fallback for Article #{$article->id}: " . $e->getMessage());
+                Log::warning("Pollinations Flux Realism cover generation fallback for Article #{$article->id}: " . $e->getMessage());
             }
         }
 
@@ -2388,12 +2389,12 @@ HTML;
                     $editorialUrl = 'https://images.unsplash.com/photo-1608248597359-0e6d526a6828?auto=format&fit=crop&w=1920&h=1080&q=100';
                 }
 
-                $editorialResp = Http::withoutVerifying()->timeout(15)->get($editorialUrl);
+                $editorialResp = Http::withoutVerifying()->connectTimeout(5)->timeout(15)->get($editorialUrl);
                 if ($editorialResp->successful() && strlen($editorialResp->body()) > 5000) {
                     $imageBytes = $this->sharpenAndEncodeFullHdJpeg($editorialResp->body());
                 }
             } catch (\Throwable $e) {
-                Log::info("Editorial photo cover fallback for Article #{$article->id}: " . $e->getMessage());
+                Log::warning("Editorial photo cover fallback for Article #{$article->id}: " . $e->getMessage());
             }
         }
 
@@ -2417,6 +2418,7 @@ HTML;
     /**
      * Crop the bottom $cropPixels (default 60px -> 1920x1080 Full HD 16:9) off an image using PHP GD imagecrop(),
      * apply a crisp Unsharp Mask / Sharpening Convolution Filter, and re-encode at JPEG quality 100.
+     * Enforces memory_limit = 256M and try ... finally imagedestroy() cleanup.
      */
     protected function cropBottomWatermarkFromImageBytes(string $rawBytes, int $cropPixels = 60): string
     {
@@ -2424,65 +2426,76 @@ HTML;
             return $rawBytes;
         }
 
-        $src = @imagecreatefromstring($rawBytes);
-        if ($src === false) {
-            return $rawBytes;
-        }
+        @ini_set('memory_limit', '256M');
 
-        $width = imagesx($src);
-        $height = imagesy($src);
-        if ($width < 200 || $height <= $cropPixels + 100) {
-            imagedestroy($src);
+        $srcImg = false;
+        $croppedImg = false;
+        $canvas = false;
 
-            return $rawBytes;
-        }
+        try {
+            $srcImg = @imagecreatefromstring($rawBytes);
+            if ($srcImg === false) {
+                return $rawBytes;
+            }
 
-        $newHeight = $height - $cropPixels;
-        $cropped = false;
+            $width = imagesx($srcImg);
+            $height = imagesy($srcImg);
+            if ($width < 200 || $height <= $cropPixels + 100) {
+                return $rawBytes;
+            }
 
-        if (function_exists('imagecrop')) {
-            $cropped = @imagecrop($src, [
-                'x' => 0,
-                'y' => 0,
-                'width' => $width,
-                'height' => $newHeight,
-            ]);
-        }
+            $newHeight = $height - $cropPixels;
 
-        if ($cropped === false && function_exists('imagecreatetruecolor')) {
-            $cropped = @imagecreatetruecolor($width, $newHeight);
-            if ($cropped !== false) {
-                imagecopy($cropped, $src, 0, 0, 0, 0, $width, $newHeight);
+            if (function_exists('imagecrop')) {
+                $croppedImg = @imagecrop($srcImg, [
+                    'x' => 0,
+                    'y' => 0,
+                    'width' => $width,
+                    'height' => $newHeight,
+                ]);
+            }
+
+            if ($croppedImg === false && function_exists('imagecreatetruecolor')) {
+                $croppedImg = @imagecreatetruecolor($width, $newHeight);
+                if ($croppedImg !== false) {
+                    imagecopy($croppedImg, $srcImg, 0, 0, 0, 0, $width, $newHeight);
+                }
+            }
+
+            if ($croppedImg === false) {
+                return $rawBytes;
+            }
+
+            if ((imagesx($croppedImg) !== 1920 || imagesy($croppedImg) !== 1080) && function_exists('imagecreatetruecolor') && function_exists('imagecopyresampled')) {
+                $canvas = @imagecreatetruecolor(1920, 1080);
+                if ($canvas !== false) {
+                    imagecopyresampled($canvas, $croppedImg, 0, 0, 0, 0, 1920, 1080, imagesx($croppedImg), imagesy($croppedImg));
+                    @imagedestroy($croppedImg);
+                    $croppedImg = $canvas;
+                    $canvas = false;
+                }
+            }
+
+            if (function_exists('imageconvolution')) {
+                @imageconvolution($croppedImg, [[-1, -1, -1], [-1, 24, -1], [-1, -1, -1]], 16, 0);
+            }
+
+            ob_start();
+            imagejpeg($croppedImg, null, 100);
+            $croppedBytes = (string) ob_get_clean();
+
+            return strlen($croppedBytes) > 5000 ? $croppedBytes : $rawBytes;
+        } finally {
+            if ($srcImg !== false && (is_resource($srcImg) || $srcImg instanceof \GdImage)) {
+                @imagedestroy($srcImg);
+            }
+            if ($croppedImg !== false && (is_resource($croppedImg) || $croppedImg instanceof \GdImage)) {
+                @imagedestroy($croppedImg);
+            }
+            if ($canvas !== false && (is_resource($canvas) || $canvas instanceof \GdImage)) {
+                @imagedestroy($canvas);
             }
         }
-
-        if ($cropped === false) {
-            imagedestroy($src);
-
-            return $rawBytes;
-        }
-
-        if ((imagesx($cropped) !== 1920 || imagesy($cropped) !== 1080) && function_exists('imagecreatetruecolor') && function_exists('imagecopyresampled')) {
-            $resized = @imagecreatetruecolor(1920, 1080);
-            if ($resized !== false) {
-                imagecopyresampled($resized, $cropped, 0, 0, 0, 0, 1920, 1080, imagesx($cropped), imagesy($cropped));
-                imagedestroy($cropped);
-                $cropped = $resized;
-            }
-        }
-
-        if (function_exists('imageconvolution')) {
-            @imageconvolution($cropped, [[-1, -1, -1], [-1, 24, -1], [-1, -1, -1]], 16, 0);
-        }
-
-        ob_start();
-        imagejpeg($cropped, null, 100);
-        $croppedBytes = (string) ob_get_clean();
-
-        imagedestroy($src);
-        imagedestroy($cropped);
-
-        return strlen($croppedBytes) > 5000 ? $croppedBytes : $rawBytes;
     }
 
     /**
@@ -2494,21 +2507,29 @@ HTML;
             return $rawBytes;
         }
 
-        $img = @imagecreatefromstring($rawBytes);
-        if ($img === false) {
-            return $rawBytes;
+        @ini_set('memory_limit', '256M');
+
+        $srcImg = false;
+        try {
+            $srcImg = @imagecreatefromstring($rawBytes);
+            if ($srcImg === false) {
+                return $rawBytes;
+            }
+
+            if (function_exists('imageconvolution')) {
+                @imageconvolution($srcImg, [[-1, -1, -1], [-1, 24, -1], [-1, -1, -1]], 16, 0);
+            }
+
+            ob_start();
+            imagejpeg($srcImg, null, 100);
+            $encoded = (string) ob_get_clean();
+
+            return strlen($encoded) > 5000 ? $encoded : $rawBytes;
+        } finally {
+            if ($srcImg !== false && (is_resource($srcImg) || $srcImg instanceof \GdImage)) {
+                @imagedestroy($srcImg);
+            }
         }
-
-        if (function_exists('imageconvolution')) {
-            @imageconvolution($img, [[-1, -1, -1], [-1, 24, -1], [-1, -1, -1]], 16, 0);
-        }
-
-        ob_start();
-        imagejpeg($img, null, 100);
-        $encoded = (string) ob_get_clean();
-        imagedestroy($img);
-
-        return strlen($encoded) > 5000 ? $encoded : $rawBytes;
     }
 
     /**
@@ -2518,30 +2539,37 @@ HTML;
     protected function buildFallbackCoverImageBytes(EcommerceSeoArticle $article): string
     {
         if (function_exists('imagecreatetruecolor') && function_exists('imagejpeg')) {
+            @ini_set('memory_limit', '256M');
             $width = 1920;
             $height = 1080;
-            $img = @imagecreatetruecolor($width, $height);
-            if ($img !== false) {
-                $bgWarm = imagecolorallocate($img, 28, 21, 19);
-                $goldAccent = imagecolorallocate($img, 201, 166, 107);
-                $softRose = imagecolorallocate($img, 217, 143, 131);
-                $cream = imagecolorallocate($img, 246, 235, 230);
+            $canvas = false;
+            try {
+                $canvas = @imagecreatetruecolor($width, $height);
+                if ($canvas !== false) {
+                    $bgWarm = imagecolorallocate($canvas, 28, 21, 19);
+                    $goldAccent = imagecolorallocate($canvas, 201, 166, 107);
+                    $softRose = imagecolorallocate($canvas, 217, 143, 131);
+                    $cream = imagecolorallocate($canvas, 246, 235, 230);
 
-                imagefilledrectangle($img, 0, 0, $width, $height, $bgWarm);
-                imagerectangle($img, 40, 40, $width - 40, $height - 40, $goldAccent);
-                imagerectangle($img, 52, 52, $width - 52, $height - 52, $softRose);
-                imagefilledellipse($img, 960, 540, 380, 380, $goldAccent);
-                imagefilledellipse($img, 960, 540, 310, 310, $bgWarm);
-                imagefilledellipse($img, 960, 540, 140, 140, $softRose);
-                imagestring($img, 5, 840, 920, 'LALEEN RITUALS BOTANICALS', $cream);
+                    imagefilledrectangle($canvas, 0, 0, $width, $height, $bgWarm);
+                    imagerectangle($canvas, 40, 40, $width - 40, $height - 40, $goldAccent);
+                    imagerectangle($canvas, 52, 52, $width - 52, $height - 52, $softRose);
+                    imagefilledellipse($canvas, 960, 540, 380, 380, $goldAccent);
+                    imagefilledellipse($canvas, 960, 540, 310, 310, $bgWarm);
+                    imagefilledellipse($canvas, 960, 540, 140, 140, $softRose);
+                    imagestring($canvas, 5, 840, 920, 'LALEEN RITUALS BOTANICALS', $cream);
 
-                ob_start();
-                imagejpeg($img, null, 100);
-                $jpegBytes = (string) ob_get_clean();
-                imagedestroy($img);
+                    ob_start();
+                    imagejpeg($canvas, null, 100);
+                    $jpegBytes = (string) ob_get_clean();
 
-                if ($jpegBytes !== '') {
-                    return $jpegBytes;
+                    if ($jpegBytes !== '') {
+                        return $jpegBytes;
+                    }
+                }
+            } finally {
+                if ($canvas !== false && (is_resource($canvas) || $canvas instanceof \GdImage)) {
+                    @imagedestroy($canvas);
                 }
             }
         }
@@ -2656,6 +2684,7 @@ HTML;
                     'X-Shopify-Access-Token' => $accessToken ?: 'test-shopify-token',
                     'Content-Type' => 'application/json',
                 ])
+                    ->connectTimeout(5)
                     ->timeout(12)
                     ->put("https://{$shopDomain}/admin/api/2025-01/products/{$shopifyProductId}.json", [
                         'product' => [
@@ -2721,6 +2750,7 @@ HTML;
                 $blogsResp = Http::withHeaders([
                     'X-Shopify-Access-Token' => $accessToken ?: 'test-shopify-token',
                 ])
+                    ->connectTimeout(5)
                     ->timeout(10)
                     ->get("https://{$shopDomain}/admin/api/2025-01/blogs.json");
 
@@ -2731,6 +2761,7 @@ HTML;
                     'X-Shopify-Access-Token' => $accessToken ?: 'test-shopify-token',
                     'Content-Type' => 'application/json',
                 ])
+                    ->connectTimeout(5)
                     ->timeout(12)
                     ->post("https://{$shopDomain}/admin/api/2025-01/blogs/{$blogId}/articles.json", [
                         'article' => [

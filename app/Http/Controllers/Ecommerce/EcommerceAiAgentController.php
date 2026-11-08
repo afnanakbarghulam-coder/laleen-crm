@@ -914,7 +914,7 @@ class EcommerceAiAgentController extends Controller
         $token = (string) ($query['hub_verify_token'] ?? $query['hub.verify_token'] ?? $request->input('hub_verify_token') ?? '');
         $challenge = (string) ($query['hub_challenge'] ?? $query['hub.challenge'] ?? $request->input('hub_challenge') ?? '');
 
-        $expectedToken = (string) config('services.whatsapp.verify_token', env('WHATSAPP_VERIFY_TOKEN', 'laleen_whatsapp_verify_2026'));
+        $expectedToken = (string) config('services.whatsapp.verify_token', 'laleen_whatsapp_verify_2026');
 
         if ($mode === 'subscribe' && $expectedToken !== '' && hash_equals($expectedToken, $token)) {
             return response($challenge, 200)->header('Content-Type', 'text/plain');
@@ -929,11 +929,23 @@ class EcommerceAiAgentController extends Controller
      */
     public function inboundWebhook(Request $request): JsonResponse
     {
-        $configuredToken = config('services.whatsapp.webhook_token');
-        if ($configuredToken !== null && trim((string) $configuredToken) !== '') {
+        $configuredToken = trim((string) config('services.whatsapp.webhook_token', ''));
+        $configuredAppSecret = trim((string) config('services.whatsapp.app_secret', ''));
+
+        if ($configuredToken === '' && $configuredAppSecret === '' && app()->environment('production')) {
+            return response()->json(['error' => 'Unauthorized: WhatsApp webhook secret not configured in production.'], 401);
+        }
+
+        if ($configuredToken !== '') {
             $headerToken = (string) $request->header('X-Ecommerce-Webhook-Token', '');
-            if ($headerToken === '' || !hash_equals((string) $configuredToken, $headerToken)) {
+            if ($headerToken === '' || !hash_equals($configuredToken, $headerToken)) {
                 return response()->json(['error' => 'Unauthorized: Invalid X-Ecommerce-Webhook-Token.'], 401);
+            }
+        } elseif ($configuredAppSecret !== '') {
+            $signatureHeader = (string) $request->header('X-Hub-Signature-256', '');
+            $expectedSignature = 'sha256=' . hash_hmac('sha256', $request->getContent(), $configuredAppSecret);
+            if ($signatureHeader === '' || !hash_equals($expectedSignature, $signatureHeader)) {
+                return response()->json(['error' => 'Unauthorized: Invalid X-Hub-Signature-256.'], 401);
             }
         }
 

@@ -443,7 +443,7 @@ class BookingsCalendarFinanceWave1Test extends TestCase
             ],
         ])->assertRedirect();
 
-        $bookedAppt = Appointment::where('phone', '97455440001')->firstOrFail();
+        $bookedAppt = Appointment::whereIn('phone', ['97455440001', '55440001'])->firstOrFail();
         $this->assertEquals(500.0, (float) $bookedAppt->price);
 
         // 2. Create a completed + paid booking (300 QAR)

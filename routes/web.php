@@ -58,10 +58,10 @@ Route::get('/', function () {
 Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [UserController::class, 'dashboard'])->name('dashboard');
     Route::get('/command-center', [CommandCenterController::class, 'index'])->name('command-center.index');
-    Route::post('/command-center/ask', [CommandCenterController::class, 'ask'])->name('command-center.ask');
-    Route::post('/command-center/tts', [CommandCenterController::class, 'tts'])->name('command-center.tts');
+    Route::post('/command-center/ask', [CommandCenterController::class, 'ask'])->middleware('throttle:20,1')->name('command-center.ask');
+    Route::post('/command-center/tts', [CommandCenterController::class, 'tts'])->middleware('throttle:20,1')->name('command-center.tts');
     Route::get('/command-center/telemetry', [CommandCenterController::class, 'telemetry'])->name('command-center.telemetry');
-    Route::post('/ai-script/{leadId?}', [AiScriptController::class, 'generate'])->name('ai-script.generate');
+    Route::post('/ai-script/{leadId?}', [AiScriptController::class, 'generate'])->middleware('throttle:20,1')->name('ai-script.generate');
 
     Route::get('/profile', [UserController::class, 'profile_edit'])->name('profile.edit');
     Route::put('/profile', [UserController::class, 'profile_update'])->name('profile.update');
@@ -72,8 +72,8 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('module:leads')->group(function () {
         Route::get('/leads-analytics', [LeadController::class, 'analytics'])->name('leads.analytics');
         Route::get('/leads/analytics', [LeadController::class, 'analytics']);
-        Route::post('/leads/analytics/ai-diagnosis', [AiScriptController::class, 'generateAnalyticsDiagnosis'])->name('leads.analytics.ai-diagnosis');
-        Route::post('/leads/ai-morning-brief', [AiScriptController::class, 'generateMorningBrief'])->name('leads.ai-morning-brief');
+        Route::post('/leads/analytics/ai-diagnosis', [AiScriptController::class, 'generateAnalyticsDiagnosis'])->middleware('throttle:20,1')->name('leads.analytics.ai-diagnosis');
+        Route::post('/leads/ai-morning-brief', [AiScriptController::class, 'generateMorningBrief'])->middleware('throttle:20,1')->name('leads.ai-morning-brief');
         Route::get('/leads-check-followups', [LeadController::class, 'checkTodaysFollowUps'])->name('leads.check.followups');
         Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
     });
@@ -86,7 +86,7 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/leads/{lead}', [LeadController::class, 'destroy'])->name('leads.destroy');
     });
     Route::middleware('module:leads')->group(function () {
-        Route::post('/leads/{lead}/ai-script', [AiScriptController::class, 'generateForLead'])->name('leads.ai-script');
+        Route::post('/leads/{lead}/ai-script', [AiScriptController::class, 'generateForLead'])->middleware('throttle:20,1')->name('leads.ai-script');
         Route::get('/leads/{lead}', [LeadController::class, 'show'])->name('leads.show');
     });
 
@@ -155,7 +155,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/staff-complaints/{staffComplaint}/resolve', [StaffComplaintController::class, 'resolve'])->name('staff-complaints.resolve');
         Route::post('/complaints/{staffComplaint}/resolve', [StaffComplaintController::class, 'resolve'])->name('complaints.resolve');
         Route::post('/staff-complaints/{staffComplaint}/generate-notice', [StaffComplaintController::class, 'generateNotice'])->name('staff-complaints.generate-notice');
-        Route::post('/staff-complaints/{staffComplaint}/draft-notice-ai', [StaffComplaintController::class, 'draftNoticeAi'])->name('staff-complaints.draft-notice-ai');
+        Route::post('/staff-complaints/{staffComplaint}/draft-notice-ai', [StaffComplaintController::class, 'draftNoticeAi'])->middleware('throttle:20,1')->name('staff-complaints.draft-notice-ai');
 
         Route::post('/staff-deductions', [StaffDeductionController::class, 'store'])->name('staff-deductions.store');
         Route::put('/staff-deductions/{staffDeduction}', [StaffDeductionController::class, 'update'])->name('staff-deductions.update');
@@ -197,8 +197,8 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('module:clients')->group(function () {
         Route::get('/customers-lookup', [CustomerController::class, 'lookup'])->name('customers.lookup');
         Route::get('/customers-search', [CustomerController::class, 'search'])->name('customers.search');
-        Route::post('/customers/sync-retention-leads', [CustomerController::class, 'syncRetentionToLeads'])->name('customers.sync-retention-leads');
-        Route::post('/customers/{customer}/ai-retention-script', [AiScriptController::class, 'generateForMaintenance'])->name('customers.ai-retention-script');
+        Route::post('/customers/sync-retention-leads', [CustomerController::class, 'syncRetentionToLeads'])->middleware('throttle:20,1')->name('customers.sync-retention-leads');
+        Route::post('/customers/{customer}/ai-retention-script', [AiScriptController::class, 'generateForMaintenance'])->middleware('throttle:20,1')->name('customers.ai-retention-script');
         Route::get('/customers/{customer}/pending-packages', [CustomerController::class, 'pendingPackages'])->name('customers.pendingPackages');
         Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
         Route::get('/customers/beauty-planning', [CustomerController::class, 'beautyPlanning'])->name('customers.beauty-planning');
@@ -247,8 +247,8 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->delete('/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'destroy'])->name('ads-plan.destroy');
 
         Route::middleware('module:kpis,edit')->post('/ad-leads', [AdLeadEntryController::class, 'store'])->name('ad-leads.store');
-        Route::middleware('module:kpis')->post('/ad-leads/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script.inline');
-        Route::middleware('module:kpis')->post('/ad-leads/{adLeadEntry}/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script');
+        Route::middleware(['module:kpis', 'throttle:20,1'])->post('/ad-leads/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script.inline');
+        Route::middleware(['module:kpis', 'throttle:20,1'])->post('/ad-leads/{adLeadEntry}/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script');
         Route::middleware('module:kpis,edit')->put('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'update'])->name('ad-leads.update');
         Route::middleware('module:kpis,edit')->delete('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'destroy'])->name('ad-leads.destroy');
 
@@ -362,53 +362,53 @@ Route::middleware(['auth'])->group(function () {
                 Route::post('/customers/{customer}/mark-contacted', [EcommerceCustomerController::class, 'markContacted'])->name('customers.mark-contacted');
                 Route::match(['post', 'patch'], '/customers/flows/{flow}/toggle', [EcommerceCustomerController::class, 'toggleFlow'])->name('customers.flows.toggle');
                 Route::match(['post', 'patch'], '/customers/toggle-flow', [EcommerceCustomerController::class, 'toggleFlow'])->name('customers.toggle-flow');
-                Route::post('/customers/run-flows', [EcommerceCustomerController::class, 'runDueFlows'])->name('customers.run-flows');
-                Route::post('/customers/run-due-flows', [EcommerceCustomerController::class, 'runDueFlows'])->name('customers.run-due-flows');
-                Route::post('/customers/{customer}/send-ping', [EcommerceCustomerController::class, 'sendLifecyclePing'])->name('customers.send-ping');
-                Route::post('/customers/send-ping', [EcommerceCustomerController::class, 'sendLifecyclePing'])->name('customers.send-ping-form');
-                Route::post('/customers/send-newsletter', [EcommerceCustomerController::class, 'sendBlogNewsletter'])->name('customers.send-newsletter');
-                Route::post('/customers/send-blog-newsletter', [EcommerceCustomerController::class, 'sendBlogNewsletter'])->name('customers.send-blog-newsletter');
+                Route::post('/customers/run-flows', [EcommerceCustomerController::class, 'runDueFlows'])->middleware('throttle:20,1')->name('customers.run-flows');
+                Route::post('/customers/run-due-flows', [EcommerceCustomerController::class, 'runDueFlows'])->middleware('throttle:20,1')->name('customers.run-due-flows');
+                Route::post('/customers/{customer}/send-ping', [EcommerceCustomerController::class, 'sendLifecyclePing'])->middleware('throttle:20,1')->name('customers.send-ping');
+                Route::post('/customers/send-ping', [EcommerceCustomerController::class, 'sendLifecyclePing'])->middleware('throttle:20,1')->name('customers.send-ping-form');
+                Route::post('/customers/send-newsletter', [EcommerceCustomerController::class, 'sendBlogNewsletter'])->middleware('throttle:20,1')->name('customers.send-newsletter');
+                Route::post('/customers/send-blog-newsletter', [EcommerceCustomerController::class, 'sendBlogNewsletter'])->middleware('throttle:20,1')->name('customers.send-blog-newsletter');
 
                 // AI Sales & Retention Agent write routes
                 Route::post('/ai-agent/settings', [EcommerceAiAgentController::class, 'updateSettings'])->name('ai-agent.settings');
-                Route::post('/ai-agent/run-scan', [EcommerceAiAgentController::class, 'runOutreachScan'])->name('ai-agent.run-scan');
-                Route::post('/ai-agent/start-cold-chat', [EcommerceAiAgentController::class, 'startColdCustomerChat'])->name('ai-agent.start-cold-chat');
+                Route::post('/ai-agent/run-scan', [EcommerceAiAgentController::class, 'runOutreachScan'])->middleware('throttle:20,1')->name('ai-agent.run-scan');
+                Route::post('/ai-agent/start-cold-chat', [EcommerceAiAgentController::class, 'startColdCustomerChat'])->middleware('throttle:20,1')->name('ai-agent.start-cold-chat');
                 Route::post('/ai-agent/trigger-cod', [EcommerceAiAgentController::class, 'triggerCod'])->name('ai-agent.trigger-cod-order');
                 Route::post('/ai-agent/threads/{thread}/Trigger-cod', [EcommerceAiAgentController::class, 'triggerCod'])->name('ai-agent.trigger-cod');
                 Route::post('/ai-agent/threads/{thread}/trigger-cod', [EcommerceAiAgentController::class, 'triggerCod'])->name('ai-agent.trigger-cod.lower');
                 Route::post('/ai-agent/threads/{thread}/reset-chat', [EcommerceAiAgentController::class, 'resetThreadChat'])->name('ai-agent.threads.reset-chat');
                 Route::post('/ai-agent/messages/{message}/approve', [EcommerceAiAgentController::class, 'approveMessage'])->name('ai-agent.messages.approve');
                 Route::post('/ai-agent/threads/{thread}/send-manual', [EcommerceAiAgentController::class, 'sendManual'])->name('ai-agent.threads.send-manual');
-                Route::post('/ai-agent/threads/{thread}/simulate-inbound', [EcommerceAiAgentController::class, 'simulateInbound'])->name('ai-agent.threads.simulate-inbound');
+                Route::post('/ai-agent/threads/{thread}/simulate-inbound', [EcommerceAiAgentController::class, 'simulateInbound'])->middleware('throttle:20,1')->name('ai-agent.threads.simulate-inbound');
                 Route::post('/ai-agent/threads/{thread}/toggle-handoff', [EcommerceAiAgentController::class, 'toggleHandoff'])->name('ai-agent.threads.toggle-handoff');
 
                 // AI Ad Script (20-Video Kanban) & 4x7 Content Calendar Generator routes
-                Route::post('/marketing/ai-generate-ads', [EcommerceMarketingController::class, 'generateMonthlyAdsWithAi'])->name('hub.marketing.ai-generate-ads');
-                Route::post('/marketing/ai-generate-calendar', [EcommerceMarketingController::class, 'generateContentCalendarWithAi'])->name('hub.marketing.ai-generate-calendar');
+                Route::post('/marketing/ai-generate-ads', [EcommerceMarketingController::class, 'generateMonthlyAdsWithAi'])->middleware('throttle:20,1')->name('hub.marketing.ai-generate-ads');
+                Route::post('/marketing/ai-generate-calendar', [EcommerceMarketingController::class, 'generateContentCalendarWithAi'])->middleware('throttle:20,1')->name('hub.marketing.ai-generate-calendar');
 
                 // SEO Command Center & AI Agent write routes
-                Route::post('/seo-agent/optimize', [EcommerceSeoAgentController::class, 'optimizeTarget'])->name('seo-agent.optimize');
-                Route::post('/seo-agent/optimize-all', [EcommerceSeoAgentController::class, 'optimizeAll'])->name('seo-agent.optimize-all');
-                Route::post('/seo-agent/topical-map', [EcommerceSeoAgentController::class, 'generateTopicalMap'])->name('seo-agent.topical-map');
-                Route::post('/seo-agent/articles/{article}/generate', [EcommerceSeoAgentController::class, 'generateArticle'])->name('seo-agent.articles.generate');
-                Route::post('/seo-agent/generate-article', [EcommerceSeoAgentController::class, 'generateArticle'])->name('seo-agent.generate-article');
-                Route::post('/seo-agent/articles/{article}/generate-image', [EcommerceSeoAgentController::class, 'generateArticleImage'])->name('seo-agent.articles.generate-image');
-                Route::post('/seo-agent/generate-article-image', [EcommerceSeoAgentController::class, 'generateArticleImage'])->name('seo-agent.generate-article-image');
-                Route::post('/seo-agent/sync-gsc', [EcommerceSeoAgentController::class, 'syncSearchConsole'])->name('seo-agent.sync-gsc');
-                Route::post('/seo-agent/create-from-query', [EcommerceSeoAgentController::class, 'createArticleFromQuery'])->name('seo-agent.create-from-query');
-                Route::post('/seo-agent/queries/{searchQuery}/create-article', [EcommerceSeoAgentController::class, 'createArticleFromQuery'])->name('seo-agent.queries.create-article');
-                Route::post('/seo-agent/publish-product', [EcommerceSeoAgentController::class, 'publishProduct'])->name('seo-agent.publish-product');
-                Route::post('/seo-agent/audits/{audit}/publish', [EcommerceSeoAgentController::class, 'publishProduct'])->name('seo-agent.audits.publish');
-                Route::post('/seo-agent/publish-article', [EcommerceSeoAgentController::class, 'publishArticle'])->name('seo-agent.publish-article');
-                Route::post('/seo-agent/articles/{article}/publish', [EcommerceSeoAgentController::class, 'publishArticle'])->name('seo-agent.articles.publish');
+                Route::post('/seo-agent/optimize', [EcommerceSeoAgentController::class, 'optimizeTarget'])->middleware('throttle:20,1')->name('seo-agent.optimize');
+                Route::post('/seo-agent/optimize-all', [EcommerceSeoAgentController::class, 'optimizeAll'])->middleware('throttle:20,1')->name('seo-agent.optimize-all');
+                Route::post('/seo-agent/topical-map', [EcommerceSeoAgentController::class, 'generateTopicalMap'])->middleware('throttle:20,1')->name('seo-agent.topical-map');
+                Route::post('/seo-agent/articles/{article}/generate', [EcommerceSeoAgentController::class, 'generateArticle'])->middleware('throttle:20,1')->name('seo-agent.articles.generate');
+                Route::post('/seo-agent/generate-article', [EcommerceSeoAgentController::class, 'generateArticle'])->middleware('throttle:20,1')->name('seo-agent.generate-article');
+                Route::post('/seo-agent/articles/{article}/generate-image', [EcommerceSeoAgentController::class, 'generateArticleImage'])->middleware('throttle:20,1')->name('seo-agent.articles.generate-image');
+                Route::post('/seo-agent/generate-article-image', [EcommerceSeoAgentController::class, 'generateArticleImage'])->middleware('throttle:20,1')->name('seo-agent.generate-article-image');
+                Route::post('/seo-agent/sync-gsc', [EcommerceSeoAgentController::class, 'syncSearchConsole'])->middleware('throttle:20,1')->name('seo-agent.sync-gsc');
+                Route::post('/seo-agent/create-from-query', [EcommerceSeoAgentController::class, 'createArticleFromQuery'])->middleware('throttle:20,1')->name('seo-agent.create-from-query');
+                Route::post('/seo-agent/queries/{searchQuery}/create-article', [EcommerceSeoAgentController::class, 'createArticleFromQuery'])->middleware('throttle:20,1')->name('seo-agent.queries.create-article');
+                Route::post('/seo-agent/publish-product', [EcommerceSeoAgentController::class, 'publishProduct'])->middleware('throttle:20,1')->name('seo-agent.publish-product');
+                Route::post('/seo-agent/audits/{audit}/publish', [EcommerceSeoAgentController::class, 'publishProduct'])->middleware('throttle:20,1')->name('seo-agent.audits.publish');
+                Route::post('/seo-agent/publish-article', [EcommerceSeoAgentController::class, 'publishArticle'])->middleware('throttle:20,1')->name('seo-agent.publish-article');
+                Route::post('/seo-agent/articles/{article}/publish', [EcommerceSeoAgentController::class, 'publishArticle'])->middleware('throttle:20,1')->name('seo-agent.articles.publish');
                 Route::match(['post', 'delete'], '/seo-agent/delete-article', [EcommerceSeoAgentController::class, 'deleteArticle'])->name('seo-agent.delete-article');
                 Route::match(['post', 'delete'], '/seo-agent/articles/{article}', [EcommerceSeoAgentController::class, 'deleteArticle'])->name('seo-agent.articles.destroy');
                 Route::match(['post', 'delete'], '/seo-agent/delete-query', [EcommerceSeoAgentController::class, 'deleteSearchQuery'])->name('seo-agent.delete-query');
                 Route::match(['post', 'delete'], '/seo-agent/queries/{searchQuery}', [EcommerceSeoAgentController::class, 'deleteSearchQuery'])->name('seo-agent.queries.destroy');
             });
 
-            Route::post('/marketing/ai-generate-ads', [EcommerceMarketingController::class, 'generateMonthlyAdsWithAi'])->name('marketing.ai-generate-ads');
-            Route::post('/marketing/ai-generate-calendar', [EcommerceMarketingController::class, 'generateContentCalendarWithAi'])->name('marketing.ai-generate-calendar');
+            Route::post('/marketing/ai-generate-ads', [EcommerceMarketingController::class, 'generateMonthlyAdsWithAi'])->middleware('throttle:20,1')->name('marketing.ai-generate-ads');
+            Route::post('/marketing/ai-generate-calendar', [EcommerceMarketingController::class, 'generateContentCalendarWithAi'])->middleware('throttle:20,1')->name('marketing.ai-generate-calendar');
 
             Route::post('/kpis', [EcommerceController::class, 'storeKpi'])->name('kpis.store');
             Route::delete('/kpis/{kpi}', [EcommerceController::class, 'destroyKpi'])->name('kpis.destroy');

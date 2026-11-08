@@ -14,6 +14,8 @@ use App\Models\StaffComplaint;
 use App\Support\ClientMaintenancePlanner;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class CustomerController extends Controller
@@ -630,115 +632,119 @@ class CustomerController extends Controller
         $todayStart = now()->startOfDay();
 
         foreach ($targetCustomerIds as $cid) {
-            $customer = $customers->get($cid);
-            if (!$customer) {
-                continue;
-            }
-
-            $normalizedPhone = Customer::normalizePhone($customer->phone);
-            if ($normalizedPhone === '') {
-                continue;
-            }
-
-            $overdueRows = $overdueRowsByCustomer->get($cid, collect());
-            $dueDetail = $dueDetailsMap[$cid] ?? null;
-            $pkgDetail = $packageDetailsMap[$cid] ?? null;
-
-            $dueServices = $overdueRows->pluck('service_name')
-                ->map(fn ($s) => trim((string) $s))
-                ->filter()
-                ->unique()
-                ->values()
-                ->all();
-
-            if (empty($dueServices) && !empty($dueDetail['service_name'])) {
-                $dueServices = [trim((string) $dueDetail['service_name'])];
-            }
-
-            if (empty($dueServices) && !empty($pkgDetail['combo_name'])) {
-                $dueServices = [trim((string) $pkgDetail['combo_name'])];
-            }
-
-            $clientCompleted = $lastCompletedByCustomer->get($cid, collect());
-            if (empty($dueServices)) {
-                $favServices = $clientCompleted
-                    ->flatMap(fn ($a) => array_map('trim', explode(',', (string) $a->service_name)))
-                    ->filter(fn ($n) => $n !== '' && strcasecmp($n, 'Decide in Salon') !== 0)
-                    ->countBy()
-                    ->sortDesc();
-
-                $dueServices = $favServices->isNotEmpty()
-                    ? [$favServices->keys()->first()]
-                    : ['Signature Salon Service'];
-            }
-
-            if (isset($dueForRefillLookup[$cid]) || ($overdueRows->isNotEmpty() && !isset($bleedingLookup[$cid]) && !isset($packageRenewalLookup[$cid]))) {
-                $daysOverdue = (int) ($dueDetail['days_overdue'] ?? ($overdueRows->isNotEmpty() ? abs((int) $overdueRows->min('days_until')) : 0));
-                if ($daysOverdue > 0) {
-                    $radarNote = "[Refill Due] {$daysOverdue}d overdue";
-                } else {
-                    $daysUntil = max(0, (int) ($dueDetail['days_until'] ?? 0));
-                    $radarNote = $daysUntil === 0 ? '[Refill Due] due today' : "[Refill Due] due in {$daysUntil}d";
+            try {
+                $customer = $customers->get($cid);
+                if (!$customer) {
+                    continue;
                 }
-            } elseif (isset($packageRenewalLookup[$cid])) {
-                $rem = (int) ($pkgDetail['remaining'] ?? 1);
-                $sessionText = $rem === 1 ? '1 session left' : "{$rem} left";
-                $radarNote = "[Package Ending] {$sessionText}";
-            } else {
-                $lastVisitAt = $clientCompleted->first()?->appointment_datetime
-                    ? Carbon::parse($clientCompleted->first()->appointment_datetime)
-                    : null;
-                $daysAway = $lastVisitAt
-                    ? max(46, (int) floor(($todayStart->timestamp - $lastVisitAt->copy()->startOfDay()->timestamp) / 86400))
-                    : 46;
-                $netLtv = $salesLtv->has($cid)
-                    ? (float) $salesLtv->get($cid)
-                    : (float) $clientCompleted->sum(fn ($a) => (float) ($a->price ?? 0));
-                $ltvFormatted = number_format($netLtv, 0, '.', '');
-                $radarNote = "[Missing VIP] {$daysAway}d away · {$ltvFormatted} QAR";
+
+                $normalizedPhone = Customer::normalizePhone($customer->phone);
+                if ($normalizedPhone === '') {
+                    continue;
+                }
+
+                $overdueRows = $overdueRowsByCustomer->get($cid, collect());
+                $dueDetail = $dueDetailsMap[$cid] ?? null;
+                $pkgDetail = $packageDetailsMap[$cid] ?? null;
+
+                $dueServices = $overdueRows->pluck('service_name')
+                    ->map(fn ($s) => trim((string) $s))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                if (empty($dueServices) && !empty($dueDetail['service_name'])) {
+                    $dueServices = [trim((string) $dueDetail['service_name'])];
+                }
+
+                if (empty($dueServices) && !empty($pkgDetail['combo_name'])) {
+                    $dueServices = [trim((string) $pkgDetail['combo_name'])];
+                }
+
+                $clientCompleted = $lastCompletedByCustomer->get($cid, collect());
+                if (empty($dueServices)) {
+                    $favServices = $clientCompleted
+                        ->flatMap(fn ($a) => array_map('trim', explode(',', (string) $a->service_name)))
+                        ->filter(fn ($n) => $n !== '' && strcasecmp($n, 'Decide in Salon') !== 0)
+                        ->countBy()
+                        ->sortDesc();
+
+                    $dueServices = $favServices->isNotEmpty()
+                        ? [$favServices->keys()->first()]
+                        : ['Signature Salon Service'];
+                }
+
+                if (isset($dueForRefillLookup[$cid]) || ($overdueRows->isNotEmpty() && !isset($bleedingLookup[$cid]) && !isset($packageRenewalLookup[$cid]))) {
+                    $daysOverdue = (int) ($dueDetail['days_overdue'] ?? ($overdueRows->isNotEmpty() ? abs((int) $overdueRows->min('days_until')) : 0));
+                    if ($daysOverdue > 0) {
+                        $radarNote = "[Refill Due] {$daysOverdue}d overdue";
+                    } else {
+                        $daysUntil = max(0, (int) ($dueDetail['days_until'] ?? 0));
+                        $radarNote = $daysUntil === 0 ? '[Refill Due] due today' : "[Refill Due] due in {$daysUntil}d";
+                    }
+                } elseif (isset($packageRenewalLookup[$cid])) {
+                    $rem = (int) ($pkgDetail['remaining'] ?? 1);
+                    $sessionText = $rem === 1 ? '1 session left' : "{$rem} left";
+                    $radarNote = "[Package Ending] {$sessionText}";
+                } else {
+                    $lastVisitAt = $clientCompleted->first()?->appointment_datetime
+                        ? Carbon::parse($clientCompleted->first()->appointment_datetime)
+                        : null;
+                    $daysAway = $lastVisitAt
+                        ? max(46, (int) floor(($todayStart->timestamp - $lastVisitAt->copy()->startOfDay()->timestamp) / 86400))
+                        : 46;
+                    $netLtv = $salesLtv->has($cid)
+                        ? (float) $salesLtv->get($cid)
+                        : (float) $clientCompleted->sum(fn ($a) => (float) ($a->price ?? 0));
+                    $ltvFormatted = number_format($netLtv, 0, '.', '');
+                    $radarNote = "[Missing VIP] {$daysAway}d away · {$ltvFormatted} QAR";
+                }
+
+                $openLead = Lead::findOpenLeadByPhone($normalizedPhone, $customer->id);
+
+                if ($openLead) {
+                    $alreadyScheduledForToday = $openLead->next_followup_date && $openLead->next_followup_date->isSameDay($today);
+                    $existingServices = is_array($openLead->service_interest) ? $openLead->service_interest : [];
+                    $mergedServices = array_values(array_unique(array_filter(array_map('trim', array_merge($existingServices, $dueServices)))));
+                    $mergedCategories = $openLead->mergeCategories('followup');
+
+                    $existingRemarks = $this->convertLegacyRemarkString(trim((string) $openLead->customer_remarks), $customer->id);
+                    $newRemarks = $this->upsertRetentionTagInRemarks($existingRemarks, $radarNote);
+
+                    // Do not overwrite an existing open lead that already has a follow-up scheduled for today
+                    $nextFollowup = $alreadyScheduledForToday
+                        ? $openLead->next_followup_date
+                        : $today;
+
+                    $openLead->update([
+                        'customer_id' => $openLead->customer_id ?: $customer->id,
+                        'phone' => $openLead->phone ?: $normalizedPhone,
+                        'category' => Lead::resolvePrimaryCategory($mergedCategories) ?: 'follow_up',
+                        'categories' => $mergedCategories,
+                        'service_interest' => !empty($mergedServices) ? $mergedServices : $dueServices,
+                        'next_followup_date' => $nextFollowup,
+                        'needful_done' => null,
+                        'customer_remarks' => $newRemarks,
+                    ]);
+                    $openLead->touch();
+                } else {
+                    Lead::create([
+                        'phone' => $normalizedPhone,
+                        'customer_id' => $customer->id,
+                        'category' => 'follow_up',
+                        'categories' => ['follow_up'],
+                        'service_interest' => $dueServices,
+                        'next_followup_date' => $today,
+                        'customer_remarks' => $radarNote,
+                    ]);
+                }
+
+                $customer->update(['last_retention_contacted_at' => now()]);
+                $pushedCount++;
+            } catch (\Throwable $e) {
+                Log::warning('CustomerController::syncRetentionToLeads row error for customer #' . $cid . ': ' . $e->getMessage());
             }
-
-            $openLead = Lead::findOpenLeadByPhone($normalizedPhone, $customer->id);
-
-            if ($openLead) {
-                $alreadyScheduledForToday = $openLead->next_followup_date && $openLead->next_followup_date->isSameDay($today);
-                $existingServices = is_array($openLead->service_interest) ? $openLead->service_interest : [];
-                $mergedServices = array_values(array_unique(array_filter(array_map('trim', array_merge($existingServices, $dueServices)))));
-                $mergedCategories = $openLead->mergeCategories('followup');
-
-                $existingRemarks = $this->convertLegacyRemarkString(trim((string) $openLead->customer_remarks), $customer->id);
-                $newRemarks = $this->upsertRetentionTagInRemarks($existingRemarks, $radarNote);
-
-                // Do not overwrite an existing open lead that already has a follow-up scheduled for today
-                $nextFollowup = $alreadyScheduledForToday
-                    ? $openLead->next_followup_date
-                    : $today;
-
-                $openLead->update([
-                    'customer_id' => $openLead->customer_id ?: $customer->id,
-                    'phone' => $openLead->phone ?: $normalizedPhone,
-                    'category' => Lead::resolvePrimaryCategory($mergedCategories) ?: 'follow_up',
-                    'categories' => $mergedCategories,
-                    'service_interest' => !empty($mergedServices) ? $mergedServices : $dueServices,
-                    'next_followup_date' => $nextFollowup,
-                    'needful_done' => null,
-                    'customer_remarks' => $newRemarks,
-                ]);
-                $openLead->touch();
-            } else {
-                Lead::create([
-                    'phone' => $normalizedPhone,
-                    'customer_id' => $customer->id,
-                    'category' => 'follow_up',
-                    'categories' => ['follow_up'],
-                    'service_interest' => $dueServices,
-                    'next_followup_date' => $today,
-                    'customer_remarks' => $radarNote,
-                ]);
-            }
-
-            $customer->update(['last_retention_contacted_at' => now()]);
-            $pushedCount++;
         }
 
         $message = "Pushed {$pushedCount} high-value retention lead" . ($pushedCount === 1 ? '' : 's') . " into the Daily Action Queue.";

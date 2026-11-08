@@ -76,7 +76,7 @@ class EcommerceWhatsappTransportService
                 $headers['X-Ecommerce-Webhook-Token'] = (string) $webhookToken;
             }
 
-            $response = Http::timeout(10)
+            $response = Http::connectTimeout(5)->timeout(10)
                 ->withHeaders($headers)
                 ->when(app()->environment('local'), fn ($h) => $h->withoutVerifying())
                 ->post($url, [
@@ -183,7 +183,7 @@ class EcommerceWhatsappTransportService
                     ],
                 ];
 
-                $templateResponse = Http::timeout(12)
+                $templateResponse = Http::connectTimeout(5)->timeout(12)
                     ->withToken($token)
                     ->when(app()->environment('local'), fn ($h) => $h->withoutVerifying())
                     ->post($endpoint, $templatePayload);
@@ -203,7 +203,7 @@ class EcommerceWhatsappTransportService
                 ]);
             }
 
-            $response = Http::timeout(12)
+            $response = Http::connectTimeout(5)->timeout(12)
                 ->withToken($token)
                 ->when(app()->environment('local'), fn ($h) => $h->withoutVerifying())
                 ->post($endpoint, [

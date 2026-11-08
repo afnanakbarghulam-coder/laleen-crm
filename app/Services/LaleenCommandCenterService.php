@@ -1437,7 +1437,11 @@ class LaleenCommandCenterService
             ]);
 
             $ecomSales = EcommerceSale::with('product:id,name')
-                ->realizedRevenue()
+                ->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+                ->where(function ($q) {
+                    $q->whereNull('order_status')
+                        ->orWhereNotIn('order_status', EcommerceSale::INACTIVE_ORDER_STATUSES);
+                })
                 ->get(['id', 'ecommerce_product_id', 'order_group_id', 'customer_name', 'quantity', 'channel', 'total_price', 'unit_cogs']);
 
             $ecomTotalRevenue = round((float) $ecomSales->sum('total_price'), 2);

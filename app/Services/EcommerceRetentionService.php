@@ -222,62 +222,78 @@ class EcommerceRetentionService
         $dispatchedLogs = collect();
 
         foreach ($customers as $customer) {
-            $classification = $this->classifyCustomerLifecycle($customer);
-            $daysSince = $classification['days_since'];
+            try {
+                $classification = $this->classifyCustomerLifecycle($customer);
+                $daysSince = $classification['days_since'];
 
-            $matchedFlowKey = null;
-            if ($daysSince <= 2 && $enabledFlows->has(self::FLOW_COD_VERIFICATION_UPSELL)) {
-                $matchedFlowKey = self::FLOW_COD_VERIFICATION_UPSELL;
-            } elseif ($daysSince >= 3 && $daysSince <= 24 && $enabledFlows->has(self::FLOW_POST_PURCHASE_RITUAL_REVIEW)) {
-                $matchedFlowKey = self::FLOW_POST_PURCHASE_RITUAL_REVIEW;
-            } elseif ($daysSince >= 25 && $daysSince <= 45 && $enabledFlows->has(self::FLOW_REFILL_30D_REORDER)) {
-                $matchedFlowKey = self::FLOW_REFILL_30D_REORDER;
-            } elseif ($daysSince >= 46 && $enabledFlows->has(self::FLOW_WINBACK_60D)) {
-                $matchedFlowKey = self::FLOW_WINBACK_60D;
-            } elseif ($enabledFlows->has($classification['flow_key'])) {
-                $matchedFlowKey = $classification['flow_key'];
-            } else {
-                $matchedFlowKey = $enabledFlows->keys()->first();
-            }
-
-            if (!$matchedFlowKey || !$enabledFlows->has($matchedFlowKey)) {
-                continue;
-            }
-
-            /** @var EcommerceLifecycleFlow $flow */
-            $flow = $enabledFlows->get($matchedFlowKey);
-            $flowChannel = strtolower((string) $flow->channel);
-
-            if (in_array($flowChannel, ['email_and_whatsapp', 'email'], true) && !empty($customer->email)) {
-                $dedupKey = "{$customer->id}:{$flow->flow_key}:email";
-                if (empty($recentLogMap[$dedupKey])) {
-                    $dispatchedLogs->push(
-                        $this->dispatchLifecycleMessage($customer, 'email', $flow->flow_key, $region, $flow)
-                    );
-                    $recentLogMap[$dedupKey] = true;
+                $matchedFlowKey = null;
+                if ($daysSince <= 2 && $enabledFlows->has(self::FLOW_COD_VERIFICATION_UPSELL)) {
+                    $matchedFlowKey = self::FLOW_COD_VERIFICATION_UPSELL;
+                } elseif ($daysSince >= 3 && $daysSince <= 24 && $enabledFlows->has(self::FLOW_POST_PURCHASE_RITUAL_REVIEW)) {
+                    $matchedFlowKey = self::FLOW_POST_PURCHASE_RITUAL_REVIEW;
+                } elseif ($daysSince >= 25 && $daysSince <= 45 && $enabledFlows->has(self::FLOW_REFILL_30D_REORDER)) {
+                    $matchedFlowKey = self::FLOW_REFILL_30D_REORDER;
+                } elseif ($daysSince >= 46 && $enabledFlows->has(self::FLOW_WINBACK_60D)) {
+                    $matchedFlowKey = self::FLOW_WINBACK_60D;
+                } elseif ($enabledFlows->has($classification['flow_key'])) {
+                    $matchedFlowKey = $classification['flow_key'];
+                } else {
+                    $matchedFlowKey = $enabledFlows->keys()->first();
                 }
-            }
 
-            if (in_array($flowChannel, ['email_and_whatsapp', 'whatsapp'], true) && !empty($customer->phone)) {
-                $dedupKey = "{$customer->id}:{$flow->flow_key}:whatsapp";
-                if (empty($recentLogMap[$dedupKey])) {
-                    $dispatchedLogs->push(
-                        $this->dispatchLifecycleMessage($customer, 'whatsapp', $flow->flow_key, $region, $flow)
-                    );
-                    $recentLogMap[$dedupKey] = true;
+                if (!$matchedFlowKey || !$enabledFlows->has($matchedFlowKey)) {
+                    continue;
                 }
-            }
 
-            // If customer had neither email nor phone populated, still log a default channel entry
-            if (empty($customer->email) && empty($customer->phone)) {
-                $fallbackChannel = $flowChannel === 'whatsapp' ? 'whatsapp' : 'email';
-                $dedupKey = "{$customer->id}:{$flow->flow_key}:{$fallbackChannel}";
-                if (empty($recentLogMap[$dedupKey])) {
-                    $dispatchedLogs->push(
-                        $this->dispatchLifecycleMessage($customer, $fallbackChannel, $flow->flow_key, $region, $flow)
-                    );
-                    $recentLogMap[$dedupKey] = true;
+                /** @var EcommerceLifecycleFlow $flow */
+                $flow = $enabledFlows->get($matchedFlowKey);
+                $flowChannel = strtolower((string) $flow->channel);
+
+                if (in_array($flowChannel, ['email_and_whatsapp', 'email'], true) && !empty($customer->email)) {
+                    $dedupKey = "{$customer->id}:{$flow->flow_key}:email";
+                    if (empty($recentLogMap[$dedupKey])) {
+                        try {
+                            $dispatchedLogs->push(
+                                $this->dispatchLifecycleMessage($customer, 'email', $flow->flow_key, $region, $flow)
+                            );
+                            $recentLogMap[$dedupKey] = true;
+                        } catch (\Throwable $e) {
+                            Log::warning('EcommerceRetentionService email dispatch failed for customer #' . $customer->id . ': ' . $e->getMessage());
+                        }
+                    }
                 }
+
+                if (in_array($flowChannel, ['email_and_whatsapp', 'whatsapp'], true) && !empty($customer->phone)) {
+                    $dedupKey = "{$customer->id}:{$flow->flow_key}:whatsapp";
+                    if (empty($recentLogMap[$dedupKey])) {
+                        try {
+                            $dispatchedLogs->push(
+                                $this->dispatchLifecycleMessage($customer, 'whatsapp', $flow->flow_key, $region, $flow)
+                            );
+                            $recentLogMap[$dedupKey] = true;
+                        } catch (\Throwable $e) {
+                            Log::warning('EcommerceRetentionService WhatsApp dispatch failed for customer #' . $customer->id . ': ' . $e->getMessage());
+                        }
+                    }
+                }
+
+                // If customer had neither email nor phone populated, still log a default channel entry
+                if (empty($customer->email) && empty($customer->phone)) {
+                    $fallbackChannel = $flowChannel === 'whatsapp' ? 'whatsapp' : 'email';
+                    $dedupKey = "{$customer->id}:{$flow->flow_key}:{$fallbackChannel}";
+                    if (empty($recentLogMap[$dedupKey])) {
+                        try {
+                            $dispatchedLogs->push(
+                                $this->dispatchLifecycleMessage($customer, $fallbackChannel, $flow->flow_key, $region, $flow)
+                            );
+                            $recentLogMap[$dedupKey] = true;
+                        } catch (\Throwable $e) {
+                            Log::warning('EcommerceRetentionService fallback dispatch failed for customer #' . $customer->id . ': ' . $e->getMessage());
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('EcommerceRetentionService::runDueLifecycleFlows row error for customer #' . ($customer->id ?? 'unknown') . ': ' . $e->getMessage());
             }
         }
 
@@ -372,29 +388,41 @@ class EcommerceRetentionService
         }
 
         foreach ($customers as $customer) {
-            $customerName = $customer->name ?: 'Valued Customer';
-            $htmlBody = $this->buildBlogNewsletterHtml($article, $customerName, $region);
+            try {
+                $customerName = $customer->name ?: 'Valued Customer';
+                $htmlBody = $this->buildBlogNewsletterHtml($article, $customerName, $region);
 
-            $this->safeSendHtmlEmail($customer->email, $subject, $htmlBody);
+                $this->safeSendHtmlEmail($customer->email, $subject, $htmlBody);
 
-            $log = EcommerceLifecycleLog::create([
-                'region' => $region,
-                'customer_id' => $customer->id,
-                'customer_name' => $customerName,
-                'customer_email' => $customer->email,
-                'customer_phone' => $customer->phone,
-                'flow_key' => 'blog_newsletter',
-                'channel' => 'email',
-                'subject' => $subject,
-                'message_body' => $htmlBody,
-                'status' => 'sent',
-                'sent_at' => now(),
-            ]);
+                $log = EcommerceLifecycleLog::create([
+                    'region' => $region,
+                    'customer_id' => $customer->id,
+                    'customer_name' => $customerName,
+                    'customer_email' => $customer->email,
+                    'customer_phone' => $customer->phone,
+                    'flow_key' => 'blog_newsletter',
+                    'channel' => 'email',
+                    'subject' => $subject,
+                    'message_body' => $htmlBody,
+                    'status' => 'sent',
+                    'sent_at' => now(),
+                ]);
 
-            $logs->push($log);
+                $logs->push($log);
+            } catch (\Throwable $e) {
+                Log::warning('EcommerceRetentionService::sendBlogNewsletterBroadcast failed for customer #' . ($customer->id ?? 'unknown') . ': ' . $e->getMessage());
+            }
         }
 
         return $logs;
+    }
+
+    /**
+     * Alias for sendBlogNewsletterBroadcast().
+     */
+    public function broadcastBlogNewsletter(int|EcommerceSeoArticle $articleOrId, string $region = 'PK'): Collection
+    {
+        return $this->sendBlogNewsletterBroadcast($articleOrId, $region);
     }
 
     /**

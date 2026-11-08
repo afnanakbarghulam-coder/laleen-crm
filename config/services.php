@@ -57,6 +57,7 @@ return [
 
     'whatsapp' => [
         'webhook_token' => env('ECOMMERCE_WHATSAPP_WEBHOOK_TOKEN'),
+        'app_secret' => env('WHATSAPP_APP_SECRET'),
         'verify_token' => env('WHATSAPP_VERIFY_TOKEN', 'laleen_whatsapp_verify_2026'),
         'api_url' => env('WHATSAPP_API_URL'),
         'api_token' => env('WHATSAPP_API_TOKEN', env('WHATSAPP_CLOUD_API_TOKEN')),
