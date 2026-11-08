@@ -4,7 +4,11 @@ namespace App\Http\Controllers\Ecommerce;
 
 use App\Http\Controllers\Controller;
 use App\Models\EcommerceCustomer;
+use App\Models\EcommerceLifecycleFlow;
+use App\Models\EcommerceLifecycleLog;
 use App\Models\EcommerceSale;
+use App\Models\EcommerceSeoArticle;
+use App\Services\EcommerceRetentionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -30,14 +34,18 @@ class EcommerceCustomerController extends Controller
         $channel = trim((string) $request->input('channel', 'all'));
         $segment = trim((string) $request->input('segment', $request->input('tier', 'all')));
 
-        $query = EcommerceCustomer::with(['sales' => function ($q) {
-            $q->with('product')->orderByDesc('created_at')->orderByDesc('id');
-        }])
+        $query = EcommerceCustomer::forRegion($region)
+            ->with(['sales' => function ($q) use ($regionChannels) {
+                $q->with('product')
+                    ->whereIn('channel', $regionChannels)
+                    ->orderByDesc('created_at')
+                    ->orderByDesc('id');
+            }])
             ->orderByDesc('total_spend')
             ->orderByDesc('last_purchase_at');
 
         if ($search !== '') {
-            $normalizedPhone = EcommerceCustomer::normalizePhone($search);
+            $normalizedPhone = EcommerceCustomer::normalizePhone($search, $region === 'qa' ? '974' : '92');
             $query->where(function ($q) use ($search, $normalizedPhone) {
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")
@@ -58,10 +66,11 @@ class EcommerceCustomerController extends Controller
 
         if ($segment !== '' && $segment !== 'all') {
             if (in_array($segment, ['whales', 'top_20', 'Top 20% LTV', 'VIP Whales (Top 20% LTV)'], true)) {
-                $totalCustomerCount = EcommerceCustomer::count();
+                $totalCustomerCount = EcommerceCustomer::forRegion($region)->count();
                 if ($totalCustomerCount > 0) {
                     $top20Limit = max(1, (int) ceil($totalCustomerCount * 0.20));
-                    $whaleIds = EcommerceCustomer::orderByDesc('total_spend')
+                    $whaleIds = EcommerceCustomer::forRegion($region)
+                        ->orderByDesc('total_spend')
                         ->orderByDesc('total_orders')
                         ->limit($top20Limit)
                         ->pluck('id');
@@ -81,35 +90,135 @@ class EcommerceCustomerController extends Controller
         $customers = $query->get();
 
         if ($isSpecificChannel) {
-            $totalCustomers = EcommerceCustomer::whereHas('sales', function ($q) use ($channel) {
-                $q->realizedRevenue()->where('channel', $channel);
-            })->count();
+            $totalCustomers = EcommerceCustomer::forRegion($region)
+                ->whereHas('sales', function ($q) use ($channel) {
+                    $q->realizedRevenue()->where('channel', $channel);
+                })->count();
 
             $totalRevenue = (float) EcommerceSale::realizedRevenue()
                 ->where('channel', $channel)
                 ->sum('total_price');
             $activeCurrency = EcommerceSale::currencyForChannel($channel);
         } else {
-            $totalCustomers = EcommerceCustomer::count();
+            $totalCustomers = EcommerceCustomer::forRegion($region)->count();
             $totalRevenue = (float) EcommerceSale::realizedRevenue()
                 ->whereIn('channel', $regionChannels)
                 ->sum('total_price');
             $activeCurrency = $currency;
         }
 
+        $regionUpper = strtoupper($region);
+        /** @var EcommerceRetentionService $retentionService */
+        $retentionService = app(EcommerceRetentionService::class);
+        $lifecycleFlows = $retentionService->ensureDefaultFlows($regionUpper);
+
+        $lifecycleClassifications = [];
+        foreach ($customers as $c) {
+            $lifecycleClassifications[$c->id] = $retentionService->classifyCustomerLifecycle($c);
+        }
+
+        $seoArticles = EcommerceSeoArticle::where('region', $regionUpper)
+            ->orderByDesc('id')
+            ->get();
+
+        $lifecycleLogs = EcommerceLifecycleLog::where('region', $regionUpper)
+            ->orderByDesc('sent_at')
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get();
+
         return view('ecommerce.customers.index', [
             'region' => $region,
+            'regionUpper' => $regionUpper,
             'currency' => $activeCurrency,
             'customers' => $customers,
             'search' => $search,
             'channel' => $channel,
-            'filterableChannels' => self::FILTERABLE_CHANNELS,
+            'filterableChannels' => $regionChannels,
             'segment' => $segment,
             'totalCustomers' => $totalCustomers,
             'totalRevenue' => $totalRevenue,
             'totalCrossChannelLtv' => $totalRevenue,
-            'lifecyclePipeline' => $this->lifecyclePipeline(),
+            'lifecyclePipeline' => $this->lifecyclePipeline($region),
+            'lifecycleFlows' => $lifecycleFlows,
+            'lifecycleClassifications' => $lifecycleClassifications,
+            'seoArticles' => $seoArticles,
+            'lifecycleLogs' => $lifecycleLogs,
+            'logs' => $lifecycleLogs,
         ]);
+    }
+
+    /**
+     * Toggle an automated Email + WhatsApp lifecycle flow on/off.
+     */
+    public function toggleFlow(Request $request, ?EcommerceLifecycleFlow $flow = null)
+    {
+        /** @var EcommerceRetentionService $retentionService */
+        $retentionService = app(EcommerceRetentionService::class);
+        $flowId = $flow?->id ?: $request->input('flow_id');
+        $updated = $retentionService->toggleFlow($flowId);
+
+        $region = strtolower($request->input('region', $updated->region));
+
+        return redirect()
+            ->route('ecommerce.customers.index', ['region' => $region])
+            ->with('success', "Lifecycle flow '{$updated->name}' is now " . ($updated->is_enabled ? 'Enabled' : 'Paused') . '.');
+    }
+
+    /**
+     * Run all due automated Email + WhatsApp lifecycle flows for the active region.
+     */
+    public function runDueFlows(Request $request)
+    {
+        $region = strtoupper((string) $request->input('region', 'PK'));
+        /** @var EcommerceRetentionService $retentionService */
+        $retentionService = app(EcommerceRetentionService::class);
+        $logs = $retentionService->runDueLifecycleFlows($region);
+
+        return redirect()
+            ->route('ecommerce.customers.index', ['region' => strtolower($region)])
+            ->with('success', "Dispatched {$logs->count()} lifecycle Email & WhatsApp message(s) for {$region}.");
+    }
+
+    /**
+     * 1-Click Send Single Customer Refill / Follow-Up via Email or WhatsApp.
+     */
+    public function sendLifecyclePing(Request $request, ?EcommerceCustomer $customer = null)
+    {
+        $customerId = $customer?->id ?: (int) $request->input('customer_id');
+        $channel = (string) $request->input('channel', 'whatsapp');
+        $flowKey = (string) $request->input('flow_key', EcommerceRetentionService::FLOW_REFILL_30D_REORDER);
+        $region = (string) $request->input('region', 'pk');
+
+        /** @var EcommerceRetentionService $retentionService */
+        $retentionService = app(EcommerceRetentionService::class);
+        $log = $retentionService->sendCustomerLifecyclePing($customerId, $channel, $flowKey, $region);
+
+        return redirect()
+            ->route('ecommerce.customers.index', ['region' => strtolower($log->region)])
+            ->with('success', "Sent {$log->channel} refill message to {$log->customer_name}.");
+    }
+
+    /**
+     * 1-Click Send SEO Blog Article as an Email Newsletter to all customers in the region.
+     */
+    public function sendBlogNewsletter(Request $request)
+    {
+        $region = strtoupper((string) $request->input('region', 'PK'));
+        $articleId = (int) $request->input('article_id');
+
+        if (!$articleId) {
+            $firstArticle = EcommerceSeoArticle::where('region', $region)->first();
+            $articleId = (int) ($firstArticle?->id ?? 0);
+        }
+
+        /** @var EcommerceRetentionService $retentionService */
+        $retentionService = app(EcommerceRetentionService::class);
+        $logs = $retentionService->sendBlogNewsletterBroadcast($articleId, $region);
+
+        return redirect()
+            ->route('ecommerce.customers.index', ['region' => strtolower($region)])
+            ->with('success', "Sent SEO Blog Newsletter to {$logs->count()} subscriber(s) in {$region}.");
     }
 
     /**
@@ -130,7 +239,7 @@ class EcommerceCustomerController extends Controller
     /**
      * 3-Stage Automated Customer Lifecycle Pipeline (LTV Expansion).
      */
-    private function lifecyclePipeline(): array
+    private function lifecyclePipeline(string $region = 'pk'): array
     {
         return [
             'day7' => [
@@ -144,7 +253,8 @@ class EcommerceCustomerController extends Controller
                     self::CROSS_SELL_START_DAYS,
                     self::CROSS_SELL_END_DAYS,
                     false,
-                    'cross_sell'
+                    'cross_sell',
+                    $region
                 ),
             ],
             'day30' => [
@@ -158,7 +268,8 @@ class EcommerceCustomerController extends Controller
                     self::REFILL_WINDOW_START_DAYS,
                     self::REFILL_WINDOW_END_DAYS,
                     true,
-                    'refill'
+                    'refill',
+                    $region
                 ),
             ],
             'day60' => [
@@ -172,7 +283,8 @@ class EcommerceCustomerController extends Controller
                     self::WIN_BACK_START_DAYS,
                     self::WIN_BACK_END_DAYS,
                     true,
-                    'win_back'
+                    'win_back',
+                    $region
                 ),
             ],
         ];
@@ -182,13 +294,15 @@ class EcommerceCustomerController extends Controller
         int $startDaysAgo,
         int $endDaysAgo,
         bool $excludeSubsequentOrders,
-        string $stageType
+        string $stageType,
+        string $region = 'pk'
     ) {
         $windowStart = now()->subDays($endDaysAgo)->startOfDay();
         $windowEnd = now()->subDays($startDaysAgo)->endOfDay();
 
         $dueSales = EcommerceSale::with(['product', 'customer'])
             ->realizedRevenue()
+            ->forRegion($region)
             ->whereBetween('created_at', [$windowStart, $windowEnd])
             ->orderByDesc('created_at')
             ->get();
@@ -205,6 +319,7 @@ class EcommerceCustomerController extends Controller
 
         if ($excludeSubsequentOrders) {
             $subsequentSales = EcommerceSale::realizedRevenue()
+                ->forRegion($region)
                 ->where('created_at', '>', $windowEnd)
                 ->get(['customer_phone', 'customer_name']);
 
@@ -297,14 +412,15 @@ class EcommerceCustomerController extends Controller
     public function searchSuggestions(Request $request): JsonResponse
     {
         $q = trim((string) $request->query('q', ''));
+        $region = EcommerceSale::normalizeRegion($request->query('region', session('ecommerce_region', 'pk')));
 
         if ($q === '') {
             return response()->json([]);
         }
 
-        $normalizedPhone = EcommerceCustomer::normalizePhone($q);
+        $normalizedPhone = EcommerceCustomer::normalizePhone($q, $region === 'qa' ? '974' : '92');
 
-        $matches = EcommerceCustomer::query()
+        $matches = EcommerceCustomer::forRegion($region)
             ->where(function ($query) use ($q, $normalizedPhone) {
                 $query->where('name', 'like', "%{$q}%")
                     ->orWhere('phone', 'like', "%{$q}%");

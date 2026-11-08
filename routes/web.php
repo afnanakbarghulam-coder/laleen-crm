@@ -312,6 +312,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/inventory', [EcommerceInventoryController::class, 'index'])->name('inventory.index');
             Route::get('/pricing', [EcommercePricingController::class, 'index'])->name('pricing.index');
             Route::get('/stock', [EcommerceStockController::class, 'index'])->name('stock.index');
+            Route::get('/seo-agent/articles/{article}/image', [EcommerceSeoAgentController::class, 'viewArticleImage'])->name('seo-agent.articles.view-image');
 
             // Customers & Unified LTV Hub group (/ecommerce/hub/...)
             Route::prefix('hub')->group(function () {
@@ -325,6 +326,7 @@ Route::middleware(['auth'])->group(function () {
                 Route::get('/profit/transactions', [EcommerceNetProfitController::class, 'transactions'])->name('profit.transactions');
                 Route::get('/ai-agent', [EcommerceAiAgentController::class, 'index'])->name('ai-agent.index');
                 Route::get('/seo-agent', [EcommerceSeoAgentController::class, 'index'])->name('seo-agent.index');
+                Route::get('/seo-agent/articles/{article}/image', [EcommerceSeoAgentController::class, 'viewArticleImage'])->name('seo-agent.hub.articles.view-image');
                 Route::get('/marketing', [EcommerceMarketingController::class, 'index'])->name('hub.marketing');
             });
         });
@@ -358,6 +360,14 @@ Route::middleware(['auth'])->group(function () {
                 Route::patch('/sales/{orderGroupId}/status', [EcommerceSalesController::class, 'updateStatus'])->name('sales.update-status');
                 Route::delete('/sales/{sale}', [EcommerceSalesController::class, 'destroy'])->name('sales.destroy');
                 Route::post('/customers/{customer}/mark-contacted', [EcommerceCustomerController::class, 'markContacted'])->name('customers.mark-contacted');
+                Route::match(['post', 'patch'], '/customers/flows/{flow}/toggle', [EcommerceCustomerController::class, 'toggleFlow'])->name('customers.flows.toggle');
+                Route::match(['post', 'patch'], '/customers/toggle-flow', [EcommerceCustomerController::class, 'toggleFlow'])->name('customers.toggle-flow');
+                Route::post('/customers/run-flows', [EcommerceCustomerController::class, 'runDueFlows'])->name('customers.run-flows');
+                Route::post('/customers/run-due-flows', [EcommerceCustomerController::class, 'runDueFlows'])->name('customers.run-due-flows');
+                Route::post('/customers/{customer}/send-ping', [EcommerceCustomerController::class, 'sendLifecyclePing'])->name('customers.send-ping');
+                Route::post('/customers/send-ping', [EcommerceCustomerController::class, 'sendLifecyclePing'])->name('customers.send-ping-form');
+                Route::post('/customers/send-newsletter', [EcommerceCustomerController::class, 'sendBlogNewsletter'])->name('customers.send-newsletter');
+                Route::post('/customers/send-blog-newsletter', [EcommerceCustomerController::class, 'sendBlogNewsletter'])->name('customers.send-blog-newsletter');
 
                 // AI Sales & Retention Agent write routes
                 Route::post('/ai-agent/settings', [EcommerceAiAgentController::class, 'updateSettings'])->name('ai-agent.settings');
@@ -382,6 +392,8 @@ Route::middleware(['auth'])->group(function () {
                 Route::post('/seo-agent/topical-map', [EcommerceSeoAgentController::class, 'generateTopicalMap'])->name('seo-agent.topical-map');
                 Route::post('/seo-agent/articles/{article}/generate', [EcommerceSeoAgentController::class, 'generateArticle'])->name('seo-agent.articles.generate');
                 Route::post('/seo-agent/generate-article', [EcommerceSeoAgentController::class, 'generateArticle'])->name('seo-agent.generate-article');
+                Route::post('/seo-agent/articles/{article}/generate-image', [EcommerceSeoAgentController::class, 'generateArticleImage'])->name('seo-agent.articles.generate-image');
+                Route::post('/seo-agent/generate-article-image', [EcommerceSeoAgentController::class, 'generateArticleImage'])->name('seo-agent.generate-article-image');
                 Route::post('/seo-agent/sync-gsc', [EcommerceSeoAgentController::class, 'syncSearchConsole'])->name('seo-agent.sync-gsc');
                 Route::post('/seo-agent/create-from-query', [EcommerceSeoAgentController::class, 'createArticleFromQuery'])->name('seo-agent.create-from-query');
                 Route::post('/seo-agent/queries/{searchQuery}/create-article', [EcommerceSeoAgentController::class, 'createArticleFromQuery'])->name('seo-agent.queries.create-article');
@@ -389,6 +401,10 @@ Route::middleware(['auth'])->group(function () {
                 Route::post('/seo-agent/audits/{audit}/publish', [EcommerceSeoAgentController::class, 'publishProduct'])->name('seo-agent.audits.publish');
                 Route::post('/seo-agent/publish-article', [EcommerceSeoAgentController::class, 'publishArticle'])->name('seo-agent.publish-article');
                 Route::post('/seo-agent/articles/{article}/publish', [EcommerceSeoAgentController::class, 'publishArticle'])->name('seo-agent.articles.publish');
+                Route::match(['post', 'delete'], '/seo-agent/delete-article', [EcommerceSeoAgentController::class, 'deleteArticle'])->name('seo-agent.delete-article');
+                Route::match(['post', 'delete'], '/seo-agent/articles/{article}', [EcommerceSeoAgentController::class, 'deleteArticle'])->name('seo-agent.articles.destroy');
+                Route::match(['post', 'delete'], '/seo-agent/delete-query', [EcommerceSeoAgentController::class, 'deleteSearchQuery'])->name('seo-agent.delete-query');
+                Route::match(['post', 'delete'], '/seo-agent/queries/{searchQuery}', [EcommerceSeoAgentController::class, 'deleteSearchQuery'])->name('seo-agent.queries.destroy');
             });
 
             Route::post('/marketing/ai-generate-ads', [EcommerceMarketingController::class, 'generateMonthlyAdsWithAi'])->name('marketing.ai-generate-ads');

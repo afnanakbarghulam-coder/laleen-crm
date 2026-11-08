@@ -36,8 +36,8 @@ return [
     ],
 
     'gemini' => [
-        'key' => env('GEMINI_API_KEY'),
-        'api_key' => env('GEMINI_API_KEY'),
+        'key' => env('GEMINI_API_KEY', env('GOOGLE_AI_API_KEY')),
+        'api_key' => env('GEMINI_API_KEY', env('GOOGLE_AI_API_KEY')),
         'model' => env('GEMINI_MODEL', 'gemini-3.5-flash-lite'),
         'command_model' => env('GEMINI_COMMAND_MODEL', 'gemini-2.5-flash'),
         'thinking_model' => env('GEMINI_THINKING_MODEL', 'gemini-3.5-flash'),
@@ -51,12 +51,16 @@ return [
 
     'shopify' => [
         'webhook_secret' => env('SHOPIFY_WEBHOOK_SECRET'),
+        'domain' => env('SHOPIFY_DOMAIN'),
+        'access_token' => env('SHOPIFY_ACCESS_TOKEN'),
     ],
 
     'whatsapp' => [
         'webhook_token' => env('ECOMMERCE_WHATSAPP_WEBHOOK_TOKEN'),
         'verify_token' => env('WHATSAPP_VERIFY_TOKEN', 'laleen_whatsapp_verify_2026'),
-        'token' => env('WHATSAPP_CLOUD_API_TOKEN'),
+        'api_url' => env('WHATSAPP_API_URL'),
+        'api_token' => env('WHATSAPP_API_TOKEN', env('WHATSAPP_CLOUD_API_TOKEN')),
+        'token' => env('WHATSAPP_CLOUD_API_TOKEN', env('WHATSAPP_API_TOKEN')),
         'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
         'template_name' => env('WHATSAPP_TEMPLATE_NAME'),
         'template_language' => env('WHATSAPP_TEMPLATE_LANGUAGE', 'en_US'),

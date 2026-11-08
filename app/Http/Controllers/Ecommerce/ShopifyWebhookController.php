@@ -15,17 +15,23 @@ use Illuminate\Support\Facades\DB;
 class ShopifyWebhookController extends Controller
 {
     public const SHOPIFY_CHANNEL = 'Shopify (Pakistan)';
+    public const QATAR_SHOPIFY_CHANNEL = 'Organic (Qatar)';
 
     /**
      * Verify X-Shopify-Hmac-Sha256 header when SHOPIFY_WEBHOOK_SECRET is configured.
+     * In production environment, an empty secret is strictly rejected with HTTP 401.
      */
     private function verifyHmac(Request $request): ?JsonResponse
     {
-        $secret = config('services.shopify.webhook_secret');
+        $secret = trim((string) config('services.shopify.webhook_secret', ''));
 
-        if ($secret !== null && trim((string) $secret) !== '') {
+        if (app()->environment('production') && $secret === '') {
+            return response()->json(['error' => 'Unauthorized: Shopify webhook secret is required in production.'], 401);
+        }
+
+        if ($secret !== '') {
             $headerHmac = (string) $request->header('X-Shopify-Hmac-Sha256', '');
-            $calculatedHmac = base64_encode(hash_hmac('sha256', $request->getContent(), (string) $secret, true));
+            $calculatedHmac = base64_encode(hash_hmac('sha256', $request->getContent(), $secret, true));
 
             if ($headerHmac === '' || !hash_equals($calculatedHmac, $headerHmac)) {
                 return response()->json(['error' => 'Unauthorized: Invalid Shopify HMAC signature.'], 401);
@@ -99,7 +105,13 @@ class ShopifyWebhookController extends Controller
             ], 200);
         }
 
-        if ($shopifyOrderId === null && $referenceId !== null && EcommerceSale::where('reference_id', $referenceId)->where('channel', self::SHOPIFY_CHANNEL)->exists()) {
+        if (
+            $shopifyOrderId === null
+            && $referenceId !== null
+            && EcommerceSale::where('reference_id', $referenceId)
+                ->whereIn('channel', [self::SHOPIFY_CHANNEL, self::QATAR_SHOPIFY_CHANNEL])
+                ->exists()
+        ) {
             return response()->json([
                 'status' => 'duplicate_ignored',
                 'reference_id' => $referenceId,
@@ -115,7 +127,25 @@ class ShopifyWebhookController extends Controller
             ?? data_get($payload, 'billing_address.phone')
             ?? data_get($payload, 'customer.default_address.phone');
 
-        $normalizedPhone = EcommerceCustomer::normalizePhone($rawPhone, '92');
+        $currency = strtoupper(trim((string) ($payload['currency'] ?? 'PKR')));
+        $countryCode = strtoupper(trim((string) (
+            data_get($payload, 'shipping_address.country_code')
+            ?? data_get($payload, 'billing_address.country_code')
+            ?? ''
+        )));
+        $rawDigits = preg_replace('/\D+/', '', (string) $rawPhone);
+        $isQatarOrder = ($currency === 'QAR')
+            || ($countryCode === 'QA')
+            || str_starts_with($rawDigits, '974')
+            || str_starts_with(trim((string) $rawPhone), '+974');
+
+        $normalizedPhone = EcommerceCustomer::normalizePhone($rawPhone, $isQatarOrder ? '974' : '92');
+        $isQatarOrder = $isQatarOrder
+            || str_starts_with($normalizedPhone, '974')
+            || str_starts_with($normalizedPhone, '+974');
+
+        $orderChannel = $isQatarOrder ? self::QATAR_SHOPIFY_CHANNEL : self::SHOPIFY_CHANNEL;
+        $customerRegion = $isQatarOrder ? 'QA' : 'PK';
 
         $firstName = trim((string) (
             data_get($payload, 'customer.first_name')
@@ -167,7 +197,10 @@ class ShopifyWebhookController extends Controller
             $lineItems,
             $referenceId,
             $shippingCost,
-            $taxAmount
+            $taxAmount,
+            $isQatarOrder,
+            $orderChannel,
+            $customerRegion
         ) {
             // Double-check idempotency inside transaction
             if ($shopifyOrderId !== null && EcommerceSale::where('shopify_order_id', $shopifyOrderId)->lockForUpdate()->exists()) {
@@ -222,6 +255,7 @@ class ShopifyWebhookController extends Controller
                     [
                         'name' => $customerName,
                         'email' => $email,
+                        'region' => $customerRegion,
                         'total_spend' => 0,
                         'total_orders' => 0,
                     ]
@@ -232,6 +266,9 @@ class ShopifyWebhookController extends Controller
                 }
                 if (empty($customer->email) && $email !== null) {
                     $customer->email = $email;
+                }
+                if (empty($customer->region)) {
+                    $customer->region = $customerRegion;
                 }
                 $customer->save();
             }
@@ -268,7 +305,7 @@ class ShopifyWebhookController extends Controller
                     'customer_name' => $customerName ?? $customer?->name,
                     'customer_phone' => $normalizedPhone !== '' ? $normalizedPhone : null,
                     'quantity' => $quantity,
-                    'channel' => self::SHOPIFY_CHANNEL,
+                    'channel' => $orderChannel,
                     'order_status' => $orderStatus,
                     'payment_status' => $paymentStatus,
                     'stock_deducted' => $shouldDeductStock,
@@ -287,8 +324,13 @@ class ShopifyWebhookController extends Controller
                 ]);
 
                 if ($shouldDeductStock) {
-                    $product->stock_pakistan = max(0.0, (float) $product->stock_pakistan - $quantity);
-                    $product->sold_pakistan = (float) $product->sold_pakistan + $quantity;
+                    if ($isQatarOrder) {
+                        $product->stock_qatar = max(0.0, (float) $product->stock_qatar - $quantity);
+                        $product->sold_qatar = (float) $product->sold_qatar + $quantity;
+                    } else {
+                        $product->stock_pakistan = max(0.0, (float) $product->stock_pakistan - $quantity);
+                        $product->sold_pakistan = (float) $product->sold_pakistan + $quantity;
+                    }
                     $product->save();
                 }
 
@@ -297,7 +339,7 @@ class ShopifyWebhookController extends Controller
             }
 
             if ($customer) {
-                $customer->recalculateLtv();
+                $customer->recalculateLtv($customerRegion);
             }
 
             return [

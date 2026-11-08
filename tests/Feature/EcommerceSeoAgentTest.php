@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Ecommerce\EcommerceSeoAgentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class EcommerceSeoAgentTest extends TestCase
@@ -23,6 +24,8 @@ class EcommerceSeoAgentTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        Storage::fake('public');
 
         $this->adminUser = User::factory()->create([
             'role' => 'admin',
@@ -159,8 +162,8 @@ class EcommerceSeoAgentTest extends TestCase
         $pkClusters = $seoService->generateTopicalAuthorityMap('PK');
         $qaClusters = $seoService->generateTopicalAuthorityMap('QA');
 
-        $this->assertCount(3, $pkClusters);
-        $this->assertCount(3, $qaClusters);
+        $this->assertGreaterThanOrEqual(5, $pkClusters->count());
+        $this->assertGreaterThanOrEqual(5, $qaClusters->count());
 
         $pkTitles = $pkClusters->pluck('title')->implode(' | ');
         $this->assertStringContainsString('How to Stop Hairfall and Dandruff Naturally at Home', $pkTitles);
@@ -263,16 +266,18 @@ class EcommerceSeoAgentTest extends TestCase
             substr((string) $generatedArticles[2]->article_markdown, 0, 220)
         );
 
-        // Controller & Minimalistic 3-Step Blade UI smoke test
+        // Controller & Minimalistic 2-Tab Blade UI smoke test
         $this->actingAs($this->adminUser)
             ->get('/ecommerce/hub/seo-agent?region=pk')
             ->assertStatus(200)
             ->assertSee('SEO Studio')
             ->assertSee('Regenerate SEO')
-            ->assertSee('1. Google Search Preview & Meta Tags')
-            ->assertSee('2. Website Product Description & FAQs')
-            ->assertSee('3. Google Rich Snippet Code (Optional)')
-            ->assertSee('Blog Articles')
+            ->assertSee('Page SEO')
+            ->assertSee('Blog Studio')
+            ->assertSee('Publish to Shopify')
+            ->assertSee('Copy Description')
+            ->assertSee('Regenerate')
+            ->assertSee('Manual Meta Tags, Image Alt & Schema Code')
             ->assertSee('Hunza Apricot Oil');
 
         $this->actingAs($this->adminUser)
@@ -360,25 +365,61 @@ class EcommerceSeoAgentTest extends TestCase
         $this->assertSame('quick_win', $qaSalonQuery->opportunity_type);
         $this->assertSame('/locations/doha-qatar', $qaSalonQuery->target_url);
 
-        // Verify Honest 4-Column Live Google Searches tab renders in Blade UI
+        // Verify Unified Blog & Google Search Studio tab renders both dropdowns on the same page and scopes to selected left-sidebar item
+        $oilAudit = EcommerceSeoAudit::where('region', 'PK')
+            ->where('ecommerce_product_id', $this->oilProduct->id)
+            ->first() ?: $seoService->auditAndOptimizeTarget($this->oilProduct, 'PK');
+        $shampooAudit = EcommerceSeoAudit::where('region', 'PK')
+            ->where('ecommerce_product_id', $this->shampooProduct->id)
+            ->first() ?: $seoService->auditAndOptimizeTarget($this->shampooProduct, 'PK');
+
         $this->actingAs($this->adminUser)
-            ->get('/ecommerce/hub/seo-agent?region=pk&tab=searches')
+            ->get("/ecommerce/hub/seo-agent?region=pk&audit_id={$oilAudit->id}&tab=blogs")
             ->assertStatus(200)
-            ->assertSee('Live Keyword Discovery from Google (google.com.pk)')
-            ->assertSee('Fetch Live Google Searches')
-            ->assertSee('Live Search Phrase on Google')
-            ->assertSee('Search Intent')
-            ->assertSee('Recommended Target')
+            ->assertSee('Blog Studio')
+            ->assertSee('Saved Blog Articles')
+            ->assertSee('New Google Searches (Click Write to Generate)')
+            ->assertSee('View SEO Meta Tags & Image Alt Text (Auto-synced on Publish)')
+            ->assertSee('Write Blog for This Search')
+            ->assertSee('Publish to Shopify')
+            ->assertSee('Rewrite')
             ->assertDontSee('Monthly Views')
             ->assertDontSee('Website Clicks')
             ->assertSee('best hair oil for hairfall in pakistan')
-            ->assertSee('High Buyer Intent')
-            ->assertSee('Symptom & How-To Search')
-            ->assertSee('Hunza Apricot Oil')
-            ->assertSee('Sulfate-Free Shampoo')
-            ->assertSee('Write Blog Post');
+            ->assertSee('How to Stop Hairfall and Dandruff Naturally at Home')
+            ->assertDontSee('sulfate free shampoo in pakistan');
 
-        // 1-Click "Write Blog Post" from search query via POST route
+        // Verify selecting Shampoo while on tab=blogs keeps tab=blogs active and scopes Unified Topic & Keyword Selector to Shampoo
+        $this->actingAs($this->adminUser)
+            ->get("/ecommerce/hub/seo-agent?region=pk&audit_id={$shampooAudit->id}&tab=blogs")
+            ->assertStatus(200)
+            ->assertSee('Saved Blog Articles')
+            ->assertSee('New Google Searches (Click Write to Generate)')
+            ->assertSee('sulfate free shampoo in pakistan')
+            ->assertSee('How to Wash Oily Scalp and Stop Monsoon Frizz in Pakistan')
+            ->assertDontSee('best hair oil for hairfall in pakistan');
+
+        // 1-Click "Generate Blog from Search" while Shampoo is selected creates an article linked to /products/shampoo and keeps Shampoo + tab=blogs active
+        $shampooRedirect = $this->actingAs($this->adminUser)
+            ->post('/ecommerce/hub/seo-agent/create-from-query', [
+                'query_id' => $shampooQuery->id,
+                'audit_id' => $shampooAudit->id,
+                'tab' => 'blogs',
+            ]);
+
+        $shampooQuery->refresh();
+        $this->assertNotNull($shampooQuery->linked_article_id);
+        $shampooArticle = EcommerceSeoArticle::findOrFail($shampooQuery->linked_article_id);
+        $this->assertSame('/products/shampoo', $shampooArticle->internal_link_target_url);
+
+        $shampooRedirect->assertRedirect(route('ecommerce.seo-agent.index', [
+            'region' => 'pk',
+            'audit_id' => $shampooAudit->id,
+            'tab' => 'blogs',
+            'article_id' => $shampooArticle->id,
+        ]));
+
+        // 1-Click "Generate Blog from Search" for Apricot Oil query via POST route
         $response = $this->actingAs($this->adminUser)
             ->post('/ecommerce/hub/seo-agent/create-from-query', [
                 'query_id' => $buyerQuery->id,
@@ -421,11 +462,41 @@ class EcommerceSeoAgentTest extends TestCase
         $this->assertStringNotContainsString(')', $visibleText);
         $this->assertStringContainsString('https://laleenrituals.com/products/apricot-oil', (string) $article->article_markdown);
         $this->assertStringContainsString('https://laleenrituals.com/products/shampoo', (string) $article->article_markdown);
+
+        // Verify deleting the blog article removes it from ecommerce_seo_articles and clears linked_article_id on the search query
+        $this->actingAs($this->adminUser)
+            ->delete("/ecommerce/hub/seo-agent/articles/{$article->id}")
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('ecommerce_seo_articles', ['id' => $article->id]);
+        $buyerQuery->refresh();
+        $this->assertNull($buyerQuery->linked_article_id);
+
+        // Verify deleting a Google search query removes it from ecommerce_seo_search_queries
+        $this->actingAs($this->adminUser)
+            ->delete('/ecommerce/hub/seo-agent/delete-query', [
+                'query_id' => $symptomQuery->id,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('ecommerce_seo_search_queries', ['id' => $symptomQuery->id]);
     }
 
     public function test_one_click_publish_to_shopify_updates_product_and_blog_article_sync_status_and_image_alt_tags(): void
     {
+        Storage::fake('public');
+
+        $fakeImagenBytes = 'FAKE_IMAGEN_BOTANICAL_COVER_JPEG_BYTES_8K';
+        config(['services.gemini.api_key' => 'test-imagen-key']);
+
         Http::fake([
+            'generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict*' => Http::response([
+                'predictions' => [
+                    [
+                        'bytesBase64Encoded' => base64_encode($fakeImagenBytes),
+                    ],
+                ],
+            ], 200),
             '*/admin/api/2025-01/products/*.json' => Http::response([
                 'product' => ['id' => 1001, 'title' => 'Hunza Apricot Oil'],
             ], 200),
@@ -446,6 +517,38 @@ class EcommerceSeoAgentTest extends TestCase
         $this->assertNull($audit->shopify_published_at);
         $this->assertNull($article->shopify_published_at);
 
+        // Verify generateSkyscraperArticle automatically generated the SEO-named cover image on Storage::disk('public')
+        $this->assertSame('seo-images/' . $article->image_filename, $article->featured_image_path);
+        $this->assertNotEmpty($article->featured_image_url);
+        $this->assertStringStartsWith('data:image/', $article->featured_image_data_uri);
+        Storage::disk('public')->assertExists($article->featured_image_path);
+        $this->assertSame($fakeImagenBytes, Storage::disk('public')->get($article->featured_image_path));
+
+        // Verify dynamic topic-specific 4K macro studio prompts never include bottles with labels or text
+        $this->assertNotEmpty($article->image_generation_prompt);
+        $this->assertStringStartsWith('Ultra-sharp 4K macro commercial studio photograph of a clear crystal apothecary bowl filled with glowing golden apricot oil', $seoService->buildImagePromptForArticle($article));
+        $this->assertStringContainsString('no bottles with labels, no text', $seoService->buildImagePromptForArticle($article));
+
+        // Verify direct GET /ecommerce/seo-agent/articles/{id}/image view & download endpoints return 200 with exact SEO filename
+        $imageResponse = $this->actingAs($this->adminUser)
+            ->get("/ecommerce/seo-agent/articles/{$article->id}/image");
+        $imageResponse->assertStatus(200);
+        $this->assertSame($fakeImagenBytes, $imageResponse->getContent());
+        $this->assertStringContainsString("inline; filename=\"{$article->image_filename}\"", (string) $imageResponse->headers->get('Content-Disposition'));
+
+        $downloadResponse = $this->actingAs($this->adminUser)
+            ->get("/ecommerce/seo-agent/articles/{$article->id}/image?download=1");
+        $downloadResponse->assertStatus(200);
+        $this->assertStringContainsString("attachment; filename=\"{$article->image_filename}\"", (string) $downloadResponse->headers->get('Content-Disposition'));
+
+        // 1-Click Regenerate AI Cover Image via POST route
+        $this->actingAs($this->adminUser)
+            ->post("/ecommerce/hub/seo-agent/articles/{$article->id}/generate-image", [
+                'audit_id' => $audit->id,
+                'tab' => 'blogs',
+            ])
+            ->assertRedirect();
+
         // 1-Click Publish Product SEO to Shopify
         $this->actingAs($this->adminUser)
             ->post('/ecommerce/hub/seo-agent/publish-product', [
@@ -457,7 +560,7 @@ class EcommerceSeoAgentTest extends TestCase
         $this->assertSame('published', $audit->shopify_sync_status);
         $this->assertNotNull($audit->shopify_published_at);
 
-        // 1-Click Publish Blog Article to Shopify
+        // 1-Click Publish Blog Article to Shopify (including base64 image attachment, SEO filename, and alt text)
         $this->actingAs($this->adminUser)
             ->post('/ecommerce/hub/seo-agent/publish-article', [
                 'article_id' => $article->id,
@@ -475,10 +578,13 @@ class EcommerceSeoAgentTest extends TestCase
                 && ($request['product']['images'][0]['alt'] ?? '') === $audit->image_alt_text;
         });
 
-        Http::assertSent(function ($request) use ($article) {
+        Http::assertSent(function ($request) use ($article, $fakeImagenBytes) {
             return str_contains($request->url(), '/admin/api/2025-01/blogs/77/articles.json')
                 && $request->method() === 'POST'
-                && ($request['article']['handle'] ?? '') === $article->slug;
+                && ($request['article']['handle'] ?? '') === $article->slug
+                && ($request['article']['image']['filename'] ?? '') === $article->image_filename
+                && ($request['article']['image']['alt'] ?? '') === $article->image_alt_text
+                && ($request['article']['image']['attachment'] ?? '') === base64_encode($fakeImagenBytes);
         });
     }
 }

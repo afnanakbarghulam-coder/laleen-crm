@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -113,13 +114,88 @@ class EcommerceCustomer extends Model
     }
 
     /**
-     * Recalculate customer's realized LTV (total_spend, total_orders, last_purchase_at)
-     * strictly from EcommerceSale::realizedRevenue() rows.
+     * Scope customers strictly to the given region ('PK' or 'QA') so Pakistan (PKR)
+     * and Qatar (QAR) customer directories and LTV metrics never mix.
      */
-    public function recalculateLtv(): void
+    public function scopeForRegion(Builder $query, ?string $region): Builder
     {
+        $regionUpper = strtoupper(EcommerceSale::normalizeRegion($region));
+        $regionChannels = EcommerceSale::revenueChannelsForRegion($regionUpper);
+        $otherChannels = $regionUpper === 'QA'
+            ? EcommerceSale::PAKISTAN_CHANNELS
+            : EcommerceSale::QATAR_CHANNELS;
+
+        return $query->where(function (Builder $q) use ($regionUpper, $regionChannels, $otherChannels) {
+            $q->whereRaw('UPPER(region) = ?', [$regionUpper])
+                ->orWhere(function (Builder $untagged) use ($regionUpper, $regionChannels, $otherChannels) {
+                    $untagged->where(function (Builder $nullRegion) {
+                        $nullRegion->whereNull('region')->orWhere('region', '');
+                    })->where(function (Builder $match) use ($regionUpper, $regionChannels, $otherChannels) {
+                        $match->whereHas('sales', function (Builder $sq) use ($regionChannels) {
+                            $sq->whereIn('channel', $regionChannels);
+                        })->orWhere(function (Builder $noSales) use ($regionUpper, $otherChannels) {
+                            $noSales->whereDoesntHave('sales', function (Builder $sq) use ($otherChannels) {
+                                $sq->whereIn('channel', $otherChannels);
+                            });
+
+                            if ($regionUpper === 'QA') {
+                                $noSales->where(function (Builder $ph) {
+                                    $ph->where('phone', 'like', '974%')
+                                        ->orWhere('phone', 'like', '+974%');
+                                });
+                            } else {
+                                $noSales->where(function (Builder $ph) {
+                                    $ph->whereNull('phone')
+                                        ->orWhere('phone', '')
+                                        ->orWhere(function (Builder $nonQa) {
+                                            $nonQa->where('phone', 'not like', '974%')
+                                                ->where('phone', 'not like', '+974%');
+                                        });
+                                });
+                            }
+                        });
+                    });
+                });
+        });
+    }
+
+    /**
+     * Recalculate customer's realized LTV (total_spend, total_orders, last_purchase_at)
+     * strictly from EcommerceSale::realizedRevenue() rows in the customer's region.
+     */
+    public function recalculateLtv(?string $region = null): void
+    {
+        $resolvedRegion = null;
+        if ($region !== null && trim($region) !== '') {
+            $resolvedRegion = strtoupper(EcommerceSale::normalizeRegion($region));
+        } elseif (!empty($this->region)) {
+            $resolvedRegion = strtoupper(EcommerceSale::normalizeRegion($this->region));
+        } else {
+            $hasQaSales = EcommerceSale::where('ecommerce_customer_id', $this->id)
+                ->whereIn('channel', EcommerceSale::QATAR_CHANNELS)
+                ->exists();
+            $hasPkSales = EcommerceSale::where('ecommerce_customer_id', $this->id)
+                ->whereIn('channel', EcommerceSale::PAKISTAN_CHANNELS)
+                ->exists();
+
+            if ($hasQaSales && !$hasPkSales) {
+                $resolvedRegion = 'QA';
+            } elseif ($hasPkSales && !$hasQaSales) {
+                $resolvedRegion = 'PK';
+            } elseif (str_starts_with(ltrim((string) $this->phone, '+'), '974')) {
+                $resolvedRegion = 'QA';
+            } else {
+                $resolvedRegion = 'PK';
+            }
+        }
+
+        if (empty($this->region)) {
+            $this->region = $resolvedRegion;
+        }
+
         $realizedSales = EcommerceSale::where('ecommerce_customer_id', $this->id)
             ->realizedRevenue()
+            ->forRegion($resolvedRegion)
             ->get(['id', 'order_group_id', 'reference_id', 'ecommerce_bundle_id', 'created_at', 'total_price']);
 
         $this->total_spend = round((float) $realizedSales->sum('total_price'), 2);

@@ -10,6 +10,7 @@ use App\Models\EcommerceSeoSearchQuery;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class EcommerceSeoAgentService
@@ -220,7 +221,7 @@ class EcommerceSeoAgentService
      * - Real Shopify URLs (/products/apricot-oil and /products/shampoo)
      * - Two-way reverse silo links (Related Hair Care Guides) + WhatsApp Lead Magnet CTA Box
      */
-    public function generateSkyscraperArticle(int|EcommerceSeoArticle $articleOrId): EcommerceSeoArticle
+    public function generateSkyscraperArticle(int|EcommerceSeoArticle $articleOrId, bool $allowExternalImageApi = true): EcommerceSeoArticle
     {
         $article = $articleOrId instanceof EcommerceSeoArticle
             ? $articleOrId
@@ -245,14 +246,17 @@ class EcommerceSeoAgentService
 
         $washCost = $isQatar ? 'under QAR 2 per wash' : 'under PKR 40 per wash';
 
-        $isShampooOrRoutineTopic = str_contains($lowerTitle, 'shampoo')
+        $isShampooOrRoutineTopic = $article->internal_link_target_url === '/products/shampoo'
+            || str_contains($lowerTitle, 'shampoo')
             || str_contains($lowerTitle, 'oily-scalp')
             || str_contains($lowerTitle, 'oily scalp')
             || str_contains($lowerTitle, 'post-keratin');
-        $isComparisonOrSalonTopic = str_contains($lowerTitle, 'mineral')
+        $isComparisonOrSalonTopic = str_contains((string) $article->internal_link_target_url, '/locations/')
+            || str_contains($lowerTitle, 'mineral')
             || str_contains($lowerTitle, 'vs')
             || str_contains($lowerTitle, 'salon')
-            || str_contains($lowerTitle, 'old-airport');
+            || str_contains($lowerTitle, 'old-airport')
+            || str_contains($lowerTitle, 'wakrah');
 
         if ($isShampooOrRoutineTopic) {
             $htmlArticle = $this->buildShampooAndScalpBalanceArticleHtml(
@@ -353,7 +357,7 @@ class EcommerceSeoAgentService
             'status' => $article->status === 'published' ? 'published' : 'ready',
         ]);
 
-        return $article->fresh();
+        return $this->generateArticleImage($article->fresh(), $allowExternalImageApi);
     }
 
     /**
@@ -1279,9 +1283,14 @@ HTML;
     }
 
     /**
-     * Regional blog article blueprints for PK and QA using real /products/apricot-oil & /products/shampoo URLs.
+     * Regional blog article blueprints for PK and QA covering every left-sidebar target:
+     * - Apricot Oil (/products/apricot-oil)
+     * - Shampoo (/products/shampoo)
+     * - Hair Recovery Kit (/collections/all)
+     * - Old Airport, Doha (/locations/old-airport-doha-hair-salon)
+     * - Al Wakrah, Qatar (/locations/al-wakrah-qatar-hair-salon)
      */
-    protected function getRegionalTopicalBlueprints(string $region, string $mode = 'all'): array
+    public function getRegionalTopicalBlueprints(string $region, string $mode = 'all'): array
     {
         if ($region === 'QA') {
             return [
@@ -1291,32 +1300,54 @@ HTML;
                     'search_intent' => 'informational',
                     'title' => 'How to Stop Desalinated Hard-Water Hairfall in Doha',
                     'slug' => 'how-to-stop-desalinated-hard-water-hairfall-in-doha',
-                    'target_keyword' => 'Desalinated Hard-Water Hairfall in Doha',
+                    'target_keyword' => 'how to stop desalinated hard-water hairfall in doha',
                     'internal_link_target_url' => '/products/apricot-oil',
                     'meta_title' => 'Stop Desalinated Hard-Water Hairfall Doha | Laleen',
                     'meta_description' => 'Stop desalinated hard-water hairfall in Doha with 100% pure Hunza Apricot Oil, cold-pressed from raw kernels handpicked in the Hunza valleys. Shop now!',
                 ],
                 [
                     'business_line' => 'salon_local',
-                    'cluster_topic' => 'Doha & Al Wakrah Salon Guide',
+                    'cluster_topic' => 'Old Airport Doha Salon Guide',
                     'search_intent' => 'local',
                     'title' => 'Best Keratin, Protein & Hair Detox Salon in Old Airport & Al Wakrah',
                     'slug' => 'best-keratin-protein-hair-detox-salon-old-airport-al-wakrah',
-                    'target_keyword' => 'Keratin Protein & Hair Detox Salon Doha Al Wakrah',
-                    'internal_link_target_url' => '/products/shampoo',
+                    'target_keyword' => 'keratin protein and hair detox salon old airport doha',
+                    'internal_link_target_url' => '/locations/old-airport-doha-hair-salon',
                     'meta_title' => 'Best Keratin & Hair Detox Salon Doha & Al Wakrah',
                     'meta_description' => 'Visit Laleen Beauty Salon in Old Airport Doha & Al Wakrah for formaldehyde-free keratin, protein restoration & hard-water scalp detox. Book your slot!',
                 ],
                 [
                     'business_line' => 'rituals_ecommerce',
                     'cluster_topic' => 'Post-Keratin Home Care',
-                    'search_intent' => 'commercial',
+                    'search_intent' => 'informational',
                     'title' => 'Sulfate-Free Post-Keratin Maintenance Routine in Qatar',
                     'slug' => 'sulfate-free-post-keratin-maintenance-routine-in-qatar',
-                    'target_keyword' => 'Sulfate-Free Post-Keratin Routine Qatar',
+                    'target_keyword' => 'sulfate-free post-keratin maintenance routine in qatar',
                     'internal_link_target_url' => '/products/shampoo',
                     'meta_title' => 'Sulfate-Free Post-Keratin Routine Qatar | Laleen',
                     'meta_description' => 'Extend your salon keratin & protein results in Qatar with Laleen Sulfate-Free Botanical Shampoo and pure Hunza Apricot Oil. Order fast Doha delivery!',
+                ],
+                [
+                    'business_line' => 'rituals_ecommerce',
+                    'cluster_topic' => 'Complete Hair Recovery Routine',
+                    'search_intent' => 'informational',
+                    'title' => 'Complete Hard-Water Hairfall and Dandruff Recovery Routine in Qatar',
+                    'slug' => 'complete-hard-water-hairfall-and-dandruff-recovery-routine-qatar',
+                    'target_keyword' => 'complete hard-water hairfall and dandruff recovery routine qatar',
+                    'internal_link_target_url' => '/collections/all',
+                    'meta_title' => 'Complete Hard-Water Hair Recovery Routine Qatar',
+                    'meta_description' => 'Follow our 2-step hard-water hair recovery routine in Qatar with 100% pure Hunza Apricot Oil and Sulfate-Free Botanical Shampoo. Order in Doha today!',
+                ],
+                [
+                    'business_line' => 'salon_local',
+                    'cluster_topic' => 'Al Wakrah Salon Guide',
+                    'search_intent' => 'local',
+                    'title' => 'Ladies Hair Botox, Keratin and Hard-Water Scalp Detox in Al Wakrah',
+                    'slug' => 'ladies-hair-botox-keratin-and-scalp-detox-in-al-wakrah',
+                    'target_keyword' => 'ladies hair botox keratin and scalp detox in al wakrah',
+                    'internal_link_target_url' => '/locations/al-wakrah-qatar-hair-salon',
+                    'meta_title' => 'Ladies Hair Botox & Keratin Salon Al Wakrah | Laleen',
+                    'meta_description' => 'Restore dry, frizzy hair at Laleen Beauty Salon Al Wakrah with formaldehyde-free keratin, hair botox, and pure Hunza botanical treatments in Qatar!',
                 ],
             ];
         }
@@ -1354,6 +1385,39 @@ HTML;
                 'internal_link_target_url' => '/products/apricot-oil',
                 'meta_title' => 'Hunza Apricot Oil vs Coconut & Mineral Oils | Laleen',
                 'meta_description' => 'Discover why 100% pure Hunza Apricot Kernel Oil absorbs deeper into weak hair roots than coconut or paraffin mineral oils. Shop pure Hunza care on COD!',
+            ],
+            [
+                'business_line' => 'rituals_ecommerce',
+                'cluster_topic' => 'Complete Weekly Hair Recovery Kit Routine',
+                'search_intent' => 'informational',
+                'title' => 'Weekly 2-Step Hair Recovery Routine for Extreme Hairfall and Dandruff',
+                'slug' => 'weekly-2-step-hair-recovery-routine-for-extreme-hairfall-and-dandruff',
+                'target_keyword' => 'weekly 2-step hair recovery routine for extreme hairfall and dandruff',
+                'internal_link_target_url' => '/collections/all',
+                'meta_title' => 'Weekly 2-Step Hairfall & Dandruff Routine | Laleen PK',
+                'meta_description' => 'Follow our weekly 2-step hair recovery routine pairing 100% pure Hunza Apricot Oil with Sulfate-Free Botanical Shampoo. Save 20% with code COMPLETE20!',
+            ],
+            [
+                'business_line' => 'salon_local',
+                'cluster_topic' => 'Old Airport Doha Salon Guide',
+                'search_intent' => 'local',
+                'title' => 'Best Keratin, Protein & Hair Detox Salon in Old Airport & Al Wakrah',
+                'slug' => 'best-keratin-protein-hair-detox-salon-old-airport-al-wakrah',
+                'target_keyword' => 'keratin protein and hair detox salon old airport doha',
+                'internal_link_target_url' => '/locations/old-airport-doha-hair-salon',
+                'meta_title' => 'Best Keratin & Hair Detox Salon Doha & Al Wakrah',
+                'meta_description' => 'Visit Laleen Beauty Salon in Old Airport Doha & Al Wakrah for formaldehyde-free keratin, protein restoration & hard-water scalp detox. Book your slot!',
+            ],
+            [
+                'business_line' => 'salon_local',
+                'cluster_topic' => 'Al Wakrah Salon Guide',
+                'search_intent' => 'local',
+                'title' => 'Ladies Hair Botox, Keratin and Hard-Water Scalp Detox in Al Wakrah',
+                'slug' => 'ladies-hair-botox-keratin-and-scalp-detox-in-al-wakrah',
+                'target_keyword' => 'ladies hair botox keratin and scalp detox in al wakrah',
+                'internal_link_target_url' => '/locations/al-wakrah-qatar-hair-salon',
+                'meta_title' => 'Ladies Hair Botox & Keratin Salon Al Wakrah | Laleen',
+                'meta_description' => 'Restore dry, frizzy hair at Laleen Beauty Salon Al Wakrah with formaldehyde-free keratin, hair botox, and pure Hunza botanical treatments in Qatar!',
             ],
         ];
     }
@@ -1424,7 +1488,7 @@ HTML;
             return $payload;
         }
 
-        $apiKey = trim((string) config('services.gemini.key', env('GEMINI_API_KEY', '')));
+        $apiKey = trim((string) (config('services.gemini.api_key') ?: config('services.gemini.key', '')));
         if ($apiKey === '') {
             return $payload;
         }
@@ -1439,15 +1503,260 @@ HTML;
     }
 
     /**
+     * Resolve canonical target URL for a left-sidebar product or salon target:
+     * - Apricot Oil -> /products/apricot-oil
+     * - Shampoo -> /products/shampoo
+     * - Hair Recovery Kit -> /collections/all
+     * - Old Airport, Doha -> /locations/old-airport-doha-hair-salon
+     * - Al Wakrah, Qatar -> /locations/al-wakrah-qatar-hair-salon
+     */
+    public function resolveTargetCanonicalUrl(mixed $target): ?string
+    {
+        if ($target === null || $target === '') {
+            return null;
+        }
+
+        if (is_numeric($target)) {
+            $target = EcommerceSeoAudit::find((int) $target);
+        }
+
+        if ($target instanceof EcommerceSeoAudit) {
+            $slug = strtolower((string) $target->target_url_slug);
+            $name = strtolower((string) $target->target_name);
+
+            if ($target->target_type === 'salon_branch' || str_contains($slug, 'salon')) {
+                if (str_contains($slug, 'wakrah') || str_contains($name, 'wakrah')) {
+                    return '/locations/al-wakrah-qatar-hair-salon';
+                }
+
+                return '/locations/old-airport-doha-hair-salon';
+            }
+
+            if (
+                str_contains($slug, 'kit')
+                || str_contains($slug, 'bundle')
+                || str_contains($slug, 'collections')
+                || str_contains($name, 'kit')
+                || str_contains($name, 'bundle')
+            ) {
+                return '/collections/all';
+            }
+
+            if (str_contains($slug, 'shampoo') || str_contains($name, 'shampoo')) {
+                return '/products/shampoo';
+            }
+
+            return '/products/apricot-oil';
+        }
+
+        $raw = strtolower(trim((string) $target));
+        if (str_contains($raw, 'wakrah')) {
+            return '/locations/al-wakrah-qatar-hair-salon';
+        }
+        if (str_contains($raw, 'old-airport') || str_contains($raw, 'old airport') || str_contains($raw, 'salon')) {
+            return '/locations/old-airport-doha-hair-salon';
+        }
+        if (str_contains($raw, 'kit') || str_contains($raw, 'bundle') || str_contains($raw, 'collections/all')) {
+            return '/collections/all';
+        }
+        if (str_contains($raw, 'shampoo')) {
+            return '/products/shampoo';
+        }
+        if (str_contains($raw, 'apricot') || str_contains($raw, 'oil')) {
+            return '/products/apricot-oil';
+        }
+
+        return null;
+    }
+
+    /**
+     * Check whether a search query or blog article target_url matches the selected left-sidebar target.
+     */
+    public function matchesTargetUrl(?string $itemUrl, ?string $canonicalTargetUrl, string $fallbackText = ''): bool
+    {
+        if ($canonicalTargetUrl === null || $canonicalTargetUrl === '') {
+            return true;
+        }
+
+        $item = strtolower(trim((string) $itemUrl));
+        $target = strtolower(trim($canonicalTargetUrl));
+        $text = strtolower($fallbackText);
+
+        if ($item === $target) {
+            return true;
+        }
+
+        if ($target === '/collections/all') {
+            return str_contains($item, 'collections/all')
+                || str_contains($item, 'hair-recovery-kit')
+                || str_contains($text, 'kit')
+                || str_contains($text, 'bundle')
+                || str_contains($text, '2-step');
+        }
+
+        if ($target === '/locations/al-wakrah-qatar-hair-salon') {
+            return str_contains($item, 'wakrah')
+                || ($item === '/locations/doha-qatar' && str_contains($text, 'wakrah'));
+        }
+
+        if ($target === '/locations/old-airport-doha-hair-salon') {
+            return str_contains($item, 'old-airport')
+                || ($item === '/locations/doha-qatar' && !str_contains($text, 'wakrah'));
+        }
+
+        return false;
+    }
+
+    /**
      * Discover live regional search phrases from Google Autocomplete (gl=pk / gl=qa)
      * with zero fake click/view/rank metrics, plus clean offline fallback phrases.
+     * Supports optional $target (EcommerceSeoAudit, audit_id, or target_slug) to fetch seeds for that specific product/salon.
      */
-    public function syncGoogleSearchConsoleData(string $region = 'PK'): Collection
+    public function syncGoogleSearchConsoleData(string $region = 'PK', mixed $target = null, bool $allowExternalApi = true): Collection
     {
         $region = $this->normalizeRegion($region);
         $gl = strtolower($region);
+        $canonicalTargetUrl = $this->resolveTargetCanonicalUrl($target);
 
-        $seeds = $region === 'QA'
+        $seeds = $this->getAutocompleteSeedsForTarget($region, $canonicalTargetUrl);
+
+        $discoveredPhrases = [];
+
+        if ($allowExternalApi) {
+            foreach ($seeds as $seed) {
+                try {
+                    $response = Http::withoutVerifying()->timeout(5)->get('https://suggestqueries.google.com/complete/search', [
+                        'client' => 'firefox',
+                        'gl' => $gl,
+                        'hl' => 'en',
+                        'q' => $seed,
+                    ]);
+
+                    if ($response->successful()) {
+                        $json = $response->json();
+                        $suggestions = is_array($json) && isset($json[1]) && is_array($json[1]) ? $json[1] : [];
+                        foreach ($suggestions as $suggestion) {
+                            $clean = $this->sanitizeSearchPhrase((string) $suggestion);
+                            if ($clean !== '' && strlen($clean) >= 6) {
+                                $discoveredPhrases[] = $clean;
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    Log::info("Google Autocomplete discovery fallback for seed [{$seed}]: " . $e->getMessage());
+                }
+            }
+        }
+
+        // Always ensure core seed/fallback phrases for all left-sidebar targets are available
+        $defaultFallbacks = $this->getDefaultSearchConsoleQueries($region);
+        foreach ($defaultFallbacks as $fallbackRow) {
+            if ($canonicalTargetUrl === null || $this->matchesTargetUrl($fallbackRow['target_url'], $canonicalTargetUrl, $fallbackRow['search_query'])) {
+                $discoveredPhrases[] = $this->sanitizeSearchPhrase($fallbackRow['search_query']);
+            }
+        }
+
+        $uniquePhrases = array_values(array_unique(array_filter($discoveredPhrases)));
+        $uniquePhrases = array_slice($uniquePhrases, 0, 20);
+
+        $fallbackMap = [];
+        foreach ($defaultFallbacks as $fb) {
+            $fallbackMap[$this->sanitizeSearchPhrase($fb['search_query'])] = $fb;
+        }
+
+        $synced = collect();
+        foreach ($uniquePhrases as $phrase) {
+            $classification = $this->classifyLiveSearchPhrase($phrase, $region);
+            $preset = $fallbackMap[$phrase] ?? null;
+
+            $resolvedTargetUrl = $canonicalTargetUrl
+                ?: ($preset['target_url'] ?? $classification['target_url']);
+
+            $record = EcommerceSeoSearchQuery::updateOrCreate(
+                [
+                    'region' => $region,
+                    'search_query' => $phrase,
+                ],
+                [
+                    'business_unit' => $preset['business_unit'] ?? $classification['business_unit'],
+                    'impressions' => 0,
+                    'clicks' => 0,
+                    'ctr_percent' => 0,
+                    'avg_position' => 0,
+                    'target_url' => $resolvedTargetUrl,
+                    'opportunity_type' => $preset['opportunity_type'] ?? $classification['opportunity_type'],
+                    'last_synced_at' => now(),
+                ]
+            );
+
+            $synced->push($record);
+        }
+
+        return $synced;
+    }
+
+    /**
+     * Return Google Autocomplete seed phrases tailored to a specific left-sidebar product/salon or the full region.
+     */
+    protected function getAutocompleteSeedsForTarget(string $region, ?string $canonicalTargetUrl = null): array
+    {
+        if ($canonicalTargetUrl === '/products/shampoo') {
+            return $region === 'QA'
+                ? [
+                    'sulfate free shampoo qatar',
+                    'best shampoo after keratin treatment doha',
+                    'shampoo for hard water hair fall qatar',
+                ]
+                : [
+                    'sulfate free shampoo in pakistan',
+                    'best shampoo for oily scalp in pakistan',
+                    'how to wash oily scalp and frizzy hair',
+                ];
+        }
+
+        if ($canonicalTargetUrl === '/collections/all') {
+            return $region === 'QA'
+                ? [
+                    'complete hair fall and dandruff kit qatar',
+                    'hair oil and sulfate free shampoo routine doha',
+                ]
+                : [
+                    'complete hair fall and dandruff kit pakistan',
+                    'weekly hair care routine for hair fall at home',
+                ];
+        }
+
+        if ($canonicalTargetUrl === '/locations/al-wakrah-qatar-hair-salon') {
+            return [
+                'best ladies salon al wakrah',
+                'hair botox and keratin treatment al wakrah',
+            ];
+        }
+
+        if ($canonicalTargetUrl === '/locations/old-airport-doha-hair-salon') {
+            return [
+                'protein hair treatment doha',
+                'keratin treatment doha',
+                'best ladies hair salon old airport doha',
+            ];
+        }
+
+        if ($canonicalTargetUrl === '/products/apricot-oil') {
+            return $region === 'QA'
+                ? [
+                    'hair fall treatment qatar',
+                    'pure apricot oil for hair qatar',
+                    'how to stop hard water hair fall in qatar',
+                ]
+                : [
+                    'best hair oil for hairfall in pakistan',
+                    'apricot oil for hair',
+                    'how to stop hair fall',
+                    'dandruff treatment at home',
+                ];
+        }
+
+        return $region === 'QA'
             ? [
                 'hair fall treatment qatar',
                 'protein hair treatment doha',
@@ -1462,73 +1771,6 @@ HTML;
                 'how to stop hair fall',
                 'dandruff treatment at home',
             ];
-
-        $discoveredPhrases = [];
-
-        foreach ($seeds as $seed) {
-            try {
-                $response = Http::timeout(5)->get('https://suggestqueries.google.com/complete/search', [
-                    'client' => 'firefox',
-                    'gl' => $gl,
-                    'hl' => 'en',
-                    'q' => $seed,
-                ]);
-
-                if ($response->successful()) {
-                    $json = $response->json();
-                    $suggestions = is_array($json) && isset($json[1]) && is_array($json[1]) ? $json[1] : [];
-                    foreach ($suggestions as $suggestion) {
-                        $clean = $this->sanitizeSearchPhrase((string) $suggestion);
-                        if ($clean !== '' && strlen($clean) >= 6) {
-                            $discoveredPhrases[] = $clean;
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                Log::info("Google Autocomplete discovery fallback for seed [{$seed}]: " . $e->getMessage());
-            }
-        }
-
-        // Always ensure core seed/fallback phrases are available if offline or few suggestions returned
-        foreach ($this->getDefaultSearchConsoleQueries($region) as $fallbackRow) {
-            $discoveredPhrases[] = $this->sanitizeSearchPhrase($fallbackRow['search_query']);
-        }
-
-        $uniquePhrases = array_values(array_unique(array_filter($discoveredPhrases)));
-        $uniquePhrases = array_slice($uniquePhrases, 0, 15);
-
-        if (!empty($uniquePhrases)) {
-            EcommerceSeoSearchQuery::where('region', $region)
-                ->whereNotIn('search_query', $uniquePhrases)
-                ->whereNull('linked_article_id')
-                ->delete();
-        }
-
-        $synced = collect();
-        foreach ($uniquePhrases as $phrase) {
-            $classification = $this->classifyLiveSearchPhrase($phrase, $region);
-
-            $record = EcommerceSeoSearchQuery::updateOrCreate(
-                [
-                    'region' => $region,
-                    'search_query' => $phrase,
-                ],
-                [
-                    'business_unit' => $classification['business_unit'],
-                    'impressions' => 0,
-                    'clicks' => 0,
-                    'ctr_percent' => 0,
-                    'avg_position' => 0,
-                    'target_url' => $classification['target_url'],
-                    'opportunity_type' => $classification['opportunity_type'],
-                    'last_synced_at' => now(),
-                ]
-            );
-
-            $synced->push($record);
-        }
-
-        return $synced;
     }
 
     /**
@@ -1550,8 +1792,10 @@ HTML;
     {
         $lower = strtolower(trim($phrase));
 
-        // Match target_url: /products/apricot-oil, /products/shampoo, or /locations/doha-qatar
-        if (str_contains($lower, 'shampoo') || str_contains($lower, 'cleanser') || str_contains($lower, 'wash')) {
+        if (str_contains($lower, 'kit') || str_contains($lower, 'bundle') || str_contains($lower, 'routine')) {
+            $targetUrl = '/collections/all';
+            $businessUnit = 'rituals_ecommerce';
+        } elseif (str_contains($lower, 'shampoo') || str_contains($lower, 'cleanser') || str_contains($lower, 'wash')) {
             $targetUrl = '/products/shampoo';
             $businessUnit = 'rituals_ecommerce';
         } elseif (
@@ -1566,11 +1810,8 @@ HTML;
             $businessUnit = 'rituals_ecommerce';
         }
 
-        // Classify opportunity_type:
-        // 'content_gap' for Symptom / Solution Search (how to, stop, dandruff, home, causes, vs)
-        // 'quick_win' for High Buyer Intent (best, buy, price, shampoo, oil, treatment, salon, keratin, protein)
         $hasSymptomTrigger = (bool) preg_match('/\b(how\s+to|at\s+home|home|causes|vs|dandruff|stop)\b/i', $lower);
-        $hasStrongBuyerTrigger = (bool) preg_match('/\b(best|buy|price|shampoo|oil|salon|keratin|protein)\b/i', $lower);
+        $hasStrongBuyerTrigger = (bool) preg_match('/\b(best|buy|price|shampoo|oil|salon|keratin|protein|kit|bundle)\b/i', $lower);
 
         if ($hasSymptomTrigger && !$hasStrongBuyerTrigger) {
             $opportunityType = 'content_gap';
@@ -1593,7 +1834,7 @@ HTML;
     }
 
     /**
-     * Offline fallback list of real search phrases with 0 metrics for PK and QA.
+     * Offline fallback list of real search phrases with 0 metrics covering every left-sidebar item in PK and QA.
      */
     protected function getDefaultSearchConsoleQueries(string $region): array
     {
@@ -1608,6 +1849,16 @@ HTML;
                     'ctr_percent' => 0,
                     'target_url' => '/products/apricot-oil',
                     'opportunity_type' => 'quick_win',
+                ],
+                [
+                    'business_unit' => 'rituals_ecommerce',
+                    'search_query' => 'how to stop hard water hair fall in qatar',
+                    'avg_position' => 0,
+                    'impressions' => 0,
+                    'clicks' => 0,
+                    'ctr_percent' => 0,
+                    'target_url' => '/products/apricot-oil',
+                    'opportunity_type' => 'content_gap',
                 ],
                 [
                     'business_unit' => 'salon_local',
@@ -1637,6 +1888,26 @@ HTML;
                     'clicks' => 0,
                     'ctr_percent' => 0,
                     'target_url' => '/products/shampoo',
+                    'opportunity_type' => 'quick_win',
+                ],
+                [
+                    'business_unit' => 'rituals_ecommerce',
+                    'search_query' => 'best shampoo after keratin treatment doha',
+                    'avg_position' => 0,
+                    'impressions' => 0,
+                    'clicks' => 0,
+                    'ctr_percent' => 0,
+                    'target_url' => '/products/shampoo',
+                    'opportunity_type' => 'quick_win',
+                ],
+                [
+                    'business_unit' => 'rituals_ecommerce',
+                    'search_query' => 'complete hair fall and dandruff kit qatar',
+                    'avg_position' => 0,
+                    'impressions' => 0,
+                    'clicks' => 0,
+                    'ctr_percent' => 0,
+                    'target_url' => '/collections/all',
                     'opportunity_type' => 'quick_win',
                 ],
                 [
@@ -1685,6 +1956,16 @@ HTML;
             ],
             [
                 'business_unit' => 'rituals_ecommerce',
+                'search_query' => 'best shampoo for oily scalp in pakistan',
+                'avg_position' => 0,
+                'impressions' => 0,
+                'clicks' => 0,
+                'ctr_percent' => 0,
+                'target_url' => '/products/shampoo',
+                'opportunity_type' => 'quick_win',
+            ],
+            [
+                'business_unit' => 'rituals_ecommerce',
                 'search_query' => 'how to stop hair fall',
                 'avg_position' => 0,
                 'impressions' => 0,
@@ -1703,15 +1984,48 @@ HTML;
                 'target_url' => '/products/apricot-oil',
                 'opportunity_type' => 'content_gap',
             ],
+            [
+                'business_unit' => 'rituals_ecommerce',
+                'search_query' => 'complete hair fall and dandruff kit pakistan',
+                'avg_position' => 0,
+                'impressions' => 0,
+                'clicks' => 0,
+                'ctr_percent' => 0,
+                'target_url' => '/collections/all',
+                'opportunity_type' => 'quick_win',
+            ],
+            [
+                'business_unit' => 'salon_local',
+                'search_query' => 'protein hair treatment doha',
+                'avg_position' => 0,
+                'impressions' => 0,
+                'clicks' => 0,
+                'ctr_percent' => 0,
+                'target_url' => '/locations/old-airport-doha-hair-salon',
+                'opportunity_type' => 'quick_win',
+            ],
+            [
+                'business_unit' => 'salon_local',
+                'search_query' => 'best ladies salon al wakrah',
+                'avg_position' => 0,
+                'impressions' => 0,
+                'clicks' => 0,
+                'ctr_percent' => 0,
+                'target_url' => '/locations/al-wakrah-qatar-hair-salon',
+                'opportunity_type' => 'quick_win',
+            ],
         ];
     }
 
     /**
      * Turn any Google search query row into a full, ready-to-copy blog article,
-     * weaving 3-4 related live search phrases from the same region into the HTML post.
+     * weaving 3-4 related live search phrases from the same region into the HTML post
+     * and linking to the selected left-sidebar target when provided.
      */
-    public function createBlogArticleFromSearchQuery(int|EcommerceSeoSearchQuery $queryOrId): EcommerceSeoArticle
-    {
+    public function createBlogArticleFromSearchQuery(
+        int|EcommerceSeoSearchQuery $queryOrId,
+        mixed $selectedTarget = null
+    ): EcommerceSeoArticle {
         $searchRow = $queryOrId instanceof EcommerceSeoSearchQuery
             ? $queryOrId
             : EcommerceSeoSearchQuery::findOrFail((int) $queryOrId);
@@ -1722,7 +2036,12 @@ HTML;
         $slug = Str::slug($rawPhrase);
 
         $classification = $this->classifyLiveSearchPhrase($rawPhrase, $region);
-        $targetProductUrl = $searchRow->target_url ?: $classification['target_url'];
+        $explicitTargetUrl = $this->resolveTargetCanonicalUrl($selectedTarget);
+        $targetProductUrl = $explicitTargetUrl ?: ($searchRow->target_url ?: $classification['target_url']);
+
+        if ($explicitTargetUrl && $searchRow->target_url !== $explicitTargetUrl) {
+            $searchRow->target_url = $explicitTargetUrl;
+        }
 
         // Pull 3-4 related live search phrases from ecommerce_seo_search_queries in the same region
         $relatedPhrases = EcommerceSeoSearchQuery::where('region', $region)
@@ -1755,13 +2074,17 @@ HTML;
         $safeKeyword = $guarded['target_keyword'];
         $imageSeo = $this->buildBlogImageSeo($cleanTitle, $slug);
 
+        $businessLine = str_contains($targetProductUrl, '/locations/')
+            ? 'salon_local'
+            : ($searchRow->business_unit ?: $classification['business_unit']);
+
         $article = EcommerceSeoArticle::updateOrCreate(
             [
                 'region' => $region,
                 'slug' => $slug,
             ],
             [
-                'business_line' => $searchRow->business_unit ?: $classification['business_unit'],
+                'business_line' => $businessLine,
                 'cluster_topic' => 'Live Google Search Topic',
                 'search_intent' => $classification['opportunity_type'] === 'quick_win' ? 'commercial' : 'informational',
                 'title' => $cleanTitle,
@@ -1888,6 +2211,363 @@ HTML;
     }
 
     /**
+     * Dynamically build a topic-specific, commercial-grade Aesop / Gisou / Vogue Beauty photography prompt
+     * matched to the exact blog article ($article->title & $article->target_keyword).
+     */
+    public function buildImagePromptForArticle(EcommerceSeoArticle $article): string
+    {
+        $targetUrl = strtolower((string) $article->internal_link_target_url);
+        $lowerContext = strtolower($article->title . ' ' . $article->target_keyword . ' ' . $article->slug);
+
+        // For Salon / Qatar Blogs
+        if (
+            $article->business_line === 'salon_local'
+            || str_contains($targetUrl, 'locations')
+            || preg_match('/\b(wakrah|airport|keratin|protein|botox|salon)\b/i', $lowerContext)
+            || (preg_match('/\b(doha|qatar)\b/i', $lowerContext) && !str_contains($lowerContext, 'hard-water') && !str_contains($lowerContext, 'hard water'))
+        ) {
+            return 'Ultra-sharp 4K architectural interior photograph of a luxury modern Doha ladies hair salon station with warm travertine marble counters, softly lit arched mirror, wooden hairbrushes, and fresh white orchids in bright natural light, Architectural Digest style, shot on Phase One 150MP, razor-sharp focus, no text';
+        }
+
+        // For Shampoo / Dandruff / Oily Scalp Blogs
+        if (
+            $targetUrl === '/products/shampoo'
+            || preg_match('/\b(flaky|oily|wash|shampoo|monsoon|water)\b/i', $lowerContext)
+            || (str_contains($lowerContext, 'dandruff') && !str_contains($lowerContext, 'hairfall') && !str_contains($lowerContext, 'hair fall'))
+        ) {
+            return 'Ultra-sharp 4K macro commercial studio photograph of a natural wooden wide-tooth hair comb, fresh green rosemary sprigs, white botanical flowers, a clear glass bowl of pure herbal essence, and crystal-clear water droplets on bright beige travertine marble, crisp morning sunlight, shot on Phase One 150MP macro lens f/4, razor-sharp focus, no labels, no text';
+        }
+
+        // For Apricot Oil / Hairfall / Growth Blogs
+        return 'Ultra-sharp 4K macro commercial studio photograph of a clear crystal apothecary bowl filled with glowing golden apricot oil, a glass pipette dripping a golden oil drop, four fresh whole orange apricots with green leaves, and a wooden paddle hairbrush on bright beige travertine marble, crisp morning sunlight, shot on Phase One XF IQ4 150MP macro lens f/4, razor-sharp focus, label-free, no bottles with labels, no text';
+    }
+
+    /**
+     * Alias for buildImagePromptForArticle().
+     */
+    public function buildArticleImagePrompt(EcommerceSeoArticle $article): string
+    {
+        return $this->buildImagePromptForArticle($article);
+    }
+
+    /**
+     * Generate an AI blog cover image via Google Imagen 3 / Gemini or Flux Realism (at 1920x1080 Full HD, quality 100,
+     * with bottom 60px crop and GD Unsharp Mask / Sharpening Convolution filter),
+     * save it to storage/app/public/seo-images/{$article->image_filename}, and update featured_image_path,
+     * featured_image_url, and image_generation_prompt.
+     */
+    public function generateArticleImage(int|EcommerceSeoArticle $articleOrId, bool $allowExternalApi = true): EcommerceSeoArticle
+    {
+        $article = $articleOrId instanceof EcommerceSeoArticle
+            ? $articleOrId
+            : EcommerceSeoArticle::findOrFail((int) $articleOrId);
+
+        if (empty($article->image_filename) || empty($article->image_alt_text)) {
+            $imageSeo = $this->buildBlogImageSeo((string) $article->title, (string) $article->slug);
+            $article->image_filename = $article->image_filename ?: $imageSeo['image_filename'];
+            $article->image_alt_text = $article->image_alt_text ?: $imageSeo['image_alt_text'];
+        }
+
+        $filename = trim((string) $article->image_filename);
+        $relativePath = 'seo-images/' . $filename;
+        $prompt = $this->buildImagePromptForArticle($article);
+
+        $imageBytes = null;
+        $apiKey = $allowExternalApi ? trim((string) (
+            config('services.gemini.api_key')
+            ?: config('services.google.api_key')
+            ?: (app()->runningUnitTests() ? '' : config('services.gemini.key', ''))
+        )) : '';
+
+        if ($apiKey !== '') {
+            // 1. First attempt Google Imagen 3 (imagen-3.0-generate-002 with aspectRatio 16:9 and personGeneration dont_allow)
+            try {
+                $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key={$apiKey}";
+                $response = Http::withoutVerifying()->timeout(20)->post($endpoint, [
+                    'instances' => [
+                        ['prompt' => $prompt],
+                    ],
+                    'parameters' => [
+                        'sampleCount' => 1,
+                        'aspectRatio' => '16:9',
+                        'personGeneration' => 'dont_allow',
+                    ],
+                ]);
+
+                if ($response->successful()) {
+                    $base64 = $response->json('predictions.0.bytesBase64Encoded')
+                        ?? $response->json('generatedImages.0.image.imageBytes');
+                    if (is_string($base64) && $base64 !== '') {
+                        $decoded = base64_decode($base64, true);
+                        if ($decoded !== false && strlen($decoded) > 16) {
+                            $imageBytes = $decoded;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::info("Imagen API cover generation fallback for Article #{$article->id}: " . $e->getMessage());
+            }
+
+            // 2. Secondary Google API check: Gemini 2.0 Flash Image Generation
+            if ($imageBytes === null) {
+                foreach (['gemini-2.0-flash-preview-image-generation', 'gemini-2.0-flash-exp-image-generation'] as $flashModel) {
+                    if ($imageBytes !== null) {
+                        break;
+                    }
+                    try {
+                        $flashEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$flashModel}:generateContent?key={$apiKey}";
+                        $flashResponse = Http::withoutVerifying()->timeout(20)->post($flashEndpoint, [
+                            'contents' => [
+                                [
+                                    'parts' => [
+                                        ['text' => $prompt],
+                                    ],
+                                ],
+                            ],
+                            'generationConfig' => [
+                                'responseModalities' => ['TEXT', 'IMAGE'],
+                            ],
+                        ]);
+
+                        if ($flashResponse->successful()) {
+                            $parts = (array) $flashResponse->json('candidates.0.content.parts', []);
+                            foreach ($parts as $part) {
+                                $inlineBase64 = $part['inlineData']['data'] ?? $part['inline_data']['data'] ?? null;
+                                if (is_string($inlineBase64) && $inlineBase64 !== '') {
+                                    $decoded = base64_decode($inlineBase64, true);
+                                    if ($decoded !== false && strlen($decoded) > 16) {
+                                        $imageBytes = $decoded;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                        Log::info("Gemini Flash ({$flashModel}) image generation fallback for Article #{$article->id}: " . $e->getMessage());
+                    }
+                }
+            }
+        }
+
+        // 3. Full HD 1920x1140 Flux Realism fallback + bottom 60px crop (1920x1080) + GD Sharpening Matrix + quality 100
+        if ($allowExternalApi && $imageBytes === null && !app()->runningUnitTests()) {
+            try {
+                $seed = (int) ($article->id ?: 101) + rand(1000, 9999);
+                $pollinationsUrl = 'https://image.pollinations.ai/prompt/'
+                    . rawurlencode($prompt)
+                    . '?width=1920&height=1140&model=flux-realism&nologo=true&enhance=false&seed='
+                    . $seed;
+                $pollinationsResp = Http::withoutVerifying()
+                    ->retry(2, 1500, throw: false)
+                    ->timeout(35)
+                    ->get($pollinationsUrl);
+                if (
+                    $pollinationsResp->successful()
+                    && strlen($pollinationsResp->body()) > 5000
+                    && str_starts_with($pollinationsResp->body(), "\xFF\xD8")
+                ) {
+                    $imageBytes = $this->cropBottomWatermarkFromImageBytes($pollinationsResp->body(), 60);
+                }
+            } catch (\Throwable $e) {
+                Log::info("Pollinations Flux Realism cover generation fallback for Article #{$article->id}: " . $e->getMessage());
+            }
+        }
+
+        // 4. Secondary photorealistic editorial fallback at 1920x1080 quality 100 if AI endpoints are rate-limited (outside PHPUnit tests)
+        if ($allowExternalApi && $imageBytes === null && !app()->runningUnitTests()) {
+            try {
+                $lowerContext = strtolower($article->title . ' ' . $article->target_keyword . ' ' . $article->slug);
+                $targetUrl = strtolower((string) $article->internal_link_target_url);
+                if (preg_match('/\b(vs|coconut|mineral|compare)\b/i', $lowerContext)) {
+                    $editorialUrl = 'https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&w=1920&h=1080&q=100';
+                } elseif ($article->business_line === 'salon_local' || str_contains($targetUrl, 'locations') || preg_match('/\b(wakrah|airport|keratin|protein|botox|salon)\b/i', $lowerContext)) {
+                    $editorialUrl = 'https://images.unsplash.com/photo-1633681926022-84c23e8cb2d6?auto=format&fit=crop&w=1920&h=1080&q=100';
+                } elseif ($targetUrl === '/products/shampoo' || preg_match('/\b(flaky|oily|wash|shampoo|monsoon|water)\b/i', $lowerContext)) {
+                    $editorialUrl = 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=1920&h=1080&q=100';
+                } else {
+                    $editorialUrl = 'https://images.unsplash.com/photo-1608248597359-0e6d526a6828?auto=format&fit=crop&w=1920&h=1080&q=100';
+                }
+
+                $editorialResp = Http::withoutVerifying()->timeout(15)->get($editorialUrl);
+                if ($editorialResp->successful() && strlen($editorialResp->body()) > 5000) {
+                    $imageBytes = $this->sharpenAndEncodeFullHdJpeg($editorialResp->body());
+                }
+            } catch (\Throwable $e) {
+                Log::info("Editorial photo cover fallback for Article #{$article->id}: " . $e->getMessage());
+            }
+        }
+
+        if ($imageBytes === null) {
+            $imageBytes = $this->buildFallbackCoverImageBytes($article);
+        }
+
+        Storage::disk('public')->put($relativePath, $imageBytes);
+
+        $article->update([
+            'image_filename' => $filename,
+            'image_alt_text' => $article->image_alt_text,
+            'featured_image_path' => $relativePath,
+            'featured_image_url' => url("/ecommerce/seo-agent/articles/{$article->id}/image"),
+            'image_generation_prompt' => $prompt,
+        ]);
+
+        return $article->fresh();
+    }
+
+    /**
+     * Crop the bottom $cropPixels (default 60px -> 1920x1080 Full HD 16:9) off an image using PHP GD imagecrop(),
+     * apply a crisp Unsharp Mask / Sharpening Convolution Filter, and re-encode at JPEG quality 100.
+     */
+    protected function cropBottomWatermarkFromImageBytes(string $rawBytes, int $cropPixels = 60): string
+    {
+        if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg')) {
+            return $rawBytes;
+        }
+
+        $src = @imagecreatefromstring($rawBytes);
+        if ($src === false) {
+            return $rawBytes;
+        }
+
+        $width = imagesx($src);
+        $height = imagesy($src);
+        if ($width < 200 || $height <= $cropPixels + 100) {
+            imagedestroy($src);
+
+            return $rawBytes;
+        }
+
+        $newHeight = $height - $cropPixels;
+        $cropped = false;
+
+        if (function_exists('imagecrop')) {
+            $cropped = @imagecrop($src, [
+                'x' => 0,
+                'y' => 0,
+                'width' => $width,
+                'height' => $newHeight,
+            ]);
+        }
+
+        if ($cropped === false && function_exists('imagecreatetruecolor')) {
+            $cropped = @imagecreatetruecolor($width, $newHeight);
+            if ($cropped !== false) {
+                imagecopy($cropped, $src, 0, 0, 0, 0, $width, $newHeight);
+            }
+        }
+
+        if ($cropped === false) {
+            imagedestroy($src);
+
+            return $rawBytes;
+        }
+
+        if ((imagesx($cropped) !== 1920 || imagesy($cropped) !== 1080) && function_exists('imagecreatetruecolor') && function_exists('imagecopyresampled')) {
+            $resized = @imagecreatetruecolor(1920, 1080);
+            if ($resized !== false) {
+                imagecopyresampled($resized, $cropped, 0, 0, 0, 0, 1920, 1080, imagesx($cropped), imagesy($cropped));
+                imagedestroy($cropped);
+                $cropped = $resized;
+            }
+        }
+
+        if (function_exists('imageconvolution')) {
+            @imageconvolution($cropped, [[-1, -1, -1], [-1, 24, -1], [-1, -1, -1]], 16, 0);
+        }
+
+        ob_start();
+        imagejpeg($cropped, null, 100);
+        $croppedBytes = (string) ob_get_clean();
+
+        imagedestroy($src);
+        imagedestroy($cropped);
+
+        return strlen($croppedBytes) > 5000 ? $croppedBytes : $rawBytes;
+    }
+
+    /**
+     * Apply the GD sharpening convolution filter and re-encode at 1920x1080 JPEG quality 100.
+     */
+    protected function sharpenAndEncodeFullHdJpeg(string $rawBytes): string
+    {
+        if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg')) {
+            return $rawBytes;
+        }
+
+        $img = @imagecreatefromstring($rawBytes);
+        if ($img === false) {
+            return $rawBytes;
+        }
+
+        if (function_exists('imageconvolution')) {
+            @imageconvolution($img, [[-1, -1, -1], [-1, 24, -1], [-1, -1, -1]], 16, 0);
+        }
+
+        ob_start();
+        imagejpeg($img, null, 100);
+        $encoded = (string) ob_get_clean();
+        imagedestroy($img);
+
+        return strlen($encoded) > 5000 ? $encoded : $rawBytes;
+    }
+
+    /**
+     * Zero-failure fallback: generate a clean luxury botanical cover graphic binary at 1920x1080 quality 100
+     * so the SEO image file always exists on disk even when offline or inside PHPUnit tests.
+     */
+    protected function buildFallbackCoverImageBytes(EcommerceSeoArticle $article): string
+    {
+        if (function_exists('imagecreatetruecolor') && function_exists('imagejpeg')) {
+            $width = 1920;
+            $height = 1080;
+            $img = @imagecreatetruecolor($width, $height);
+            if ($img !== false) {
+                $bgWarm = imagecolorallocate($img, 28, 21, 19);
+                $goldAccent = imagecolorallocate($img, 201, 166, 107);
+                $softRose = imagecolorallocate($img, 217, 143, 131);
+                $cream = imagecolorallocate($img, 246, 235, 230);
+
+                imagefilledrectangle($img, 0, 0, $width, $height, $bgWarm);
+                imagerectangle($img, 40, 40, $width - 40, $height - 40, $goldAccent);
+                imagerectangle($img, 52, 52, $width - 52, $height - 52, $softRose);
+                imagefilledellipse($img, 960, 540, 380, 380, $goldAccent);
+                imagefilledellipse($img, 960, 540, 310, 310, $bgWarm);
+                imagefilledellipse($img, 960, 540, 140, 140, $softRose);
+                imagestring($img, 5, 840, 920, 'LALEEN RITUALS BOTANICALS', $cream);
+
+                ob_start();
+                imagejpeg($img, null, 100);
+                $jpegBytes = (string) ob_get_clean();
+                imagedestroy($img);
+
+                if ($jpegBytes !== '') {
+                    return $jpegBytes;
+                }
+            }
+        }
+
+        $safeTitle = htmlspecialchars((string) $article->title, ENT_QUOTES, 'UTF-8');
+
+        return <<<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1c1513"/>
+      <stop offset="55%" stop-color="#2b1f1c"/>
+      <stop offset="100%" stop-color="#3a2923"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#bg)"/>
+  <rect x="32" y="32" width="1136" height="611" rx="18" fill="none" stroke="#c9a66b" stroke-width="2" stroke-opacity="0.55"/>
+  <circle cx="600" cy="290" r="115" fill="#c9a66b" fill-opacity="0.16" stroke="#c9a66b" stroke-width="2"/>
+  <circle cx="600" cy="290" r="54" fill="#d98f83" fill-opacity="0.28"/>
+  <text x="600" y="485" text-anchor="middle" fill="#c9a66b" font-family="Georgia, serif" font-size="22" letter-spacing="4">LALEEN RITUALS HUNZA BOTANICALS</text>
+  <text x="600" y="535" text-anchor="middle" fill="#f6ebe6" font-family="Georgia, serif" font-size="26">{$safeTitle}</text>
+</svg>
+SVG;
+    }
+
+    /**
      * Build the Two-Way Reverse Silo Links (Related Hair Care Guides) + WhatsApp Lead CTA Box for blog articles.
      * Enforces zero raw Markdown symbols (#, *, |, [ ], ( )) in visible prose.
      */
@@ -2005,7 +2685,7 @@ HTML;
     }
 
     /**
-     * 1-Click Publish Blog Article (title, handle, body_html, summary_html, image alt, and SEO metafields) to Shopify Admin API.
+     * 1-Click Publish Blog Article (title, handle, body_html, summary_html, image attachment + filename + alt, and SEO metafields) to Shopify Admin API.
      */
     public function publishBlogArticleToShopify(int|EcommerceSeoArticle $articleOrId): EcommerceSeoArticle
     {
@@ -2015,6 +2695,21 @@ HTML;
 
         if (empty($article->article_markdown) || empty($article->image_alt_text)) {
             $article = $this->generateSkyscraperArticle($article);
+        }
+
+        if (empty($article->featured_image_path) || !Storage::disk('public')->exists($article->featured_image_path)) {
+            $article = $this->generateArticleImage($article);
+        }
+
+        $imagePayload = [
+            'filename' => $article->image_filename,
+            'alt' => $article->image_alt_text,
+        ];
+
+        if (!empty($article->featured_image_path) && Storage::disk('public')->exists($article->featured_image_path)) {
+            $imagePayload['attachment'] = base64_encode((string) Storage::disk('public')->get($article->featured_image_path));
+        } elseif (!empty($article->featured_image_url)) {
+            $imagePayload['src'] = $article->featured_image_url;
         }
 
         $shopifyConfig = $this->resolveShopifyApiCredentials($article->region);
@@ -2045,10 +2740,7 @@ HTML;
                             'body_html' => $article->article_markdown,
                             'summary_html' => $article->meta_description,
                             'published' => true,
-                            'image' => [
-                                'alt' => $article->image_alt_text,
-                                'filename' => $article->image_filename,
-                            ],
+                            'image' => $imagePayload,
                             'metafields' => [
                                 [
                                     'key' => 'title_tag',
@@ -2081,8 +2773,8 @@ HTML;
 
     protected function resolveShopifyApiCredentials(string $region = 'PK'): array
     {
-        $domain = trim((string) config('services.shopify.domain', env('SHOPIFY_DOMAIN', '')));
-        $accessToken = trim((string) config('services.shopify.access_token', env('SHOPIFY_ACCESS_TOKEN', '')));
+        $domain = trim((string) config('services.shopify.domain', ''));
+        $accessToken = trim((string) config('services.shopify.access_token', ''));
 
         try {
             $aiSetting = EcommerceAiSetting::current();

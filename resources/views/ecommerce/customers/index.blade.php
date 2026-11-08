@@ -91,6 +91,82 @@
         </form>
     </div>
 
+    {{-- ============ Minimalistic Lifecycle & Email Automation Bar ============ --}}
+    @php
+        $regionUpper = strtoupper($region ?? 'PK');
+        $lifecycleFlows = $lifecycleFlows ?? collect();
+        $seoArticles = $seoArticles ?? collect();
+        $logs = $logs ?? ($lifecycleLogs ?? collect());
+        $flowPillLabels = [
+            'cod_verification_upsell' => '📦 Day-0 COD + Kit Upsell',
+            'post_purchase_ritual_review' => '✨ Day-4/10 Ritual & Review',
+            'refill_30d_reorder' => '🔄 Day-30 Bottle Refill',
+            'winback_60d' => '💎 Day-60 Win-Back',
+        ];
+    @endphp
+    <div class="ec-card mb-3" style="padding: 14px 16px;">
+        {{-- Row 1: Compact Automated Flows Strip (4 Pill Cards in 1 Horizontal Row + Run Due Flows Now button) --}}
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+            <div class="d-flex align-items-center flex-wrap gap-2 flex-grow-1">
+                @foreach ($lifecycleFlows as $flow)
+                    @php
+                        $pillTitle = $flowPillLabels[$flow->flow_key] ?? $flow->name;
+                        $channelBadge = $flow->channel === 'email' ? 'Email' : ($flow->channel === 'whatsapp' ? 'WA' : 'Email + WA');
+                    @endphp
+                    <div
+                        class="d-inline-flex align-items-center gap-2 px-3 py-2 rounded-3"
+                        style="background: {{ $flow->is_enabled ? 'rgba(201, 166, 107, 0.12)' : 'rgba(255, 255, 255, 0.03)' }}; border: 1px solid {{ $flow->is_enabled ? 'rgba(201, 166, 107, 0.45)' : 'rgba(255, 255, 255, 0.1)' }}; font-size: 12px;"
+                        title="{{ $flow->name }}"
+                    >
+                        <span class="fw-bold" style="color: #f6ebe6;">{{ $pillTitle }}</span>
+                        <span class="badge" style="background: rgba(217, 143, 131, 0.2); color: #e79a91; font-size: 10px;">{{ $channelBadge }}</span>
+                        <span class="ec-sub" style="font-size: 11px;">Sent: {{ $flow->sent_count }}</span>
+                        <form action="{{ route('ecommerce.customers.flows.toggle', $flow->id) }}" method="POST" class="d-inline m-0">
+                            @csrf
+                            <input type="hidden" name="region" value="{{ $region }}">
+                            <button
+                                type="submit"
+                                class="btn btn-sm py-0 px-2"
+                                style="font-size: 10.5px; border-radius: 12px; font-weight: 700; {{ $flow->is_enabled ? 'background: rgba(142, 168, 138, 0.25); color: #9fc49a; border: 1px solid rgba(142, 168, 138, 0.5);' : 'background: rgba(255, 255, 255, 0.06); color: #9c8c86; border: 1px solid rgba(255, 255, 255, 0.15);' }}"
+                            >
+                                {{ $flow->is_enabled ? 'On' : 'Off' }}
+                            </button>
+                        </form>
+                    </div>
+                @endforeach
+            </div>
+
+            <form action="{{ route('ecommerce.customers.run-flows') }}" method="POST" class="m-0">
+                @csrf
+                <input type="hidden" name="region" value="{{ $regionUpper }}">
+                <button type="submit" class="btn btn-primary btn-sm fw-bold" style="white-space: nowrap;">
+                    ▶️ Run Due Flows Now
+                </button>
+            </form>
+        </div>
+
+        {{-- Row 2: 1-Click Blog-to-Email Newsletter Bar (Single Line) --}}
+        <form action="{{ route('ecommerce.customers.send-newsletter') }}" method="POST" class="d-flex align-items-center flex-wrap gap-2 pt-2 m-0" style="border-top: 1px solid rgba(255, 255, 255, 0.07);">
+            @csrf
+            <input type="hidden" name="region" value="{{ $regionUpper }}">
+            <span class="fw-semibold" style="font-size: 12.5px; color: #c9a66b; white-space: nowrap;">
+                📧 Send SEO Blog as Email Newsletter:
+            </span>
+            <select name="article_id" class="form-select form-select-sm ec-form-select" style="max-width: 440px; flex: 1 1 260px;">
+                @forelse ($seoArticles as $articleOption)
+                    <option value="{{ $articleOption->id }}">
+                        {{ $articleOption->title }} ({{ strtoupper($articleOption->status ?: 'ready') }})
+                    </option>
+                @empty
+                    <option value="">No saved SEO blog articles for {{ $regionUpper }} yet</option>
+                @endforelse
+            </select>
+            <button type="submit" class="btn btn-outline-light btn-sm fw-bold" style="border-color: rgba(201, 166, 107, 0.55); color: #f6ebe6; white-space: nowrap;">
+                🚀 Send Newsletter to All {{ $regionUpper }} Customers
+            </button>
+        </form>
+    </div>
+
     {{-- Customer Directory Table --}}
     <div class="ec-card">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -107,6 +183,7 @@
                     <tr>
                         <th>Customer</th>
                         <th>Phone / WhatsApp</th>
+                        <th>Lifecycle Stage</th>
                         <th>Channels Shopped</th>
                         <th class="text-end">Total Orders</th>
                         <th class="text-end">Lifetime Value (LTV)</th>
@@ -122,15 +199,24 @@
                             $latestProduct = $customer->latest_product;
                             $waText = "Hi {$waName}, checking in from Laleen! It's been a little while since your last order of {$latestProduct}...";
                             $waLink = 'https://wa.me/' . $customer->phone . '?text=' . rawurlencode($waText);
+                            $stageInfo = $lifecycleClassifications[$customer->id] ?? app(\App\Services\EcommerceRetentionService::class)->classifyCustomerLifecycle($customer);
                         @endphp
                         <tr>
                             <td>
                                 <a href="{{ route('ecommerce.customers.show', $customer->id) }}" class="fw-bold text-decoration-none" style="color: #f3e9e7;">
                                     {{ $customer->name ?: 'Unnamed Customer' }}
                                 </a>
+                                @if (!empty($customer->email))
+                                    <div class="ec-sub" style="font-size: 11px;">{{ $customer->email }}</div>
+                                @endif
                             </td>
                             <td>
                                 <span style="font-variant-numeric: tabular-nums;">+{{ $customer->phone }}</span>
+                            </td>
+                            <td>
+                                <span class="ec-health-badge {{ $stageInfo['key'] === 'winback_due' ? 'ec-health-churned' : ($stageInfo['key'] === 'refill_due' ? 'ec-health-slipping' : 'ec-health-active') }}" title="{{ $stageInfo['label'] }}">
+                                    {{ $stageInfo['short_label'] ?? $stageInfo['label'] }}
+                                </span>
                             </td>
                             <td>
                                 <div class="d-flex flex-wrap gap-1">
@@ -145,7 +231,7 @@
                             </td>
                             <td class="text-end fw-semibold">{{ number_format($customer->total_orders, 0) }}</td>
                             <td class="text-end fw-bold" style="color: var(--ec-success); font-variant-numeric: tabular-nums;">
-                                PKR {{ number_format($customer->total_spend, 2) }}
+                                {{ $currency }} {{ number_format($customer->total_spend, 2) }}
                             </td>
                             <td>
                                 @if ($customer->last_purchase_at)
@@ -156,10 +242,29 @@
                                 @endif
                             </td>
                             <td class="text-end">
-                                <div class="d-inline-flex align-items-center gap-2">
+                                <div class="d-inline-flex align-items-center flex-wrap justify-content-end gap-1">
+                                    <form action="{{ route('ecommerce.customers.send-ping', $customer->id) }}" method="POST" class="d-inline m-0">
+                                        @csrf
+                                        <input type="hidden" name="channel" value="email">
+                                        <input type="hidden" name="flow_key" value="{{ $stageInfo['flow_key'] ?? 'refill_30d_reorder' }}">
+                                        <input type="hidden" name="region" value="{{ $region }}">
+                                        <button type="submit" class="ec-profile-action-btn" style="padding: 4px 10px; font-size: 11.5px; cursor: pointer;">
+                                            📧 Email Refill
+                                        </button>
+                                    </form>
+                                    <form action="{{ route('ecommerce.customers.send-ping', $customer->id) }}" method="POST" class="d-inline m-0">
+                                        @csrf
+                                        <input type="hidden" name="channel" value="whatsapp">
+                                        <input type="hidden" name="flow_key" value="{{ $stageInfo['flow_key'] ?? 'refill_30d_reorder' }}">
+                                        <input type="hidden" name="region" value="{{ $region }}">
+                                        <button type="submit" class="ec-wa-action-btn" style="padding: 4px 10px; font-size: 11.5px; cursor: pointer;">
+                                            💬 WA Refill
+                                        </button>
+                                    </form>
                                     <a
                                         href="{{ route('ecommerce.customers.show', $customer->id) }}"
                                         class="ec-profile-action-btn"
+                                        style="padding: 4px 10px; font-size: 11.5px;"
                                     >
                                         <i class="bx bx-user"></i> View Profile
                                     </a>
@@ -168,16 +273,17 @@
                                         target="_blank"
                                         rel="noopener"
                                         class="ec-wa-action-btn"
+                                        style="padding: 4px 10px; font-size: 11.5px;"
                                         title="{{ $waText }}"
                                     >
-                                        <i class="bx bxl-whatsapp" style="font-size: 15px;"></i> WhatsApp
+                                        <i class="bx bxl-whatsapp" style="font-size: 14px;"></i> WhatsApp
                                     </a>
                                 </div>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-4">
+                            <td colspan="8" class="text-center text-muted py-4">
                                 No customers found matching your filter. Adjust the Channel or Smart Segment dropdowns above.
                             </td>
                         </tr>
@@ -309,6 +415,65 @@
                 @endif
             </div>
         @endforeach
+    </div>
+
+    {{-- ============ Collapsed-by-Default Email & WhatsApp Automation Logs Drawer ============ --}}
+    <div class="ec-card mt-3" style="padding: 12px 16px;">
+        <details>
+            <summary class="fw-bold" style="cursor: pointer; color: #c9a66b; font-size: 13px; list-style: none;">
+                📬 View Recent Email &amp; WhatsApp Automation Logs ({{ $logs->count() }})
+            </summary>
+            <div class="table-responsive mt-3">
+                <table class="table ec-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Sent At</th>
+                            <th>Customer</th>
+                            <th>Channel</th>
+                            <th>Flow</th>
+                            <th>Subject / Message Preview</th>
+                            <th class="text-end">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($logs as $logItem)
+                            <tr>
+                                <td class="ec-sub" style="font-size: 11.5px; white-space: nowrap;">
+                                    {{ optional($logItem->sent_at ?: $logItem->created_at)->format('d M Y H:i') }}
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">{{ $logItem->customer_name ?: 'Valued Customer' }}</div>
+                                    <div class="ec-sub" style="font-size: 11px;">
+                                        {{ $logItem->customer_email ?: ($logItem->customer_phone ? '+' . $logItem->customer_phone : '—') }}
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge" style="background: {{ $logItem->channel === 'email' ? 'rgba(201, 166, 107, 0.22)' : 'rgba(37, 211, 102, 0.2)' }}; color: {{ $logItem->channel === 'email' ? '#deb97c' : '#4ddb84' }}; font-size: 10.5px;">
+                                        {{ strtoupper($logItem->channel) }}
+                                    </span>
+                                </td>
+                                <td class="ec-sub" style="font-size: 11.5px;">{{ $logItem->flow_key }}</td>
+                                <td style="max-width: 420px;">
+                                    <div class="fw-semibold" style="font-size: 12px; color: #f6ebe6;">{{ $logItem->subject }}</div>
+                                    <div class="ec-sub text-truncate" style="font-size: 11px; max-width: 400px;">
+                                        {{ \Illuminate\Support\Str::limit(strip_tags((string) $logItem->message_body), 110) }}
+                                    </div>
+                                </td>
+                                <td class="text-end">
+                                    <span class="ec-health-badge ec-health-active">{{ strtoupper($logItem->status) }}</span>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-3">
+                                    No automated Email or WhatsApp logs recorded for {{ $regionUpper }} yet.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </details>
     </div>
 
     <script>
@@ -477,6 +642,8 @@
     <script>
         (function () {
             const SUGGESTIONS_URL = @json(route('ecommerce.customers.suggestions'));
+            const ACTIVE_CURRENCY = @json($currency ?? 'PKR');
+            const ACTIVE_REGION = @json($region ?? 'pk');
             const searchInput = document.getElementById('customerSearchInput');
             const suggestionsList = document.getElementById('customerSearchSuggestions');
             const filterForm = document.getElementById('customerFilterForm');
@@ -521,7 +688,7 @@
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                     });
-                    right.textContent = 'PKR ' + spend;
+                    right.textContent = ACTIVE_CURRENCY + ' ' + spend;
 
                     li.appendChild(left);
                     li.appendChild(right);
@@ -554,7 +721,7 @@
                 }
 
                 debounceTimer = setTimeout(function () {
-                    fetch(SUGGESTIONS_URL + '?q=' + encodeURIComponent(q), {
+                    fetch(SUGGESTIONS_URL + '?region=' + encodeURIComponent(ACTIVE_REGION) + '&q=' + encodeURIComponent(q), {
                         headers: { 'Accept': 'application/json' },
                     })
                         .then(function (res) { return res.ok ? res.json() : []; })
