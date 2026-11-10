@@ -440,4 +440,91 @@ class StaffOpsTrackerTest extends TestCase
         $this->assertTrue($ayanTask->is_completed);
         $this->assertSame('Afnan (Owner)', $ayanTask->completed_by);
     }
+
+    public function test_admin_can_edit_timeframe_and_recalculate_due_at_while_non_admin_staff_cannot_edit_timeframe(): void
+    {
+        $assignedTime = Carbon::parse('2026-11-10 10:00:00')->startOfSecond();
+
+        $task = OpsActionItem::create([
+            'title' => 'Restock Laleen Rituals packaging boxes before weekend rush',
+            'scope' => 'Laleen Rituals',
+            'pending_with_type' => 'ops_lead',
+            'pending_with_name' => 'Ops Lead',
+            'assigned_user_ids' => [$this->opsLeadUser->id],
+            'assigned_names' => ['Ops Lead'],
+            'sla_hours' => 48,
+            'ball_assigned_at' => $assignedTime,
+            'due_at' => $assignedTime->copy()->addHours(48),
+            'is_completed' => false,
+        ]);
+
+        // 1. Admin sees the editable Timeframe (Admin Only) selector inside the Edit drawer
+        $adminIndex = $this->actingAs($this->admin)
+            ->get(route('staff.ops-tracker.index'))
+            ->assertOk();
+
+        $adminIndex->assertSee('id="opsEditDrawerTimeframeSection"', false);
+        $adminIndex->assertSee('Timeframe (Admin Only)');
+        $adminIndex->assertSee('class="ops-edit-drawer-sla-radio"', false);
+        $adminIndex->assertSee('data-sla-hours="48"', false);
+        $adminIndex->assertDontSee('id="opsEditDrawerTimeframeLocked"', false);
+
+        // 2. Non-Admin Staff (Ops Lead / Manager & Ayan / Agent) do NOT see editable timeframe radio inputs in Edit drawer
+        $opsLeadIndex = $this->actingAs($this->opsLeadUser)
+            ->get(route('staff.ops-tracker.index'))
+            ->assertOk();
+
+        $opsLeadIndex->assertDontSee('id="opsEditDrawerTimeframeSection"', false);
+        $opsLeadIndex->assertDontSee('class="ops-edit-drawer-sla-radio"', false);
+        $opsLeadIndex->assertSee('id="opsEditDrawerTimeframeLocked"', false);
+        $opsLeadIndex->assertSee('🔒 Timeframe: 48h (2 Days)');
+
+        // 3. Non-Admin attempting to change sla_hours via PATCH receives 403 Forbidden; sla_hours & due_at remain unchanged
+        $this->actingAs($this->opsLeadUser)
+            ->patch(route('staff.ops-tracker.update', $task), [
+                'notes' => 'Trying to extend my own deadline to 1 week',
+                'sla_hours' => 168,
+            ])
+            ->assertForbidden();
+
+        $task->refresh();
+        $this->assertSame(48, $task->sla_hours);
+        $this->assertTrue($task->due_at->equalTo($assignedTime->copy()->addHours(48)));
+        $this->assertNull($task->notes);
+
+        // Non-Admin CAN still update notes/assignees when sla_hours is not modified
+        $this->actingAs($this->opsLeadUser)
+            ->patch(route('staff.ops-tracker.update', $task), [
+                'notes' => 'Supplier confirmed delivery tomorrow morning.',
+                'assigned_user_ids' => [$this->opsLeadUser->id],
+            ])
+            ->assertRedirect();
+
+        $task->refresh();
+        $this->assertSame('Supplier confirmed delivery tomorrow morning.', $task->notes);
+        $this->assertSame(48, $task->sla_hours);
+
+        // 4. Admin / Owner CAN update sla_hours (48 -> 72 and 168) and due_at recalculates accurately
+        $this->actingAs($this->admin)
+            ->patch(route('staff.ops-tracker.update', $task), [
+                'notes' => 'Approved 3-day window for custom foil stamping.',
+                'assigned_user_ids' => [$this->opsLeadUser->id],
+                'sla_hours' => 72,
+            ])
+            ->assertRedirect();
+
+        $task->refresh();
+        $this->assertSame(72, $task->sla_hours);
+        $this->assertTrue($task->due_at->equalTo($assignedTime->copy()->addHours(72)));
+
+        $this->actingAs($this->admin)
+            ->patch(route('staff.ops-tracker.update', $task), [
+                'sla_hours' => 168,
+            ])
+            ->assertRedirect();
+
+        $task->refresh();
+        $this->assertSame(168, $task->sla_hours);
+        $this->assertTrue($task->due_at->equalTo($assignedTime->copy()->addHours(168)));
+    }
 }

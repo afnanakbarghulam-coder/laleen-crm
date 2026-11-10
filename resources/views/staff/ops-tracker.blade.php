@@ -630,6 +630,16 @@
         color: var(--ops-ink);
     }
 
+    .ops-locked-timeframe-box {
+        background: rgba(20, 16, 14, 0.55);
+        border: 1px solid rgba(217, 143, 131, 0.2);
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--ops-muted);
+    }
+
     .btn-ops-drawer-save {
         flex: 1;
         background: linear-gradient(135deg, #e09b8f 0%, #c97c70 100%);
@@ -832,6 +842,9 @@
                                 ? array_values(array_map('intval', $item->assigned_user_ids))
                                 : [];
 
+                            $itemSlaHours = (int) ($item->sla_hours ?: 48);
+                            $itemTimeframeLabel = $slaOptions[$itemSlaHours] ?? ($itemSlaHours . 'h');
+
                             $editPayload = [
                                 'id' => $item->id,
                                 'title' => $item->title,
@@ -839,6 +852,8 @@
                                 'notes' => (string) ($item->notes ?? ''),
                                 'assigned_user_ids' => $currentAssigneeIds,
                                 'assigned_names' => $item->assignee_list,
+                                'sla_hours' => $itemSlaHours,
+                                'timeframe_label' => $itemTimeframeLabel,
                                 'update_url' => route('staff.ops-tracker.update', $item),
                             ];
                         @endphp
@@ -846,7 +861,9 @@
                             $canCompleteTask = $item->canBeCompletedBy(auth()->user());
                             $isAdminViewer = \App\Models\OpsActionItem::isAdminOrOwner(auth()->user());
                         @endphp
-                        <tr class="{{ $item->is_completed ? 'ops-row-completed' : '' }}" data-ops-item-id="{{ $item->id }}">
+                        <tr class="{{ $item->is_completed ? 'ops-row-completed' : '' }}"
+                            data-ops-item-id="{{ $item->id }}"
+                            data-sla-hours="{{ $itemSlaHours }}">
                             {{-- Col 1: Ultra-Minimalistic 2-Line Task & Note --}}
                             <td>
                                 <div class="d-flex align-items-start gap-2">
@@ -885,6 +902,7 @@
                                             @moduleEdit('staff_management')
                                                 <button type="button"
                                                         class="ops-inline-pencil-btn"
+                                                        data-sla-hours="{{ $itemSlaHours }}"
                                                         onclick="openOpsEditDrawer(@js($editPayload))"
                                                         title="Edit note &amp; assignees">
                                                     &#9998;
@@ -1126,7 +1144,7 @@
                     </div>
 
                     {{-- Editable Pending With (Staff Access — Select 1 or more) --}}
-                    <div class="mb-2">
+                    <div class="mb-3">
                         <label class="ops-drawer-field-label">Pending With (Staff Access &mdash; Select 1 or more)</label>
                         <div class="ops-drawer-staff-list" id="opsEditDrawerStaffList">
                             @foreach ($assigneeOptions as $opt)
@@ -1145,6 +1163,32 @@
                             @endforeach
                         </div>
                     </div>
+
+                    {{-- Admin-Only Timeframe Control (Editable for Admin/Owner, Locked Read-Only for Non-Admin) --}}
+                    @if (\App\Models\OpsActionItem::isAdminOrOwner(auth()->user()))
+                        <div class="mb-2" id="opsEditDrawerTimeframeSection">
+                            <label class="ops-drawer-field-label">Timeframe (Admin Only)</label>
+                            <div class="ops-chip-group">
+                                @foreach ($slaOptions as $hoursVal => $hoursLabel)
+                                    <label class="ops-chip-option">
+                                        <input type="radio"
+                                               name="sla_hours"
+                                               value="{{ $hoursVal }}"
+                                               data-sla-value="{{ $hoursVal }}"
+                                               class="ops-edit-drawer-sla-radio">
+                                        <span class="ops-chip-pill">{{ $hoursLabel }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        </div>
+                    @else
+                        <div class="mb-2" id="opsEditDrawerTimeframeLocked">
+                            <label class="ops-drawer-field-label">Timeframe</label>
+                            <div class="ops-locked-timeframe-box" id="opsEditDrawerLockedTimeframe">
+                                🔒 Timeframe: 48h (2 Days) &mdash; Admin Only
+                            </div>
+                        </div>
+                    @endif
                 </div>
 
                 <div class="ops-drawer-footer">
@@ -1213,6 +1257,7 @@
         const formEl = document.getElementById('opsEditDrawerForm');
         const lockedTitleEl = document.getElementById('opsEditDrawerLockedTitle');
         const notesInput = document.getElementById('opsEditDrawerNotesInput');
+        const lockedTimeframeEl = document.getElementById('opsEditDrawerLockedTimeframe');
 
         if (createDrawer) createDrawer.classList.remove('open');
         if (formEl && payload.update_url) {
@@ -1223,6 +1268,17 @@
         }
         if (notesInput) {
             notesInput.value = payload.notes || '';
+        }
+
+        const currentSlaHours = parseInt(payload.sla_hours || 48, 10);
+        document.querySelectorAll('.ops-edit-drawer-sla-radio').forEach(function (radio) {
+            const val = parseInt(radio.getAttribute('data-sla-value') || radio.value || '48', 10);
+            radio.checked = val === currentSlaHours;
+        });
+
+        if (lockedTimeframeEl) {
+            const tfLabel = payload.timeframe_label || (currentSlaHours + 'h');
+            lockedTimeframeEl.textContent = '🔒 Timeframe: ' + tfLabel + ' — Admin Only';
         }
 
         const assignedIds = Array.isArray(payload.assigned_user_ids)

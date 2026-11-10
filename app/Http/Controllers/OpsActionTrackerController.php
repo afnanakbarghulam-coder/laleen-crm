@@ -266,26 +266,42 @@ class OpsActionTrackerController extends Controller
 
     /**
      * Update an existing Ops Action Item.
-     * Task title is strictly immutable after creation — only notes and Staff Access
-     * assignees (assigned_user_ids / assigned_names) may be updated.
+     * Task title is strictly immutable after creation — only notes, Staff Access
+     * assignees (assigned_user_ids / assigned_names), and Admin-only sla_hours may be updated.
      */
     public function update(Request $request, OpsActionItem $opsActionItem)
     {
+        $currentSlaHours = (int) ($opsActionItem->sla_hours ?: 48);
+        $isAdmin = OpsActionItem::isAdminOrOwner($request->user());
+
+        if ($request->filled('sla_hours')) {
+            $requestedSla = (int) $request->input('sla_hours');
+            if (! $isAdmin && $requestedSla !== $currentSlaHours) {
+                abort(403, 'Only an Admin or Owner can modify a task timeframe.');
+            }
+        }
+
         $validated = $request->validate([
             'notes' => ['nullable', 'string', 'max:3000'],
             'assigned_user_ids' => ['nullable', 'array'],
             'assigned_names' => ['nullable', 'array'],
             'pending_with_name' => ['nullable', 'string', 'max:500'],
             'pending_with_type' => ['nullable', Rule::in(['owner', 'ops_lead', 'staff'])],
+            'sla_hours' => ['nullable', 'integer', Rule::in([6, 24, 48, 72, 120, 168])],
         ]);
 
         $payload = [];
+        $assigneesChanged = false;
 
         if ($request->has('notes')) {
             $payload['notes'] = isset($validated['notes']) && trim($validated['notes']) !== ''
                 ? trim($validated['notes'])
                 : null;
         }
+
+        $effectiveSlaHours = ($isAdmin && ! empty($validated['sla_hours']))
+            ? (int) $validated['sla_hours']
+            : $currentSlaHours;
 
         if ($request->hasAny(['assigned_user_ids', 'assigned_names', 'pending_with_name', 'pending_with_type', 'pending_with'])) {
             [$newType, $newName, $newUserIds, $newNames] = $this->resolveMultiAssignees($request);
@@ -304,9 +320,19 @@ class OpsActionTrackerController extends Controller
             $payload['assigned_names'] = $newNames;
 
             if ($assigneesChanged) {
-                $slaHours = (int) ($opsActionItem->sla_hours ?: 48);
-                $payload['ball_assigned_at'] = now();
-                $payload['due_at'] = now()->addHours($slaHours);
+                $now = now();
+                $payload['ball_assigned_at'] = $now;
+                $payload['due_at'] = $now->copy()->addHours($effectiveSlaHours);
+            }
+        }
+
+        if ($isAdmin && ! empty($validated['sla_hours'])) {
+            $newSlaHours = (int) $validated['sla_hours'];
+            $payload['sla_hours'] = $newSlaHours;
+
+            if (! $assigneesChanged) {
+                $baseTime = ($opsActionItem->ball_assigned_at ?? $opsActionItem->created_at ?? now())->copy();
+                $payload['due_at'] = $baseTime->addHours($newSlaHours);
             }
         }
 
