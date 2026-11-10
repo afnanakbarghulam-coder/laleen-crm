@@ -360,7 +360,7 @@ class OpsActionTrackerController extends Controller
         abort_unless(
             $opsActionItem->canBeCompletedBy($request->user()),
             403,
-            'Only an Admin or an assigned staff member can change the completion status of this task.'
+            'Only Admin or Arbab (Operations Lead) can mark tasks completed or reopen them.'
         );
 
         $markCompleted = $request->has('is_completed')
@@ -408,7 +408,7 @@ class OpsActionTrackerController extends Controller
         abort_unless(
             $opsActionItem->canBeCompletedBy($request->user()),
             403,
-            'Only an Admin or an assigned staff member can change the completion status of this task.'
+            'Only Admin or Arbab (Operations Lead) can mark tasks completed or reopen them.'
         );
 
         $payload = [
@@ -443,7 +443,7 @@ class OpsActionTrackerController extends Controller
         abort_unless(
             $opsActionItem->canBeCompletedBy($request->user()),
             403,
-            'Only an Admin or an assigned staff member can change the completion status of this task.'
+            'Only Admin or Arbab (Operations Lead) can mark tasks completed or reopen them.'
         );
 
         $slaHours = (int) ($opsActionItem->sla_hours ?: 48);

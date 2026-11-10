@@ -884,7 +884,7 @@
                                         <button type="button"
                                                 class="ops-status-circle is-disabled {{ $item->is_completed ? 'is-done' : '' }}"
                                                 disabled
-                                                title="Only Admin or assigned staff can complete this task">
+                                                title="Only Admin or Arbab can mark this task completed">
                                             ✓
                                         </button>
                                     @endif
@@ -973,8 +973,8 @@
                                         @endif
                                     @else
                                         <span class="ops-assigned-only-pill"
-                                              title="Only Admin or assigned staff can complete this task">
-                                            🔒 Assigned Only
+                                              title="Only Admin or Arbab can mark this task completed">
+                                            🔒 Verified by Ops Lead
                                         </span>
                                     @endif
 

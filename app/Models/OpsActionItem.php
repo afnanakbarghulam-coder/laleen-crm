@@ -333,12 +333,32 @@ class OpsActionItem extends Model
     }
 
     /**
+     * Determine whether the given user is Arbab (Operations Lead).
+     */
+    public static function isArbab(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        $lowerName = strtolower(trim((string) $user->name));
+        if ($lowerName === 'arbab' || str_starts_with($lowerName, 'arbab')) {
+            return true;
+        }
+
+        $emailPrefix = strtolower(trim(explode('@', (string) $user->email)[0] ?? ''));
+        if ($emailPrefix === 'arbab' || str_starts_with($emailPrefix, 'arbab')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Determine whether the given Staff Access user is authorized to mark this task
      * Completed or move it back to Pending:
-     * - Returns true if $user is an Admin / Owner.
-     * - Returns true if $user->id is present in $this->assigned_user_ids (cast to int)
-     *   or (for legacy rows without assigned_user_ids) $user->name matches assigned_names / pending_with_name.
-     * - Returns false for everyone else.
+     * - Returns true ONLY if $user is an Admin / Owner OR $user is Arbab.
+     * - Returns false for all other users (even if assigned to the task).
      */
     public function canBeCompletedBy(?User $user): bool
     {
@@ -346,19 +366,7 @@ class OpsActionItem extends Model
             return false;
         }
 
-        if (static::isAdminOrOwner($user)) {
-            return true;
-        }
-
-        $userIds = is_array($this->assigned_user_ids)
-            ? array_values(array_filter(array_map('intval', $this->assigned_user_ids), fn (int $id) => $id > 0))
-            : [];
-
-        if (! empty($userIds)) {
-            return in_array((int) $user->id, $userIds, true);
-        }
-
-        return $this->isAssignedToUser((int) $user->id, $user->name);
+        return static::isAdminOrOwner($user) || static::isArbab($user);
     }
 
     public function staff(): BelongsTo

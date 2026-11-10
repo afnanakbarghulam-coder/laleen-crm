@@ -360,85 +360,115 @@ class StaffOpsTrackerTest extends TestCase
         $currentWeekResponse->assertSee('36h left');
     }
 
-    public function test_completion_authorization_allows_admin_and_assigned_staff_but_blocks_unassigned_staff_with_403_and_locked_ui(): void
+    public function test_completion_authorization_allows_only_admin_and_arbab_while_blocking_other_assigned_staff_with_403_and_locked_ui(): void
     {
-        // Task assigned strictly to Ayan (stored as string ID to also verify safe (int) casting)
-        $ayanTask = OpsActionItem::create([
+        $arbabUser = User::factory()->create([
+            'name' => 'Arbab',
+            'email' => 'arbab@laleen.qa',
+            'role' => 'manager',
+            'is_active' => true,
+            'permissions' => ['staff_management' => 'edit'],
+        ]);
+
+        $ladenUser = User::factory()->create([
+            'name' => 'Laden Khan',
+            'email' => 'laden@laleen.qa',
+            'role' => 'manager',
+            'is_active' => true,
+            'permissions' => ['staff_management' => 'edit'],
+        ]);
+
+        // Task explicitly assigned to Ayan and Laden Khan
+        $assignedTask = OpsActionItem::create([
             'title' => 'Follow up with 15 Ramadan Keratin leads on WhatsApp',
             'scope' => 'Marketing & Ads',
             'pending_with_type' => 'staff',
-            'pending_with_name' => 'Ayan',
-            'assigned_user_ids' => [(string) $this->ayanUser->id],
-            'assigned_names' => ['Ayan'],
+            'pending_with_name' => 'Ayan, Laden Khan',
+            'assigned_user_ids' => [$this->ayanUser->id, $ladenUser->id],
+            'assigned_names' => ['Ayan', 'Laden Khan'],
             'sla_hours' => 48,
             'is_completed' => false,
         ]);
 
-        // Verify model helper directly
-        $this->assertTrue($ayanTask->canBeCompletedBy($this->admin));
-        $this->assertTrue($ayanTask->canBeCompletedBy($this->ayanUser));
-        $this->assertFalse($ayanTask->canBeCompletedBy($this->opsLeadUser));
-        $this->assertFalse($ayanTask->canBeCompletedBy($this->sanaUser));
+        // Verify model helper directly: ONLY Admin/Owner and Arbab return true
+        $this->assertTrue($assignedTask->canBeCompletedBy($this->admin));
+        $this->assertTrue($assignedTask->canBeCompletedBy($arbabUser));
+        $this->assertFalse($assignedTask->canBeCompletedBy($this->ayanUser));
+        $this->assertFalse($assignedTask->canBeCompletedBy($ladenUser));
+        $this->assertFalse($assignedTask->canBeCompletedBy($this->opsLeadUser));
+        $this->assertFalse($assignedTask->canBeCompletedBy($this->sanaUser));
 
-        // 1. Unassigned Non-Admin Staff Access User (Ops Lead & Sana) sees locked UI state and gets 403 Forbidden on toggle
-        $unassignedView = $this->actingAs($this->opsLeadUser)
+        // 1. Other Assigned Staff (Ayan & Laden Khan, even though explicitly assigned) see locked UI and get 403 Forbidden on toggle
+        $ayanView = $this->actingAs($this->ayanUser)
             ->get(route('staff.ops-tracker.index'))
             ->assertOk();
 
-        $unassignedView->assertDontSee('✓ Mark Done');
-        $unassignedView->assertSee('🔒 Assigned Only');
-        $unassignedView->assertSee('Only Admin or assigned staff can complete this task');
-
-        $this->actingAs($this->opsLeadUser)
-            ->post(route('staff.ops-tracker.toggle', $ayanTask))
-            ->assertForbidden();
-
-        $ayanTask->refresh();
-        $this->assertFalse($ayanTask->is_completed);
-
-        // Unassigned non-admin also cannot delete tasks
-        $this->actingAs($this->opsLeadUser)
-            ->delete(route('staff.ops-tracker.destroy', $ayanTask))
-            ->assertForbidden();
-        $this->assertDatabaseHas('ops_action_items', ['id' => $ayanTask->id]);
-
-        // 2. Assigned Staff Access User (Ayan) sees "✓ Mark Done" and CAN mark their own assigned task Completed
-        $assignedView = $this->actingAs($this->ayanUser)
-            ->get(route('staff.ops-tracker.index'))
-            ->assertOk();
-
-        $assignedView->assertSee('✓ Mark Done');
-        $assignedView->assertDontSee('🔒 Assigned Only');
+        $ayanView->assertDontSee('✓ Mark Done');
+        $ayanView->assertSee('🔒 Verified by Ops Lead');
+        $ayanView->assertSee('Only Admin or Arbab can mark this task completed');
 
         $this->actingAs($this->ayanUser)
-            ->post(route('staff.ops-tracker.toggle', $ayanTask))
-            ->assertRedirect();
-
-        $ayanTask->refresh();
-        $this->assertTrue($ayanTask->is_completed);
-        $this->assertSame('Ayan', $ayanTask->completed_by);
-
-        // Unassigned non-admin ALSO cannot reopen a completed task
-        $this->actingAs($this->opsLeadUser)
-            ->post(route('staff.ops-tracker.toggle', $ayanTask))
+            ->post(route('staff.ops-tracker.toggle', $assignedTask))
             ->assertForbidden();
-        $this->assertTrue($ayanTask->fresh()->is_completed);
 
-        // 3. Admin / Owner can reopen AND complete ANY task, even when assigned solely to another staff member
-        $this->actingAs($this->admin)
-            ->post(route('staff.ops-tracker.toggle', $ayanTask))
+        $this->actingAs($ladenUser)
+            ->post(route('staff.ops-tracker.toggle', $assignedTask))
+            ->assertForbidden();
+
+        $assignedTask->refresh();
+        $this->assertFalse($assignedTask->is_completed);
+
+        // Non-admin also cannot delete tasks
+        $this->actingAs($arbabUser)
+            ->delete(route('staff.ops-tracker.destroy', $assignedTask))
+            ->assertForbidden();
+        $this->assertDatabaseHas('ops_action_items', ['id' => $assignedTask->id]);
+
+        // 2. Arbab (non-admin Operations Lead) sees "✓ Mark Done", CAN mark tasks Completed, and CAN move them back to Pending
+        $arbabView = $this->actingAs($arbabUser)
+            ->get(route('staff.ops-tracker.index'))
+            ->assertOk();
+
+        $arbabView->assertSee('✓ Mark Done');
+        $arbabView->assertDontSee('🔒 Verified by Ops Lead');
+
+        $this->actingAs($arbabUser)
+            ->post(route('staff.ops-tracker.toggle', $assignedTask))
             ->assertRedirect();
 
-        $ayanTask->refresh();
-        $this->assertFalse($ayanTask->is_completed);
+        $assignedTask->refresh();
+        $this->assertTrue($assignedTask->is_completed);
+        $this->assertSame('Arbab', $assignedTask->completed_by);
 
-        $this->actingAs($this->admin)
-            ->post(route('staff.ops-tracker.toggle', $ayanTask))
+        // Assigned staff (Ayan) ALSO cannot reopen a completed task
+        $this->actingAs($this->ayanUser)
+            ->post(route('staff.ops-tracker.toggle', $assignedTask))
+            ->assertForbidden();
+        $this->assertTrue($assignedTask->fresh()->is_completed);
+
+        // Arbab CAN move the completed task back to Pending
+        $this->actingAs($arbabUser)
+            ->post(route('staff.ops-tracker.toggle', $assignedTask))
             ->assertRedirect();
 
-        $ayanTask->refresh();
-        $this->assertTrue($ayanTask->is_completed);
-        $this->assertSame('Afnan (Owner)', $ayanTask->completed_by);
+        $assignedTask->refresh();
+        $this->assertFalse($assignedTask->is_completed);
+
+        // 3. Admin / Owner can mark ANY task Completed and move it back to Pending
+        $this->actingAs($this->admin)
+            ->post(route('staff.ops-tracker.toggle', $assignedTask))
+            ->assertRedirect();
+
+        $assignedTask->refresh();
+        $this->assertTrue($assignedTask->is_completed);
+        $this->assertSame('Afnan (Owner)', $assignedTask->completed_by);
+
+        $this->actingAs($this->admin)
+            ->post(route('staff.ops-tracker.toggle', $assignedTask))
+            ->assertRedirect();
+
+        $assignedTask->refresh();
+        $this->assertFalse($assignedTask->is_completed);
     }
 
     public function test_admin_can_edit_timeframe_and_recalculate_due_at_while_non_admin_staff_cannot_edit_timeframe(): void
