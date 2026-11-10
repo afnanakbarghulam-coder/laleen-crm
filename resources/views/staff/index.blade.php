@@ -543,19 +543,31 @@
         @endmoduleEdit
     </div>
 
-    <div class="d-flex gap-2 mb-3">
-        <a href="{{ route('staffs.index') }}" class="btn btn-sm btn-dark">Team members</a>
+    <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+        <a href="{{ route('staffs.index') }}" class="btn btn-sm btn-dark">👥 Staff Directory &amp; Payroll</a>
         <a href="{{ route('shifts.index') }}" class="btn btn-sm btn-outline-secondary">Scheduled shifts</a>
+        <a href="{{ route('staff.ops-tracker.index') }}" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
+            <span>⚡ Ops &amp; Action Tracker</span>
+            @if(($pendingOwnerActionCount ?? 0) > 0)
+                <span class="badge rounded-pill ms-1" style="background:#7f1d1d !important; color:#ffffff !important; font-weight:700; border:1px solid rgba(255,255,255,0.2);">{{ $pendingOwnerActionCount }} Pending Owner</span>
+            @endif
+        </a>
         @if (auth()->user()->isSuperAdmin())
             <a href="{{ route('users.index') }}" class="btn btn-sm btn-outline-secondary">Staff Access</a>
         @endif
     </div>
 
-    <div class="d-flex gap-2 mb-4 flex-wrap">
+    <div class="d-flex gap-2 mb-4 flex-wrap align-items-center">
         <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'directory' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="directory">Staff Directory</button>
         <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'workspace' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="workspace">Staff Workspace</button>
         <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'payroll' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="payroll">Payroll &amp; Overtime</button>
         <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'complaints' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="complaints">HR &amp; Disciplinary</button>
+        <a href="{{ route('staff.ops-tracker.index') }}" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
+            <i class="bx bx-bolt-circle"></i> Ops &amp; Action Tracker
+            @if(($pendingOwnerActionCount ?? 0) > 0)
+                <span class="badge rounded-pill ms-1" style="background:#7f1d1d !important; color:#ffffff !important; font-weight:700; border:1px solid rgba(255,255,255,0.2);">{{ $pendingOwnerActionCount }} Pending Owner</span>
+            @endif
+        </a>
     </div>
 
     {{-- ================= STAFF DIRECTORY ================= --}}

@@ -9,6 +9,7 @@ use App\Models\ServiceCategory;
 use App\Models\Appointment;
 use App\Models\AppointmentService;
 use App\Models\Expense;
+use App\Models\OpsActionItem;
 use App\Models\StaffComplaint;
 use App\Models\StaffDeduction;
 use App\Models\StaffNotice;
@@ -187,6 +188,19 @@ class StaffController extends Controller
             ->paginate(15, ['*'], 'notices_page')
             ->appends(array_merge($hrAppendParams, array_filter(['notices_staff' => $request->input('notices_staff')])));
 
+        $pendingOwnerActionCount = 0;
+        try {
+            $usersById = User::where('is_active', true)->get(['id', 'name', 'role'])->keyBy('id');
+            $pendingOwnerActionCount = OpsActionItem::forWeek(now()->startOfWeek(Carbon::MONDAY))
+                ->where('is_completed', false)
+                ->get()
+                ->filter(fn (OpsActionItem $item) => $item->involvesBucket('owner', $usersById))
+                ->count();
+        } catch (\Throwable) {
+            $pendingOwnerActionCount = 0;
+        }
+        $pendingOwnerCount = $pendingOwnerActionCount;
+
         return view('staff.index', compact(
             'staff', 'services', 'categories', 'activeTab', 'allStaff', 'allStaffOptions', 'serviceOptions',
             'staffWorkspaceOptions', 'selectedWorkspaceStaffId',
@@ -195,7 +209,8 @@ class StaffController extends Controller
             'complaintsDate', 'complaintsFrom', 'complaintsTo',
             'deductionsDate', 'deductionsFrom', 'deductionsTo',
             'openComplaints', 'openComplaintOptions',
-            'notices', 'noticesStaffFilter'
+            'notices', 'noticesStaffFilter',
+            'pendingOwnerActionCount', 'pendingOwnerCount'
         ));
     }
 
