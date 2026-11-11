@@ -19,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class StaffController extends Controller
@@ -216,6 +217,8 @@ class StaffController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorizeAccessSync($request, null);
+
         $validated = $this->validated($request);
         $profilePath = $this->handlePhoto($request);
 
@@ -242,6 +245,8 @@ class StaffController extends Controller
 
     public function update(Request $request, Staff $staff)
     {
+        $this->authorizeAccessSync($request, $staff);
+
         $validated = $this->validated($request);
 
         if ($request->hasFile('profile_picture')) {
@@ -302,11 +307,22 @@ class StaffController extends Controller
         return redirect()->back()->with('success', 'Wage settings updated for ' . $staff->name . '.');
     }
 
-    public function destroy(Staff $staff)
+    public function destroy(Request $request, Staff $staff)
     {
+        $existingUser = $staff->user_id ? ($staff->user ?? User::find($staff->user_id)) : null;
+        $actor = $request->user();
+        $actorIsAdmin = $actor && ($actor->isSuperAdmin() || $actor->isAdmin());
+
+        if ($existingUser && ($existingUser->isAdmin() || $existingUser->isSuperAdmin()) && !$actorIsAdmin) {
+            abort(403, 'Only an administrator can remove or deactivate an admin account.');
+        }
+
         DB::transaction(function () use ($staff) {
             if ($staff->user_id) {
                 User::where('id', $staff->user_id)->update(['is_active' => false]);
+                if (Schema::hasTable('sessions')) {
+                    DB::table('sessions')->where('user_id', $staff->user_id)->delete();
+                }
             }
 
             // Move any open/upcoming appointments assigned to this staff member
@@ -356,6 +372,11 @@ class StaffController extends Controller
      */
     public function postPayrollToFinance(Request $request)
     {
+        $actor = $request->user();
+        if (!$actor || (!$actor->isAdmin() && !$actor->canEdit('finance'))) {
+            abort(403, 'You do not have permission to post payroll to Finance.');
+        }
+
         $from = $request->date('payroll_from') ?? $request->date('from') ?? now()->startOfMonth();
         $to = $request->date('payroll_to') ?? $request->date('to') ?? now()->endOfMonth();
         if ($from->gt($to)) {
@@ -366,57 +387,99 @@ class StaffController extends Controller
         $payrollBranch = in_array($rawBranch, ['old_airport', 'wakrah'], true) ? $rawBranch : null;
 
         $calculator = new StaffPayrollCalculator($from, $to);
-        $staffQuery = Staff::active()->orderBy('name');
-        if ($payrollBranch) {
-            $staffQuery->where(fn ($q) => $q->where('branch', $payrollBranch)->orWhere('branch', 'both'));
+        $allActiveStaff = Staff::active()->orderBy('name')->get();
+        $allRows = $calculator->payrollFor($allActiveStaff);
+
+        $branchBuckets = [
+            'old_airport' => ['label' => 'Old Airport', 'amount' => 0.0, 'count' => 0],
+            'wakrah' => ['label' => 'Al Wakrah', 'amount' => 0.0, 'count' => 0],
+        ];
+
+        foreach ($allRows as $row) {
+            $net = round((float) ($row['net_salary'] ?? 0), 2);
+            $staffBranch = (string) ($row['branch'] ?? 'old_airport');
+
+            if ($staffBranch === 'both') {
+                $oaShare = round($net * 0.5, 2);
+                $wkShare = round($net - $oaShare, 2);
+                $branchBuckets['old_airport']['amount'] = round($branchBuckets['old_airport']['amount'] + $oaShare, 2);
+                $branchBuckets['old_airport']['count']++;
+                $branchBuckets['wakrah']['amount'] = round($branchBuckets['wakrah']['amount'] + $wkShare, 2);
+                $branchBuckets['wakrah']['count']++;
+            } elseif ($staffBranch === 'wakrah') {
+                $branchBuckets['wakrah']['amount'] = round($branchBuckets['wakrah']['amount'] + $net, 2);
+                $branchBuckets['wakrah']['count']++;
+            } else {
+                $branchBuckets['old_airport']['amount'] = round($branchBuckets['old_airport']['amount'] + $net, 2);
+                $branchBuckets['old_airport']['count']++;
+            }
         }
 
-        $rows = $calculator->payrollFor($staffQuery->get());
-        $totalNetPayroll = round((float) $rows->sum('net_salary'), 2);
-
         $tag = sprintf('[Payroll: %s to %s]', $from->format('Y-m-d'), $to->format('Y-m-d'));
-        $branchLabel = $payrollBranch === 'old_airport'
-            ? 'Old Airport'
-            : ($payrollBranch === 'wakrah' ? 'Al Wakrah' : 'All Branches');
-        $description = sprintf('%s Staff Payroll (%d staff) %s', $branchLabel, $rows->count(), $tag);
 
-        $expense = DB::transaction(function () use ($tag, $payrollBranch, $totalNetPayroll, $to, $description) {
-            $existingQuery = Expense::where('category', 'Salaries & Wages')
-                ->where('description', 'like', '%' . $tag . '%');
+        $targetBranches = $payrollBranch
+            ? [$payrollBranch]
+            : ['old_airport', 'wakrah'];
 
-            if ($payrollBranch) {
-                $existingQuery->where('branch', $payrollBranch);
-            } else {
-                $existingQuery->whereNull('branch');
+        $totalNetPayroll = round(collect($targetBranches)->sum(fn (string $b) => $branchBuckets[$b]['amount']), 2);
+
+        $expense = DB::transaction(function () use ($tag, $payrollBranch, $targetBranches, $branchBuckets, $to) {
+            // Remove any legacy unallocated (branch IS NULL) payroll rows for the same period
+            // so switching between "All Branches" and per-branch posting never double-posts.
+            Expense::where('category', 'Salaries & Wages')
+                ->whereNull('branch')
+                ->where('description', 'like', '%' . $tag . '%')
+                ->lockForUpdate()
+                ->delete();
+
+            $primaryExpense = null;
+
+            foreach ($targetBranches as $branchKey) {
+                $bucket = $branchBuckets[$branchKey];
+                $description = sprintf('%s Staff Payroll (%d staff) %s', $bucket['label'], $bucket['count'], $tag);
+
+                $existing = Expense::where('category', 'Salaries & Wages')
+                    ->where('branch', $branchKey)
+                    ->where('description', 'like', '%' . $tag . '%')
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($payrollBranch === null && $bucket['count'] === 0 && $bucket['amount'] <= 0) {
+                    if ($existing) {
+                        $existing->delete();
+                    }
+                    continue;
+                }
+
+                if ($existing) {
+                    $existing->update([
+                        'amount' => $bucket['amount'],
+                        'expense_date' => $to->toDateString(),
+                        'description' => $description,
+                    ]);
+                    $primaryExpense = $primaryExpense ?? $existing;
+                } else {
+                    $created = Expense::create([
+                        'branch' => $branchKey,
+                        'category' => 'Salaries & Wages',
+                        'amount' => $bucket['amount'],
+                        'expense_date' => $to->toDateString(),
+                        'description' => $description,
+                        'created_by' => auth()->id(),
+                    ]);
+                    $primaryExpense = $primaryExpense ?? $created;
+                }
             }
 
-            $existing = $existingQuery->lockForUpdate()->first();
-
-            if ($existing) {
-                $existing->update([
-                    'amount' => $totalNetPayroll,
-                    'expense_date' => $to->toDateString(),
-                    'description' => $description,
-                ]);
-                return $existing;
-            }
-
-            return Expense::create([
-                'branch' => $payrollBranch,
-                'category' => 'Salaries & Wages',
-                'amount' => $totalNetPayroll,
-                'expense_date' => $to->toDateString(),
-                'description' => $description,
-                'created_by' => auth()->id(),
-            ]);
+            return $primaryExpense;
         });
 
         if ($request->wantsJson()) {
             return response()->json([
                 'success' => true,
                 'message' => "Posted QAR " . number_format($totalNetPayroll, 2) . " payroll to Finance Expenses.",
-                'expense_id' => $expense->id,
-                'amount' => (float) $expense->amount,
+                'expense_id' => $expense?->id,
+                'amount' => (float) $totalNetPayroll,
             ]);
         }
 
@@ -490,17 +553,51 @@ class StaffController extends Controller
     }
 
     /**
+     * Block non-admin staff managers from assigning role='admin' or mutating/revoking
+     * an existing admin or super-admin account via the Staff Management form.
+     */
+    private function authorizeAccessSync(Request $request, ?Staff $staff): void
+    {
+        $actor = $request->user();
+        $actorIsAdmin = $actor && ($actor->isSuperAdmin() || $actor->isAdmin());
+
+        if ($actorIsAdmin) {
+            return;
+        }
+
+        $hasAccess = $request->boolean('has_access') || $request->boolean('login_access');
+        $requestedRole = strtolower(trim((string) $request->input('access_role', '')));
+
+        if ($hasAccess && in_array($requestedRole, ['admin', 'owner', 'super_admin'], true)) {
+            abort(403, 'Only an administrator can assign the admin role.');
+        }
+
+        if ($staff && $staff->user_id) {
+            $existingUser = $staff->user ?? User::find($staff->user_id);
+            if ($existingUser && ($existingUser->isAdmin() || $existingUser->isSuperAdmin())) {
+                abort(403, 'Only an administrator can modify or revoke an admin account.');
+            }
+        }
+    }
+
+    /**
      * Grant, update, or revoke this team member's CRM login + role.
      * Revoking unlinks the account without deleting it, so access can be
      * restored later without losing the user's history.
      */
     private function syncAccess(Request $request, Staff $staff): void
     {
+        $this->authorizeAccessSync($request, $staff);
+
         $hasAccess = $request->boolean('has_access') || $request->boolean('login_access');
 
         if (!$hasAccess) {
             if ($staff->user_id) {
-                User::where('id', $staff->user_id)->update(['is_active' => false]);
+                $deactivatedUserId = $staff->user_id;
+                User::where('id', $deactivatedUserId)->update(['is_active' => false]);
+                if (Schema::hasTable('sessions')) {
+                    DB::table('sessions')->where('user_id', $deactivatedUserId)->delete();
+                }
                 $staff->update(['user_id' => null]);
             }
             return;

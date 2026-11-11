@@ -38,9 +38,11 @@ class EcommerceController extends Controller
                 ->orWhere('are_stories_posted', true)
                 ->orWhere('status', 'Live on Shopify/Meta');
         })->count();
-        $inFlightAdsCount = EcommerceMonthlyAd::whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count();
+        $inFlightAdsCount = EcommerceMonthlyAd::forRegion($region)
+            ->whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)
+            ->count();
 
-        $totalCustomersCount = EcommerceCustomer::count();
+        $totalCustomersCount = EcommerceCustomer::forRegion($region)->count();
 
         $revenueSales = EcommerceSale::realizedRevenue()
             ->whereIn('channel', $regionChannels)
@@ -76,8 +78,9 @@ class EcommerceController extends Controller
         return redirect()->route('ecommerce.partners.index');
     }
 
-    public function marketing()
+    public function marketing(Request $request)
     {
+        $region = EcommerceSale::normalizeRegion($request->query('region', 'pk'));
         $contentLive = EcommerceContentCalendar::where(function ($q) {
             $q->where('is_reel_posted', true)
                 ->orWhere('are_stories_posted', true)
@@ -85,8 +88,9 @@ class EcommerceController extends Controller
         })->count();
 
         return view('ecommerce.marketing.hub', [
-            'adsInFlight' => EcommerceMonthlyAd::whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count(),
-            'adsScaling' => EcommerceMonthlyAd::where('phase', 'Scaling')->count(),
+            'region' => $region,
+            'adsInFlight' => EcommerceMonthlyAd::forRegion($region)->whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count(),
+            'adsScaling' => EcommerceMonthlyAd::forRegion($region)->where('phase', 'Scaling')->count(),
             'contentSlots' => EcommerceContentCalendar::count(),
             'contentLive' => $contentLive,
         ]);

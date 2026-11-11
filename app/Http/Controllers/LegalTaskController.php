@@ -8,8 +8,10 @@ use Illuminate\Support\Facades\Auth;
 
 class LegalTaskController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+
         $tasks = LegalTask::with('creator')
             ->orderBy('deadline', 'asc')
             ->get();
@@ -22,6 +24,8 @@ class LegalTaskController extends Controller
 
     public function store(Request $request)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -44,6 +48,8 @@ class LegalTaskController extends Controller
 
     public function update(Request $request, LegalTask $legalTask)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
@@ -57,8 +63,10 @@ class LegalTaskController extends Controller
         return back()->with('success', 'Legal task updated successfully.');
     }
 
-    public function destroy(LegalTask $legalTask)
+    public function destroy(Request $request, LegalTask $legalTask)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+
         $legalTask->delete();
 
         return back()->with('success', 'Legal task deleted successfully.');

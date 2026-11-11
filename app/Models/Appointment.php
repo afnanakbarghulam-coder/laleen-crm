@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Carbon;
 
 class Appointment extends Model
 {
@@ -35,6 +36,11 @@ class Appointment extends Model
         'appointment_datetime' => 'datetime',
         'paid_at' => 'datetime',
     ];
+
+    public function getAppointmentDateAttribute(): Carbon
+    {
+        return Carbon::parse($this->appointment_datetime ?: $this->booking_date ?: $this->created_at ?: now());
+    }
 
     public function agent()
     {

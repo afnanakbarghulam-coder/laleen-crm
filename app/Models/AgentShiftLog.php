@@ -7,6 +7,8 @@ use Illuminate\Support\Carbon;
 
 class AgentShiftLog extends Model
 {
+    public const SHIFT_TIMEZONE = 'Asia/Qatar';
+
     const SHIFTS = [
         'morning' => 'Morning',
         'evening' => 'Evening',
@@ -42,7 +44,8 @@ class AgentShiftLog extends Model
      */
     public function windowStart(): Carbon
     {
-        return $this->date->copy()->setTimeFromTimeString($this->check_in_time);
+        return Carbon::parse($this->date->format('Y-m-d'), self::SHIFT_TIMEZONE)
+            ->setTimeFromTimeString($this->check_in_time);
     }
 
     /**
@@ -50,11 +53,13 @@ class AgentShiftLog extends Model
      */
     public function windowEnd(): Carbon
     {
+        $qatarDay = Carbon::parse($this->date->format('Y-m-d'), self::SHIFT_TIMEZONE);
+
         if (empty($this->check_out_time)) {
-            return $this->date->copy()->endOfDay();
+            return $qatarDay->endOfDay();
         }
 
-        return $this->date->copy()->setTimeFromTimeString($this->check_out_time);
+        return $qatarDay->setTimeFromTimeString($this->check_out_time);
     }
 
     /**

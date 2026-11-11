@@ -20,6 +20,7 @@ use App\Models\Combo;
 use App\Models\ClientPackage;
 use App\Models\ClientPackageService;
 use App\Models\LoyaltyTransaction;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -439,9 +440,7 @@ class AppointmentController extends Controller
         $allServiceNames = array_column($scheduleEntries, 'name');
         $services = !empty($allServiceNames) ? implode(', ', $allServiceNames) : 'Decide in Salon';
 
-        $previousRevenue = Appointment::whereRaw("REPLACE(REPLACE(REPLACE(phone, ' ', ''), '(', ''), ')', '') = ?", [$phone])
-            ->sum('price');
-        $lifetimeRevenue = $previousRevenue + ($request->price ?? 0);
+        $lifetimeRevenue = $this->calculateVerifiedLifetimeRevenue($customer?->id, $phone);
 
         $appointment = DB::transaction(function () use ($request, $services, $phone, $customer, $lifetimeRevenue, $staffId, $startTime, $appointmentDate, $isUnscheduled, $serviceNames, $packagePlans, $redemptionPlans) {
             $appointment = Appointment::create(array_merge(
@@ -528,6 +527,59 @@ class AppointmentController extends Controller
     }
 
     /**
+     * Compute verified paid client Lifetime Revenue (LTV) strictly from net paid Sale records,
+     * excluding cancelled, no-show, or unpaid appointments and preventing edit double-counting.
+     */
+    private function calculateVerifiedLifetimeRevenue(?int $customerId, ?string $phone): float
+    {
+        $rawDigits = preg_replace('/\D/', '', (string) $phone);
+        [$countryCode, $localNumber] = Lead::splitPhone($rawDigits);
+        $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
+        $withQatarCode = strlen($normalizedPhone) === 8 ? '974' . $normalizedPhone : null;
+        $phoneCandidates = array_values(array_unique(array_filter([
+            $normalizedPhone,
+            $rawDigits,
+            $withQatarCode,
+        ])));
+
+        if (!$customerId && empty($phoneCandidates)) {
+            return 0.0;
+        }
+
+        $matchedCustomerIds = collect($customerId ? [$customerId] : []);
+        if (!empty($phoneCandidates)) {
+            $matchedCustomerIds = $matchedCustomerIds->merge(
+                Customer::whereIn('phone', $phoneCandidates)->pluck('id')
+            )->unique()->values();
+        }
+
+        $sales = Sale::query()
+            ->where(function ($q) use ($matchedCustomerIds, $phoneCandidates) {
+                if ($matchedCustomerIds->isNotEmpty()) {
+                    $q->whereIn('customer_id', $matchedCustomerIds);
+                }
+                if (!empty($phoneCandidates)) {
+                    $q->orWhereHas('appointment', function ($aq) use ($phoneCandidates) {
+                        $aq->whereNotIn('status', ['cancelled', 'no_show'])
+                            ->where(function ($pq) use ($phoneCandidates) {
+                                $pq->whereIn('phone', $phoneCandidates);
+                                foreach ($phoneCandidates as $cand) {
+                                    $pq->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '(', ''), ')', '') = ?", [$cand]);
+                                }
+                            });
+                    });
+                }
+            })
+            ->where(function ($q) {
+                $q->whereNull('appointment_id')
+                    ->orWhereHas('appointment', fn ($aq) => $aq->whereNotIn('status', ['cancelled', 'no_show']));
+            })
+            ->get(['id', 'services_total', 'products_total', 'packages_total', 'discount_amount']);
+
+        return round((float) $sales->unique('id')->sum(fn (Sale $sale) => AdLeadEntry::netSaleAmount($sale)), 2);
+    }
+
+    /**
      * Find a customer by phone, creating one if needed. Refreshes the stored
      * name so the directory reflects the latest booking's spelling. Returns
      * null when phone normalizes to empty (walk-in without a phone number).
@@ -609,6 +661,7 @@ class AppointmentController extends Controller
 
         // Defensively merge and remove any older duplicate open rows so 1 booking = 1 conversion
         foreach ($openLeads->slice(1) as $duplicateLead) {
+            AdLeadEntry::where('lead_id', $duplicateLead->id)->update(['lead_id' => $primaryLead->id]);
             $duplicateLead->delete();
         }
 
@@ -702,14 +755,6 @@ class AppointmentController extends Controller
                 ->with('error', 'Staff is already booked during this time.');
         }
 
-        // Calculate lifetime revenue: sum of previous appointments except current (walk-ins have none)
-        $lifetimeRevenue = (float) ($request->price ?? 0);
-        if ($phone !== '') {
-            $previousRevenue = Appointment::whereRaw("REPLACE(REPLACE(REPLACE(phone, ' ', ''), '(', ''), ')', '') = ?", [$phone])
-                ->sum('price');
-            $lifetimeRevenue = $previousRevenue + ($request->price ?? 0);
-        }
-
         $customerId = $appointment->customer_id;
         if ($phone !== '') {
             $customer = $this->findOrCreateCustomer($phone, $request->customer_name);
@@ -717,6 +762,10 @@ class AppointmentController extends Controller
                 $customerId = $customer->id;
             }
         }
+
+        // Calculate verified paid lifetime revenue strictly from paid Sale net amounts
+        // (never double-counting the edited appointment or including cancelled/no-show/unpaid bookings).
+        $lifetimeRevenue = $this->calculateVerifiedLifetimeRevenue($customerId ? (int) $customerId : null, $phone);
 
         $oldStaffId = $appointment->staff_id;
         $oldStatus = $appointment->status;
@@ -866,35 +915,126 @@ class AppointmentController extends Controller
     public function destroy(Appointment $appointment)
     {
         DB::transaction(function () use ($appointment) {
-            $customer = $appointment->customer;
-            $apptDate = Carbon::parse($appointment->appointment_datetime ?: $appointment->booking_date ?: now());
+            $customer = $appointment->customer ?: ($appointment->customer_id ? Customer::find($appointment->customer_id) : null);
+            $apptDate = $appointment->appointment_date->copy();
             $phone = $appointment->phone;
             $appointmentId = $appointment->id;
 
-            $reopenNote = '[Reopened: Booking deleted on ' . now()->format('d M Y') . ']';
-            $linkedBookedLeads = Lead::where('appointment_id', $appointment->id)
-                ->where('needful_done', 'booked')
-                ->get();
+            $rawPhone = preg_replace('/\D/', '', (string) $phone);
+            $normalizedPhone = Customer::normalizePhone((string) $phone);
+            $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $rawPhone, $phone])));
+            $customerId = $appointment->customer_id ?: $customer?->id;
 
-            foreach ($linkedBookedLeads as $lead) {
-                $cleanedRemarks = trim((string) preg_replace('/\s*\[Auto-closed:[^\]]*\]/i', '', (string) $lead->customer_remarks));
+            $this->reverseAppointmentSale($appointment);
+
+            $reopenNote = '[Reopened: Booking deleted on ' . now()->format('d M Y') . ']';
+            $linkedLeads = Lead::where('appointment_id', $appointmentId)->orderByDesc('id')->get();
+            $primaryLinkedLead = $linkedLeads->first();
+            $minConversionDateStr = ($primaryLinkedLead?->created_at
+                ? Carbon::parse($primaryLinkedLead->created_at)->startOfDay()
+                : today()->startOfDay()
+            )->toDateString();
+
+            $otherActiveAppt = null;
+            if ($customerId || !empty($phoneCandidates)) {
+                $otherActiveAppt = Appointment::query()
+                    ->where('id', '!=', $appointmentId)
+                    ->whereNotIn('status', ['cancelled', 'no_show'])
+                    ->where(function ($q) use ($customerId, $phoneCandidates) {
+                        if ($customerId) {
+                            $q->orWhere('customer_id', $customerId);
+                        }
+                        if (!empty($phoneCandidates)) {
+                            $q->orWhereIn('phone', $phoneCandidates);
+                        }
+                    })
+                    ->orderByDesc('appointment_datetime')
+                    ->orderByDesc('id')
+                    ->get()
+                    ->first(function (Appointment $cand) use ($minConversionDateStr) {
+                        $candDateStr = $cand->appointment_date->toDateString();
+
+                        return $candDateStr >= $minConversionDateStr || $candDateStr >= today()->toDateString();
+                    });
+            }
+
+            if ($otherActiveAppt) {
+                foreach ($linkedLeads as $lead) {
+                    $lead->update([
+                        'appointment_id' => $otherActiveAppt->id,
+                        'needful_done' => 'booked',
+                        'next_followup_date' => null,
+                    ]);
+                }
+            } elseif ($linkedLeads->isNotEmpty()) {
+                /** @var Lead $primaryLead */
+                $primaryLead = $linkedLeads->first();
+
+                $extraOpenLeads = collect();
+                if ($customerId || !empty($phoneCandidates)) {
+                    $extraOpenLeads = Lead::query()
+                        ->where('id', '!=', $primaryLead->id)
+                        ->where(function ($q) use ($customerId, $phoneCandidates, $appointmentId) {
+                            $q->where('appointment_id', $appointmentId)
+                                ->orWhere(function ($sub) use ($customerId, $phoneCandidates) {
+                                    $sub->where(function ($openQ) {
+                                        $openQ->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
+                                    })->where(function ($matchQ) use ($customerId, $phoneCandidates) {
+                                        if ($customerId) {
+                                            $matchQ->orWhere('customer_id', $customerId);
+                                        }
+                                        if (!empty($phoneCandidates)) {
+                                            $matchQ->orWhereIn('phone', $phoneCandidates);
+                                        }
+                                    });
+                                });
+                        })
+                        ->get();
+                }
+
+                $mergedServices = is_array($primaryLead->service_interest) ? $primaryLead->service_interest : [];
+                $mergedCategories = array_merge($primaryLead->categories_list, ['cancel']);
+                $remarksParts = [];
+                $baseRemark = trim((string) preg_replace('/\s*\[Auto-closed:[^\]]*\]/i', '', (string) $primaryLead->customer_remarks));
+                if ($baseRemark !== '') {
+                    $remarksParts[] = $baseRemark;
+                }
+
+                foreach ($extraOpenLeads as $extra) {
+                    if (is_array($extra->service_interest)) {
+                        $mergedServices = array_merge($mergedServices, $extra->service_interest);
+                    }
+                    $mergedCategories = array_merge($mergedCategories, $extra->categories_list);
+                    $extraRemark = trim((string) preg_replace('/\s*\[Auto-closed:[^\]]*\]/i', '', (string) $extra->customer_remarks));
+                    if ($extraRemark !== '' && !in_array($extraRemark, $remarksParts, true)) {
+                        $remarksParts[] = $extraRemark;
+                    }
+                    AdLeadEntry::where('lead_id', $extra->id)->update(['lead_id' => $primaryLead->id]);
+                    $extra->delete();
+                }
+
+                $mergedServices = array_values(array_unique(array_filter(array_map('trim', $mergedServices))));
+                $normalizedCategories = Lead::normalizeCategories($mergedCategories);
+                $primaryCategory = Lead::resolvePrimaryCategory($normalizedCategories) ?: 'cancel';
+                $cleanedRemarks = implode(' | ', $remarksParts);
                 $newRemarks = $cleanedRemarks !== ''
                     ? (str_contains($cleanedRemarks, $reopenNote) ? $cleanedRemarks : $cleanedRemarks . ' ' . $reopenNote)
                     : $reopenNote;
 
-                $lead->update([
+                $primaryLead->update([
+                    'category' => $primaryCategory,
+                    'categories' => $normalizedCategories,
                     'needful_done' => null,
                     'appointment_id' => null,
-                    'next_followup_date' => null,
+                    'next_followup_date' => now()->toDateString(),
+                    'service_interest' => !empty($mergedServices) ? $mergedServices : $primaryLead->service_interest,
                     'customer_remarks' => $newRemarks,
                 ]);
             }
 
-            $this->reverseAppointmentSale($appointment);
-
             $appointment->delete();
 
-            AdLeadEntry::syncFromCustomerActivity($customer, $apptDate, $phone, $appointmentId);
+            AdLeadEntry::syncFromCustomerActivity($customer, $apptDate, $phone);
         });
 
         return redirect()->back()->with('success', 'Booking successfully deleted.');
@@ -1021,10 +1161,14 @@ class AppointmentController extends Controller
         $pendingTimeBookings = $this->pendingTimeBookingsForDate($request, $anchor);
 
         $prefillCustomer = $request->filled('customer_id') ? Customer::find((int) $request->input('customer_id')) : null;
+        $normalizedPrefillPhone = $request->filled('phone')
+            ? Customer::normalizePhone((string) $request->input('phone'))
+            : '';
         if (!$prefillCustomer && $request->filled('phone')) {
             $rawPhoneDigits = preg_replace('/\D+/', '', (string) $request->input('phone'));
-            if ($rawPhoneDigits !== '') {
-                $prefillCustomer = Customer::where('phone', $rawPhoneDigits)->first();
+            $prefillPhoneCandidates = array_values(array_unique(array_filter([$normalizedPrefillPhone, $rawPhoneDigits])));
+            if (!empty($prefillPhoneCandidates)) {
+                $prefillCustomer = Customer::whereIn('phone', $prefillPhoneCandidates)->first();
             }
         }
 
@@ -1072,7 +1216,9 @@ class AppointmentController extends Controller
             'auto_open' => $hasPrefillTrigger,
             'customer_id' => $prefillCustomer?->id ?: ($request->filled('customer_id') ? (int) $request->input('customer_id') : null),
             'customer_name' => trim((string) ($request->input('name') ?: $request->input('customer_name') ?: $prefillCustomer?->name ?: '')),
-            'phone' => trim((string) ($request->input('phone') ?: $prefillCustomer?->phone ?: '')),
+            'phone' => $normalizedPrefillPhone !== ''
+                ? $normalizedPrefillPhone
+                : trim((string) ($request->input('phone') ?: $prefillCustomer?->phone ?: '')),
             'branch' => $request->filled('branch') && array_key_exists((string) $request->input('branch'), self::BRANCH_LABELS)
                 ? (string) $request->input('branch')
                 : null,
@@ -1740,16 +1886,28 @@ class AppointmentController extends Controller
 
     public function customerProfile($phone)
     {
-        // Normalize incoming phone
-        $phone = preg_replace('/\D/', '', (string) $phone); // keep only digits
-        if ($phone === '') {
+        // Normalize incoming phone (supports 8-digit local, 974..., +974..., and 00974...)
+        $rawDigits = preg_replace('/\D/', '', (string) $phone);
+        if ($rawDigits === '') {
             return response()->json(['message' => 'No records found for this customer'], 404);
         }
 
-        $appointments = Appointment::whereRaw(
-            "REPLACE(REPLACE(REPLACE(phone, ' ', ''), '(', ''), ')', '') = ?",
-            [$phone]
-        )
+        [$countryCode, $localNumber] = Lead::splitPhone($rawDigits);
+        $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
+        $withQatarCode = strlen($normalizedPhone) === 8 ? '974' . $normalizedPhone : null;
+        $phoneCandidates = array_values(array_unique(array_filter([
+            $normalizedPhone,
+            $rawDigits,
+            $withQatarCode,
+        ])));
+        $phone = $normalizedPhone !== '' ? $normalizedPhone : $rawDigits;
+
+        $appointments = Appointment::where(function ($q) use ($phoneCandidates) {
+            $q->whereIn('phone', $phoneCandidates);
+            foreach ($phoneCandidates as $cand) {
+                $q->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '(', ''), ')', '') = ?", [$cand]);
+            }
+        })
             ->orderBy('appointment_datetime', 'asc')->get();
 
         if ($appointments->isEmpty()) {
@@ -1771,7 +1929,11 @@ class AppointmentController extends Controller
             $servicesTaken = $servicesTaken->merge(explode(', ', $a->service_name));
         }
         $servicesTaken = $servicesTaken->unique()->implode(', ');
-        $lifetimeRevenue = $appointments->sum('price');
+        $firstCustomerId = $appointments->pluck('customer_id')->filter()->first();
+        $lifetimeRevenue = $this->calculateVerifiedLifetimeRevenue(
+            $firstCustomerId ? (int) $firstCustomerId : null,
+            $phone
+        );
 
         $appointmentList = $appointments->map(function ($a) {
             return [
@@ -2145,6 +2307,7 @@ class AppointmentController extends Controller
 
         foreach ($leads as $row) {
             if ($row->id !== $primaryLead->id && !in_array($row->needful_done, Lead::CLOSED_STATUSES, true)) {
+                AdLeadEntry::where('lead_id', $row->id)->update(['lead_id' => $primaryLead->id]);
                 $row->delete();
             }
         }
@@ -2177,8 +2340,9 @@ class AppointmentController extends Controller
 
     /**
      * Synchronize or reopen a Lead when an appointment is marked Cancelled or
-     * No-show. Checks appointment_id FIRST so a previously 'booked' lead for
-     * this exact appointment is reopened and reset cleanly.
+     * No-show. Checks if another active/completed Appointment exists for the
+     * client first; if not, clears appointment_id & needful_done and sets
+     * next_followup_date = today so the lead stays visible for re-booking.
      */
     private function syncLeadCategoryFromAppointment(Appointment $appointment, string $category): void
     {
@@ -2198,7 +2362,7 @@ class AppointmentController extends Controller
             ? array_values(array_filter(array_map('trim', explode(',', $appointment->service_name))))
             : [];
 
-        // 1. Always check appointment_id FIRST so a 'booked' lead tied to this appointment is reopened
+        // 1. Always check appointment_id FIRST so a 'booked' lead tied to this appointment is found
         $lead = Lead::where('appointment_id', $appointment->id)->first();
 
         // 2. Otherwise find any existing open lead for this phone/customer
@@ -2216,6 +2380,40 @@ class AppointmentController extends Controller
                 })
                 ->orderByDesc('id')
                 ->first();
+        }
+
+        // Check whether this customer/phone has ANOTHER active or completed Appointment
+        // on/after this lead's creation date (or today), excluding historical visits prior to the lead
+        $minConversionDateStr = ($lead?->created_at
+            ? Carbon::parse($lead->created_at)->startOfDay()
+            : today()->startOfDay()
+        )->toDateString();
+
+        $otherActiveAppt = null;
+        if ($appointment->customer_id || !empty($phoneCandidates)) {
+            $otherActiveAppt = Appointment::query()
+                ->where('id', '!=', $appointment->id)
+                ->whereNotIn('status', ['cancelled', 'no_show'])
+                ->where(function ($q) use ($appointment, $phoneCandidates) {
+                    if ($appointment->customer_id) {
+                        $q->orWhere('customer_id', $appointment->customer_id);
+                    }
+                    if (!empty($phoneCandidates)) {
+                        $q->orWhereIn('phone', $phoneCandidates);
+                    }
+                })
+                ->orderByDesc('appointment_datetime')
+                ->orderByDesc('id')
+                ->get()
+                ->first(function (Appointment $cand) use ($minConversionDateStr) {
+                    $candDateStr = $cand->appointment_date->toDateString();
+
+                    return $candDateStr >= $minConversionDateStr || $candDateStr >= today()->toDateString();
+                });
+        }
+
+        if (!$lead && $otherActiveAppt) {
+            $lead = Lead::where('appointment_id', $otherActiveAppt->id)->first();
         }
 
         // Resolve agent attribution (Bidirectional sync + inheritance from previous leads)
@@ -2239,7 +2437,6 @@ class AppointmentController extends Controller
         }
 
         if ($lead) {
-            // If reopening a 'booked' lead while another open lead exists for the same phone, merge them so only 1 open lead remains
             $extraOpenLeads = collect();
             if ($normalizedPhone !== '' || $appointment->customer_id) {
                 $extraOpenLeads = Lead::where('id', '!=', $lead->id)
@@ -2259,7 +2456,6 @@ class AppointmentController extends Controller
 
             $existingServices = is_array($lead->service_interest) ? $lead->service_interest : [];
             $mergedCategories = $lead->categories_list;
-            // If toggling the SAME appointment between 'cancel' and 'no_show', replace the previous missed-appointment status
             if ($lead->appointment_id === $appointment->id && in_array($category, ['cancel', 'no_show'], true)) {
                 $oppositeMissed = $category === 'cancel' ? 'no_show' : 'cancel';
                 if (count($mergedCategories) === 1 && $mergedCategories[0] === $oppositeMissed) {
@@ -2283,12 +2479,36 @@ class AppointmentController extends Controller
                 if ($extraRemark !== '' && !in_array($extraRemark, $remarksParts, true)) {
                     $remarksParts[] = $extraRemark;
                 }
+                AdLeadEntry::where('lead_id', $extra->id)->update(['lead_id' => $lead->id]);
                 $extra->delete();
             }
 
             $mergedServices = array_values(array_unique(array_filter(array_map('trim', array_merge($existingServices, $incomingServices)))));
             $normalizedCategories = Lead::normalizeCategories($mergedCategories);
             $primaryCategory = Lead::resolvePrimaryCategory($normalizedCategories) ?: $category;
+
+            if ($otherActiveAppt) {
+                $autoCloseNote = '[Auto-closed: Booked on ' . now()->format('d M Y') . ']';
+                $cleanedRemarks = implode(' | ', $remarksParts);
+                $newRemarks = $cleanedRemarks !== ''
+                    ? (str_contains($cleanedRemarks, $autoCloseNote) ? $cleanedRemarks : $cleanedRemarks . ' ' . $autoCloseNote)
+                    : $autoCloseNote;
+
+                $lead->update([
+                    'category' => $primaryCategory,
+                    'categories' => $normalizedCategories,
+                    'needful_done' => 'booked',
+                    'next_followup_date' => null,
+                    'service_interest' => !empty($mergedServices) ? $mergedServices : $lead->service_interest,
+                    'appointment_id' => $otherActiveAppt->id,
+                    'customer_id' => $lead->customer_id ?: $appointment->customer_id,
+                    'assigned_agent_id' => $inheritedAgentId,
+                    'customer_remarks' => $newRemarks,
+                ]);
+                $lead->touch();
+
+                return;
+            }
 
             $reopenNote = '[Reopened: ' . ucfirst($category) . ' on ' . now()->format('d M Y') . ']';
             $cleanedRemarks = implode(' | ', $remarksParts);
@@ -2300,9 +2520,9 @@ class AppointmentController extends Controller
                 'category' => $primaryCategory,
                 'categories' => $normalizedCategories,
                 'needful_done' => null,
-                'next_followup_date' => null,
+                'next_followup_date' => now()->toDateString(),
                 'service_interest' => !empty($mergedServices) ? $mergedServices : $lead->service_interest,
-                'appointment_id' => $appointment->id,
+                'appointment_id' => null,
                 'customer_id' => $lead->customer_id ?: $appointment->customer_id,
                 'assigned_agent_id' => $inheritedAgentId,
                 'customer_remarks' => $newRemarks,
@@ -2318,20 +2538,32 @@ class AppointmentController extends Controller
             return;
         }
 
-        // No default follow-up date: staff need to actually contact the
-        // client to learn their preferred rebooking timeline before one can
-        // be set. Left blank, this lead surfaces in the "needs a follow-up
-        // date" warning on the Leads page instead of a guessed date quietly
-        // going stale.
+        if ($otherActiveAppt) {
+            Lead::create([
+                'phone' => $leadPhone,
+                'customer_id' => $appointment->customer_id,
+                'appointment_id' => $otherActiveAppt->id,
+                'assigned_agent_id' => $inheritedAgentId,
+                'category' => $category,
+                'categories' => [$category],
+                'service_interest' => !empty($incomingServices) ? $incomingServices : null,
+                'needful_done' => 'booked',
+                'next_followup_date' => null,
+            ]);
+
+            return;
+        }
+
         Lead::create([
             'phone' => $leadPhone,
             'customer_id' => $appointment->customer_id,
-            'appointment_id' => $appointment->id,
+            'appointment_id' => null,
             'assigned_agent_id' => $inheritedAgentId,
             'category' => $category,
             'categories' => [$category],
             'service_interest' => !empty($incomingServices) ? $incomingServices : null,
-            'next_followup_date' => null,
+            'needful_done' => null,
+            'next_followup_date' => now()->toDateString(),
         ]);
     }
 
@@ -2420,21 +2652,25 @@ class AppointmentController extends Controller
         ]);
 
         $wasUnscheduled = $appointment->start_time === null;
-        $oldStart = Carbon::parse($appointment->appointment_datetime);
+        $previousStaffId = $appointment->staff_id;
+        $oldStart = $appointment->appointment_date->copy();
 
         if ($request->filled('appointment_datetime')) {
             $newStart = Carbon::parse($request->appointment_datetime);
         } else {
             $baseDate = $request->booking_date
-                ?: ($appointment->booking_date ?: $appointment->appointment_datetime->toDateString());
+                ?: ($appointment->booking_date ?: $appointment->appointment_date->toDateString());
             $newStart = Carbon::parse($baseDate . ' ' . $request->start_time);
         }
 
         $staffId = $request->staff_id ?: $appointment->staff_id;
         $branch = $request->branch ?: $appointment->branch;
 
-        $duration = $appointment->appointmentServices->isNotEmpty()
-            ? (int) $appointment->appointmentServices->sum(fn($l) => $l->duration ?: 30)
+        $serviceLines = $appointment->appointmentServices()->orderBy('start_time')->orderBy('id')->get();
+        $isMultiService = $serviceLines->count() > 1;
+
+        $duration = $serviceLines->isNotEmpty()
+            ? (int) $serviceLines->sum(fn($l) => $l->duration ?: 30)
             : $this->totalServiceDuration(explode(',', (string) $appointment->service_name));
 
         $workingHours = $this->branchWorkingHours($branch, $newStart);
@@ -2451,66 +2687,126 @@ class AppointmentController extends Controller
             ], 422);
         }
 
-        if ($staffId) {
-            $staff = Staff::with(['shiftPatterns.blocks', 'timeOffs'])->find($staffId);
-            $offInfo = $staff ? $this->staffOffInfo($staff, $newStart, $duration, true) : ['off' => false];
-            if ($offInfo['off']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Selected staff is unavailable then: ' . $offInfo['reason'],
-                ], 422);
-            }
-        }
-
-        if ($staffId && $appointment->service_name !== 'Decide in Salon') {
-            $unskilled = $this->unskilledServices((int) $staffId, explode(',', $appointment->service_name));
-            if (!empty($unskilled)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Staff member is not skilled to do this service: ' . implode(', ', $unskilled) . '.',
-                ], 422);
-            }
-        }
-
-        if ($staffId && $this->staffHasTimeConflict((int) $staffId, $newStart, $duration, $appointment->id)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'That staff member is already booked at this time.',
-            ], 422);
-        }
-
-        $appointment->update([
-            'appointment_datetime' => $newStart,
-            'booking_date' => $newStart->toDateString(),
-            'start_time' => $newStart->format('H:i:s'),
-            'staff_id' => $staffId,
-            'branch' => $branch,
-        ]);
-
-        // The calendar grid positions each block from its own
-        // AppointmentService line items (start_time/staff_id), not from the
-        // appointment's own fields just updated above - without this, a
-        // rescheduled appointment keeps rendering at its old slot even
-        // though the appointment row itself moved correctly. For previously
-        // unscheduled bookings (where line start_time was null), stack each
-        // service sequentially starting at $newStart.
         $minuteDelta = $oldStart->diffInMinutes($newStart, false);
-        $cursor = $newStart->copy();
-        $appointment->appointmentServices->each(function ($line) use ($wasUnscheduled, $minuteDelta, $staffId, &$cursor) {
-            $lineStart = (!$wasUnscheduled && $line->start_time)
-                ? Carbon::parse($line->start_time)->addMinutes($minuteDelta)
-                : $cursor->copy();
+        $plannedLineUpdates = [];
 
-            $line->update([
-                'start_time' => $lineStart,
+        if ($serviceLines->isNotEmpty()) {
+            $cursor = $newStart->copy();
+            foreach ($serviceLines as $line) {
+                $lineStart = (!$wasUnscheduled && $line->start_time)
+                    ? Carbon::parse($line->start_time)->addMinutes($minuteDelta)
+                    : $cursor->copy();
+                $lineDuration = (int) ($line->duration ?: 30);
+
+                $preserveSecondaryStylist = $isMultiService
+                    && $line->staff_id !== null
+                    && ($previousStaffId === null || (int) $line->staff_id !== (int) $previousStaffId);
+
+                $effectiveLineStaffId = $preserveSecondaryStylist
+                    ? (int) $line->staff_id
+                    : ($staffId ? (int) $staffId : null);
+
+                $lineEnd = $lineStart->copy()->addMinutes($lineDuration);
+                if ($lineStart->lt($startBranch) || $lineEnd->gt($endBranch)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Outside branch working hours: ' . $startBranch->format('H:i') . ' - ' . $endBranch->format('H:i'),
+                    ], 422);
+                }
+
+                if ($effectiveLineStaffId) {
+                    $lineStaff = Staff::with(['shiftPatterns.blocks', 'timeOffs'])->find($effectiveLineStaffId);
+                    $offInfo = $lineStaff ? $this->staffOffInfo($lineStaff, $lineStart, $lineDuration, true) : ['off' => false];
+                    if ($offInfo['off']) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Selected staff is unavailable then: ' . $offInfo['reason'],
+                        ], 422);
+                    }
+
+                    if ($line->name && $line->name !== 'Decide in Salon') {
+                        $unskilled = $this->unskilledServices($effectiveLineStaffId, [$line->name]);
+                        if (!empty($unskilled)) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'Staff member is not skilled to do this service: ' . implode(', ', $unskilled) . '.',
+                            ], 422);
+                        }
+                    }
+
+                    if ($this->staffHasTimeConflict($effectiveLineStaffId, $lineStart, $lineDuration, $appointment->id)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'That staff member is already booked at this time.',
+                        ], 422);
+                    }
+                }
+
+                $plannedLineUpdates[] = [
+                    'line' => $line,
+                    'start_time' => $lineStart,
+                    'staff_id' => $effectiveLineStaffId,
+                ];
+
+                $cursor = $lineStart->copy()->addMinutes($lineDuration);
+            }
+        } else {
+            if ($staffId) {
+                $staff = Staff::with(['shiftPatterns.blocks', 'timeOffs'])->find($staffId);
+                $offInfo = $staff ? $this->staffOffInfo($staff, $newStart, $duration, true) : ['off' => false];
+                if ($offInfo['off']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Selected staff is unavailable then: ' . $offInfo['reason'],
+                    ], 422);
+                }
+
+                if ($appointment->service_name && $appointment->service_name !== 'Decide in Salon') {
+                    $unskilled = $this->unskilledServices((int) $staffId, explode(',', $appointment->service_name));
+                    if (!empty($unskilled)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Staff member is not skilled to do this service: ' . implode(', ', $unskilled) . '.',
+                        ], 422);
+                    }
+                }
+
+                if ($this->staffHasTimeConflict((int) $staffId, $newStart, $duration, $appointment->id)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'That staff member is already booked at this time.',
+                    ], 422);
+                }
+            }
+        }
+
+        DB::transaction(function () use ($appointment, $newStart, $staffId, $branch, $plannedLineUpdates, $oldStart) {
+            $updatePayload = [
+                'appointment_datetime' => $newStart,
+                'booking_date' => $newStart->toDateString(),
+                'start_time' => $newStart->format('H:i:s'),
                 'staff_id' => $staffId,
-            ]);
+                'branch' => $branch,
+            ];
 
-            $cursor = $lineStart->copy()->addMinutes($line->duration ?: 30);
+            if (in_array(strtolower((string) ($appointment->status ?? '')), ['cancelled', 'no_show'], true)) {
+                $updatePayload['status'] = 'confirmed';
+            }
+
+            $appointment->update($updatePayload);
+
+            foreach ($plannedLineUpdates as $item) {
+                /** @var AppointmentService $line */
+                $line = $item['line'];
+                $line->update([
+                    'start_time' => $item['start_time'],
+                    'staff_id' => $item['staff_id'],
+                ]);
+            }
+
+            $this->markAppointmentLeadsAsBooked($appointment);
+            $this->syncAdLeadAttributionForAppointment($appointment, $oldStart);
         });
-
-        $this->markAppointmentLeadsAsBooked($appointment);
-        $this->syncAdLeadAttributionForAppointment($appointment, $oldStart);
 
         return response()->json([
             'success' => true,
@@ -2798,9 +3094,10 @@ class AppointmentController extends Controller
             }
         }
 
+        $previousDate = $appointment->appointment_date->copy();
         $appointmentService->update($data);
         $appointment->syncFromServices();
-        $this->syncAdLeadAttributionForAppointment($appointment);
+        $this->syncAdLeadAttributionForAppointment($appointment, $previousDate);
 
         $this->logPriceOverrideIfDiscounted($appointmentService->fresh(), $request->discount_reason);
 
@@ -2834,6 +3131,7 @@ class AppointmentController extends Controller
             ClientPackageService::whereIn('id', $redemptions->pluck('id'))->delete();
         }
 
+        $previousDate = $appointment->appointment_date->copy();
         $appointmentService->delete();
 
         foreach (ClientPackage::whereIn('id', $affectedPackageIds)->get() as $pkg) {
@@ -2841,7 +3139,7 @@ class AppointmentController extends Controller
         }
 
         $appointment->syncFromServices();
-        $this->syncAdLeadAttributionForAppointment($appointment);
+        $this->syncAdLeadAttributionForAppointment($appointment, $previousDate);
 
         return response()->json(['success' => true, 'message' => 'Service removed.']);
     }
@@ -3041,11 +3339,6 @@ class AppointmentController extends Controller
 
     public function storePayment(Request $request, Appointment $appointment)
     {
-        if ($appointment->sale()->exists()) {
-            return redirect()->route('appointments.revenue.index')
-                ->with('error', 'This appointment has already been checked out.');
-        }
-
         $request->validate([
             'discount_type' => 'nullable|in:flat,percent',
             'discount_value' => 'nullable|numeric|min:0',
@@ -3073,323 +3366,349 @@ class AppointmentController extends Controller
             'redeem_points' => 'nullable|integer|min:0',
         ]);
 
-        $customer = $appointment->customer_id
-            ? $appointment->customer
-            : $this->findOrCreateCustomer($appointment->phone, $appointment->customer_name);
-
-        // The expiration engine: reconcile this client's packages against
-        // real time before trusting anything about what's still redeemable.
-        if ($customer) {
-            ClientPackage::expireDue($customer->id);
-        }
-
-        $requestedRedeemPoints = (int) ($request->input('redeem_points', 0));
-        if ($requestedRedeemPoints > 0) {
-            if (!$customer || $requestedRedeemPoints > (int) $customer->loyalty_points) {
-                return redirect()->back()->withInput()->with('error', 'Insufficient loyalty points to redeem.');
-            }
-        }
-
-        [$packagePlans, $packagePlanError] = $this->buildPackagePurchasePlans($request->input('packages', []));
-        if ($packagePlanError) {
-            return redirect()->back()->withInput()->with('error', $packagePlanError);
-        }
-        if (!empty($packagePlans) && !$customer) {
-            return redirect()->back()->withInput()->with('error', 'A client profile with a phone number is required to purchase a package.');
-        }
-
-        [$redemptionPlans, $redemptionPlanError] = $customer
-            ? $this->buildPackageRedemptionPlans($request->input('redeem_service_ids', []), $customer, $appointment->id)
-            : [[], (!empty($request->input('redeem_service_ids', [])) ? 'A client profile with a phone number is required to redeem a package.' : null)];
-        if ($redemptionPlanError) {
-            return redirect()->back()->withInput()->with('error', $redemptionPlanError);
-        }
-
-        // Nothing is written yet - redeemed/immediate package services are
-        // always priced at 0, so they can't change what's due either way.
-        // Writes only happen once the payment total below is confirmed
-        // valid, so a rejected checkout never leaves a service half-redeemed
-        // with no completed sale behind it.
-        $serviceItems = $this->appointmentServiceItems($appointment);
-        $servicesTotal = array_sum(array_column($serviceItems, 'price'));
-
-        // A combo bought at booking time already has its ClientPackage row
-        // (and any immediate services already added as 0-cost lines) - it's
-        // just never been paid for yet. Charge for it here alongside any
-        // brand-new combo being sold at this checkout.
-        $unpaidBookingPackages = ClientPackage::where('appointment_id', $appointment->id)->whereNull('sale_id')->get();
-
-        $packagesTotal = array_reduce($packagePlans, fn($sum, $plan) => $sum + (float) $plan['combo']->price, 0)
-            + (float) $unpaidBookingPackages->sum('price_paid');
-
-        $productLines = [];
-        $productsTotal = 0;
-        foreach ($request->input('products', []) as $line) {
-            $product = Product::find($line['product_id']);
-            if (!$product) continue;
-            $qty = (int) $line['quantity'];
-            $lineTotal = $product->price * $qty;
-            $productsTotal += $lineTotal;
-            $lineStaffId = !empty($line['staff_id']) ? (int) $line['staff_id'] : $appointment->staff_id;
-            $productLines[] = [
-                'product' => $product,
-                'product_id' => $product->id,
-                'staff_id' => $lineStaffId,
-                'name' => $product->name,
-                'price' => $product->price,
-                'quantity' => $qty,
-                'total' => $lineTotal,
-            ];
-        }
-
-        // Upsells logged from the calendar drawer are charged at checkout too,
-        // folded into services/products revenue by their own type.
-        $upsells = $appointment->upsells;
-        $upsellsTotal = (float) $upsells->sum('amount');
-        $servicesTotal += (float) $upsells->where('type', 'service')->sum('amount');
-        $productsTotal += (float) $upsells->where('type', 'product')->sum('amount');
-
-        $subtotal = $servicesTotal + $productsTotal + $packagesTotal;
-
-        $discountType = $request->discount_type;
-        $discountValue = (float) ($request->discount_value ?? 0);
-        $discountAmount = 0;
-        if ($discountType === 'percent') {
-            $discountAmount = round($subtotal * min($discountValue, 100) / 100, 2);
-        } elseif ($discountType === 'flat') {
-            $discountAmount = round(min($discountValue, $subtotal), 2);
-        }
-
-        $effectiveRedeemPoints = 0;
-        if ($requestedRedeemPoints > 0 && $customer) {
-            $maxRedeemableAmount = max(0.0, $subtotal - $discountAmount);
-            $effectiveRedeemPoints = (int) min($requestedRedeemPoints, floor($maxRedeemableAmount));
-            if ($effectiveRedeemPoints > 0) {
-                $discountAmount = round($discountAmount + $effectiveRedeemPoints, 2);
-                if (!$discountType) {
-                    $discountType = 'flat';
-                    $discountValue = $discountAmount;
-                }
-            }
-        }
-
-        $tipAmount = round((float) ($request->tip_amount ?? 0), 2);
-        $totalAmount = round(max(0, $subtotal - $discountAmount) + $tipAmount, 2);
-
-        $payments = array_filter([
-            'cash' => (float) ($request->input('payments.cash', 0)),
-            'card' => (float) ($request->input('payments.card', 0)),
-            'online_transfer' => (float) ($request->input('payments.online_transfer', 0)),
-        ], fn($amount) => $amount > 0);
-
-        $paidTotal = round(array_sum($payments), 2);
-
-        // A checkout that's entirely a free package redemption can legitimately
-        // have nothing due - only reject when the tendered amount doesn't
-        // actually match what's owed, not merely because no method was filled in.
-        if (abs($paidTotal - $totalAmount) > 0.01) {
-            return redirect()->back()
-                ->with('error', sprintf(
-                    'Payment total (%.2f QAR) does not match the amount due (%.2f QAR).',
-                    $paidTotal,
-                    $totalAmount
-                ))->withInput();
-        }
-
-        // Only now, with the payment confirmed valid, do we actually touch
-        // the database - and all of it atomically, so a mid-sequence failure
-        // (a bad row, an unexpected exception) can never leave a service
-        // marked redeemed with no completed sale behind it, or a sale with
-        // no matching appointment update.
-        // Seeded with any packages already created at booking time - they
-        // still need a sale_id and a SaleItem now that they're being paid for.
-        $purchasedPackages = $unpaidBookingPackages->all();
+        $alreadyCheckedOut = false;
+        $validationError = null;
+        $purchasedPackages = [];
         $pointsEarned = 0;
+        $customer = null;
 
-        DB::transaction(function () use (
-            $appointment,
-            $customer,
-            $redemptionPlans,
-            $packagePlans,
-            $serviceItems,
-            $servicesTotal,
-            $productLines,
-            $productsTotal,
-            $packagesTotal,
-            $upsells,
-            $discountType,
-            $discountValue,
-            $discountAmount,
-            $tipAmount,
-            $totalAmount,
-            $payments,
-            $effectiveRedeemPoints,
-            &$purchasedPackages,
-            &$pointsEarned
-        ) {
-            $lastLine = $appointment->appointmentServices()->orderByDesc('start_time')->first();
-            $cursor = $lastLine ? $lastLine->end_time : $appointment->appointment_datetime;
+        try {
+            DB::transaction(function () use (
+                $request,
+                $appointment,
+                &$alreadyCheckedOut,
+                &$validationError,
+                &$purchasedPackages,
+                &$pointsEarned,
+                &$customer
+            ) {
+                $lockedAppointment = Appointment::whereKey($appointment->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-            foreach ($redemptionPlans as $plan) {
-                $service = $plan['service'];
-                $package = $plan['client_package'];
+                if ($lockedAppointment->sale()->exists()) {
+                    $alreadyCheckedOut = true;
+                    return;
+                }
 
-                $appointmentService = $this->addRedeemedServiceLine($appointment, $service, $package->combo_name, $cursor);
-                ClientPackageService::create([
-                    'client_package_id' => $package->id,
-                    'service_id' => $service->id,
-                    'service_name' => $service->name,
-                    'status' => 'redeemed',
-                    'redeemed_at' => now(),
-                    'appointment_service_id' => $appointmentService->id,
-                ]);
-                $package->refreshStatus();
-            }
+                $customer = $lockedAppointment->customer_id
+                    ? Customer::whereKey($lockedAppointment->customer_id)->lockForUpdate()->first()
+                    : $this->findOrCreateCustomer($lockedAppointment->phone, $lockedAppointment->customer_name);
 
-            if ($customer && !empty($packagePlans)) {
-                $purchasedPackages = array_merge(
-                    $purchasedPackages,
-                    $this->createPackagePurchases($appointment, $customer, $packagePlans, $cursor)
-                );
-            }
+                // The expiration engine: reconcile this client's packages against
+                // real time before trusting anything about what's still redeemable.
+                if ($customer) {
+                    ClientPackage::expireDue($customer->id);
+                }
 
-            // Re-fetch now that the redemption/immediate lines above actually
-            // exist, so the sale's service line items include them (still at
-            // their 0 price - $servicesTotal itself doesn't change). The
-            // relation was already cached by the earlier pre-write call, so
-            // it must be force-reloaded or these new rows won't show up.
-            if ($redemptionPlans || $packagePlans) {
-                $serviceItems = $this->appointmentServiceItems($appointment->load('appointmentServices'));
-
-                // Fold the newly-performed package services into service_name
-                // (replacing a "Decide in Salon" placeholder if that's all
-                // there was) so the Enhanced Calendar block - which derives
-                // its width from that flat field, not the line items - grows
-                // or shrinks to match only what's actually being done today.
-                $appointment->syncFromServices();
-            }
-
-            $sale = Sale::create([
-                'appointment_id' => $appointment->id,
-                'customer_id' => $customer?->id,
-                'staff_id' => $appointment->staff_id,
-                'created_by' => auth()->id(),
-                'branch' => $appointment->branch,
-                'services_total' => $servicesTotal,
-                'products_total' => $productsTotal,
-                'packages_total' => $packagesTotal,
-                'discount_type' => $discountType,
-                'discount_value' => $discountValue,
-                'discount_amount' => $discountAmount,
-                'tip_amount' => $tipAmount,
-                'total_amount' => $totalAmount,
-            ]);
-
-            foreach ($serviceItems as $item) {
-                SaleItem::create([
-                    'sale_id' => $sale->id,
-                    'type' => 'service',
-                    'staff_id' => $item['staff_id'] ?? null,
-                    'name' => $item['name'],
-                    'price' => $item['price'],
-                    'original_price' => $item['original_price'],
-                    'discount_amount' => $item['discount_amount'],
-                    'quantity' => 1,
-                    'total' => $item['price'],
-                ]);
-            }
-
-            foreach ($productLines as $line) {
-                SaleItem::create([
-                    'sale_id' => $sale->id,
-                    'type' => 'product',
-                    'product_id' => $line['product_id'],
-                    'staff_id' => $line['staff_id'] ?? $appointment->staff_id,
-                    'name' => $line['name'],
-                    'price' => $line['price'],
-                    'quantity' => $line['quantity'],
-                    'total' => $line['total'],
-                ]);
-
-                /** @var Product $productModel */
-                $productModel = $line['product'];
-                $productModel->update([
-                    'stock_quantity' => max(0, (int) $productModel->stock_quantity - (int) $line['quantity']),
-                ]);
-            }
-
-            foreach ($upsells as $upsell) {
-                SaleItem::create([
-                    'sale_id' => $sale->id,
-                    'type' => $upsell->type,
-                    'product_id' => $upsell->product_id,
-                    'staff_id' => $upsell->staff_id ?? $appointment->staff_id,
-                    'name' => $upsell->name . ' (Upsell)',
-                    'price' => $upsell->amount,
-                    'quantity' => 1,
-                    'total' => $upsell->amount,
-                ]);
-
-                if ($upsell->type === 'product' && $upsell->product_id) {
-                    $upsellProduct = Product::find($upsell->product_id);
-                    if ($upsellProduct) {
-                        $upsellProduct->update([
-                            'stock_quantity' => max(0, (int) $upsellProduct->stock_quantity - 1),
-                        ]);
+                $requestedRedeemPoints = (int) ($request->input('redeem_points', 0));
+                if ($requestedRedeemPoints > 0) {
+                    if (!$customer || $requestedRedeemPoints > (int) $customer->loyalty_points) {
+                        $validationError = 'Insufficient loyalty points to redeem.';
+                        return;
                     }
                 }
-            }
 
-            foreach ($purchasedPackages as $pkg) {
-                $pkg->update(['sale_id' => $sale->id]);
+                [$packagePlans, $packagePlanError] = $this->buildPackagePurchasePlans($request->input('packages', []));
+                if ($packagePlanError) {
+                    $validationError = $packagePlanError;
+                    return;
+                }
+                if (!empty($packagePlans) && !$customer) {
+                    $validationError = 'A client profile with a phone number is required to purchase a package.';
+                    return;
+                }
 
-                SaleItem::create([
-                    'sale_id' => $sale->id,
-                    'type' => 'package',
-                    'name' => $pkg->combo_name . ' (Package)',
-                    'price' => $pkg->price_paid,
-                    'original_price' => $pkg->price_paid,
-                    'quantity' => 1,
-                    'total' => $pkg->price_paid,
-                ]);
-            }
+                [$redemptionPlans, $redemptionPlanError] = $customer
+                    ? $this->buildPackageRedemptionPlans($request->input('redeem_service_ids', []), $customer, $lockedAppointment->id)
+                    : [[], (!empty($request->input('redeem_service_ids', [])) ? 'A client profile with a phone number is required to redeem a package.' : null)];
+                if ($redemptionPlanError) {
+                    $validationError = $redemptionPlanError;
+                    return;
+                }
 
-            foreach ($payments as $method => $amount) {
-                SalePayment::create([
-                    'sale_id' => $sale->id,
-                    'method' => $method,
-                    'amount' => round($amount, 2),
-                ]);
-            }
+                // Nothing is written yet - redeemed/immediate package services are
+                // always priced at 0, so they can't change what's due either way.
+                // Writes only happen once the payment total below is confirmed
+                // valid, so a rejected checkout never leaves a service half-redeemed
+                // with no completed sale behind it.
+                $serviceItems = $this->appointmentServiceItems($lockedAppointment);
+                $servicesTotal = array_sum(array_column($serviceItems, 'price'));
 
-            $dominantMethod = $payments ? array_search(max($payments), $payments) : null;
+                // A combo bought at booking time already has its ClientPackage row
+                // (and any immediate services already added as 0-cost lines) - it's
+                // just never been paid for yet. Charge for it here alongside any
+                // brand-new combo being sold at this checkout.
+                $unpaidBookingPackages = ClientPackage::where('appointment_id', $lockedAppointment->id)
+                    ->whereNull('sale_id')
+                    ->lockForUpdate()
+                    ->get();
 
-            $appointment->update([
-                'status' => 'completed',
-                'price' => $servicesTotal,
-                'payment_method' => $dominantMethod,
-                'paid_at' => now(),
-            ]);
+                $packagesTotal = array_reduce($packagePlans, fn($sum, $plan) => $sum + (float) $plan['combo']->price, 0)
+                    + (float) $unpaidBookingPackages->sum('price_paid');
 
-            $this->markAppointmentLeadsAsBooked($appointment);
-            $this->syncAdLeadAttributionForAppointment($appointment);
+                $productLines = [];
+                $productsTotal = 0;
+                foreach ($request->input('products', []) as $line) {
+                    $product = Product::whereKey($line['product_id'])->lockForUpdate()->first();
+                    if (!$product) continue;
+                    $qty = (int) $line['quantity'];
+                    $lineTotal = $product->price * $qty;
+                    $productsTotal += $lineTotal;
+                    $lineStaffId = !empty($line['staff_id']) ? (int) $line['staff_id'] : $lockedAppointment->staff_id;
+                    $productLines[] = [
+                        'product' => $product,
+                        'product_id' => $product->id,
+                        'staff_id' => $lineStaffId,
+                        'name' => $product->name,
+                        'price' => $product->price,
+                        'quantity' => $qty,
+                        'total' => $lineTotal,
+                    ];
+                }
 
-            if ($customer && $effectiveRedeemPoints > 0) {
-                LoyaltyTransaction::create([
-                    'customer_id' => $customer->id,
-                    'sale_id' => $sale->id,
-                    'type' => 'redeem',
-                    'points' => -$effectiveRedeemPoints,
-                    'description' => 'Redeemed at checkout #' . $sale->id,
+                // Upsells logged from the calendar drawer are charged at checkout too,
+                // folded into services/products revenue by their own type.
+                $upsells = $lockedAppointment->upsells()->get();
+                $servicesTotal += (float) $upsells->where('type', 'service')->sum('amount');
+                $productsTotal += (float) $upsells->where('type', 'product')->sum('amount');
+
+                $subtotal = $servicesTotal + $productsTotal + $packagesTotal;
+
+                $discountType = $request->discount_type;
+                $discountValue = (float) ($request->discount_value ?? 0);
+                $discountAmount = 0;
+                if ($discountType === 'percent') {
+                    $discountAmount = round($subtotal * min($discountValue, 100) / 100, 2);
+                } elseif ($discountType === 'flat') {
+                    $discountAmount = round(min($discountValue, $subtotal), 2);
+                }
+
+                $effectiveRedeemPoints = 0;
+                if ($requestedRedeemPoints > 0 && $customer) {
+                    $maxRedeemableAmount = max(0.0, $subtotal - $discountAmount);
+                    $effectiveRedeemPoints = (int) min($requestedRedeemPoints, floor($maxRedeemableAmount));
+                    if ($effectiveRedeemPoints > 0) {
+                        $discountAmount = round($discountAmount + $effectiveRedeemPoints, 2);
+                        if (!$discountType) {
+                            $discountType = 'flat';
+                            $discountValue = $discountAmount;
+                        }
+                    }
+                }
+
+                $tipAmount = round((float) ($request->tip_amount ?? 0), 2);
+                $totalAmount = round(max(0, $subtotal - $discountAmount) + $tipAmount, 2);
+
+                $payments = array_filter([
+                    'cash' => (float) ($request->input('payments.cash', 0)),
+                    'card' => (float) ($request->input('payments.card', 0)),
+                    'online_transfer' => (float) ($request->input('payments.online_transfer', 0)),
+                ], fn($amount) => $amount > 0);
+
+                $paidTotal = round(array_sum($payments), 2);
+
+                // A checkout that's entirely a free package redemption can legitimately
+                // have nothing due - only reject when the tendered amount doesn't
+                // actually match what's owed, not merely because no method was filled in.
+                if (abs($paidTotal - $totalAmount) > 0.01) {
+                    $validationError = sprintf(
+                        'Payment total (%.2f QAR) does not match the amount due (%.2f QAR).',
+                        $paidTotal,
+                        $totalAmount
+                    );
+                    return;
+                }
+
+                // Seeded with any packages already created at booking time - they
+                // still need a sale_id and a SaleItem now that they're being paid for.
+                $purchasedPackages = $unpaidBookingPackages->all();
+
+                $lastLine = $lockedAppointment->appointmentServices()->orderByDesc('start_time')->first();
+                $cursor = $lastLine ? $lastLine->end_time : $lockedAppointment->appointment_datetime;
+
+                foreach ($redemptionPlans as $plan) {
+                    $service = $plan['service'];
+                    $package = $plan['client_package'];
+
+                    $appointmentService = $this->addRedeemedServiceLine($lockedAppointment, $service, $package->combo_name, $cursor);
+                    ClientPackageService::create([
+                        'client_package_id' => $package->id,
+                        'service_id' => $service->id,
+                        'service_name' => $service->name,
+                        'status' => 'redeemed',
+                        'redeemed_at' => now(),
+                        'appointment_service_id' => $appointmentService->id,
+                    ]);
+                    $package->refreshStatus();
+                }
+
+                if ($customer && !empty($packagePlans)) {
+                    $purchasedPackages = array_merge(
+                        $purchasedPackages,
+                        $this->createPackagePurchases($lockedAppointment, $customer, $packagePlans, $cursor)
+                    );
+                }
+
+                // Re-fetch now that the redemption/immediate lines above actually
+                // exist, so the sale's service line items include them (still at
+                // their 0 price - $servicesTotal itself doesn't change). The
+                // relation was already cached by the earlier pre-write call, so
+                // it must be force-reloaded or these new rows won't show up.
+                if ($redemptionPlans || $packagePlans) {
+                    $serviceItems = $this->appointmentServiceItems($lockedAppointment->load('appointmentServices'));
+
+                    // Fold the newly-performed package services into service_name
+                    // (replacing a "Decide in Salon" placeholder if that's all
+                    // there was) so the Enhanced Calendar block - which derives
+                    // its width from that flat field, not the line items - grows
+                    // or shrinks to match only what's actually being done today.
+                    $lockedAppointment->syncFromServices();
+                }
+
+                $resolvedBranch = $lockedAppointment->branch ?: ($request->input('branch') ?: 'old_airport');
+
+                $sale = Sale::create([
+                    'appointment_id' => $lockedAppointment->id,
+                    'customer_id' => $customer?->id,
+                    'staff_id' => $lockedAppointment->staff_id,
                     'created_by' => auth()->id(),
+                    'branch' => $resolvedBranch,
+                    'services_total' => $servicesTotal,
+                    'products_total' => $productsTotal,
+                    'packages_total' => $packagesTotal,
+                    'discount_type' => $discountType,
+                    'discount_value' => $discountValue,
+                    'discount_amount' => $discountAmount,
+                    'tip_amount' => $tipAmount,
+                    'total_amount' => $totalAmount,
                 ]);
-                $customer->decrement('loyalty_points', $effectiveRedeemPoints);
-            }
 
-            if ($customer) {
-                $pointsEarned = $customer->earnPointsForSale($sale);
-            }
-        });
+                foreach ($serviceItems as $item) {
+                    SaleItem::create([
+                        'sale_id' => $sale->id,
+                        'type' => 'service',
+                        'staff_id' => $item['staff_id'] ?? null,
+                        'name' => $item['name'],
+                        'price' => $item['price'],
+                        'original_price' => $item['original_price'],
+                        'discount_amount' => $item['discount_amount'],
+                        'quantity' => 1,
+                        'total' => $item['price'],
+                    ]);
+                }
+
+                foreach ($productLines as $line) {
+                    SaleItem::create([
+                        'sale_id' => $sale->id,
+                        'type' => 'product',
+                        'product_id' => $line['product_id'],
+                        'staff_id' => $line['staff_id'] ?? $lockedAppointment->staff_id,
+                        'name' => $line['name'],
+                        'price' => $line['price'],
+                        'quantity' => $line['quantity'],
+                        'total' => $line['total'],
+                    ]);
+
+                    /** @var Product $productModel */
+                    $productModel = $line['product'];
+                    $productModel->update([
+                        'stock_quantity' => max(0, (int) $productModel->stock_quantity - (int) $line['quantity']),
+                    ]);
+                }
+
+                foreach ($upsells as $upsell) {
+                    SaleItem::create([
+                        'sale_id' => $sale->id,
+                        'type' => $upsell->type,
+                        'product_id' => $upsell->product_id,
+                        'staff_id' => $upsell->staff_id ?? $lockedAppointment->staff_id,
+                        'name' => $upsell->name . ' (Upsell)',
+                        'price' => $upsell->amount,
+                        'quantity' => 1,
+                        'total' => $upsell->amount,
+                    ]);
+
+                    if ($upsell->type === 'product' && $upsell->product_id) {
+                        $upsellProduct = Product::whereKey($upsell->product_id)->lockForUpdate()->first();
+                        if ($upsellProduct) {
+                            $upsellProduct->update([
+                                'stock_quantity' => max(0, (int) $upsellProduct->stock_quantity - 1),
+                            ]);
+                        }
+                    }
+                }
+
+                foreach ($purchasedPackages as $pkg) {
+                    $pkg->update(['sale_id' => $sale->id]);
+
+                    SaleItem::create([
+                        'sale_id' => $sale->id,
+                        'type' => 'package',
+                        'name' => $pkg->combo_name . ' (Package)',
+                        'price' => $pkg->price_paid,
+                        'original_price' => $pkg->price_paid,
+                        'quantity' => 1,
+                        'total' => $pkg->price_paid,
+                    ]);
+                }
+
+                foreach ($payments as $method => $amount) {
+                    SalePayment::create([
+                        'sale_id' => $sale->id,
+                        'method' => $method,
+                        'amount' => round($amount, 2),
+                    ]);
+                }
+
+                $dominantMethod = $payments ? array_search(max($payments), $payments) : null;
+                $netSalePrice = AdLeadEntry::netSaleAmount($sale);
+                $updatedLifetimeRevenue = $this->calculateVerifiedLifetimeRevenue(
+                    $customer?->id ?: ($lockedAppointment->customer_id ? (int) $lockedAppointment->customer_id : null),
+                    $lockedAppointment->phone
+                );
+
+                $lockedAppointment->update([
+                    'branch' => $resolvedBranch,
+                    'status' => 'completed',
+                    'price' => $netSalePrice,
+                    'lifetime_revenue' => $updatedLifetimeRevenue,
+                    'payment_method' => $dominantMethod,
+                    'paid_at' => now(),
+                ]);
+
+                $this->markAppointmentLeadsAsBooked($lockedAppointment);
+                $this->syncAdLeadAttributionForAppointment($lockedAppointment);
+
+                if ($customer && $effectiveRedeemPoints > 0) {
+                    LoyaltyTransaction::create([
+                        'customer_id' => $customer->id,
+                        'sale_id' => $sale->id,
+                        'type' => 'redeem',
+                        'points' => -$effectiveRedeemPoints,
+                        'description' => 'Redeemed at checkout #' . $sale->id,
+                        'created_by' => auth()->id(),
+                    ]);
+                    $customer->decrement('loyalty_points', $effectiveRedeemPoints);
+                }
+
+                if ($customer) {
+                    $pointsEarned = $customer->earnPointsForSale($sale);
+                }
+            });
+        } catch (UniqueConstraintViolationException) {
+            return redirect()->route('appointments.revenue.index')
+                ->with('error', 'This appointment has already been checked out.');
+        }
+
+        if ($alreadyCheckedOut) {
+            return redirect()->route('appointments.revenue.index')
+                ->with('error', 'This appointment has already been checked out.');
+        }
+
+        if ($validationError !== null) {
+            return redirect()->back()->withInput()->with('error', $validationError);
+        }
 
         $packageNote = count($purchasedPackages)
             ? ' ' . count($purchasedPackages) . ' package' . (count($purchasedPackages) === 1 ? '' : 's') . ' sold.'

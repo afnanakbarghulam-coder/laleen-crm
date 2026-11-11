@@ -29,6 +29,15 @@ class User extends Authenticatable
     ];
 
     /**
+     * Default attribute values matching the database schema defaults.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'is_active' => true,
+    ];
+
+    /**
      * The attributes that should be hidden for serialization.
      *
      * @var list<string>
@@ -70,6 +79,15 @@ class User extends Authenticatable
     public function isSuperAdmin(): bool
     {
         return $this->role === 'admin' && $this->email === 'afnanakbarghulam@gmail.com';
+    }
+
+    /**
+     * Determine whether this account holds full Admin / Owner privileges.
+     */
+    public function isAdmin(): bool
+    {
+        return in_array(strtolower(trim((string) $this->role)), ['admin', 'owner', 'super_admin'], true)
+            || $this->isSuperAdmin();
     }
 
     /**

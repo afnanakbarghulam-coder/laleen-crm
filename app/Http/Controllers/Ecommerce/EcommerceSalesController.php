@@ -297,13 +297,24 @@ class EcommerceSalesController extends Controller
 
         $product = EcommerceProduct::findOrFail($validated['ecommerce_product_id']);
 
+        $orderRegion = $isPakistan ? 'pk' : 'qa';
         $pricingModel = EcommercePricingModel::where('ecommerce_product_id', $product->id)->first();
-        $unitCogs = $pricingModel?->bomUnitCost() ?? 0.0;
-        $unitLiquidCost = (float) ($pricingModel->liquid_cost ?? 0);
-        $unitBottleCost = (float) ($pricingModel->bottle_cost ?? 0);
-        $unitLabelCost = (float) ($pricingModel->label_cost ?? 0);
-        $unitPumpCost = (float) ($pricingModel->pump_cost ?? 0);
-        $unitOuterBoxCost = (float) ($pricingModel->box_cost ?? 0);
+        $resolvedCosts = $pricingModel
+            ? $pricingModel->componentCostsForRegion($orderRegion)
+            : [
+                'unit_cogs' => 0.0,
+                'unit_liquid_cost' => 0.0,
+                'unit_bottle_cost' => 0.0,
+                'unit_label_cost' => 0.0,
+                'unit_pump_cost' => 0.0,
+                'unit_outer_box_cost' => 0.0,
+            ];
+        $unitCogs = $resolvedCosts['unit_cogs'];
+        $unitLiquidCost = $resolvedCosts['unit_liquid_cost'];
+        $unitBottleCost = $resolvedCosts['unit_bottle_cost'];
+        $unitLabelCost = $resolvedCosts['unit_label_cost'];
+        $unitPumpCost = $resolvedCosts['unit_pump_cost'];
+        $unitOuterBoxCost = $resolvedCosts['unit_outer_box_cost'];
 
         $customerId = !empty($validated['ecommerce_customer_id']) ? (int) $validated['ecommerce_customer_id'] : null;
         $normalizedPhone = EcommerceCustomer::normalizePhone(
@@ -537,6 +548,17 @@ class EcommerceSalesController extends Controller
                     $unitsSold = (int) $item->quantity * $bundleQuantity;
                     $lineRevenue = (float) ($allocation[$item->id] ?? 0);
                     $pricingModel = $product->pricingModel;
+                    $bundleRegion = str_contains($validated['channel'], 'Pakistan') ? 'pk' : 'qa';
+                    $resolvedBundleCosts = $pricingModel
+                        ? $pricingModel->componentCostsForRegion($bundleRegion)
+                        : [
+                            'unit_cogs' => 0.0,
+                            'unit_liquid_cost' => 0.0,
+                            'unit_bottle_cost' => 0.0,
+                            'unit_label_cost' => 0.0,
+                            'unit_pump_cost' => 0.0,
+                            'unit_outer_box_cost' => 0.0,
+                        ];
 
                     EcommerceSale::create([
                         'ecommerce_product_id' => $product->id,
@@ -554,12 +576,12 @@ class EcommerceSalesController extends Controller
                         'reason' => trim(($validated['reason'] ?? '') . ' [Bundle: ' . $bundle->name . ']'),
                         'unit_price' => $unitsSold > 0 ? round($lineRevenue / $unitsSold, 2) : 0,
                         'total_price' => $lineRevenue,
-                        'unit_cogs' => $pricingModel?->bomUnitCost() ?? 0.0,
-                        'unit_liquid_cost' => (float) ($pricingModel->liquid_cost ?? 0),
-                        'unit_bottle_cost' => (float) ($pricingModel->bottle_cost ?? 0),
-                        'unit_label_cost' => (float) ($pricingModel->label_cost ?? 0),
-                        'unit_pump_cost' => (float) ($pricingModel->pump_cost ?? 0),
-                        'unit_outer_box_cost' => (float) ($pricingModel->box_cost ?? 0),
+                        'unit_cogs' => $resolvedBundleCosts['unit_cogs'],
+                        'unit_liquid_cost' => $resolvedBundleCosts['unit_liquid_cost'],
+                        'unit_bottle_cost' => $resolvedBundleCosts['unit_bottle_cost'],
+                        'unit_label_cost' => $resolvedBundleCosts['unit_label_cost'],
+                        'unit_pump_cost' => $resolvedBundleCosts['unit_pump_cost'],
+                        'unit_outer_box_cost' => $resolvedBundleCosts['unit_outer_box_cost'],
                         'shipping_cost' => $isFirstLine ? $shippingCost : 0,
                         'tax_amount' => $isFirstLine ? $taxAmount : 0,
                         'meta_ad_allocation' => $isFirstLine ? $metaAdAllocation : 0,

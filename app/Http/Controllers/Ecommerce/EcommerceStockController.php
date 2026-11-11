@@ -23,28 +23,34 @@ class EcommerceStockController extends Controller
     private const NO_VELOCITY_DAYS_REMAINING = 999;
 
     /**
-     * Daily sales velocity and days-of-cover per product.
+     * Daily sales velocity and days-of-cover per product, strictly isolated by
+     * active region ('pk' vs 'qa') and excluding cancelled/voided ('rto') orders.
      *
      * Resolved as ONE grouped aggregate rather than a query per row — the
      * obvious $product->sales()->sum() inside the Blade loop is an N+1.
-     *
-     * Every channel counts, including Backbar Use and Damage/Expiry: those
-     * deplete real stock, so they belong in a reorder forecast even though
-     * they are excluded from revenue elsewhere.
      */
-    private function velocityByProduct($products): array
+    private function velocityByProduct($products, string $region = 'pk'): array
     {
+        $normalizedRegion = EcommerceSale::normalizeRegion($region);
+        $regionChannels = EcommerceSale::channelsForRegion($normalizedRegion);
         $since = now()->subDays(self::VELOCITY_WINDOW_DAYS);
 
         $unitsByProduct = EcommerceSale::where('created_at', '>=', $since)
+            ->whereIn('channel', $regionChannels)
+            ->where(function ($q) {
+                $q->whereNull('order_status')
+                    ->orWhereNotIn('order_status', EcommerceSale::INACTIVE_ORDER_STATUSES);
+            })
             ->groupBy('ecommerce_product_id')
             ->selectRaw('ecommerce_product_id, SUM(quantity) as units')
             ->pluck('units', 'ecommerce_product_id');
 
-        return $products->mapWithKeys(function (EcommerceProduct $product) use ($unitsByProduct) {
+        return $products->mapWithKeys(function (EcommerceProduct $product) use ($unitsByProduct, $normalizedRegion) {
             $units = (float) ($unitsByProduct[$product->id] ?? 0);
             $dailyVelocity = $units / self::VELOCITY_WINDOW_DAYS;
-            $stockOnHand = (float) $product->stock_pakistan + (float) $product->stock_qatar;
+            $stockOnHand = $normalizedRegion === 'qa'
+                ? (float) $product->stock_qatar
+                : (float) $product->stock_pakistan;
 
             $daysRemaining = $dailyVelocity > 0
                 ? $stockOnHand / $dailyVelocity
@@ -63,6 +69,9 @@ class EcommerceStockController extends Controller
 
     public function index(Request $request)
     {
+        $region = EcommerceSale::normalizeRegion($request->query('region', 'pk'));
+        $currency = EcommerceSale::currencyForRegion($region);
+
         // Defaults to month-to-date, matching the Sales & Usage / Net Profit
         // filters. This range scopes historical data ONLY (the Batch History
         // modal) — current stock counts and Total Capital are always live.
@@ -77,24 +86,26 @@ class EcommerceStockController extends Controller
         }])->orderBy('name')->get();
 
         // Keyed by product id so the view can look up each product's saved
-        // BOM cost (Liquid + Bottle + Label + Box + Pump) from the Pricing &
-        // Profit sandbox — products with no saved pricing model cost PKR 0.
+        // BOM cost from the Pricing & Profit sandbox in the active region's currency.
         $pricingModels = EcommercePricingModel::all()->keyBy('ecommerce_product_id');
 
-        // Total Capital in Inventory: every unsold unit (Pakistan + Qatar)
-        // valued at its BOM cost per unit, summed across all finished goods.
-        // Always live/unfiltered — never scoped by the date range above.
-        $totalCapitalInInventory = $products->sum(function (EcommerceProduct $product) use ($pricingModels) {
-            $unitCost = $pricingModels->get($product->id)?->bomUnitCost() ?? 0.0;
-            $totalStock = (float) $product->stock_pakistan + (float) $product->stock_qatar;
+        // Total Capital in Inventory strictly for the active region ('pk' -> PKR, 'qa' -> QAR):
+        // regional unsold stock valued at its regional unit COGS.
+        $totalCapitalInInventory = $products->sum(function (EcommerceProduct $product) use ($pricingModels, $region) {
+            $unitCost = $pricingModels->get($product->id)?->unitCogsForRegion($region) ?? 0.0;
+            $regionalStock = $region === 'qa'
+                ? (float) $product->stock_qatar
+                : (float) $product->stock_pakistan;
 
-            return $totalStock * $unitCost;
+            return round($regionalStock * $unitCost, 2);
         });
 
         return view('ecommerce.stock', [
+            'region' => $region,
+            'currency' => $currency,
             'products' => $products,
             'pricingModels' => $pricingModels,
-            'velocity' => $this->velocityByProduct($products),
+            'velocity' => $this->velocityByProduct($products, $region),
             'velocityWindowDays' => self::VELOCITY_WINDOW_DAYS,
             'reorderThresholdDays' => self::REORDER_THRESHOLD_DAYS,
             'totalCapitalInInventory' => $totalCapitalInInventory,

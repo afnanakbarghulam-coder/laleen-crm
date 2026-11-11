@@ -27,6 +27,7 @@ class EcommercePricingController extends Controller
                 'label_cost' => (float) $model->label_cost,
                 'pump_cost' => (float) $model->pump_cost,
                 'box_cost' => (float) $model->box_cost,
+                'unit_cogs_qar' => $model->unit_cogs_qar !== null ? (float) $model->unit_cogs_qar : null,
                 'selling_price' => (float) $model->selling_price,
             ];
         });
@@ -142,6 +143,7 @@ class EcommercePricingController extends Controller
             'label_cost' => 'nullable|numeric|min:0',
             'pump_cost' => 'nullable|numeric|min:0',
             'box_cost' => 'nullable|numeric|min:0',
+            'unit_cogs_qar' => 'nullable|numeric|min:0',
             'selling_price' => 'required|numeric|min:0.01',
         ], [
             'selling_price.required' => 'A selling price is required — a zero-price product corrupts Net Profit.',
@@ -160,16 +162,24 @@ class EcommercePricingController extends Controller
                 ->withErrors(['error' => 'Total unit COGS must be greater than zero. Enter at least one real component cost — a zero-cost product reports a fake 100% margin on every sale.']);
         }
 
+        $attributes = [
+            'liquid_cost' => $validated['liquid_cost'] ?? 0,
+            'bottle_cost' => $validated['bottle_cost'] ?? 0,
+            'label_cost' => $validated['label_cost'] ?? 0,
+            'pump_cost' => $validated['pump_cost'] ?? 0,
+            'box_cost' => $validated['box_cost'] ?? 0,
+            'selling_price' => $validated['selling_price'] ?? 0,
+        ];
+
+        if ($request->has('unit_cogs_qar')) {
+            $attributes['unit_cogs_qar'] = $validated['unit_cogs_qar'] !== null && $validated['unit_cogs_qar'] !== ''
+                ? $validated['unit_cogs_qar']
+                : null;
+        }
+
         EcommercePricingModel::updateOrCreate(
             ['ecommerce_product_id' => $validated['ecommerce_product_id']],
-            [
-                'liquid_cost' => $validated['liquid_cost'] ?? 0,
-                'bottle_cost' => $validated['bottle_cost'] ?? 0,
-                'label_cost' => $validated['label_cost'] ?? 0,
-                'pump_cost' => $validated['pump_cost'] ?? 0,
-                'box_cost' => $validated['box_cost'] ?? 0,
-                'selling_price' => $validated['selling_price'] ?? 0,
-            ]
+            $attributes
         );
 
         return redirect()

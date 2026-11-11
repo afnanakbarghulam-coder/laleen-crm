@@ -17,7 +17,16 @@ class EnsureRole
     {
         $user = $request->user();
 
-        if (!$user || !in_array($user->role, $roles, true)) {
+        if ($user && !$user->is_active) {
+            return EnsureActiveUser::logoutDeactivated($request);
+        }
+
+        $hasAllowedRole = $user && (
+            in_array($user->role, $roles, true)
+            || (in_array('admin', $roles, true) && $user->isAdmin())
+        );
+
+        if (!$hasAllowedRole) {
             abort(403, 'You do not have permission to access this section.');
         }
 

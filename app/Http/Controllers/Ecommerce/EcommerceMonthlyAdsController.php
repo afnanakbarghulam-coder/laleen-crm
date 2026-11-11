@@ -18,6 +18,7 @@ class EcommerceMonthlyAdsController extends Controller
         $currency = EcommerceSale::currencyForRegion($region);
 
         $availableMonths = EcommerceMonthlyAd::query()
+            ->forRegion($region)
             ->whereNotNull('plan_month')
             ->distinct()
             ->pluck('plan_month')
@@ -27,7 +28,7 @@ class EcommerceMonthlyAdsController extends Controller
             ->sort()
             ->values();
 
-        $query = EcommerceMonthlyAd::orderByDesc('id');
+        $query = EcommerceMonthlyAd::forRegion($region)->orderByDesc('id');
         if ($selectedMonth !== 'all') {
             $query->where('plan_month', $selectedMonth);
         }
@@ -56,9 +57,19 @@ class EcommerceMonthlyAdsController extends Controller
 
     public function store(Request $request)
     {
-        EcommerceMonthlyAd::create($this->validated($request));
+        $data = $this->validated($request);
+        $regionParam = $request->input('region', $request->query('region'));
+        if ($regionParam !== null && trim((string) $regionParam) !== '') {
+            $data['region'] = strtoupper(EcommerceSale::normalizeRegion((string) $regionParam));
+        } elseif (in_array($data['target_branch'] ?? '', ['Old Airport', 'Wakrah'], true)) {
+            $data['region'] = 'QA';
+        } else {
+            $data['region'] = 'PK';
+        }
 
-        return redirect()->route('ecommerce.marketing.ads-plan.index')->with('success', 'Ad added.');
+        EcommerceMonthlyAd::create($data);
+
+        return redirect()->route('ecommerce.marketing.ads-plan.index', ['region' => strtolower($data['region'])])->with('success', 'Ad added.');
     }
 
     public function update(Request $request, EcommerceMonthlyAd $ad)

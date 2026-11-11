@@ -7,8 +7,10 @@ use Illuminate\Http\Request;
 
 class CommandCenterController extends Controller
 {
-    public function index(LaleenCommandCenterService $service)
+    public function index(Request $request, LaleenCommandCenterService $service)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+
         $telemetry = $service->getLiveTelemetrySnapshot();
         $voiceProfiles = LaleenCommandCenterService::VOICE_PROFILES;
         $commandModel = config('services.gemini.command_model', config('services.gemini.model', 'gemini-2.5-flash'));
@@ -24,6 +26,8 @@ class CommandCenterController extends Controller
 
     public function ask(Request $request, LaleenCommandCenterService $service)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+
         @set_time_limit(120);
 
         $validated = $request->validate([
@@ -64,6 +68,8 @@ class CommandCenterController extends Controller
 
     public function tts(Request $request, LaleenCommandCenterService $service)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+
         $validated = $request->validate([
             'spoken_text' => 'required|string|max:2500',
             'voice_profile' => 'nullable|string|in:friday_tactical,kore_coo,aoede_advisor',
@@ -84,8 +90,10 @@ class CommandCenterController extends Controller
         ]);
     }
 
-    public function telemetry(LaleenCommandCenterService $service)
+    public function telemetry(Request $request, LaleenCommandCenterService $service)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+
         return response()->json([
             'status' => 'online',
             'read_only' => true,

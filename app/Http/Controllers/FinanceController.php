@@ -16,6 +16,11 @@ class FinanceController extends Controller
         'wakrah' => 'Al Wakrah',
     ];
 
+    public function revenue(Request $request)
+    {
+        return $this->index($request);
+    }
+
     public function index(Request $request)
     {
         $from = $request->filled('from')
@@ -49,8 +54,14 @@ class FinanceController extends Controller
 
         if ($staffId) {
             $salesQuery->where(function ($q) use ($staffId) {
-                $q->where('staff_id', $staffId)
-                    ->orWhereHas('items', fn ($iq) => $iq->where('staff_id', $staffId));
+                $q->whereHas('items', fn ($iq) => $iq->where('staff_id', $staffId))
+                    ->orWhere(function ($legacy) use ($staffId) {
+                        $legacy->where('staff_id', $staffId)
+                            ->where(function ($sub) {
+                                $sub->whereDoesntHave('items')
+                                    ->orWhereDoesntHave('items', fn ($iq) => $iq->whereNotNull('staff_id'));
+                            });
+                    });
             });
         }
 
@@ -67,23 +78,38 @@ class FinanceController extends Controller
         $sales = $salesQuery->orderByDesc('created_at')->get();
         $expenses = $expensesQuery->orderByDesc('expense_date')->get();
 
-        $grossServices = (float) $sales->sum('services_total');
-        $grossProducts = (float) $sales->sum('products_total');
-        $grossPackages = (float) $sales->sum('packages_total');
-        $totalDiscounts = (float) $sales->sum('discount_amount');
-        $totalTips = (float) $sales->sum('tip_amount');
-        $grossSales = (float) $sales->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount));
+        $saleFigures = $sales->map(fn (Sale $sale) => $this->saleFiguresForStaff($sale, $staffId));
+
+        $grossServices = round((float) $saleFigures->sum('services'), 2);
+        $grossProducts = round((float) $saleFigures->sum('products'), 2);
+        $grossPackages = round((float) $saleFigures->sum('packages'), 2);
+        $totalDiscounts = round((float) $saleFigures->sum('discount'), 2);
+        $totalTips = round((float) $saleFigures->sum('tip'), 2);
+        $grossSales = round((float) $saleFigures->sum('net'), 2);
         $totalExpenses = (float) $expenses->sum('amount');
         $netProfit = $grossSales - $totalExpenses;
         $profitMargin = $grossSales > 0 ? ($netProfit / $grossSales) * 100 : 0;
 
-        $paymentTotals = SalePayment::whereIn('sale_id', $sales->pluck('id'))
-            ->selectRaw('method, SUM(amount) as total')
-            ->groupBy('method')
-            ->pluck('total', 'method');
+        if ($staffId) {
+            $paymentMap = [];
+            foreach ($sales as $sale) {
+                $fig = $this->saleFiguresForStaff($sale, $staffId);
+                $ratio = $fig['ratio'];
+                foreach ($sale->payments as $payment) {
+                    $method = (string) $payment->method;
+                    $paymentMap[$method] = round(($paymentMap[$method] ?? 0.0) + ((float) $payment->amount * $ratio), 2);
+                }
+            }
+            $paymentTotals = collect($paymentMap);
+        } else {
+            $paymentTotals = SalePayment::whereIn('sale_id', $sales->pluck('id'))
+                ->selectRaw('method, SUM(amount) as total')
+                ->groupBy('method')
+                ->pluck('total', 'method');
+        }
 
         $branchBreakdown = self::branchBreakdown($from, $to);
-        $trend = $this->trendBuckets($from, $to, $sales, $expenses);
+        $trend = $this->trendBuckets($from, $to, $sales, $expenses, $staffId);
 
         return view('revenue.index', [
             'from' => $from,
@@ -185,10 +211,94 @@ class FinanceController extends Controller
     }
 
     /**
+     * Compute apportioned sale line figures for a specific staff member (or full sale when $staffId is null).
+     *
+     * @return array{services: float, products: float, packages: float, discount: float, tip: float, net: float, ratio: float}
+     */
+    private function saleFiguresForStaff(Sale $sale, ?int $staffId): array
+    {
+        $fullServices = (float) $sale->services_total;
+        $fullProducts = (float) $sale->products_total;
+        $fullPackages = (float) $sale->packages_total;
+        $fullDiscount = (float) $sale->discount_amount;
+        $fullTip = (float) $sale->tip_amount;
+        $fullNet = max(0.0, $fullServices + $fullProducts + $fullPackages - $fullDiscount);
+
+        if (!$staffId) {
+            return [
+                'services' => $fullServices,
+                'products' => $fullProducts,
+                'packages' => $fullPackages,
+                'discount' => $fullDiscount,
+                'tip' => $fullTip,
+                'net' => $fullNet,
+                'ratio' => 1.0,
+            ];
+        }
+
+        $allItems = $sale->relationLoaded('items') ? $sale->items : $sale->items()->get();
+        $staffItems = $allItems->filter(fn ($item) => (int) ($item->staff_id ?? 0) === $staffId);
+
+        if ($staffItems->isNotEmpty()) {
+            $services = round((float) $staffItems->where('type', 'service')->sum('total'), 2);
+            $products = round((float) $staffItems->where('type', 'product')->sum('total'), 2);
+            $packages = round((float) $staffItems->where('type', 'package')->sum('total'), 2);
+            $staffGross = $services + $products + $packages;
+
+            $saleItemsGross = (float) $allItems->sum('total');
+            if ($saleItemsGross <= 0) {
+                $saleItemsGross = $fullServices + $fullProducts + $fullPackages;
+            }
+
+            $ratio = $saleItemsGross > 0
+                ? min(1.0, max(0.0, $staffGross / $saleItemsGross))
+                : 0.0;
+
+            $discount = round($fullDiscount * $ratio, 2);
+            $tip = round($fullTip * $ratio, 2);
+            $net = round(max(0.0, $staffGross - $discount), 2);
+
+            return [
+                'services' => $services,
+                'products' => $products,
+                'packages' => $packages,
+                'discount' => $discount,
+                'tip' => $tip,
+                'net' => $net,
+                'ratio' => $ratio,
+            ];
+        }
+
+        // Legacy fallback: itemless sale (or items with null staff_id) owned by $sale->staff_id
+        $hasStaffAttributedItems = $allItems->contains(fn ($item) => $item->staff_id !== null);
+        if (!$hasStaffAttributedItems && (int) ($sale->staff_id ?? 0) === $staffId) {
+            return [
+                'services' => $fullServices,
+                'products' => $fullProducts,
+                'packages' => $fullPackages,
+                'discount' => $fullDiscount,
+                'tip' => $fullTip,
+                'net' => $fullNet,
+                'ratio' => 1.0,
+            ];
+        }
+
+        return [
+            'services' => 0.0,
+            'products' => 0.0,
+            'packages' => 0.0,
+            'discount' => 0.0,
+            'tip' => 0.0,
+            'net' => 0.0,
+            'ratio' => 0.0,
+        ];
+    }
+
+    /**
      * Daily revenue/expense series for the trend chart. Falls back to weekly
      * buckets once the range is too wide for a legible daily x-axis.
      */
-    private function trendBuckets(Carbon $from, Carbon $to, $sales, $expenses): array
+    private function trendBuckets(Carbon $from, Carbon $to, $sales, $expenses, ?int $staffId = null): array
     {
         $spanDays = $from->diffInDays($to) + 1;
         $weekly = $spanDays > 62;
@@ -212,7 +322,7 @@ class FinanceController extends Controller
         foreach ($sales as $sale) {
             $key = $weekly ? $sale->created_at->format('o-W') : $sale->created_at->format('Y-m-d');
             if (isset($buckets[$key])) {
-                $buckets[$key]['revenue'] += max(0, (float) $sale->services_total + (float) $sale->products_total + (float) $sale->packages_total - (float) $sale->discount_amount);
+                $buckets[$key]['revenue'] += $this->saleFiguresForStaff($sale, $staffId)['net'];
             }
         }
 

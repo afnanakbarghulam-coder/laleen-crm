@@ -17,10 +17,15 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/webhooks/ecommerce/*',
         ]);
 
+        $middleware->web(append: [
+            \App\Http\Middleware\EnsureActiveUser::class,
+        ]);
+
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureRole::class,
             'super-admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
             'module' => \App\Http\Middleware\EnsureModulePermission::class,
+            'active' => \App\Http\Middleware\EnsureActiveUser::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

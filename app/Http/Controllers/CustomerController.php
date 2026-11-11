@@ -586,6 +586,11 @@ class CustomerController extends Controller
      */
     public function syncRetentionToLeads(Request $request)
     {
+        $user = $request->user();
+        if (!$user || (!$user->canEdit('clients') && !$user->canEdit('leads'))) {
+            abort(403, 'You do not have permission to sync retention leads.');
+        }
+
         $this->normalizeLegacyRetentionRemarks();
 
         $plannerQueue = (new ClientMaintenancePlanner())->dueQueue();
@@ -1098,9 +1103,13 @@ class CustomerController extends Controller
 
         if ($q !== '') {
             $digits = preg_replace('/\D/', '', $q);
-            $query->where(function ($sub) use ($q, $digits) {
+            $normalizedDigits = Customer::normalizePhone($q);
+            $query->where(function ($sub) use ($q, $digits, $normalizedDigits) {
                 $sub->where('name', 'like', '%' . $q . '%');
-                if ($digits !== '') {
+                if ($normalizedDigits !== '') {
+                    $sub->orWhere('phone', 'like', '%' . $normalizedDigits . '%');
+                }
+                if ($digits !== '' && $digits !== $normalizedDigits) {
                     $sub->orWhere('phone', 'like', '%' . $digits . '%');
                 }
             });
@@ -1132,13 +1141,18 @@ class CustomerController extends Controller
      */
     public function lookup(Request $request)
     {
-        $phone = preg_replace('/\D/', '', $request->query('phone', ''));
+        $rawQuery = (string) $request->query('phone', '');
+        $digits = preg_replace('/\D/', '', $rawQuery);
+        $normalized = Customer::normalizePhone($rawQuery);
+        $searchPhone = $normalized !== '' ? $normalized : $digits;
 
-        if (strlen($phone) < 4) {
+        if (strlen($searchPhone) < 4) {
             return response()->json(['found' => false]);
         }
 
-        $customer = Customer::where('phone', 'like', '%' . $phone . '%')->first();
+        $exactCandidates = array_values(array_unique(array_filter([$normalized, $digits])));
+        $customer = Customer::whereIn('phone', $exactCandidates)->first()
+            ?: Customer::where('phone', 'like', '%' . $searchPhone . '%')->first();
 
         if (!$customer) {
             return response()->json(['found' => false]);

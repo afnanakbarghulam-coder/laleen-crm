@@ -3473,7 +3473,17 @@ PROMPT;
                     $orderTotal = round($orderTotal + $lineTotal, 2);
 
                     $pricingModel = EcommercePricingModel::where('ecommerce_product_id', $product->id)->first();
-                    $unitCogs = $pricingModel?->bomUnitCost() ?? 0.0;
+                    $saleRegion = in_array($channel, EcommerceSale::QATAR_CHANNELS, true) ? 'qa' : 'pk';
+                    $resolvedCosts = $pricingModel
+                        ? $pricingModel->componentCostsForRegion($saleRegion)
+                        : [
+                            'unit_cogs' => 0.0,
+                            'unit_liquid_cost' => 0.0,
+                            'unit_bottle_cost' => 0.0,
+                            'unit_label_cost' => 0.0,
+                            'unit_pump_cost' => 0.0,
+                            'unit_outer_box_cost' => 0.0,
+                        ];
 
                     EcommerceSale::create([
                         'ecommerce_product_id' => $product->id,
@@ -3495,12 +3505,12 @@ PROMPT;
                         'delivery_notes' => $lockedThread->delivery_notes,
                         'unit_price' => $unitPrice,
                         'total_price' => $lineTotal,
-                        'unit_cogs' => $unitCogs,
-                        'unit_liquid_cost' => (float) ($pricingModel->liquid_cost ?? 0),
-                        'unit_bottle_cost' => (float) ($pricingModel->bottle_cost ?? 0),
-                        'unit_label_cost' => (float) ($pricingModel->label_cost ?? 0),
-                        'unit_pump_cost' => (float) ($pricingModel->pump_cost ?? 0),
-                        'unit_outer_box_cost' => (float) ($pricingModel->box_cost ?? 0),
+                        'unit_cogs' => $resolvedCosts['unit_cogs'],
+                        'unit_liquid_cost' => $resolvedCosts['unit_liquid_cost'],
+                        'unit_bottle_cost' => $resolvedCosts['unit_bottle_cost'],
+                        'unit_label_cost' => $resolvedCosts['unit_label_cost'],
+                        'unit_pump_cost' => $resolvedCosts['unit_pump_cost'],
+                        'unit_outer_box_cost' => $resolvedCosts['unit_outer_box_cost'],
                         'shipping_cost' => 0,
                         'tax_amount' => 0,
                         'meta_ad_allocation' => 0,
@@ -3683,7 +3693,17 @@ PROMPT;
                 $totalUpsellPrice = round($addonPrice * $qty);
 
                 $pricingModel = EcommercePricingModel::where('ecommerce_product_id', $product->id)->first();
-                $unitCogs = $pricingModel?->bomUnitCost() ?? 0.0;
+                $regionKey = $isQatar ? 'qa' : 'pk';
+                $componentCosts = $pricingModel
+                    ? $pricingModel->componentCostsForRegion($regionKey)
+                    : [
+                        'unit_cogs' => 0.0,
+                        'unit_liquid_cost' => 0.0,
+                        'unit_bottle_cost' => 0.0,
+                        'unit_label_cost' => 0.0,
+                        'unit_pump_cost' => 0.0,
+                        'unit_outer_box_cost' => 0.0,
+                    ];
 
                 $targetOrderGroupId = ($lockedThread->order_group_id && !EcommerceWhatsappThread::isColdChatOrderRef($lockedThread->order_group_id))
                     ? $lockedThread->order_group_id
@@ -3714,12 +3734,12 @@ PROMPT;
                     'delivery_notes' => $lockedThread->delivery_notes ?: $firstSale?->delivery_notes,
                     'unit_price' => $addonPrice,
                     'total_price' => $totalUpsellPrice,
-                    'unit_cogs' => $unitCogs,
-                    'unit_liquid_cost' => (float) ($pricingModel->liquid_cost ?? 0),
-                    'unit_bottle_cost' => (float) ($pricingModel->bottle_cost ?? 0),
-                    'unit_label_cost' => (float) ($pricingModel->label_cost ?? 0),
-                    'unit_pump_cost' => (float) ($pricingModel->pump_cost ?? 0),
-                    'unit_outer_box_cost' => (float) ($pricingModel->box_cost ?? 0),
+                    'unit_cogs' => $componentCosts['unit_cogs'],
+                    'unit_liquid_cost' => $componentCosts['unit_liquid_cost'],
+                    'unit_bottle_cost' => $componentCosts['unit_bottle_cost'],
+                    'unit_label_cost' => $componentCosts['unit_label_cost'],
+                    'unit_pump_cost' => $componentCosts['unit_pump_cost'],
+                    'unit_outer_box_cost' => $componentCosts['unit_outer_box_cost'],
                     'shipping_cost' => 0,
                     'tax_amount' => 0,
                     'meta_ad_allocation' => 0,

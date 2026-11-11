@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class EcommerceMonthlyAd extends Model
@@ -185,6 +186,33 @@ class EcommerceMonthlyAd extends Model
         }
 
         return null;
+    }
+
+    /**
+     * Scope monthly ad plans strictly by region ('PK' vs 'QA') so Pakistan PKR
+     * ad budgets and Qatar QAR ad budgets never cross-pollinate.
+     */
+    public function scopeForRegion(Builder $query, ?string $region): Builder
+    {
+        $regionUpper = strtoupper(EcommerceSale::normalizeRegion($region));
+
+        return $query->where(function (Builder $q) use ($regionUpper) {
+            $q->whereRaw('UPPER(region) = ?', [$regionUpper])
+                ->orWhere(function (Builder $untagged) use ($regionUpper) {
+                    $untagged->where(function (Builder $nullRegion) {
+                        $nullRegion->whereNull('region')->orWhere('region', '');
+                    });
+
+                    if ($regionUpper === 'QA') {
+                        $untagged->whereIn('target_branch', ['Old Airport', 'Wakrah']);
+                    } else {
+                        $untagged->where(function (Builder $nonQa) {
+                            $nonQa->whereNull('target_branch')
+                                ->orWhereNotIn('target_branch', ['Old Airport', 'Wakrah']);
+                        });
+                    }
+                });
+        });
     }
 
     /**

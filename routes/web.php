@@ -58,10 +58,12 @@ Route::get('/', function () {
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [UserController::class, 'dashboard'])->name('dashboard');
-    Route::get('/command-center', [CommandCenterController::class, 'index'])->name('command-center.index');
-    Route::post('/command-center/ask', [CommandCenterController::class, 'ask'])->middleware('throttle:20,1')->name('command-center.ask');
-    Route::post('/command-center/tts', [CommandCenterController::class, 'tts'])->middleware('throttle:20,1')->name('command-center.tts');
-    Route::get('/command-center/telemetry', [CommandCenterController::class, 'telemetry'])->name('command-center.telemetry');
+    Route::middleware('role:admin,owner,super_admin')->group(function () {
+        Route::get('/command-center', [CommandCenterController::class, 'index'])->name('command-center.index');
+        Route::post('/command-center/ask', [CommandCenterController::class, 'ask'])->middleware('throttle:20,1')->name('command-center.ask');
+        Route::post('/command-center/tts', [CommandCenterController::class, 'tts'])->middleware('throttle:20,1')->name('command-center.tts');
+        Route::get('/command-center/telemetry', [CommandCenterController::class, 'telemetry'])->name('command-center.telemetry');
+    });
     Route::post('/ai-script/{leadId?}', [AiScriptController::class, 'generate'])->middleware('throttle:20,1')->name('ai-script.generate');
 
     Route::get('/profile', [UserController::class, 'profile_edit'])->name('profile.edit');
@@ -135,14 +137,12 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/staffs', [StaffController::class, 'index'])->name('staffs.index');
         Route::get('/scheduled-shifts', [ShiftController::class, 'index'])->name('shifts.index');
         Route::get('/staff/ops-tracker', [OpsActionTrackerController::class, 'index'])->name('staff.ops-tracker.index');
+    });
+    Route::middleware('module:staff_management,edit')->group(function () {
         Route::middleware('throttle:60,1')->group(function () {
             Route::match(['post', 'patch', 'put'], '/staff/ops-tracker/{opsActionItem}/toggle', [OpsActionTrackerController::class, 'toggle'])->name('staff.ops-tracker.toggle');
             Route::match(['post', 'patch', 'put'], '/staff/ops-tracker/{opsActionItem}/complete', [OpsActionTrackerController::class, 'complete'])->name('staff.ops-tracker.complete');
             Route::match(['post', 'patch', 'put'], '/staff/ops-tracker/{opsActionItem}/reopen', [OpsActionTrackerController::class, 'reopen'])->name('staff.ops-tracker.reopen');
-        });
-    });
-    Route::middleware('module:staff_management,edit')->group(function () {
-        Route::middleware('throttle:60,1')->group(function () {
             Route::post('/staff/ops-tracker', [OpsActionTrackerController::class, 'store'])->name('staff.ops-tracker.store');
             Route::match(['put', 'patch', 'post'], '/staff/ops-tracker/{opsActionItem}', [OpsActionTrackerController::class, 'update'])->name('staff.ops-tracker.update');
             Route::match(['post', 'patch', 'put'], '/staff/ops-tracker/{opsActionItem}/approve-owner', [OpsActionTrackerController::class, 'approveOwner'])->name('staff.ops-tracker.approve-owner');
@@ -154,7 +154,7 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/staffs/{staff}/wages', [StaffController::class, 'updateWages'])->name('staffs.wages.update');
         Route::put('/staffs/{staff}/workspace', [StaffController::class, 'updateWorkspace'])->name('staffs.workspace.update');
         Route::delete('/staffs/{staff}', [StaffController::class, 'destroy'])->name('staffs.destroy');
-        Route::post('/staff-payroll/post-to-finance', [StaffController::class, 'postPayrollToFinance'])->name('staff.payroll.post-to-finance');
+        Route::post('/staff-payroll/post-to-finance', [StaffController::class, 'postPayrollToFinance'])->middleware('module:finance,edit')->name('staff.payroll.post-to-finance');
         Route::post('/scheduled-shifts/{staff}/pattern', [ShiftController::class, 'savePattern'])->name('shifts.pattern.store');
         Route::post('/scheduled-shifts/{staff}/time-off', [ShiftController::class, 'storeTimeOff'])->name('shifts.timeoff.store');
         Route::delete('/scheduled-shifts/time-off/{timeOff}', [ShiftController::class, 'destroyTimeOff'])->name('shifts.timeoff.destroy');
@@ -212,10 +212,11 @@ Route::middleware(['auth'])->group(function () {
     Route::match(['patch', 'post', 'put'], '/clients/{customer}/quick-rename', [CustomerController::class, 'quickRename'])->name('clients.quick-rename');
     Route::match(['patch', 'post', 'put'], '/customers/{customer}/quick-rename', [CustomerController::class, 'quickRename'])->name('customers.quick-rename');
 
+    Route::post('/customers/sync-retention-leads', [CustomerController::class, 'syncRetentionToLeads'])->middleware('throttle:20,1')->name('customers.sync-retention-leads');
+
     Route::middleware('module:clients')->group(function () {
         Route::get('/customers-lookup', [CustomerController::class, 'lookup'])->name('customers.lookup');
         Route::get('/customers-search', [CustomerController::class, 'search'])->name('customers.search');
-        Route::post('/customers/sync-retention-leads', [CustomerController::class, 'syncRetentionToLeads'])->middleware('throttle:20,1')->name('customers.sync-retention-leads');
         Route::post('/customers/{customer}/ai-retention-script', [AiScriptController::class, 'generateForMaintenance'])->middleware('throttle:20,1')->name('customers.ai-retention-script');
         Route::get('/customers/{customer}/pending-packages', [CustomerController::class, 'pendingPackages'])->name('customers.pendingPackages');
         Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
@@ -245,7 +246,7 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('kpis')->name('kpi.')->group(function () {
         Route::middleware('module:kpis')->get('/', [KpiHubController::class, 'index'])->name('hub');
         Route::middleware('module:kpis')->get('/operations', [KpiHubController::class, 'operations'])->name('operations');
-        Route::middleware('module:kpis')->post('/late-replies', [KpiHubController::class, 'updateLateReplies'])->name('late-replies.update');
+        Route::middleware('module:kpis,edit')->post('/late-replies', [KpiHubController::class, 'updateLateReplies'])->name('late-replies.update');
         Route::middleware('module:kpis')->get('/marketing', [KpiHubController::class, 'marketing'])->name('marketing.index');
         Route::middleware('module:kpis')->get('/customer-service', [KpiHubController::class, 'customerService'])->name('customer-service.index');
         Route::middleware('module:kpis')->get('/salon-staff', [KpiHubController::class, 'salonStaff'])->name('salon-staff.index');
@@ -445,7 +446,7 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // ---- Legal Tasks ----
-    Route::prefix('legal')->name('legal.')->group(function () {
+    Route::prefix('legal')->name('legal.')->middleware('role:admin,owner,super_admin')->group(function () {
         Route::get('/', [LegalTaskController::class, 'index'])->name('index');
         Route::get('/tasks', [LegalTaskController::class, 'index'])->name('tasks.index');
         Route::post('/tasks', [LegalTaskController::class, 'store'])->name('tasks.store');

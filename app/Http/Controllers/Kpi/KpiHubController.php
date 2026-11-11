@@ -151,97 +151,17 @@ class KpiHubController extends Controller
         // =========================================================================
         // C. SANA — Organic Content & Social Media Replies (01 – Current Day)
         // =========================================================================
-        $currentWeekMonday = $isCurrentMonth
-            ? now()->startOfWeek(Carbon::MONDAY)->toDateString()
-            : $monthStart->copy()->startOfWeek(Carbon::MONDAY)->toDateString();
-
-        $weekPlans = SocialContentPlan::query()
-            ->whereDate('week_start_date', $currentWeekMonday)
-            ->get();
-
-        // If viewing a historical month where a later week in that month has data, prefer the most recent populated week in that month
-        if (!$isCurrentMonth && $weekPlans->isEmpty()) {
-            $latestWeekInMonth = SocialContentPlan::query()
-                ->whereBetween('week_start_date', [$periodStart, $periodEnd])
-                ->max('week_start_date');
-            if ($latestWeekInMonth) {
-                $currentWeekMonday = Carbon::parse($latestWeekInMonth)->toDateString();
-                $weekPlans = SocialContentPlan::whereDate('week_start_date', $currentWeekMonday)->get();
-            }
-        }
-
-        $publishedReels = $weekPlans->where('is_reel_posted', true)->count();
-        $publishedStories = $weekPlans->where('are_stories_posted', true)->count();
-        $weeklyItemsCompleted = $publishedReels + $publishedStories;
-        $weeklyItemsTarget = self::SANA_WEEKLY_REELS_TARGET + self::SANA_WEEKLY_STORIES_TARGET; // 11
-
-        $monthContentPlans = SocialContentPlan::query()
-            ->whereBetween('week_start_date', [
-                $periodStart->copy()->startOfWeek(Carbon::MONDAY)->startOfDay(),
-                $periodEnd,
-            ])
-            ->get();
-
-        $mtdPublishedReels = $monthContentPlans->where('is_reel_posted', true)->count();
-        $mtdPublishedStories = $monthContentPlans->where('are_stories_posted', true)->count();
-        $mtdItemsCompleted = $mtdPublishedReels + $mtdPublishedStories;
-
-        // Prorate the active week's target by elapsed days in the current week (1=Mon .. 7=Sun)
-        // so Monday/Tuesday mornings reflect true MTD/weekly pace rather than crashing to 0% FAIL.
-        $dayOfWeekIso = $isCurrentMonth ? (int) now()->dayOfWeekIso : 7;
-        $proratedReelsTarget = $isCurrentMonth
-            ? (int) floor((self::SANA_WEEKLY_REELS_TARGET * $dayOfWeekIso) / 7)
-            : self::SANA_WEEKLY_REELS_TARGET;
-        $proratedStoriesTarget = $isCurrentMonth
-            ? (int) floor((self::SANA_WEEKLY_STORIES_TARGET * $dayOfWeekIso) / 7)
-            : self::SANA_WEEKLY_STORIES_TARGET;
-        $proratedWeeklyItemsTarget = $isCurrentMonth
-            ? max(1, $proratedReelsTarget + $proratedStoriesTarget)
-            : $weeklyItemsTarget;
-
-        $effectiveItemsCompleted = max($weeklyItemsCompleted, $mtdItemsCompleted);
-        $weeklyContentExecutionPct = round(min(100.0, ($effectiveItemsCompleted / $proratedWeeklyItemsTarget) * 100), 1);
-
-        $weekLateReplies = (int) $weekPlans->sum('late_replies_count');
-        $monthLateReplies = (int) $monthContentPlans->sum('late_replies_count');
-        $effectiveLateReplies = max($weekLateReplies, $monthLateReplies);
-
-        $sanaContentPassing = ($publishedReels >= self::SANA_WEEKLY_REELS_TARGET && $publishedStories >= self::SANA_WEEKLY_STORIES_TARGET)
-            || ($isCurrentMonth && $publishedReels >= $proratedReelsTarget && $publishedStories >= $proratedStoriesTarget && $effectiveItemsCompleted >= $proratedWeeklyItemsTarget);
-        $sanaRepliesPassing = ($effectiveLateReplies === 0);
-        $sanaRepliesScorePct = $sanaRepliesPassing ? 100.0 : 0.0;
-        $sanaOverallScorePct = round(($weeklyContentExecutionPct + $sanaRepliesScorePct) / 2, 1);
-        $sanaPassingCount = ($sanaContentPassing ? 1 : 0) + ($sanaRepliesPassing ? 1 : 0);
-        $sanaTotalKpis = 2;
-        $sanaFailingCount = $sanaTotalKpis - $sanaPassingCount;
-
-        $sanaData = [
-            'owner' => 'Sana',
-            'role' => 'Organic Content & Social Media Replies',
-            'week_start_date' => $currentWeekMonday,
-            'period_badge' => $shortPeriodBadge,
-            'published_reels' => $publishedReels,
-            'reels_target' => self::SANA_WEEKLY_REELS_TARGET,
-            'prorated_reels_target' => $proratedReelsTarget,
-            'published_stories' => $publishedStories,
-            'stories_target' => self::SANA_WEEKLY_STORIES_TARGET,
-            'prorated_stories_target' => $proratedStoriesTarget,
-            'prorated_weekly_target' => $proratedWeeklyItemsTarget,
-            'weekly_execution_pct' => $weeklyContentExecutionPct,
-            'content_passing' => $sanaContentPassing,
-            'mtd_published_reels' => $mtdPublishedReels,
-            'mtd_published_stories' => $mtdPublishedStories,
-            'late_replies_count' => $effectiveLateReplies,
-            'replies_sla_passing' => $sanaRepliesPassing,
-            'replies_sla_status_label' => $sanaRepliesPassing
-                ? '100% SLA PASS (0 Late Replies)'
-                : "SLA BREACH ({$effectiveLateReplies} Reported Late " . ($effectiveLateReplies === 1 ? 'Reply' : 'Replies') . ')',
-            'overall_score_pct' => $sanaOverallScorePct,
-            'passing_kpis_count' => $sanaPassingCount,
-            'total_kpis_count' => $sanaTotalKpis,
-            'below_floor_count' => $sanaFailingCount,
-            'is_passing_all' => $sanaFailingCount === 0,
-        ];
+        $sanaData = $this->buildSanaSection(
+            periodStart: $periodStart,
+            periodEnd: $periodEnd,
+            monthStart: $monthStart,
+            isCurrentMonth: $isCurrentMonth,
+            daysElapsed: $daysElapsed,
+            shortPeriodBadge: $shortPeriodBadge
+        );
+        $sanaOverallScorePct = $sanaData['overall_score_pct'];
+        $sanaFailingCount = $sanaData['below_floor_count'];
+        $effectiveLateReplies = $sanaData['late_replies_count'];
 
         // =========================================================================
         // A. AYAN — Marketing, Ads Revenue & Content Oversight (01 – Current Day)
@@ -338,182 +258,16 @@ class KpiHubController extends Controller
         // =========================================================================
         // B. LADEN — Customer Service, Bookings, Chat Eval & Complaint SLA (01 – Current Day)
         // =========================================================================
-        // KPI 1: Daily Booking Quota (26 Bookings / Day = 13/Day x 2 Chat Agents)
         $referenceDate = $isCurrentMonth ? now()->copy() : $monthEnd->copy();
 
-        $todayBookingsCount = Appointment::query()
-            ->whereDate('created_at', $referenceDate->toDateString())
-            ->count();
-
-        $mtdBookingsCount = Appointment::query()
-            ->whereBetween('created_at', [$periodStart, $periodEnd])
-            ->count();
-
-        $dailyTarget = self::LADEN_DAILY_BOOKING_QUOTA; // 26 (13/day x 2 Chat Agents)
-        $fullMonthTargetBookings = $dailyTarget * $daysInMonth;
-        $mtdTargetBookings = $dailyTarget * $daysElapsed;
-        $todayBookingQuotaPct = round(min(100.0, ($todayBookingsCount / $dailyTarget) * 100), 1);
-        $mtdBookingQuotaPct = min(100.0, round(($mtdBookingsCount / max(1, $mtdTargetBookings)) * 100, 1));
-        $ladenBookingPassing = ($mtdBookingsCount >= $mtdTargetBookings || $todayBookingsCount >= $dailyTarget);
-        $bookingStatusLabel = ($mtdBookingQuotaPct >= 100.0 || $todayBookingQuotaPct >= 100.0)
-            ? 'ON TARGET'
-            : (($mtdBookingQuotaPct >= 85.0 || $todayBookingQuotaPct >= 85.0) ? 'NEAR TARGET' : 'BELOW QUOTA');
-
-        // KPI 2: Agent Chat Evaluation Score (Target: >= 85%)
-        $monthChatEvals = KpiChatEvaluation::query()
-            ->whereBetween('evaluation_date', [$periodStart, $periodEnd])
-            ->get(['id', 'agent_id', 'percentage', 'total_score']);
-
-        $chatEvalsCount = $monthChatEvals->count();
-        $chatEvalAvgPct = $chatEvalsCount > 0
-            ? round((float) $monthChatEvals->avg('percentage'), 1)
-            : 0.0;
-        $ladenChatPassing = ($chatEvalsCount > 0 && $chatEvalAvgPct >= self::LADEN_CHAT_EVAL_TARGET_PCT);
-        $chatEvalAchievementPct = round(min(100.0, ($chatEvalAvgPct / self::LADEN_CHAT_EVAL_TARGET_PCT) * 100), 1);
-        $chatStatusLabel = $ladenChatPassing ? 'PASS' : 'BELOW TARGET';
-
-        // KPI 3: Lead Management & Conversion Rate (Target: >= 30%)
-        $monthLeads = Lead::query()
-            ->whereBetween('created_at', [$periodStart, $periodEnd])
-            ->get(['id', 'appointment_id', 'needful_done', 'assigned_agent_id', 'next_followup_date']);
-
-        $totalLeadsCount = $monthLeads->count();
-        $bookedLeadsCount = $monthLeads->filter(function (Lead $lead) {
-            return $lead->appointment_id !== null
-                || in_array((string) $lead->needful_done, ['booked', 'Appointment Booked', 'Completed / Visited'], true);
-        })->count();
-        $leadConversionPct = $totalLeadsCount > 0
-            ? round(($bookedLeadsCount / $totalLeadsCount) * 100, 1)
-            : 0.0;
-        $ladenLeadConvPassing = ($totalLeadsCount > 0 && $leadConversionPct >= self::LADEN_LEAD_CONVERSION_TARGET_PCT);
-        $leadConvAchievementPct = round(min(100.0, ($leadConversionPct / self::LADEN_LEAD_CONVERSION_TARGET_PCT) * 100), 1);
-        $leadStatusLabel = $ladenLeadConvPassing ? 'ON TRACK' : 'BELOW FLOOR';
-
-        $openPipelineLeads = Lead::query()
-            ->where(function ($q) {
-                $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
-            })
-            ->where(function ($q) {
-                $q->whereNull('category')->orWhere('category', '!=', 'cancel');
-            })
-            ->get(['id', 'assigned_agent_id', 'next_followup_date']);
-
-        $unassignedLeadsCount = $openPipelineLeads->whereNull('assigned_agent_id')->count();
-        $overdueFollowupsCount = Lead::query()
-            ->whereNotNull('next_followup_date')
-            ->whereDate('next_followup_date', '<', today())
-            ->where(function ($q) {
-                $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
-            })
-            ->where(function ($q) {
-                $q->whereNull('category')->orWhere('category', '!=', 'cancel');
-            })
-            ->count();
-
-        // KPI 4: Complaint Resolution SLA (<= 48 Hours)
-        $monthComplaints = StaffComplaint::with('notices')
-            ->where(function ($q) use ($periodStart, $periodEnd) {
-                $q->whereBetween('complaint_date', [$periodStart->toDateString(), $periodEnd->toDateString()])
-                  ->orWhereBetween('created_at', [$periodStart, $periodEnd]);
-            })
-            ->get();
-
-        $totalComplaintsCount = $monthComplaints->count();
-        $resolvedWithin48hCount = 0;
-        $openComplaintsCount = 0;
-        $breachingOpenCount = 0;
-        $oldestOpenAgeHours = 0;
-
-        foreach ($monthComplaints as $complaint) {
-            $createdAt = $complaint->created_at ? Carbon::parse($complaint->created_at) : Carbon::parse($complaint->complaint_date);
-            $isResolved = ($complaint->is_staff_mistake !== null || $complaint->notices->isNotEmpty());
-
-            if ($isResolved) {
-                $resolvedAt = $complaint->resolved_at
-                    ? Carbon::parse($complaint->resolved_at)
-                    : ($complaint->updated_at ? Carbon::parse($complaint->updated_at) : $createdAt);
-                $resolutionHours = max(0.0, $createdAt->diffInMinutes($resolvedAt, false) / 60.0);
-                if ($resolutionHours <= self::LADEN_COMPLAINT_SLA_HOURS) {
-                    $resolvedWithin48hCount++;
-                }
-            } else {
-                $openComplaintsCount++;
-                $ageHours = (int) max(0, floor($createdAt->diffInMinutes(now(), false) / 60));
-                if ($ageHours > $oldestOpenAgeHours) {
-                    $oldestOpenAgeHours = $ageHours;
-                }
-                if ($ageHours > self::LADEN_COMPLAINT_SLA_HOURS) {
-                    $breachingOpenCount++;
-                }
-            }
-        }
-
-        $complaintSlaPct = $totalComplaintsCount > 0
-            ? round(($resolvedWithin48hCount / $totalComplaintsCount) * 100, 1)
-            : 100.0;
-
-        $ladenComplaintPassing = ($totalComplaintsCount === 0 || ($resolvedWithin48hCount === $totalComplaintsCount && $breachingOpenCount === 0));
-
-        $ladenPassingCount = ($ladenBookingPassing ? 1 : 0)
-            + ($ladenChatPassing ? 1 : 0)
-            + ($ladenLeadConvPassing ? 1 : 0)
-            + ($ladenComplaintPassing ? 1 : 0);
-        $ladenTotalKpis = 4;
-        $ladenFailingCount = $ladenTotalKpis - $ladenPassingCount;
-
-        $ladenOverallScorePct = round((
-            $mtdBookingQuotaPct +
-            $chatEvalAchievementPct +
-            $leadConvAchievementPct +
-            $complaintSlaPct
-        ) / 4, 1);
-
-        $ladenData = [
-            'owner' => 'Laden',
-            'role' => 'Customer Service, Bookings, Chat Quality & Complaints SLA',
-            'daily_booking_target' => $dailyTarget,
-            'today_bookings_count' => $todayBookingsCount,
-            'today_booking_quota_pct' => $todayBookingQuotaPct,
-            'mtd_bookings_count' => $mtdBookingsCount,
-            'mtd_target_bookings' => $mtdTargetBookings,
-            'full_month_target_bookings' => $fullMonthTargetBookings,
-            'mtd_booking_quota_pct' => $mtdBookingQuotaPct,
-            'booking_status_label' => $bookingStatusLabel,
-            'booking_passing' => $ladenBookingPassing,
-            'chat_eval_target_pct' => self::LADEN_CHAT_EVAL_TARGET_PCT,
-            'chat_evals_count' => $chatEvalsCount,
-            'total_evaluations_count' => $chatEvalsCount,
-            'chat_eval_avg_pct' => $chatEvalAvgPct,
-            'average_score_percent' => $chatEvalAvgPct,
-            'chat_eval_achievement_pct' => $chatEvalAchievementPct,
-            'chat_status_label' => $chatStatusLabel,
-            'chat_passing' => $ladenChatPassing,
-            'lead_conversion_target_pct' => self::LADEN_LEAD_CONVERSION_TARGET_PCT,
-            'total_leads_count' => $totalLeadsCount,
-            'booked_leads_count' => $bookedLeadsCount,
-            'lead_conversion_pct' => $leadConversionPct,
-            'lead_conv_achievement_pct' => $leadConvAchievementPct,
-            'lead_status_label' => $leadStatusLabel,
-            'lead_conv_passing' => $ladenLeadConvPassing,
-            'unassigned_leads_count' => $unassignedLeadsCount,
-            'overdue_followups_count' => $overdueFollowupsCount,
-            'complaint_sla_hours' => self::LADEN_COMPLAINT_SLA_HOURS,
-            'total_complaints_count' => $totalComplaintsCount,
-            'resolved_within_48h_count' => $resolvedWithin48hCount,
-            'open_complaints_count' => $openComplaintsCount,
-            'breaching_open_count' => $breachingOpenCount,
-            'oldest_open_age_hours' => $oldestOpenAgeHours,
-            'complaint_sla_pct' => $complaintSlaPct,
-            'complaint_sla_label' => $totalComplaintsCount === 0
-                ? '100% — 0 Complaints'
-                : "{$resolvedWithin48hCount} / {$totalComplaintsCount} Resolved <= 48h ({$complaintSlaPct}%)",
-            'complaint_passing' => $ladenComplaintPassing,
-            'overall_score_pct' => $ladenOverallScorePct,
-            'passing_kpis_count' => $ladenPassingCount,
-            'total_kpis_count' => $ladenTotalKpis,
-            'below_floor_count' => $ladenFailingCount,
-            'is_passing_all' => $ladenFailingCount === 0,
-        ];
+        $ladenData = $this->buildLadenSection(
+            periodStart: $periodStart,
+            periodEnd: $periodEnd,
+            monthEnd: $monthEnd,
+            isCurrentMonth: $isCurrentMonth,
+            daysInMonth: $daysInMonth,
+            daysElapsed: $daysElapsed
+        );
 
         // =========================================================================
         // D. AHANA (Old Airport) & RHEA (Wakrah) — Branch Managers (01 – Current Day)
@@ -585,6 +339,116 @@ class KpiHubController extends Controller
         ];
     }
 
+    private function buildSanaSection(
+        Carbon $periodStart,
+        Carbon $periodEnd,
+        Carbon $monthStart,
+        bool $isCurrentMonth,
+        int $daysElapsed,
+        string $shortPeriodBadge
+    ): array {
+        $currentWeekMonday = $isCurrentMonth
+            ? now()->startOfWeek(Carbon::MONDAY)->toDateString()
+            : $monthStart->copy()->startOfWeek(Carbon::MONDAY)->toDateString();
+
+        $weekPlans = SocialContentPlan::query()
+            ->whereDate('week_start_date', $currentWeekMonday)
+            ->get();
+
+        if (!$isCurrentMonth && $weekPlans->isEmpty()) {
+            $latestWeekInMonth = SocialContentPlan::query()
+                ->whereBetween('week_start_date', [$periodStart, $periodEnd])
+                ->max('week_start_date');
+            if ($latestWeekInMonth) {
+                $currentWeekMonday = Carbon::parse($latestWeekInMonth)->toDateString();
+                $weekPlans = SocialContentPlan::whereDate('week_start_date', $currentWeekMonday)->get();
+            }
+        }
+
+        $publishedReels = $weekPlans->where('is_reel_posted', true)->count();
+        $publishedStories = $weekPlans->where('are_stories_posted', true)->count();
+        $weeklyItemsTarget = self::SANA_WEEKLY_REELS_TARGET + self::SANA_WEEKLY_STORIES_TARGET; // 11
+        $monthlyItemsTarget = $weeklyItemsTarget * 4; // 44
+        $elapsedWeeks = max(1, min(4, (int) ceil($daysElapsed / 7)));
+
+        $monthContentPlans = SocialContentPlan::query()
+            ->whereBetween('week_start_date', [
+                $periodStart->copy()->startOfWeek(Carbon::MONDAY)->startOfDay(),
+                $periodEnd,
+            ])
+            ->get();
+
+        $mtdPublishedReels = $monthContentPlans->where('is_reel_posted', true)->count();
+        $mtdPublishedStories = $monthContentPlans->where('are_stories_posted', true)->count();
+        $mtdItemsCompleted = $mtdPublishedReels + $mtdPublishedStories;
+
+        $cumulativeMtdTarget = min($monthlyItemsTarget, $weeklyItemsTarget * $elapsedWeeks);
+        $cumulativeMtdReelsTarget = min(self::SANA_WEEKLY_REELS_TARGET * 4, self::SANA_WEEKLY_REELS_TARGET * $elapsedWeeks);
+        $cumulativeMtdStoriesTarget = min(self::SANA_WEEKLY_STORIES_TARGET * 4, self::SANA_WEEKLY_STORIES_TARGET * $elapsedWeeks);
+
+        $dayOfWeekIso = $isCurrentMonth ? (int) now()->dayOfWeekIso : 7;
+        $proratedReelsTarget = $isCurrentMonth
+            ? (int) floor((self::SANA_WEEKLY_REELS_TARGET * $dayOfWeekIso) / 7)
+            : self::SANA_WEEKLY_REELS_TARGET;
+        $proratedStoriesTarget = $isCurrentMonth
+            ? (int) floor((self::SANA_WEEKLY_STORIES_TARGET * $dayOfWeekIso) / 7)
+            : self::SANA_WEEKLY_STORIES_TARGET;
+        $proratedWeeklyItemsTarget = $isCurrentMonth
+            ? max(1, $proratedReelsTarget + $proratedStoriesTarget)
+            : $weeklyItemsTarget;
+
+        // Compare cumulative MTD completed posts against cumulative MTD target (never dividing a month's posts by 1 week's target)
+        $weeklyContentExecutionPct = round(min(100.0, ($mtdItemsCompleted / max(1, $cumulativeMtdTarget)) * 100), 1);
+
+        $weekLateReplies = (int) $weekPlans->sum('late_replies_count');
+        $monthLateReplies = (int) $monthContentPlans->sum('late_replies_count');
+        $effectiveLateReplies = max($weekLateReplies, $monthLateReplies);
+
+        $sanaContentPassing = (
+            $mtdPublishedReels >= $cumulativeMtdReelsTarget
+            && $mtdPublishedStories >= $cumulativeMtdStoriesTarget
+            && $mtdItemsCompleted >= $cumulativeMtdTarget
+        );
+        $sanaRepliesPassing = ($effectiveLateReplies === 0);
+        $sanaRepliesScorePct = $sanaRepliesPassing ? 100.0 : 0.0;
+        $sanaOverallScorePct = round(($weeklyContentExecutionPct + $sanaRepliesScorePct) / 2, 1);
+        $sanaPassingCount = ($sanaContentPassing ? 1 : 0) + ($sanaRepliesPassing ? 1 : 0);
+        $sanaTotalKpis = 2;
+        $sanaFailingCount = $sanaTotalKpis - $sanaPassingCount;
+
+        return [
+            'owner' => 'Sana',
+            'role' => 'Organic Content & Social Media Replies',
+            'week_start_date' => $currentWeekMonday,
+            'period_badge' => $shortPeriodBadge,
+            'published_reels' => $publishedReels,
+            'reels_target' => self::SANA_WEEKLY_REELS_TARGET,
+            'prorated_reels_target' => $proratedReelsTarget,
+            'published_stories' => $publishedStories,
+            'stories_target' => self::SANA_WEEKLY_STORIES_TARGET,
+            'prorated_stories_target' => $proratedStoriesTarget,
+            'prorated_weekly_target' => $proratedWeeklyItemsTarget,
+            'elapsed_weeks' => $elapsedWeeks,
+            'monthly_items_target' => $monthlyItemsTarget,
+            'cumulative_mtd_target' => $cumulativeMtdTarget,
+            'mtd_items_completed' => $mtdItemsCompleted,
+            'weekly_execution_pct' => $weeklyContentExecutionPct,
+            'content_passing' => $sanaContentPassing,
+            'mtd_published_reels' => $mtdPublishedReels,
+            'mtd_published_stories' => $mtdPublishedStories,
+            'late_replies_count' => $effectiveLateReplies,
+            'replies_sla_passing' => $sanaRepliesPassing,
+            'replies_sla_status_label' => $sanaRepliesPassing
+                ? '100% SLA PASS (0 Late Replies)'
+                : "SLA BREACH ({$effectiveLateReplies} Reported Late " . ($effectiveLateReplies === 1 ? 'Reply' : 'Replies') . ')',
+            'overall_score_pct' => $sanaOverallScorePct,
+            'passing_kpis_count' => $sanaPassingCount,
+            'total_kpis_count' => $sanaTotalKpis,
+            'below_floor_count' => $sanaFailingCount,
+            'is_passing_all' => $sanaFailingCount === 0,
+        ];
+    }
+
     private function buildChatAgentScorecard(
         string $owner,
         string $role,
@@ -607,17 +471,25 @@ class KpiHubController extends Controller
 
         if ($agentUserIds->isNotEmpty()) {
             $todayBookings = Appointment::query()
+                ->whereNotIn('status', ['cancelled', 'no_show'])
                 ->where(function ($q) use ($agentUserIds) {
                     $q->whereIn('booking_agent_id', $agentUserIds)
-                      ->orWhereIn('created_by', $agentUserIds);
+                        ->orWhere(function ($sub) use ($agentUserIds) {
+                            $sub->whereNull('booking_agent_id')
+                                ->whereIn('created_by', $agentUserIds);
+                        });
                 })
                 ->whereDate('created_at', $referenceDate->toDateString())
                 ->count();
 
             $mtdBookings = Appointment::query()
+                ->whereNotIn('status', ['cancelled', 'no_show'])
                 ->where(function ($q) use ($agentUserIds) {
                     $q->whereIn('booking_agent_id', $agentUserIds)
-                      ->orWhereIn('created_by', $agentUserIds);
+                        ->orWhere(function ($sub) use ($agentUserIds) {
+                            $sub->whereNull('booking_agent_id')
+                                ->whereIn('created_by', $agentUserIds);
+                        });
                 })
                 ->whereBetween('created_at', [$periodStart, $periodEnd])
                 ->count();
@@ -719,6 +591,195 @@ class KpiHubController extends Controller
             'total_kpis_count' => $totalKpis,
             'below_floor_count' => $failingCount,
             'is_passing_all' => $failingCount === 0,
+        ];
+    }
+
+    /**
+     * Build Laden's Customer Service, Bookings, Chat Quality & Complaint SLA scorecard section.
+     * Ensures Lead Conversion Rate only counts leads with needful_done === 'booked' (when not linked
+     * to a cancelled/no-show booking) OR a linked active non-cancelled/non-no-show Appointment.
+     */
+    private function buildLadenSection(
+        Carbon $periodStart,
+        Carbon $periodEnd,
+        Carbon $monthEnd,
+        bool $isCurrentMonth,
+        int $daysInMonth,
+        int $daysElapsed
+    ): array {
+        $referenceDate = $isCurrentMonth ? now()->copy() : $monthEnd->copy();
+
+        $todayBookingsCount = Appointment::query()
+            ->whereNotIn('status', ['cancelled', 'no_show'])
+            ->whereDate('created_at', $referenceDate->toDateString())
+            ->count();
+
+        $mtdBookingsCount = Appointment::query()
+            ->whereNotIn('status', ['cancelled', 'no_show'])
+            ->whereBetween('created_at', [$periodStart, $periodEnd])
+            ->count();
+
+        $dailyTarget = self::LADEN_DAILY_BOOKING_QUOTA; // 26 (13/day x 2 Chat Agents)
+        $fullMonthTargetBookings = $dailyTarget * $daysInMonth;
+        $mtdTargetBookings = $dailyTarget * $daysElapsed;
+        $todayBookingQuotaPct = round(min(100.0, ($todayBookingsCount / $dailyTarget) * 100), 1);
+        $mtdBookingQuotaPct = min(100.0, round(($mtdBookingsCount / max(1, $mtdTargetBookings)) * 100, 1));
+        $ladenBookingPassing = ($mtdBookingsCount >= $mtdTargetBookings || $todayBookingsCount >= $dailyTarget);
+        $bookingStatusLabel = ($mtdBookingQuotaPct >= 100.0 || $todayBookingQuotaPct >= 100.0)
+            ? 'ON TARGET'
+            : (($mtdBookingQuotaPct >= 85.0 || $todayBookingQuotaPct >= 85.0) ? 'NEAR TARGET' : 'BELOW QUOTA');
+
+        // KPI 2: Agent Chat Evaluation Score (Target: >= 85%)
+        $monthChatEvals = KpiChatEvaluation::query()
+            ->whereBetween('evaluation_date', [$periodStart, $periodEnd])
+            ->get(['id', 'agent_id', 'percentage', 'total_score']);
+
+        $chatEvalsCount = $monthChatEvals->count();
+        $chatEvalAvgPct = $chatEvalsCount > 0
+            ? round((float) $monthChatEvals->avg('percentage'), 1)
+            : 0.0;
+        $ladenChatPassing = ($chatEvalsCount > 0 && $chatEvalAvgPct >= self::LADEN_CHAT_EVAL_TARGET_PCT);
+        $chatEvalAchievementPct = round(min(100.0, ($chatEvalAvgPct / self::LADEN_CHAT_EVAL_TARGET_PCT) * 100), 1);
+        $chatStatusLabel = $ladenChatPassing ? 'PASS' : 'BELOW TARGET';
+
+        // KPI 3: Lead Management & Conversion Rate (Target: >= 30%)
+        $monthLeads = Lead::with('appointment:id,status')
+            ->whereBetween('created_at', [$periodStart, $periodEnd])
+            ->get(['id', 'appointment_id', 'needful_done', 'assigned_agent_id', 'next_followup_date']);
+
+        $totalLeadsCount = $monthLeads->count();
+        $bookedLeadsCount = $monthLeads->filter(fn (Lead $lead) => $lead->isBookedConversion())->count();
+        $leadConversionPct = $totalLeadsCount > 0
+            ? round(($bookedLeadsCount / $totalLeadsCount) * 100, 1)
+            : 0.0;
+        $ladenLeadConvPassing = ($totalLeadsCount > 0 && $leadConversionPct >= self::LADEN_LEAD_CONVERSION_TARGET_PCT);
+        $leadConvAchievementPct = round(min(100.0, ($leadConversionPct / self::LADEN_LEAD_CONVERSION_TARGET_PCT) * 100), 1);
+        $leadStatusLabel = $ladenLeadConvPassing ? 'ON TRACK' : 'BELOW FLOOR';
+
+        $openPipelineLeads = Lead::query()
+            ->where(function ($q) {
+                $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
+            })
+            ->where(function ($q) {
+                $q->whereNull('category')->orWhere('category', '!=', 'cancel');
+            })
+            ->get(['id', 'assigned_agent_id', 'next_followup_date']);
+
+        $unassignedLeadsCount = $openPipelineLeads->whereNull('assigned_agent_id')->count();
+        $overdueFollowupsCount = Lead::query()
+            ->whereNotNull('next_followup_date')
+            ->whereDate('next_followup_date', '<', today())
+            ->where(function ($q) {
+                $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
+            })
+            ->where(function ($q) {
+                $q->whereNull('category')->orWhere('category', '!=', 'cancel');
+            })
+            ->count();
+
+        // KPI 4: Complaint Resolution SLA (<= 48 Hours)
+        $monthComplaints = StaffComplaint::with('notices')
+            ->where(function ($q) use ($periodStart, $periodEnd) {
+                $q->whereBetween('complaint_date', [$periodStart->toDateString(), $periodEnd->toDateString()])
+                  ->orWhereBetween('created_at', [$periodStart, $periodEnd]);
+            })
+            ->get();
+
+        $totalComplaintsCount = $monthComplaints->count();
+        $resolvedWithin48hCount = 0;
+        $openComplaintsCount = 0;
+        $breachingOpenCount = 0;
+        $oldestOpenAgeHours = 0;
+
+        foreach ($monthComplaints as $complaint) {
+            $createdAt = $complaint->created_at ? Carbon::parse($complaint->created_at) : Carbon::parse($complaint->complaint_date);
+            $isResolved = ($complaint->is_staff_mistake !== null || $complaint->notices->isNotEmpty());
+
+            if ($isResolved) {
+                $resolvedAt = $complaint->resolved_at
+                    ? Carbon::parse($complaint->resolved_at)
+                    : ($complaint->updated_at ? Carbon::parse($complaint->updated_at) : $createdAt);
+                $resolutionHours = max(0.0, $createdAt->diffInMinutes($resolvedAt, false) / 60.0);
+                if ($resolutionHours <= self::LADEN_COMPLAINT_SLA_HOURS) {
+                    $resolvedWithin48hCount++;
+                }
+            } else {
+                $openComplaintsCount++;
+                $ageHours = (int) max(0, floor($createdAt->diffInMinutes(now(), false) / 60));
+                if ($ageHours > $oldestOpenAgeHours) {
+                    $oldestOpenAgeHours = $ageHours;
+                }
+                if ($ageHours > self::LADEN_COMPLAINT_SLA_HOURS) {
+                    $breachingOpenCount++;
+                }
+            }
+        }
+
+        $complaintSlaPct = $totalComplaintsCount > 0
+            ? round(($resolvedWithin48hCount / $totalComplaintsCount) * 100, 1)
+            : 100.0;
+
+        $ladenComplaintPassing = ($totalComplaintsCount === 0 || ($resolvedWithin48hCount === $totalComplaintsCount && $breachingOpenCount === 0));
+
+        $ladenPassingCount = ($ladenBookingPassing ? 1 : 0)
+            + ($ladenChatPassing ? 1 : 0)
+            + ($ladenLeadConvPassing ? 1 : 0)
+            + ($ladenComplaintPassing ? 1 : 0);
+        $ladenTotalKpis = 4;
+        $ladenFailingCount = $ladenTotalKpis - $ladenPassingCount;
+
+        $ladenOverallScorePct = round((
+            $mtdBookingQuotaPct +
+            $chatEvalAchievementPct +
+            $leadConvAchievementPct +
+            $complaintSlaPct
+        ) / 4, 1);
+
+        return [
+            'owner' => 'Laden',
+            'role' => 'Customer Service, Bookings, Chat Quality & Complaints SLA',
+            'daily_booking_target' => $dailyTarget,
+            'today_bookings_count' => $todayBookingsCount,
+            'today_booking_quota_pct' => $todayBookingQuotaPct,
+            'mtd_bookings_count' => $mtdBookingsCount,
+            'mtd_target_bookings' => $mtdTargetBookings,
+            'full_month_target_bookings' => $fullMonthTargetBookings,
+            'mtd_booking_quota_pct' => $mtdBookingQuotaPct,
+            'booking_status_label' => $bookingStatusLabel,
+            'booking_passing' => $ladenBookingPassing,
+            'chat_eval_target_pct' => self::LADEN_CHAT_EVAL_TARGET_PCT,
+            'chat_evals_count' => $chatEvalsCount,
+            'total_evaluations_count' => $chatEvalsCount,
+            'chat_eval_avg_pct' => $chatEvalAvgPct,
+            'average_score_percent' => $chatEvalAvgPct,
+            'chat_eval_achievement_pct' => $chatEvalAchievementPct,
+            'chat_status_label' => $chatStatusLabel,
+            'chat_passing' => $ladenChatPassing,
+            'lead_conversion_target_pct' => self::LADEN_LEAD_CONVERSION_TARGET_PCT,
+            'total_leads_count' => $totalLeadsCount,
+            'booked_leads_count' => $bookedLeadsCount,
+            'lead_conversion_pct' => $leadConversionPct,
+            'lead_conv_achievement_pct' => $leadConvAchievementPct,
+            'lead_status_label' => $ladenLeadConvPassing ? 'ON TRACK' : 'BELOW FLOOR',
+            'lead_conv_passing' => $ladenLeadConvPassing,
+            'unassigned_leads_count' => $unassignedLeadsCount,
+            'overdue_followups_count' => $overdueFollowupsCount,
+            'complaint_sla_hours' => self::LADEN_COMPLAINT_SLA_HOURS,
+            'total_complaints_count' => $totalComplaintsCount,
+            'resolved_within_48h_count' => $resolvedWithin48hCount,
+            'open_complaints_count' => $openComplaintsCount,
+            'breaching_open_count' => $breachingOpenCount,
+            'oldest_open_age_hours' => $oldestOpenAgeHours,
+            'complaint_sla_pct' => $complaintSlaPct,
+            'complaint_sla_label' => $totalComplaintsCount === 0
+                ? '100% — 0 Complaints'
+                : "{$resolvedWithin48hCount} / {$totalComplaintsCount} Resolved <= 48h ({$complaintSlaPct}%)",
+            'complaint_passing' => $ladenComplaintPassing,
+            'overall_score_pct' => $ladenOverallScorePct,
+            'passing_kpis_count' => $ladenPassingCount,
+            'total_kpis_count' => $ladenTotalKpis,
+            'below_floor_count' => $ladenFailingCount,
+            'is_passing_all' => $ladenFailingCount === 0,
         ];
     }
 

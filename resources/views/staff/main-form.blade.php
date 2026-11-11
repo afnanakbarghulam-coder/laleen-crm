@@ -252,7 +252,9 @@
                                 <div class="mb-3">
                                     <label class="form-label">Role</label>
                                     <select name="access_role" id="stfAccessRole" class="form-select">
-                                        <option value="admin">Admin — full access to every module</option>
+                                        @if (auth()->user()?->isAdmin())
+                                            <option value="admin">Admin — full access to every module</option>
+                                        @endif
                                         <option value="manager">Manager — branch operations &amp; oversight</option>
                                         <option value="agent">Agent — bookings, leads, revenue</option>
                                         <option value="staff">Staff — calendar &amp; appointments only</option>

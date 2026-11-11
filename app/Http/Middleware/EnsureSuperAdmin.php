@@ -16,6 +16,10 @@ class EnsureSuperAdmin
     {
         $user = $request->user();
 
+        if ($user && !$user->is_active) {
+            return EnsureActiveUser::logoutDeactivated($request);
+        }
+
         if (!$user || !$user->isSuperAdmin()) {
             abort(403, 'You do not have permission to access this section.');
         }

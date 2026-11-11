@@ -30,7 +30,7 @@ class AdLeadEntryController extends Controller
         $entry = $entry->fresh();
         $synced = AdLeadEntry::syncFromCustomerActivity(
             customer: $entry->customer,
-            activityDate: Carbon::parse($entry->date)->endOfMonth(),
+            activityDate: Carbon::parse($entry->date),
             phone: $entry->phone,
             targetEntry: $entry,
             resetIfNoActivity: !$hasManualBranch
@@ -59,7 +59,7 @@ class AdLeadEntryController extends Controller
         $entry = $entry->fresh();
         $synced = AdLeadEntry::syncFromCustomerActivity(
             customer: $entry->customer,
-            activityDate: Carbon::parse($entry->date)->endOfMonth(),
+            activityDate: Carbon::parse($entry->date),
             phone: $entry->phone,
             targetEntry: $entry,
             resetIfNoActivity: !$hasManualBranch
@@ -73,7 +73,34 @@ class AdLeadEntryController extends Controller
 
     public function destroy(AdLeadEntry $adLeadEntry)
     {
+        $customer = $adLeadEntry->customer;
+        $phone = $adLeadEntry->phone;
+        $entryDate = $adLeadEntry->date ? Carbon::parse($adLeadEntry->date) : now();
+
+        if ($adLeadEntry->lead_id && Schema::hasTable('leads')) {
+            $linkedLead = Lead::find($adLeadEntry->lead_id);
+            if (
+                $linkedLead
+                && $linkedLead->needful_done === 'booked'
+                && $linkedLead->appointment_id === null
+                && !$adLeadEntry->hasVerifiedCustomerConversion()
+            ) {
+                $linkedLead->update([
+                    'needful_done' => null,
+                    'next_followup_date' => now()->toDateString(),
+                ]);
+            }
+        }
+
         $adLeadEntry->delete();
+
+        if ($customer || $phone) {
+            AdLeadEntry::syncFromCustomerActivity(
+                customer: $customer,
+                activityDate: $entryDate,
+                phone: $phone
+            );
+        }
 
         return redirect()->route('kpi.ads.index')->with('success', 'Ad lead deleted.');
     }
@@ -190,23 +217,28 @@ class AdLeadEntryController extends Controller
                         $q->orWhereIn('phone', $candidates);
                     }
                 })
-                ->whereYear('created_at', $entryDate->year)
-                ->whereMonth('created_at', $entryDate->month)
+                ->whereBetween('created_at', [
+                    $entryDate->copy()->subDays(AdLeadEntry::ATTRIBUTION_WINDOW_DAYS)->startOfDay(),
+                    $entryDate->copy()->addDays(AdLeadEntry::ATTRIBUTION_WINDOW_DAYS)->endOfDay(),
+                ])
                 ->latest('id')
                 ->first();
         }
 
         $interestList = $entry->category ? [$entry->category] : [];
+        $hasVerifiedConversion = $entry->hasVerifiedCustomerConversion();
+        $verifiedAppointment = $hasVerifiedConversion ? $entry->resolveVerifiedAppointment() : null;
 
         if (!$existingLead) {
             $newLead = Lead::create([
                 'phone' => $entry->phone,
                 'customer_id' => $entry->customer_id,
+                'appointment_id' => $verifiedAppointment?->id,
                 'category' => 'inquiry',
                 'categories' => ['inquiry'],
                 'service_interest' => $interestList,
                 'customer_remarks' => $entry->remarks,
-                'needful_done' => $entry->isBooked() ? 'booked' : null,
+                'needful_done' => $hasVerifiedConversion ? 'booked' : null,
                 'assigned_agent_id' => $entry->created_by ?? auth()->id(),
             ]);
 
@@ -220,9 +252,17 @@ class AdLeadEntryController extends Controller
         if ($entry->customer_id && !$existingLead->customer_id) {
             $updates['customer_id'] = $entry->customer_id;
         }
-        if ($entry->isBooked() && $existingLead->needful_done !== 'booked') {
-            $updates['needful_done'] = 'booked';
-            $updates['next_followup_date'] = null;
+        if ($hasVerifiedConversion) {
+            if ($verifiedAppointment && !$existingLead->appointment_id) {
+                $updates['appointment_id'] = $verifiedAppointment->id;
+            }
+            if ($existingLead->needful_done !== 'booked') {
+                $updates['needful_done'] = 'booked';
+                $updates['next_followup_date'] = null;
+            }
+        } elseif ($existingLead->needful_done === 'booked' && $existingLead->appointment_id === null) {
+            $updates['needful_done'] = null;
+            $updates['next_followup_date'] = now()->toDateString();
         }
         if (!empty($interestList)) {
             $currentInterests = is_array($existingLead->service_interest) ? $existingLead->service_interest : [];

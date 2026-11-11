@@ -316,7 +316,7 @@ class OpsActionItem extends Model
      */
     public static function isAdminOrOwner(?User $user): bool
     {
-        if (! $user) {
+        if (! $user || ! $user->is_active) {
             return false;
         }
 
@@ -337,7 +337,7 @@ class OpsActionItem extends Model
      */
     public static function isArbab(?User $user): bool
     {
-        if (! $user) {
+        if (! $user || ! $user->is_active) {
             return false;
         }
 
@@ -357,12 +357,12 @@ class OpsActionItem extends Model
     /**
      * Determine whether the given Staff Access user is authorized to mark this task
      * Completed or move it back to Pending:
-     * - Returns true ONLY if $user is an Admin / Owner OR $user is Arbab.
+     * - Returns true ONLY if $user is active AND ($user is an Admin / Owner OR $user is Arbab).
      * - Returns false for all other users (even if assigned to the task).
      */
     public function canBeCompletedBy(?User $user): bool
     {
-        if (! $user) {
+        if (! $user || ! $user->is_active) {
             return false;
         }
 

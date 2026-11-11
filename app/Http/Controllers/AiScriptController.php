@@ -98,6 +98,11 @@ class AiScriptController extends Controller
 
     public function generate(Request $request, $leadId = null)
     {
+        $user = $request->user();
+        if (!$user || (!$user->canView('leads') && !$user->canView('kpis'))) {
+            abort(403, 'You do not have permission to access this section.');
+        }
+
         $id = $leadId ?? $request->input('lead_id');
 
         if ($request->input('module') === 'lead_management' && $id) {

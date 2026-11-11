@@ -416,7 +416,7 @@ class ServicesProductsKpisDashboardWave5Test extends TestCase
 
         $syncedLead = Lead::where('phone', $expectedPhone)->first();
         $this->assertNotNull($syncedLead);
-        $this->assertSame('booked', $syncedLead->needful_done);
+        $this->assertNull($syncedLead->needful_done);
     }
 
     public function test_dashboard_reads_social_content_plan_and_renders_live_operational_pulse(): void

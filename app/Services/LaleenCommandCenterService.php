@@ -211,6 +211,7 @@ class LaleenCommandCenterService
     {
         try {
             $stateFingerprint = implode('_', [
+                'v2',
                 Sale::count(),
                 Appointment::count(),
                 Lead::count(),
@@ -219,55 +220,95 @@ class LaleenCommandCenterService
                 Expense::count(),
                 Product::count(),
                 Service::count(),
+                Combo::count(),
+                StaffComplaint::count(),
                 EcommerceSale::count(),
             ]);
 
             if (Cache::get('friday_live_telemetry_fingerprint') !== $stateFingerprint) {
                 Cache::forget('friday_live_telemetry_snapshot');
-                Cache::put('friday_live_telemetry_fingerprint', $stateFingerprint, 30);
             }
 
-            return Cache::remember('friday_live_telemetry_snapshot', 30, function () {
-                $revenue = $this->read_revenue_and_bookings('all', 'today');
-                $leads = $this->read_leads_and_money_brief();
-                $retention = $this->read_retention_radar();
-                $staff = $this->read_staff_upsells_and_evaluations('all');
-                $marketing = $this->read_marketing_and_ads_pulse();
-                $calendarGaps = $this->read_calendar_gaps_and_idle_capacity('all');
-                $unrecovered = $this->read_unrecovered_cancellations(14);
-                $crmOperations = $this->read_full_crm_catalog_inventory_finance_and_ecommerce('all');
-
-                return [
-                    'generated_at' => now()->format('d M Y, H:i'),
-                    'revenue' => $revenue,
-                    'leads' => $leads,
-                    'retention' => $retention,
-                    'staff' => $staff,
-                    'marketing' => $marketing,
-                    'calendar_gaps' => $calendarGaps,
-                    'unrecovered_cancellations' => $unrecovered,
-                    'crm_operations' => $crmOperations,
-                ];
-            });
+            $cached = Cache::get('friday_live_telemetry_snapshot');
+            if (is_array($cached) && empty($cached['_is_fallback'])) {
+                return $cached;
+            }
         } catch (\Throwable $e) {
-            Log::warning('F.R.I.D.A.Y. telemetry snapshot fallback triggered.', ['error' => $e->getMessage()]);
+            Log::error('F.R.I.D.A.Y. telemetry cache check failed.', [
+                'exception' => $e::class,
+                'error' => $e->getMessage(),
+            ]);
+            Cache::forget('friday_live_telemetry_snapshot');
+            Cache::forget('friday_live_telemetry_fingerprint');
+
+            return $this->fallbackTelemetrySnapshot();
+        }
+
+        $snapshot = $this->buildLiveTelemetrySnapshot();
+
+        if (empty($snapshot['_is_fallback'])) {
+            Cache::put('friday_live_telemetry_fingerprint', $stateFingerprint, 30);
+            Cache::put('friday_live_telemetry_snapshot', $snapshot, 30);
+        }
+
+        unset($snapshot['_is_fallback']);
+
+        return $snapshot;
+    }
+
+    public function buildLiveTelemetrySnapshot(): array
+    {
+        try {
+            $revenue = $this->read_revenue_and_bookings('all', 'today');
+            $leads = $this->read_leads_and_money_brief();
+            $retention = $this->read_retention_radar();
+            $staff = $this->read_staff_upsells_and_evaluations('all');
+            $marketing = $this->read_marketing_and_ads_pulse();
+            $calendarGaps = $this->read_calendar_gaps_and_idle_capacity('all');
+            $unrecovered = $this->read_unrecovered_cancellations(14);
+            $crmOperations = $this->read_full_crm_catalog_inventory_finance_and_ecommerce('all');
+
             return [
                 'generated_at' => now()->format('d M Y, H:i'),
-                'revenue' => ['today_total_net_qar' => 0, 'mtd_total_net_qar' => 0, 'branches' => []],
-                'leads' => ['overdue_count' => 0, 'due_today_count' => 0, 'top_three_potential_qar' => 0, 'top_money_leads' => [], 'top_five_leads' => []],
-                'retention' => ['due_for_refill_count' => 0, 'package_renewal_count' => 0, 'bleeding_vips_count' => 0, 'total_actionable_clients' => 0],
-                'staff' => ['prorated_target_qar' => 0, 'top_stylists' => [], 'open_complaints_count' => 0],
-                'marketing' => ['ad_leads_total' => 0, 'ad_conversion_pct' => 0, 'attributed_ad_revenue_qar' => 0, 'reels_posted' => 0, 'reels_target' => 4, 'stories_posted' => 0, 'stories_target' => 7],
-                'calendar_gaps' => ['total_booked_today' => 0, 'total_idle_capacity_qar' => 0, 'branches' => []],
-                'unrecovered_cancellations' => ['unrecovered_count' => 0, 'trapped_revenue_qar' => 0, 'top_unrecovered_clients' => []],
-                'crm_operations' => [
-                    'finance' => ['today_expenses_qar' => 0, 'mtd_expenses_qar' => 0, 'mtd_net_profit_qar' => 0, 'expenses_by_category' => []],
-                    'services' => ['total_services_count' => 0, 'categories_count' => 0, 'combos_count' => 0, 'top_booked_services_mtd' => []],
-                    'products' => ['total_products_count' => 0, 'out_of_stock_count' => 0, 'low_stock_count' => 0, 'low_stock_items' => [], 'top_selling_products' => []],
-                    'ecommerce' => ['total_products_count' => 0, 'total_orders_count' => 0, 'total_revenue_qar' => 0, 'total_expenses_qar' => 0, 'top_ecommerce_products' => []],
-                ],
+                'revenue' => $revenue,
+                'leads' => $leads,
+                'retention' => $retention,
+                'staff' => $staff,
+                'marketing' => $marketing,
+                'calendar_gaps' => $calendarGaps,
+                'unrecovered_cancellations' => $unrecovered,
+                'crm_operations' => $crmOperations,
             ];
+        } catch (\Throwable $e) {
+            Log::error('F.R.I.D.A.Y. telemetry snapshot failed.', [
+                'exception' => $e::class,
+                'error' => $e->getMessage(),
+            ]);
+            Cache::forget('friday_live_telemetry_snapshot');
+            Cache::forget('friday_live_telemetry_fingerprint');
+
+            return $this->fallbackTelemetrySnapshot() + ['_is_fallback' => true];
         }
+    }
+
+    private function fallbackTelemetrySnapshot(): array
+    {
+        return [
+            'generated_at' => now()->format('d M Y, H:i'),
+            'revenue' => ['today_total_net_qar' => 0, 'mtd_total_net_qar' => 0, 'branches' => []],
+            'leads' => ['overdue_count' => 0, 'due_today_count' => 0, 'top_three_potential_qar' => 0, 'top_money_leads' => [], 'top_five_leads' => []],
+            'retention' => ['due_for_refill_count' => 0, 'package_renewal_count' => 0, 'bleeding_vips_count' => 0, 'total_actionable_clients' => 0],
+            'staff' => ['prorated_target_qar' => 0, 'top_stylists' => [], 'open_complaints_count' => 0],
+            'marketing' => ['ad_leads_total' => 0, 'ad_conversion_pct' => 0, 'attributed_ad_revenue_qar' => 0, 'reels_posted' => 0, 'reels_target' => 4, 'stories_posted' => 0, 'stories_target' => 7],
+            'calendar_gaps' => ['total_booked_today' => 0, 'total_idle_capacity_qar' => 0, 'branches' => []],
+            'unrecovered_cancellations' => ['unrecovered_count' => 0, 'trapped_revenue_qar' => 0, 'top_unrecovered_clients' => []],
+            'crm_operations' => [
+                'finance' => ['today_expenses_qar' => 0, 'mtd_expenses_qar' => 0, 'mtd_net_profit_qar' => 0, 'expenses_by_category' => []],
+                'services' => ['total_services_count' => 0, 'categories_count' => 0, 'combos_count' => 0, 'top_booked_services_mtd' => []],
+                'products' => ['total_products_count' => 0, 'out_of_stock_count' => 0, 'low_stock_count' => 0, 'low_stock_items' => [], 'top_selling_products' => []],
+                'ecommerce' => ['total_products_count' => 0, 'total_orders_count' => 0, 'total_revenue_qar' => 0, 'total_expenses_qar' => 0, 'top_ecommerce_products' => []],
+            ],
+        ];
     }
 
     /**
@@ -746,7 +787,7 @@ class LaleenCommandCenterService
             : null;
 
         $openComplaintsCount = StaffComplaint::query()
-            ->where('status', '!=', 'resolved')
+            ->whereNull('resolved_at')
             ->count();
 
         $mtdNoticesCount = StaffNotice::query()
@@ -779,7 +820,7 @@ class LaleenCommandCenterService
             ->get(['id', 'branch', 'ticket_amount', 'category']);
 
         $totalAdLeads = $adLeads->count();
-        $bookedAdLeads = $adLeads->filter(fn (AdLeadEntry $e) => !empty($e->branch) || (float) $e->ticket_amount > 0)->count();
+        $bookedAdLeads = $adLeads->filter(fn (AdLeadEntry $e) => $e->isBooked())->count();
         $adConversionPct = $totalAdLeads > 0 ? round(($bookedAdLeads / $totalAdLeads) * 100, 1) : 0.0;
         $attributedRevenueQar = round((float) $adLeads->sum('ticket_amount'), 2);
 
@@ -844,7 +885,14 @@ class LaleenCommandCenterService
             ->limit(5)
             ->get();
 
-        $clientResults = $customers->map(function (Customer $c) {
+        $customerSalesByCustomer = $customers->isEmpty()
+            ? collect()
+            : Sale::query()
+                ->whereIn('customer_id', $customers->pluck('id'))
+                ->get(['customer_id', 'services_total', 'products_total', 'packages_total', 'discount_amount', 'total_amount', 'tip_amount'])
+                ->groupBy('customer_id');
+
+        $clientResults = $customers->map(function (Customer $c) use ($customerSalesByCustomer) {
             $completedVisits = Appointment::query()
                 ->where('customer_id', $c->id)
                 ->where('status', 'completed')
@@ -862,12 +910,15 @@ class LaleenCommandCenterService
                 ->values()
                 ->all();
 
+            $ltvQar = round((float) $customerSalesByCustomer->get($c->id, collect())
+                ->sum(fn (Sale $sale) => AdLeadEntry::netSaleAmount($sale)), 2);
+
             return [
                 'id' => $c->id,
                 'name' => $c->name,
                 'phone' => $c->phone,
                 'completed_visits' => $completedVisits,
-                'ltv_qar' => $c->total_spent,
+                'ltv_qar' => $ltvQar,
                 'loyalty_points' => (int) $c->loyalty_points,
                 'last_visit' => $lastVisit ? Carbon::parse($lastVisit)->format('d M Y') : null,
                 'active_packages' => $activePackages,
@@ -1334,7 +1385,7 @@ class LaleenCommandCenterService
         if ($includeAll || $scopeKey === 'services') {
             $allServices = Service::with('category:id,name')->get(['id', 'name', 'category_id', 'price', 'duration']);
             $categoriesCount = ServiceCategory::count();
-            $combos = Combo::query()->get(['id', 'name', 'price', 'original_price', 'total_sessions']);
+            $combos = Combo::query()->get(['id', 'name', 'price', 'quantity_included', 'validity_days', 'status']);
 
             $mtdApptServices = Appointment::query()
                 ->whereNotIn('status', ['cancelled', 'no_show'])
@@ -1373,10 +1424,11 @@ class LaleenCommandCenterService
                     'duration_mins' => (int) $s->duration,
                 ])->values()->all(),
                 'top_booked_services_mtd' => $topBookedServices,
-                'active_combos' => $combos->take(5)->map(fn (Combo $c) => [
+                'active_combos' => $combos->where('status', 'active')->take(5)->map(fn (Combo $c) => [
                     'name' => $c->name,
                     'price_qar' => round((float) $c->price, 2),
-                    'sessions' => (int) $c->total_sessions,
+                    'sessions' => (int) ($c->quantity_included ?? 0),
+                    'validity_days' => $c->validity_days !== null ? (int) $c->validity_days : null,
                 ])->values()->all(),
             ];
         }
@@ -1428,7 +1480,7 @@ class LaleenCommandCenterService
             ];
         }
 
-        // 4. ECOMMERCE PRODUCTS, ORDERS, STOCK & EXPENSES
+        // 4. ECOMMERCE PRODUCTS, ORDERS, STOCK & EXPENSES (STRICTLY PARTITIONED BY REGION: PK [PKR] vs QA [QAR])
         if ($includeAll || $scopeKey === 'ecommerce') {
             $ecomProducts = EcommerceProduct::with('pricingModel')->get([
                 'id', 'name', 'sku', 'stock_qatar', 'stock_pakistan', 'sold_qatar', 'sold_pakistan',
@@ -1437,36 +1489,99 @@ class LaleenCommandCenterService
             ]);
 
             $ecomSales = EcommerceSale::with('product:id,name')
-                ->whereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS)
+                ->where(function ($q) {
+                    $q->whereNull('channel')
+                        ->orWhereNotIn('channel', EcommerceSale::NON_REVENUE_CHANNELS);
+                })
                 ->where(function ($q) {
                     $q->whereNull('order_status')
                         ->orWhereNotIn('order_status', EcommerceSale::INACTIVE_ORDER_STATUSES);
                 })
-                ->get(['id', 'ecommerce_product_id', 'order_group_id', 'customer_name', 'quantity', 'channel', 'total_price', 'unit_cogs']);
+                ->where(function ($q) {
+                    $q->whereNull('payment_status')
+                        ->orWhere('payment_status', 'paid')
+                        ->orWhere('order_status', 'delivered');
+                })
+                ->get([
+                    'id', 'ecommerce_product_id', 'order_group_id', 'reference_id', 'ecommerce_bundle_id',
+                    'customer_name', 'quantity', 'channel', 'order_status', 'payment_status',
+                    'total_price', 'unit_cogs', 'created_at',
+                ]);
 
-            $ecomTotalRevenue = round((float) $ecomSales->sum('total_price'), 2);
-            $ecomTotalUnits = (int) $ecomSales->sum('quantity');
-            $ecomExpensesTotal = round((float) EcommerceExpense::query()->sum('amount'), 2);
-            $ecomTotalOrders = $ecomSales->pluck('order_group_id')->filter()->unique()->count() ?: $ecomSales->count();
+            $isQatarChannel = static function (?string $channel): bool {
+                $ch = (string) $channel;
+
+                return in_array($ch, EcommerceSale::QATAR_CHANNELS, true)
+                    || stripos($ch, 'qatar') !== false
+                    || stripos($ch, 'wakrah') !== false
+                    || stripos($ch, 'airport') !== false;
+            };
+
+            $qaSales = $ecomSales->filter(fn (EcommerceSale $s) => $isQatarChannel($s->channel))->values();
+            $pkSales = $ecomSales->filter(fn (EcommerceSale $s) => !$isQatarChannel($s->channel))->values();
+
+            $qaRevenueQar = round((float) $qaSales->sum('total_price'), 2);
+            $qaCogsQar = round((float) $qaSales->sum(fn (EcommerceSale $s) => (float) $s->quantity * (float) ($s->unit_cogs ?? 0)), 2);
+            $qaUnitsSold = (int) $qaSales->sum('quantity');
+            $qaOrdersCount = EcommerceSale::countDistinctOrders($qaSales);
+            $qaExpensesQar = round((float) EcommerceExpense::forRegion('qa')
+                ->whereNotIn('category', EcommerceExpense::BOM_INVENTORY_CATEGORIES)
+                ->sum('amount'), 2);
+            $qaNetProfitQar = round($qaRevenueQar - $qaCogsQar - $qaExpensesQar, 2);
+
+            $pkRevenuePkr = round((float) $pkSales->sum('total_price'), 2);
+            $pkCogsPkr = round((float) $pkSales->sum(fn (EcommerceSale $s) => (float) $s->quantity * (float) ($s->unit_cogs ?? 0)), 2);
+            $pkUnitsSold = (int) $pkSales->sum('quantity');
+            $pkOrdersCount = EcommerceSale::countDistinctOrders($pkSales);
+            $pkExpensesPkr = round((float) EcommerceExpense::forRegion('pk')
+                ->whereNotIn('category', EcommerceExpense::BOM_INVENTORY_CATEGORIES)
+                ->sum('amount'), 2);
+            $pkNetProfitPkr = round($pkRevenuePkr - $pkCogsPkr - $pkExpensesPkr, 2);
+
+            $ecomTotalUnits = $qaUnitsSold + $pkUnitsSold;
+            $ecomTotalOrders = $qaOrdersCount + $pkOrdersCount;
 
             $channelBreakdown = $ecomSales
                 ->groupBy(fn (EcommerceSale $s) => $s->channel ?: 'Qatar')
-                ->map(fn ($group) => [
-                    'orders_count' => $group->pluck('order_group_id')->filter()->unique()->count() ?: $group->count(),
-                    'units_sold' => (int) $group->sum('quantity'),
-                    'revenue_qar' => round((float) $group->sum('total_price'), 2),
-                ])
+                ->map(function ($group, $channel) use ($isQatarChannel) {
+                    $isQaChannel = $isQatarChannel($channel);
+                    $rev = round((float) $group->sum('total_price'), 2);
+
+                    return [
+                        'currency' => $isQaChannel ? 'QAR' : 'PKR',
+                        'orders_count' => EcommerceSale::countDistinctOrders($group),
+                        'units_sold' => (int) $group->sum('quantity'),
+                        'revenue' => $rev,
+                        'revenue_qar' => $isQaChannel ? $rev : 0.0,
+                        'revenue_pkr' => $isQaChannel ? 0.0 : $rev,
+                    ];
+                })
                 ->all();
 
-            $topEcomProducts = $ecomSales
+            $topQatarProducts = $qaSales
                 ->groupBy(fn (EcommerceSale $s) => $s->product?->name ?? 'Ecommerce Item')
                 ->map(fn ($group, $name) => [
                     'name' => $name,
-                    'orders_count' => $group->pluck('order_group_id')->filter()->unique()->count() ?: $group->count(),
+                    'currency' => 'QAR',
+                    'orders_count' => EcommerceSale::countDistinctOrders($group),
                     'units_sold' => (int) $group->sum('quantity'),
                     'revenue_qar' => round((float) $group->sum('total_price'), 2),
                 ])
                 ->sortByDesc('revenue_qar')
+                ->take(5)
+                ->values()
+                ->all();
+
+            $topPakistanProducts = $pkSales
+                ->groupBy(fn (EcommerceSale $s) => $s->product?->name ?? 'Ecommerce Item')
+                ->map(fn ($group, $name) => [
+                    'name' => $name,
+                    'currency' => 'PKR',
+                    'orders_count' => EcommerceSale::countDistinctOrders($group),
+                    'units_sold' => (int) $group->sum('quantity'),
+                    'revenue_pkr' => round((float) $group->sum('total_price'), 2),
+                ])
+                ->sortByDesc('revenue_pkr')
                 ->take(5)
                 ->values()
                 ->all();
@@ -1477,16 +1592,42 @@ class LaleenCommandCenterService
                 'total_stock_pakistan' => (int) $ecomProducts->sum('stock_pakistan'),
                 'total_orders_count' => $ecomTotalOrders,
                 'total_units_sold' => $ecomTotalUnits,
-                'total_revenue_qar' => $ecomTotalRevenue,
-                'total_expenses_qar' => $ecomExpensesTotal,
-                'net_ecommerce_profit_qar' => round($ecomTotalRevenue - $ecomExpensesTotal, 2),
+                // Strictly QAR-only figures in all _qar keys (never mixed with PKR!)
+                'total_revenue_qar' => $qaRevenueQar,
+                'total_cogs_qar' => $qaCogsQar,
+                'total_expenses_qar' => $qaExpensesQar,
+                'net_ecommerce_profit_qar' => $qaNetProfitQar,
+                'qatar_qar' => [
+                    'currency' => 'QAR',
+                    'stock_units' => (int) $ecomProducts->sum('stock_qatar'),
+                    'orders_count' => $qaOrdersCount,
+                    'units_sold' => $qaUnitsSold,
+                    'revenue_qar' => $qaRevenueQar,
+                    'cogs_qar' => $qaCogsQar,
+                    'expenses_qar' => $qaExpensesQar,
+                    'net_profit_qar' => $qaNetProfitQar,
+                    'top_products' => $topQatarProducts,
+                ],
+                'pakistan_pkr' => [
+                    'currency' => 'PKR',
+                    'stock_units' => (int) $ecomProducts->sum('stock_pakistan'),
+                    'orders_count' => $pkOrdersCount,
+                    'units_sold' => $pkUnitsSold,
+                    'revenue_pkr' => $pkRevenuePkr,
+                    'cogs_pkr' => $pkCogsPkr,
+                    'expenses_pkr' => $pkExpensesPkr,
+                    'net_profit_pkr' => $pkNetProfitPkr,
+                    'top_products' => $topPakistanProducts,
+                ],
                 'sales_by_channel' => $channelBreakdown,
-                'top_ecommerce_products' => $topEcomProducts,
+                'top_ecommerce_products' => $topQatarProducts,
                 'catalog_items' => $ecomProducts->take(6)->map(fn (EcommerceProduct $ep) => [
                     'name' => $ep->name,
                     'sku' => $ep->sku,
-                    'selling_price_qar' => round((float) ($ep->pricingModel?->selling_price ?? $ep->selling_price), 2),
-                    'unit_cogs' => round((float) $ep->unit_cogs, 2),
+                    'selling_price_pkr' => round((float) ($ep->pricingModel?->selling_price ?? $ep->selling_price), 2),
+                    'selling_price_qar' => round((float) $ep->resolveBasePrice('QA'), 2),
+                    'unit_cogs_pkr' => round((float) ($ep->pricingModel ? $ep->pricingModel->unitCogsForRegion('pk') : $ep->unit_cogs), 2),
+                    'unit_cogs_qar' => round((float) ($ep->pricingModel ? $ep->pricingModel->unitCogsForRegion('qa') : 0.0), 2),
                     'stock_qatar' => (int) $ep->stock_qatar,
                     'stock_pakistan' => (int) $ep->stock_pakistan,
                 ])->values()->all(),
@@ -1657,6 +1798,10 @@ class LaleenCommandCenterService
         $connectHost = filter_var($ipv4, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? $ipv4 : $host;
         $path = "/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={$apiKey}";
 
+        $verifySsl = app()->environment('local')
+            ? (bool) config('services.gemini.verify_ssl', true)
+            : true;
+
         foreach (self::LOCKED_FRIDAY_LIVE_BIDI_MODELS as $liveModel) {
             $fp = null;
             try {
@@ -1664,8 +1809,8 @@ class LaleenCommandCenterService
                     'ssl' => [
                         'peer_name' => $host,
                         'SNI_enabled' => true,
-                        'verify_peer' => false,
-                        'verify_peer_name' => false,
+                        'verify_peer' => $verifySsl,
+                        'verify_peer_name' => $verifySsl,
                     ],
                 ]);
 
@@ -2282,6 +2427,10 @@ PROMPT;
             'models/gemini-2.5-flash-live-preview',
         ];
 
+        $verifySsl = app()->environment('local')
+            ? (bool) config('services.gemini.verify_ssl', true)
+            : true;
+
         foreach ($liveTextModels as $liveModel) {
             $fp = null;
             try {
@@ -2289,8 +2438,8 @@ PROMPT;
                     'ssl' => [
                         'peer_name' => $host,
                         'SNI_enabled' => true,
-                        'verify_peer' => false,
-                        'verify_peer_name' => false,
+                        'verify_peer' => $verifySsl,
+                        'verify_peer_name' => $verifySsl,
                     ],
                 ]);
 

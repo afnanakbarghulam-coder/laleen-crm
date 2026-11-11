@@ -84,10 +84,10 @@ class Customer extends Model
             return '';
         }
 
-        if (preg_match('/^00974(\d{8})$/', $raw, $m)) {
+        if (preg_match('/^009740*(\d{8})$/', $raw, $m)) {
             return $m[1];
         }
-        if (preg_match('/^974(\d{8})$/', $raw, $m)) {
+        if (preg_match('/^9740*(\d{8})$/', $raw, $m)) {
             return $m[1];
         }
 

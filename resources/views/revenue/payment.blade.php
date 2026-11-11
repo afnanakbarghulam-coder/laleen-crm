@@ -660,6 +660,20 @@
             cb.addEventListener('change', recalc);
         });
 
+        const checkoutForm = document.getElementById('checkoutForm');
+        const completeSaleBtn = document.getElementById('completeSaleBtn');
+        if (checkoutForm && completeSaleBtn) {
+            checkoutForm.addEventListener('submit', function (e) {
+                if (checkoutForm.dataset.submitting === '1') {
+                    e.preventDefault();
+                    return;
+                }
+                checkoutForm.dataset.submitting = '1';
+                completeSaleBtn.disabled = true;
+                completeSaleBtn.textContent = 'Processing…';
+            });
+        }
+
         recalc();
     </script>
 @endsection

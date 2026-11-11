@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class Lead extends Model
 {
@@ -59,6 +61,7 @@ class Lead extends Model
 
     const COUNTRY_CODES = [
         '974' => 'Qatar',
+        '1' => 'USA / Canada',
         '91' => 'India',
         '971' => 'UAE',
         '966' => 'Saudi Arabia',
@@ -142,6 +145,12 @@ class Lead extends Model
                 $normalized = self::normalizeCategories($combined);
                 $lead->categories = !empty($normalized) ? $normalized : null;
                 $lead->category = self::resolvePrimaryCategory($normalized) ?? $lead->category;
+            }
+        });
+
+        static::deleting(function (Lead $lead) {
+            if (Schema::hasTable('ad_lead_entries') && Schema::hasColumn('ad_lead_entries', 'lead_id')) {
+                AdLeadEntry::where('lead_id', $lead->id)->update(['lead_id' => null]);
             }
         });
     }
@@ -340,6 +349,108 @@ class Lead extends Model
     }
 
     /**
+     * Determine whether this Lead counts as a valid "Booked" conversion for KPIs/Analytics.
+     * Excludes leads whose linked appointment was cancelled or marked no_show.
+     */
+    public function isBookedConversion(): bool
+    {
+        if ($this->appointment_id !== null) {
+            $appt = $this->relationLoaded('appointment')
+                ? $this->appointment
+                : $this->appointment()->select(['id', 'status'])->first();
+
+            if ($appt) {
+                return !in_array(strtolower((string) ($appt->status ?? 'pending')), ['cancelled', 'no_show'], true);
+            }
+        }
+
+        return $this->needful_done === 'booked';
+    }
+
+    /**
+     * Determine whether this Lead is backed by a real active/completed calendar Appointment
+     * or a verified paid Sale record (used to guard Needful Done lock vs phantom-booked leads).
+     */
+    public function hasVerifiedConversionActivity(): bool
+    {
+        if ($this->appointment_id !== null && Schema::hasTable('appointments')) {
+            $hasActiveLinked = Appointment::where('id', $this->appointment_id)
+                ->whereNotIn('status', ['cancelled', 'no_show'])
+                ->exists();
+
+            if ($hasActiveLinked) {
+                return true;
+            }
+        }
+
+        $phoneCandidates = array_values(array_unique(array_filter([
+            $this->phone,
+            Customer::normalizePhone((string) $this->phone),
+        ])));
+
+        $customerIds = array_values(array_unique(array_filter([
+            $this->customer_id,
+        ])));
+
+        if (!empty($phoneCandidates) && Schema::hasTable('customers')) {
+            $matchedCustomerIds = Customer::whereIn('phone', $phoneCandidates)->pluck('id')->all();
+            $customerIds = array_values(array_unique(array_merge($customerIds, $matchedCustomerIds)));
+        }
+
+        if (empty($customerIds) && empty($phoneCandidates)) {
+            return false;
+        }
+
+        $minDate = $this->created_at ? Carbon::parse($this->created_at)->startOfDay() : today()->startOfDay();
+        $minDateStr = $minDate->toDateString();
+        $todayStr = today()->toDateString();
+
+        if (Schema::hasTable('appointments')) {
+            $activeAppointments = Appointment::query()
+                ->whereNotIn('status', ['cancelled', 'no_show'])
+                ->where(function ($q) use ($customerIds, $phoneCandidates) {
+                    if (!empty($customerIds)) {
+                        $q->orWhereIn('customer_id', $customerIds);
+                    }
+                    if (!empty($phoneCandidates)) {
+                        $q->orWhereIn('phone', $phoneCandidates);
+                    }
+                })
+                ->get();
+
+            $hasRelevantActiveAppt = $activeAppointments->contains(function (Appointment $a) use ($minDateStr, $todayStr) {
+                $apptDateStr = $a->appointment_date->toDateString();
+
+                return $apptDateStr >= $minDateStr || $apptDateStr >= $todayStr;
+            });
+
+            if ($hasRelevantActiveAppt) {
+                return true;
+            }
+        }
+
+        if (Schema::hasTable('sales') && !empty($customerIds)) {
+            $sales = Sale::with('appointment')
+                ->whereIn('customer_id', $customerIds)
+                ->get();
+
+            foreach ($sales as $sale) {
+                if ($sale->appointment && in_array(strtolower((string) $sale->appointment->status), ['cancelled', 'no_show'], true)) {
+                    continue;
+                }
+                if ($minDate && AdLeadEntry::resolveSaleDate($sale)->lt($minDate)) {
+                    continue;
+                }
+                if (AdLeadEntry::netSaleAmount($sale) > 0) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Combine a country code + local number into the digits-only phone format
      * used everywhere else in the app (Customers, Appointments, Calendar all
      * store bare local numbers with no country code - e.g. "55532347", not
@@ -354,18 +465,32 @@ class Lead extends Model
         $cleanCountryCode = preg_replace('/^00+/', '', $cleanCountryCode);
 
         $digits = preg_replace('/\D+/', '', (string) $number);
-        if (preg_match('/^00974(\d{8})$/', $digits, $m)) {
+        if (preg_match('/^009740*(\d{8})$/', $digits, $m)) {
             $digits = $m[1];
-        } elseif (preg_match('/^974(\d{8})$/', $digits, $m)) {
+        } elseif (preg_match('/^9740*(\d{8})$/', $digits, $m)) {
             $digits = $m[1];
         } elseif (str_starts_with($digits, '00')) {
             $digits = preg_replace('/^00+/', '', $digits);
         }
 
-        if ($cleanCountryCode !== '' && $cleanCountryCode !== '974') {
-            if (!str_starts_with($digits, $cleanCountryCode)) {
-                $digits = $cleanCountryCode . $digits;
+        if ($cleanCountryCode === '974') {
+            if (str_starts_with($digits, '974') && strlen($digits) > 8) {
+                $digits = substr($digits, 3);
             }
+            $stripped = ltrim($digits, '0');
+            if ($stripped !== '') {
+                $digits = $stripped;
+            }
+        } elseif ($cleanCountryCode !== '') {
+            if (str_starts_with($digits, $cleanCountryCode) && strlen($digits) >= strlen($cleanCountryCode) + 7) {
+                $localPart = ltrim(substr($digits, strlen($cleanCountryCode)), '0');
+                $digits = $cleanCountryCode . $localPart;
+            } else {
+                $localPart = ltrim($digits, '0');
+                $digits = $cleanCountryCode . ($localPart !== '' ? $localPart : $digits);
+            }
+        } elseif (preg_match('/^0+(\d{8})$/', $digits, $m)) {
+            $digits = $m[1];
         }
 
         return $digits;
@@ -383,8 +508,15 @@ class Lead extends Model
             $digits = preg_replace('/^00+/', '', $digits);
         }
 
-        if (preg_match('/^974(\d{8})$/', $digits, $m)) {
+        if (preg_match('/^9740*(\d{8})$/', $digits, $m)) {
             return ['974', $m[1]];
+        }
+
+        // Bare 8-digit numbers in Qatar CRM (including Doha landlines 44xxxxxx) are local Qatar numbers
+        if (strlen($digits) <= 9) {
+            $local = preg_match('/^0+(\d{8})$/', $digits, $m) ? $m[1] : $digits;
+
+            return ['974', $local];
         }
 
         $codes = array_keys(self::COUNTRY_CODES);
@@ -392,8 +524,23 @@ class Lead extends Model
 
         foreach ($codes as $code) {
             $codeStr = (string) $code;
-            if (str_starts_with($digits, $codeStr) && strlen($digits) > strlen($codeStr)) {
-                return [$codeStr, substr($digits, strlen($codeStr))];
+            if (!str_starts_with($digits, $codeStr)) {
+                continue;
+            }
+
+            $rest = substr($digits, strlen($codeStr));
+            $restStripped = ltrim($rest, '0');
+
+            if ($codeStr === '1') {
+                // NANP (+1 USA/Canada) requires exactly 10 digits after country code 1
+                if (strlen($rest) === 10) {
+                    return ['1', $rest];
+                }
+                continue;
+            }
+
+            if (strlen($restStripped) >= 7) {
+                return [$codeStr, $restStripped];
             }
         }
 

@@ -41,6 +41,26 @@ class StaffSalesAnalytics
         return round($this->monthlyTargetPerStaff * $this->daysElapsed() / self::DAYS_IN_MONTH, 2);
     }
 
+    /**
+     * Branch-allocated prorated target for a staff member:
+     * - 'both' branch staff split their monthly/prorated quota 50% Old Airport / 50% Al Wakrah
+     * - single-branch staff allocate 100% to their home branch (0% on cross-branch guest upsells)
+     */
+    public function proratedTargetForStaffOnBranch(Staff $staff, string $branch): float
+    {
+        $fullProrated = $this->proratedTarget();
+
+        if ($staff->branch === 'both') {
+            return round($fullProrated * 0.5, 2);
+        }
+
+        if ($staff->branch === $branch) {
+            return $fullProrated;
+        }
+
+        return 0.0;
+    }
+
     public function borderFor(float $pct): string
     {
         return match (true) {
@@ -155,11 +175,14 @@ class StaffSalesAnalytics
     /** Per-staff breakdown for one branch — used by the "Sales & Upsells" tab. */
     public function computedStaff(string $branch): Collection
     {
-        $prorated = $this->proratedTarget();
         $totals = $this->upsellTotalsForBranch($branch);
 
         return $this->staffForBranch($branch)
-            ->map(fn ($staff) => $this->computeRow($staff, (float) $totals->get($staff->id, 0), $prorated))
+            ->map(fn ($staff) => $this->computeRow(
+                $staff,
+                (float) $totals->get($staff->id, 0),
+                $this->proratedTargetForStaffOnBranch($staff, $branch)
+            ))
             ->values();
     }
 
@@ -192,7 +215,9 @@ class StaffSalesAnalytics
     {
         $prorated = $this->proratedTarget();
         $teamTotal = round($staff->sum('upsell'), 2);
-        $teamTarget = round($prorated * max($staff->count(), 1), 2);
+        $teamTarget = $staff->isNotEmpty()
+            ? round((float) $staff->sum('prorated_target'), 2)
+            : $prorated;
         $teamPct = $teamTarget > 0 ? round($teamTotal / $teamTarget * 100, 1) : 0.0;
         $top = $staff->sortByDesc('upsell')->first();
 

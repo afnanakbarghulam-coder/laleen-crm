@@ -42,6 +42,7 @@ return [
         'command_model' => env('GEMINI_COMMAND_MODEL', 'gemini-2.5-flash'),
         'thinking_model' => env('GEMINI_THINKING_MODEL', 'gemini-3.5-flash'),
         'tts_model' => env('GEMINI_TTS_MODEL', 'gemini-3.8-flash-tts'),
+        'verify_ssl' => env('GEMINI_VERIFY_SSL', true),
     ],
 
     'openai' => [
@@ -65,6 +66,10 @@ return [
         'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
         'template_name' => env('WHATSAPP_TEMPLATE_NAME'),
         'template_language' => env('WHATSAPP_TEMPLATE_LANGUAGE', 'en_US'),
+    ],
+
+    'ecommerce' => [
+        'pkr_per_qar' => (float) env('ECOMMERCE_PKR_PER_QAR', 76.5),
     ],
 
 ];

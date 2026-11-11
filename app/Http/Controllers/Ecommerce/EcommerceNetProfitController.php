@@ -33,7 +33,8 @@ class EcommerceNetProfitController extends Controller
         // excluding physical BOM inventory restocks (which hit profit via unit_cogs on sale).
         $deductionExpenses = EcommerceExpense::where('currency', $currency)
             ->whereNotIn('category', EcommerceExpense::BOM_INVENTORY_CATEGORIES)
-            ->whereBetween('expense_date', [$from->toDateString(), $to->toDateString()])
+            ->whereDate('expense_date', '>=', $from->toDateString())
+            ->whereDate('expense_date', '<=', $to->toDateString())
             ->get();
 
         // Realized Revenue Sales ONLY (paid or delivered, excluding unpaid_cod, cancelled, rto, and non-revenue channels)

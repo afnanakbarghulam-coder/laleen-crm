@@ -20,6 +20,8 @@ class EcommerceMarketingController extends Controller
      */
     public function index(Request $request)
     {
+        $region = (string) $request->query('region', 'pk');
+
         $contentLive = EcommerceContentCalendar::where(function ($q) {
             $q->where('is_reel_posted', true)
                 ->orWhere('are_stories_posted', true)
@@ -27,8 +29,9 @@ class EcommerceMarketingController extends Controller
         })->count();
 
         return view('ecommerce.marketing.hub', [
-            'adsInFlight' => EcommerceMonthlyAd::whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count(),
-            'adsScaling' => EcommerceMonthlyAd::where('phase', 'Scaling')->count(),
+            'region' => $region,
+            'adsInFlight' => EcommerceMonthlyAd::forRegion($region)->whereIn('phase', EcommerceMonthlyAd::BOARD_PHASES)->count(),
+            'adsScaling' => EcommerceMonthlyAd::forRegion($region)->where('phase', 'Scaling')->count(),
             'contentSlots' => EcommerceContentCalendar::count(),
             'contentLive' => $contentLive,
         ]);

@@ -292,8 +292,18 @@ class ShopifyWebhookController extends Controller
                 $effectiveUnitPrice = $quantity > 0 ? round($lineTotal / $quantity, 2) : $unitPrice;
                 $orderRevenue += $lineTotal;
 
+                $orderRegion = $isQatarOrder ? 'qa' : 'pk';
                 $pricingModel = EcommercePricingModel::where('ecommerce_product_id', $product->id)->first();
-                $unitCogs = $pricingModel?->bomUnitCost() ?? 0.0;
+                $resolvedCosts = $pricingModel
+                    ? $pricingModel->componentCostsForRegion($orderRegion)
+                    : [
+                        'unit_cogs' => 0.0,
+                        'unit_liquid_cost' => 0.0,
+                        'unit_bottle_cost' => 0.0,
+                        'unit_label_cost' => 0.0,
+                        'unit_pump_cost' => 0.0,
+                        'unit_outer_box_cost' => 0.0,
+                    ];
 
                 EcommerceSale::create([
                     'ecommerce_product_id' => $product->id,
@@ -312,12 +322,12 @@ class ShopifyWebhookController extends Controller
                     'reason' => 'Shopify Webhook Automated Order',
                     'unit_price' => $effectiveUnitPrice,
                     'total_price' => $lineTotal,
-                    'unit_cogs' => $unitCogs,
-                    'unit_liquid_cost' => (float) ($pricingModel->liquid_cost ?? 0),
-                    'unit_bottle_cost' => (float) ($pricingModel->bottle_cost ?? 0),
-                    'unit_label_cost' => (float) ($pricingModel->label_cost ?? 0),
-                    'unit_pump_cost' => (float) ($pricingModel->pump_cost ?? 0),
-                    'unit_outer_box_cost' => (float) ($pricingModel->box_cost ?? 0),
+                    'unit_cogs' => $resolvedCosts['unit_cogs'],
+                    'unit_liquid_cost' => $resolvedCosts['unit_liquid_cost'],
+                    'unit_bottle_cost' => $resolvedCosts['unit_bottle_cost'],
+                    'unit_label_cost' => $resolvedCosts['unit_label_cost'],
+                    'unit_pump_cost' => $resolvedCosts['unit_pump_cost'],
+                    'unit_outer_box_cost' => $resolvedCosts['unit_outer_box_cost'],
                     'shipping_cost' => $isFirstLine ? $shippingCost : 0,
                     'tax_amount' => $isFirstLine ? $taxAmount : 0,
                     'meta_ad_allocation' => 0,

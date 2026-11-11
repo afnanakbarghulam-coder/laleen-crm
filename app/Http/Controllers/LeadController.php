@@ -25,7 +25,7 @@ class LeadController extends Controller
 
     public function index(Request $request)
     {
-        $query = Lead::query()->with(['agent', 'customer']);
+        $query = Lead::query()->with(['agent', 'customer', 'appointment:id,status']);
         $alertFilter = $request->input('alert_filter');
 
         if ($alertFilter === 'overdue') {
@@ -44,7 +44,16 @@ class LeadController extends Controller
                     $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
                 });
         } elseif ($alertFilter === 'booked') {
-            $query->where('needful_done', 'booked');
+            $query->where(function ($q) {
+                $q->where(function ($sub) {
+                    $sub->where('needful_done', 'booked')
+                        ->where(function ($aq) {
+                            $aq->whereNull('appointment_id')
+                                ->orWhereHas('appointment', fn ($ap) => $ap->whereNotIn('status', ['cancelled', 'no_show']))
+                                ->orWhereDoesntHave('appointment');
+                        });
+                })->orWhereHas('appointment', fn ($ap) => $ap->whereNotIn('status', ['cancelled', 'no_show']));
+            });
         }
 
         if ($request->filled('category')) {
@@ -94,7 +103,13 @@ class LeadController extends Controller
         $unscheduledLeads = $this->unscheduledLeadsQuery()->orderByDesc('created_at')->get();
         $overdueCount = $overdueLeads->count();
         $unscheduledCount = $unscheduledLeads->count();
-        $bookedCount = Lead::where('needful_done', 'booked')->count();
+        $bookedCount = Lead::with('appointment:id,status')
+            ->where(function ($q) {
+                $q->where('needful_done', 'booked')->orWhereNotNull('appointment_id');
+            })
+            ->get()
+            ->filter(fn (Lead $l) => $l->isBookedConversion())
+            ->count();
 
         $morningBrief = $this->buildMorningMoneyBrief($overdueCount, $unscheduledCount);
         $dueTodayCount = $morningBrief['due_today_count'];
@@ -339,7 +354,7 @@ class LeadController extends Controller
      */
     public function updateNeedfulDone(Request $request, Lead $lead)
     {
-        if ($lead->needful_done === 'booked') {
+        if ($lead->needful_done === 'booked' && $lead->hasVerifiedConversionActivity()) {
             return response()->json([
                 'message' => 'Leads can only be marked as Booked automatically by creating a Calendar appointment.',
                 'errors' => [
@@ -354,10 +369,13 @@ class LeadController extends Controller
             'needful_done.in' => 'Leads can only be marked as Booked automatically by creating a Calendar appointment.',
         ]);
 
+        $wasBooked = $lead->needful_done === 'booked';
         $newStatus = $request->needful_done ?: null;
         $payload = ['needful_done' => $newStatus];
         if (in_array($newStatus, Lead::CLOSED_STATUSES, true)) {
             $payload['next_followup_date'] = null;
+        } elseif ($wasBooked && !$lead->next_followup_date) {
+            $payload['next_followup_date'] = now()->toDateString();
         }
 
         $lead->update($payload);
@@ -420,10 +438,10 @@ class LeadController extends Controller
         $categorySeries = array_merge(array_values($categoryCounts), [$uncategorized]);
 
         $needfulCounts = [
-            'booked' => $leads->where('needful_done', 'booked')->count(),
-            'yes' => $leads->where('needful_done', 'yes')->count(),
-            'no' => $leads->where('needful_done', 'no')->count(),
-            'unset' => $leads->whereNull('needful_done')->count(),
+            'booked' => $leads->filter(fn (Lead $l) => $l->isBookedConversion())->count(),
+            'yes' => $leads->filter(fn (Lead $l) => !$l->isBookedConversion() && $l->needful_done === 'yes')->count(),
+            'no' => $leads->filter(fn (Lead $l) => !$l->isBookedConversion() && $l->needful_done === 'no')->count(),
+            'unset' => $leads->filter(fn (Lead $l) => !$l->isBookedConversion() && $l->needful_done === null)->count(),
         ];
 
         $bookedLeadsCount = $needfulCounts['booked'];
@@ -431,17 +449,17 @@ class LeadController extends Controller
 
         $winBackPool = $leads->filter(fn(Lead $l) => $l->hasCategory(['cancel', 'no_show']));
         $winBackTotal = $winBackPool->count();
-        $winBackBooked = $winBackPool->where('needful_done', 'booked')->count();
+        $winBackBooked = $winBackPool->filter(fn (Lead $l) => $l->isBookedConversion())->count();
         $winBackRate = $winBackTotal > 0 ? round(($winBackBooked / $winBackTotal) * 100, 1) : 0.0;
 
         $today = today();
-        $allLeads = Lead::all();
+        $allLeads = Lead::with('appointment:id,status')->get();
         $overdueLeadsLive = $this->overdueLeadsQuery()->get();
         $followupPerformance = [
             'overdue' => $overdueLeadsLive->count(),
-            'completed' => $allLeads->where('needful_done', 'booked')->count(),
-            'upcoming' => $allLeads->filter(fn($l) => $l->next_followup_date && $l->next_followup_date->gte($today) && !in_array($l->needful_done, Lead::CLOSED_STATUSES, true))->count(),
-            'no_date' => $allLeads->whereNull('next_followup_date')->filter(fn($l) => !in_array($l->needful_done, Lead::CLOSED_STATUSES, true))->count(),
+            'completed' => $allLeads->filter(fn (Lead $l) => $l->isBookedConversion())->count(),
+            'upcoming' => $allLeads->filter(fn($l) => $l->next_followup_date && $l->next_followup_date->gte($today) && !$l->isBookedConversion() && !in_array($l->needful_done, Lead::CLOSED_STATUSES, true))->count(),
+            'no_date' => $allLeads->whereNull('next_followup_date')->filter(fn($l) => !$l->isBookedConversion() && !in_array($l->needful_done, Lead::CLOSED_STATUSES, true))->count(),
         ];
 
         $agents = User::where('role', 'agent')->orderBy('name')->get();
@@ -450,8 +468,8 @@ class LeadController extends Controller
         $agentLeaderboard = $agents->map(function (User $agent) use ($leads, $overdueByAgent) {
             $agentLeads = $leads->where('assigned_agent_id', $agent->id);
             $assigned = $agentLeads->count();
-            $booked = $agentLeads->where('needful_done', 'booked')->count();
-            $contacted = $agentLeads->where('needful_done', 'yes')->count();
+            $booked = $agentLeads->filter(fn (Lead $l) => $l->isBookedConversion())->count();
+            $contacted = $agentLeads->filter(fn (Lead $l) => !$l->isBookedConversion() && $l->needful_done === 'yes')->count();
             $rate = $assigned > 0 ? round(($booked / $assigned) * 100, 1) : 0.0;
 
             return [
@@ -470,8 +488,8 @@ class LeadController extends Controller
         $unassignedLeads = $leads->whereNull('assigned_agent_id');
         if ($unassignedLeads->isNotEmpty()) {
             $unassignedCount = $unassignedLeads->count();
-            $unassignedBooked = $unassignedLeads->where('needful_done', 'booked')->count();
-            $unassignedContacted = $unassignedLeads->where('needful_done', 'yes')->count();
+            $unassignedBooked = $unassignedLeads->filter(fn (Lead $l) => $l->isBookedConversion())->count();
+            $unassignedContacted = $unassignedLeads->filter(fn (Lead $l) => !$l->isBookedConversion() && $l->needful_done === 'yes')->count();
             $unassignedRate = $unassignedCount > 0 ? round(($unassignedBooked / $unassignedCount) * 100, 1) : 0.0;
 
             $agentLeaderboard->push([
@@ -611,7 +629,7 @@ class LeadController extends Controller
 
     public function leadsForAnalyticsPeriod(Carbon $from, Carbon $to)
     {
-        return Lead::with(['agent', 'customer'])
+        return Lead::with(['agent', 'customer', 'appointment:id,status'])
             ->where(function ($q) use ($from, $to) {
                 $q->whereBetween('created_at', [$from, $to])
                     ->orWhere(function ($sub) use ($from, $to) {
@@ -780,7 +798,7 @@ class LeadController extends Controller
 
         $servicePriceMap = self::buildServicePriceMap();
         $totalLeads = $leads->count();
-        $unbookedLeads = $leads->filter(fn(Lead $l) => $l->needful_done !== 'booked')->values();
+        $unbookedLeads = $leads->filter(fn(Lead $l) => !$l->isBookedConversion())->values();
         $unbookedCount = $unbookedLeads->count();
 
         // 1. Service Bottleneck Math
@@ -952,11 +970,29 @@ class LeadController extends Controller
      */
     private function resolveOrCreateCustomer(string $normalizedPhone, ?int $requestedCustomerId, ?string $name): Customer
     {
-        $customer = $requestedCustomerId ? Customer::find($requestedCustomerId) : null;
-        $customer = $customer ?: Customer::firstOrCreate(['phone' => $normalizedPhone]);
+        $canonicalPhone = Customer::normalizePhone($normalizedPhone) ?: $normalizedPhone;
+        $candidates = array_values(array_unique(array_filter([$canonicalPhone, $normalizedPhone])));
 
-        if ($name) {
-            $customer->name = $name;
+        $customer = $requestedCustomerId ? Customer::find($requestedCustomerId) : null;
+        if (!$customer && !empty($candidates)) {
+            $customer = Customer::whereIn('phone', $candidates)->first();
+        }
+
+        $trimmedName = trim((string) $name);
+
+        if (!$customer) {
+            return Customer::create([
+                'phone' => $canonicalPhone,
+                'name' => $trimmedName !== '' ? $trimmedName : null,
+            ]);
+        }
+
+        $existingName = trim((string) ($customer->name ?? ''));
+        $isPlaceholder = $existingName === ''
+            || in_array(strtolower($existingName), ['walk-in', 'guest', 'unnamed', 'unnamed client', '-', '—'], true);
+
+        if ($trimmedName !== '' && $isPlaceholder) {
+            $customer->name = $trimmedName;
             $customer->save();
         }
 
@@ -964,16 +1000,17 @@ class LeadController extends Controller
     }
 
     /**
-     * Link any same-month AdLeadEntry rows for this customer/phone that do not
-     * yet have a lead_id (or were pointing at a merged duplicate lead).
+     * Link any AdLeadEntry rows within the 30-day attribution window for this customer/phone
+     * that do not yet have a lead_id (or were pointing at a merged duplicate lead).
      */
     private function linkSameMonthAdLeadEntries(Lead $lead, Customer $customer, string $normalizedPhone, ?int $mergedFromLeadId = null): void
     {
         $refDate = $lead->created_at ? Carbon::parse($lead->created_at) : now();
+        $windowStart = $refDate->copy()->subDays(AdLeadEntry::ATTRIBUTION_WINDOW_DAYS)->toDateString();
+        $windowEnd = $refDate->copy()->addDays(AdLeadEntry::ATTRIBUTION_WINDOW_DAYS)->toDateString();
 
         AdLeadEntry::query()
-            ->whereYear('date', $refDate->year)
-            ->whereMonth('date', $refDate->month)
+            ->whereBetween('date', [$windowStart, $windowEnd])
             ->where(function ($q) use ($customer, $normalizedPhone, $mergedFromLeadId) {
                 $q->where('customer_id', $customer->id);
                 if ($normalizedPhone !== '') {

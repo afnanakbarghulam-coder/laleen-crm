@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\SaleItem;
 use App\Models\Staff;
 use App\Models\StaffDeduction;
 use App\Models\StaffOvertimeEntry;
@@ -17,10 +18,91 @@ use Illuminate\Support\Collection;
  */
 class StaffPayrollCalculator
 {
+    /** @var array<int, Collection> */
+    private array $overtimeCache = [];
+
+    /** @var array<int, Collection> */
+    private array $deductionsCache = [];
+
+    /** @var array<int, Collection> */
+    private array $unpaidTimeOffsCache = [];
+
+    /** @var array<int, float> */
+    private array $commissionSalesCache = [];
+
     public function __construct(
         public Carbon $dateFrom,
         public Carbon $dateTo,
     ) {}
+
+    /**
+     * Batch-preload overtime entries, deductions (with complaints), unpaid leave,
+     * and commissionable sales for an entire Staff collection in O(1) SQL queries.
+     */
+    public function preloadForStaff(Collection $staffs): void
+    {
+        $staffIds = $staffs->pluck('id')->filter()->map(fn ($id) => (int) $id)->unique()->values();
+        if ($staffIds->isEmpty()) {
+            return;
+        }
+
+        $bounds = $this->dateRangeBounds();
+        $fromStr = $this->dateFrom->toDateString();
+        $toStr = $this->dateTo->toDateString();
+        $staffById = $staffs->keyBy('id');
+
+        $overtimeByStaff = StaffOvertimeEntry::whereIn('staff_id', $staffIds)
+            ->whereBetween('entry_date', $bounds)
+            ->get()
+            ->groupBy('staff_id');
+
+        $deductionsByStaff = StaffDeduction::with('complaint')
+            ->whereIn('staff_id', $staffIds)
+            ->whereBetween('deduction_date', $bounds)
+            ->get()
+            ->groupBy('staff_id');
+
+        $unpaidLeaveByStaff = StaffTimeOff::whereIn('staff_id', $staffIds)
+            ->where('reason', 'unpaid')
+            ->whereDate('start_date', '<=', $toStr)
+            ->whereDate('end_date', '>=', $fromStr)
+            ->get()
+            ->groupBy('staff_id');
+
+        $commissionStaffIds = $staffs
+            ->filter(fn (Staff $s) => (float) ($s->commission_rate ?? 0) > 0)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+
+        $salesByStaff = collect();
+        if ($commissionStaffIds->isNotEmpty()) {
+            $salesByStaff = SaleItem::query()
+                ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+                ->leftJoin('appointments', 'appointments.id', '=', 'sales.appointment_id')
+                ->whereIn('sale_items.staff_id', $commissionStaffIds)
+                ->whereBetween('sales.created_at', $bounds)
+                ->where(function ($q) {
+                    $q->whereNull('sales.appointment_id')
+                        ->orWhereNotIn('appointments.status', ['cancelled', 'no_show']);
+                })
+                ->groupBy('sale_items.staff_id')
+                ->selectRaw('sale_items.staff_id, SUM(sale_items.total) as total')
+                ->pluck('total', 'staff_id');
+        }
+
+        foreach ($staffIds as $id) {
+            $staffModel = $staffById->get($id);
+            $otRows = $overtimeByStaff->get($id, collect());
+            if ($staffModel) {
+                $otRows->each(fn ($entry) => $entry->setRelation('staff', $staffModel));
+            }
+            $this->overtimeCache[$id] = $otRows;
+            $this->deductionsCache[$id] = $deductionsByStaff->get($id, collect());
+            $this->unpaidTimeOffsCache[$id] = $unpaidLeaveByStaff->get($id, collect());
+            $this->commissionSalesCache[$id] = (float) $salesByStaff->get($id, 0.0);
+        }
+    }
 
     /**
      * Start-of-day / end-of-day bounds — SQLite stores every Carbon-cast
@@ -34,28 +116,67 @@ class StaffPayrollCalculator
 
     private function overtimeEntriesFor(Staff $staff): Collection
     {
-        return StaffOvertimeEntry::where('staff_id', $staff->id)
+        if (array_key_exists($staff->id, $this->overtimeCache)) {
+            return $this->overtimeCache[$staff->id];
+        }
+
+        $entries = StaffOvertimeEntry::where('staff_id', $staff->id)
             ->whereBetween('entry_date', $this->dateRangeBounds())
             ->get();
+        $entries->each(fn ($e) => $e->setRelation('staff', $staff));
+
+        return $this->overtimeCache[$staff->id] = $entries;
     }
 
     private function deductionsFor(Staff $staff): Collection
     {
-        return StaffDeduction::where('staff_id', $staff->id)
+        if (array_key_exists($staff->id, $this->deductionsCache)) {
+            return $this->deductionsCache[$staff->id];
+        }
+
+        return $this->deductionsCache[$staff->id] = StaffDeduction::with('complaint')
+            ->where('staff_id', $staff->id)
             ->whereBetween('deduction_date', $this->dateRangeBounds())
             ->get();
     }
 
     private function unpaidTimeOffsFor(Staff $staff): Collection
     {
+        if (array_key_exists($staff->id, $this->unpaidTimeOffsCache)) {
+            return $this->unpaidTimeOffsCache[$staff->id];
+        }
+
         $fromStr = $this->dateFrom->toDateString();
         $toStr = $this->dateTo->toDateString();
 
-        return StaffTimeOff::where('staff_id', $staff->id)
+        return $this->unpaidTimeOffsCache[$staff->id] = StaffTimeOff::where('staff_id', $staff->id)
             ->where('reason', 'unpaid')
             ->whereDate('start_date', '<=', $toStr)
             ->whereDate('end_date', '>=', $fromStr)
             ->get();
+    }
+
+    public function commissionAmount(Staff $staff): float
+    {
+        $rate = (float) ($staff->commission_rate ?? 0);
+        if ($rate <= 0) {
+            return 0.0;
+        }
+
+        if (!array_key_exists($staff->id, $this->commissionSalesCache)) {
+            $this->commissionSalesCache[$staff->id] = (float) SaleItem::query()
+                ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+                ->leftJoin('appointments', 'appointments.id', '=', 'sales.appointment_id')
+                ->where('sale_items.staff_id', $staff->id)
+                ->whereBetween('sales.created_at', $this->dateRangeBounds())
+                ->where(function ($q) {
+                    $q->whereNull('sales.appointment_id')
+                        ->orWhereNotIn('appointments.status', ['cancelled', 'no_show']);
+                })
+                ->sum('sale_items.total');
+        }
+
+        return round($this->commissionSalesCache[$staff->id] * ($rate / 100), 2);
     }
 
     public function unpaidLeaveDays(Staff $staff): int
@@ -132,7 +253,11 @@ class StaffPayrollCalculator
     public function rowFor(Staff $staff): array
     {
         $overtimeEntries = $this->overtimeEntriesFor($staff)->sortByDesc('entry_date')->values();
-        $deductionEntries = $this->deductionsFor($staff)->load('complaint')->sortByDesc('deduction_date')->values();
+        $deductionEntries = $this->deductionsFor($staff);
+        if ($deductionEntries->isNotEmpty() && !$deductionEntries->first()->relationLoaded('complaint')) {
+            $deductionEntries->load('complaint');
+        }
+        $deductionEntries = $deductionEntries->sortByDesc('deduction_date')->values();
 
         return [
             'staff_id' => $staff->id,
@@ -141,6 +266,7 @@ class StaffPayrollCalculator
             'base_salary' => $this->baseSalary($staff),
             'hourly_wage' => (float) ($staff->hourly_wage ?? 0),
             'commission_rate' => (float) ($staff->commission_rate ?? 0),
+            'commission_amount' => $this->commissionAmount($staff),
             'overtime_hours' => $this->overtimeHours($staff),
             'overtime_pay' => $this->overtimePay($staff),
             'unpaid_leave_days' => $this->unpaidLeaveDays($staff),
@@ -154,6 +280,8 @@ class StaffPayrollCalculator
 
     public function payrollFor(Collection $staffs): Collection
     {
+        $this->preloadForStaff($staffs);
+
         return $staffs->map(fn (Staff $staff) => $this->rowFor($staff))->values();
     }
 }

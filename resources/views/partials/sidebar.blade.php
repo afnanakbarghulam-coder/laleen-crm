@@ -254,15 +254,17 @@
          </li>
 
          <!-- Command Center (F.R.I.D.A.Y.) -->
-         <li class="menu-item {{ request()->routeIs('command-center.*') ? 'active' : '' }}">
-             <a href="{{ route('command-center.index') }}" class="menu-link">
-                 <i class="bx bx-radar me-2"></i>
-                 <div class="d-flex align-items-center justify-content-between w-100">
-                     <span>Command Center</span>
-                     <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 999px; background: rgba(217, 143, 131, 0.18); color: #e79a91; border: 1px solid rgba(201, 166, 107, 0.45);">AI</span>
-                 </div>
-             </a>
-         </li>
+         @if (auth()->user()?->isAdmin())
+             <li class="menu-item {{ request()->routeIs('command-center.*') ? 'active' : '' }}">
+                 <a href="{{ route('command-center.index') }}" class="menu-link">
+                     <i class="bx bx-radar me-2"></i>
+                     <div class="d-flex align-items-center justify-content-between w-100">
+                         <span>Command Center</span>
+                         <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 999px; background: rgba(217, 143, 131, 0.18); color: #e79a91; border: 1px solid rgba(201, 166, 107, 0.45);">AI</span>
+                     </div>
+                 </a>
+             </li>
+         @endif
 
          <!-- Leads -->
          {{-- <li class="menu-header small text-uppercase mt-3">
@@ -368,12 +370,14 @@
          @endmoduleView
 
          <!-- Legal Tasks -->
-         <li class="menu-item {{ request()->routeIs('legal.*') ? 'active' : '' }}">
-             <a href="{{ route('legal.tasks.index') }}" class="menu-link">
-                 <i class="bx bx-check-shield me-2"></i>
-                 <div>Legal Tasks</div>
-             </a>
-         </li>
+         @if (auth()->user()?->isAdmin())
+             <li class="menu-item {{ request()->routeIs('legal.*') ? 'active' : '' }}">
+                 <a href="{{ route('legal.tasks.index') }}" class="menu-link">
+                     <i class="bx bx-check-shield me-2"></i>
+                     <div>Legal Tasks</div>
+                 </a>
+             </li>
+         @endif
 
      </ul>
  </aside>

@@ -17,7 +17,9 @@ use App\Support\StaffSalesAnalytics;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class UserController extends Controller
@@ -350,6 +352,10 @@ class UserController extends Controller
         $user->is_active = !$user->is_active;
         $user->save();
 
+        if (!$user->is_active && Schema::hasTable('sessions')) {
+            DB::table('sessions')->where('user_id', $user->id)->delete();
+        }
+
         return redirect()->route('users.index')->with('success', $user->is_active ? 'Staff member reactivated.' : 'Staff member deactivated.');
     }
 
@@ -361,9 +367,14 @@ class UserController extends Controller
     public function profile_update(Request $request)
     {
         $user = Auth::user();
+        $isAdmin = $user && $user->isAdmin();
+
+        if (!$isAdmin && $request->has('name') && trim((string) $request->input('name')) !== $user->name) {
+            abort(403, 'Only an administrator can change a staff account name.');
+        }
 
         $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => $isAdmin ? 'required|string|max:255' : 'sometimes|string|max:255',
             'email' => 'required|email|max:255|unique:users,email,' . $user->id,
             'password' => 'nullable|string|min:8|confirmed',
             'profile_photo' => 'nullable|image|max:2048', // max 2MB
@@ -376,7 +387,9 @@ class UserController extends Controller
             $user->profile_photo = 'uploads/profiles/' . $filename;
         }
 
-        $user->name = $request->name;
+        if ($isAdmin) {
+            $user->name = $request->name;
+        }
         $user->email = $request->email;
 
         if ($request->filled('password')) {

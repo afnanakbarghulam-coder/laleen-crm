@@ -20,6 +20,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <p class="ec-sub mb-0">Scopes Batch History only &mdash; live stock and capital figures below always reflect right now.</p>
         <form method="GET" action="{{ route('ecommerce.stock.index') }}" class="d-flex align-items-center flex-wrap gap-2">
+            <input type="hidden" name="region" value="{{ $region ?? 'pk' }}">
             <div class="d-flex align-items-center gap-2">
                 <label for="startDateFilter" class="ec-sub mb-0">From</label>
                 <input type="date" name="start_date" id="startDateFilter" class="form-control form-control-sm ec-date-filter" value="{{ $startDate }}">
@@ -44,8 +45,8 @@
         <div class="col-md-4">
             <div class="ec-card ec-card-highlight">
                 <h6>Total Capital in Inventory</h6>
-                <div class="ec-value">PKR {{ number_format($totalCapitalInInventory, 2) }}</div>
-                <div class="ec-sub">Unsold stock (Pakistan + Qatar) &times; BOM cost per unit</div>
+                <div class="ec-value">{{ $currency ?? 'PKR' }} {{ number_format($totalCapitalInInventory, 2) }}</div>
+                <div class="ec-sub">Unsold {{ ($region ?? 'pk') === 'qa' ? 'Qatar' : 'Pakistan' }} stock &times; regional BOM cost per unit</div>
             </div>
         </div>
         <div class="col-md-4">
@@ -112,11 +113,10 @@
                                 ->values();
 
                             $pricingModel = $pricingModels->get($product->id);
-                            $unitCost = $pricingModel
-                                ? (float) $pricingModel->liquid_cost + (float) $pricingModel->bottle_cost + (float) $pricingModel->label_cost + (float) $pricingModel->box_cost + (float) $pricingModel->pump_cost
-                                : 0.0;
-                            $totalStockBothLocations = (float) $product->stock_pakistan + (float) $product->stock_qatar;
-                            $totalValue = $totalStockBothLocations * $unitCost;
+                            $activeRegion = $region ?? 'pk';
+                            $unitCost = $pricingModel ? $pricingModel->unitCogsForRegion($activeRegion) : 0.0;
+                            $regionalStock = $activeRegion === 'qa' ? (float) $product->stock_qatar : (float) $product->stock_pakistan;
+                            $totalValue = $regionalStock * $unitCost;
                             $v = $velocity[$product->id] ?? null;
                         @endphp
                         <tr>
@@ -142,7 +142,7 @@
                                     <span class="text-muted">—</span>
                                 @endif
                             </td>
-                            <td class="ec-stock-emphasis">PKR {{ number_format($totalValue, 2) }}</td>
+                            <td class="ec-stock-emphasis">{{ $currency ?? 'PKR' }} {{ number_format($totalValue, 2) }}</td>
                             <td>{{ number_format($totalProduced, 0) }}</td>
                             <td>{{ number_format($product->sold_pakistan, 0) }}</td>
                             <td class="ec-col-divider ec-stock-emphasis {{ $product->stock_pakistan < 0 ? 'ec-negative' : '' }}">

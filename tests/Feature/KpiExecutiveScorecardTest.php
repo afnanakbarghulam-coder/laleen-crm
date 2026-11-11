@@ -198,18 +198,22 @@ class KpiExecutiveScorecardTest extends TestCase
             'updated_at' => $now->copy()->subHours(60),
         ])->saveQuietly();
 
-        // 3. Seed Sana's Weekly Content Plan (4 Reels + 7 Stories = 100% Execution, 0 Late Replies)
-        foreach (SocialContentPlan::DAYS_OF_WEEK as $idx => $dayName) {
-            SocialContentPlan::create([
-                'week_start_date' => $weekMonday,
-                'day_of_week' => $dayName,
-                'reel_content' => $idx < 4 ? "Reel #{$idx}" : null,
-                'is_reel_posted' => $idx < 4,
-                'is_reel_skipped' => $idx >= 4,
-                'stories_content' => "Story #{$idx}",
-                'are_stories_posted' => true,
-                'late_replies_count' => 0,
-            ]);
+        // 3. Seed Sana's Weekly Content Plan across all elapsed MTD weeks (4 Reels + 7 Stories per week = 100% Execution, 0 Late Replies)
+        $elapsedWeeks = max(1, min(4, (int) ceil(max(1, (int) $now->day) / 7)));
+        for ($w = 0; $w < $elapsedWeeks; $w++) {
+            $seedWeekMonday = Carbon::parse($weekMonday)->subWeeks($w)->toDateString();
+            foreach (SocialContentPlan::DAYS_OF_WEEK as $idx => $dayName) {
+                SocialContentPlan::create([
+                    'week_start_date' => $seedWeekMonday,
+                    'day_of_week' => $dayName,
+                    'reel_content' => $idx < 4 ? "Reel #{$idx}" : null,
+                    'is_reel_posted' => $idx < 4,
+                    'is_reel_skipped' => $idx >= 4,
+                    'stories_content' => "Story #{$idx}",
+                    'are_stories_posted' => true,
+                    'late_replies_count' => 0,
+                ]);
+            }
         }
 
         // 3B. Seed Ahana (Old Airport) & Rhea (Wakrah) Branch Manager KPIs
@@ -558,32 +562,32 @@ class KpiExecutiveScorecardTest extends TestCase
         ]);
         $futureAppt->forceFill(['created_at' => $now])->saveQuietly();
 
-        // Agent & Supervisor Booking Rule: Once booked, it counts as 1 regardless of status ('confirmed', 'completed', 'cancelled', 'no_show')
-        foreach (['confirmed', 'completed', 'cancelled', 'no_show'] as $statusToTest) {
+        // Agent & Supervisor Booking Rule: Active/completed bookings count as 1; cancelled & no_show bookings are excluded (0)
+        foreach (['confirmed' => 1, 'completed' => 1, 'cancelled' => 0, 'no_show' => 0] as $statusToTest => $expectedCount) {
             $futureAppt->update(['status' => $statusToTest]);
 
             $report = new \App\Models\KpiAgentTargetReport([
                 'date_from' => $now->copy()->startOfDay(),
                 'date_to' => $now->copy()->endOfDay(),
             ]);
-            $this->assertSame(1, $report->combined()['bookings'], "Agent booking must still count when status is {$statusToTest}");
+            $this->assertSame($expectedCount, $report->combined()['bookings'], "Agent booking count mismatch when status is {$statusToTest}");
 
             $liveAgentCards = \App\Models\KpiAgentTargetReport::liveAgentScorecards();
             $areebaLive = collect($liveAgentCards)->firstWhere('id', $areeba->id);
             $this->assertNotNull($areebaLive);
-            $this->assertSame(1, $areebaLive['today_bookings'], "Live today_bookings must remain 1 when status is {$statusToTest}");
-            $this->assertSame(1, $areebaLive['mtd_bookings'], "Live mtd_bookings must remain 1 when status is {$statusToTest}");
+            $this->assertSame($expectedCount, $areebaLive['today_bookings'], "Live today_bookings mismatch when status is {$statusToTest}");
+            $this->assertSame($expectedCount, $areebaLive['mtd_bookings'], "Live mtd_bookings mismatch when status is {$statusToTest}");
 
             $statusScorecard = $this->actingAs($this->admin)
                 ->get(route('kpi.hub', ['month' => $now->format('Y-m')]))
                 ->viewData('scorecard');
-            $this->assertSame(1, $statusScorecard['areeba']['today_bookings'], "Areeba today_bookings must remain 1 when status is {$statusToTest}");
-            $this->assertSame(1, $statusScorecard['areeba']['mtd_bookings'], "Areeba mtd_bookings must remain 1 when status is {$statusToTest}");
-            $this->assertSame(1, $statusScorecard['laden']['today_bookings_count'], "Laden today_bookings_count must remain 1 when status is {$statusToTest}");
-            $this->assertSame(1, $statusScorecard['laden']['mtd_bookings_count'], "Laden mtd_bookings_count must remain 1 when status is {$statusToTest}");
+            $this->assertSame($expectedCount, $statusScorecard['areeba']['today_bookings'], "Areeba today_bookings mismatch when status is {$statusToTest}");
+            $this->assertSame($expectedCount, $statusScorecard['areeba']['mtd_bookings'], "Areeba mtd_bookings mismatch when status is {$statusToTest}");
+            $this->assertSame($expectedCount, $statusScorecard['laden']['today_bookings_count'], "Laden today_bookings_count mismatch when status is {$statusToTest}");
+            $this->assertSame($expectedCount, $statusScorecard['laden']['mtd_bookings_count'], "Laden mtd_bookings_count mismatch when status is {$statusToTest}");
         }
 
-        // Preserve Lead Conversion Status even if appointment is later cancelled (appointment_id is set)
+        // Cancelled / no-show linked appointment must NOT count as a converted lead until active/confirmed
         $convertedLeadOnCancelledAppt = Lead::create([
             'phone' => '55770001',
             'appointment_id' => $futureAppt->id,
@@ -594,7 +598,7 @@ class KpiExecutiveScorecardTest extends TestCase
         $leadCheckScorecard = $this->actingAs($this->admin)
             ->get(route('kpi.hub', ['month' => $now->format('Y-m')]))
             ->viewData('scorecard');
-        $this->assertSame(1, $leadCheckScorecard['laden']['booked_leads_count'], 'Lead with appointment_id must remain counted as converted even if appointment was later cancelled');
+        $this->assertSame(0, $leadCheckScorecard['laden']['booked_leads_count'], 'Lead pointing to a cancelled/no-show appointment must not inflate booked_leads_count');
         $convertedLeadOnCancelledAppt->delete();
 
         // Phone normalization rule: '974', '+974', and '00974' all normalize identically to 8-digit local number

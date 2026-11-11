@@ -21,7 +21,9 @@
 
                     <input type="text" name="name"
                         value="{{ old('name', $user?->name) }}"
-                        class="form-control mb-3" required>
+                        class="form-control mb-3"
+                        @if(!$user?->isAdmin()) readonly title="Account name can only be modified by an administrator" @endif
+                        required>
 
                     <input type="email" name="email"
                         value="{{ old('email', $user?->email) }}"

@@ -86,11 +86,11 @@ class LeadsModulePatchesTest extends TestCase
             ->patchJson(route('appointments.updateStatus', $appt2), ['status' => 'no_show'])
             ->assertOk();
 
-        // Still 1 open lead, with merged services and updated category/appointment_id
+        // Still 1 open lead, with merged services and cleared appointment_id once no active bookings remain
         $this->assertEquals(1, Lead::where('phone', '77132353')->count());
         $lead = Lead::where('phone', '77132353')->first();
         $this->assertEquals('no_show', $lead->category);
-        $this->assertEquals($appt2->id, $lead->appointment_id);
+        $this->assertNull($lead->appointment_id);
         $this->assertEquals(['Facial', 'Balayage'], $lead->service_interest);
         // If the appointment is subsequently changed back to confirmed/completed on the Calendar,
         // the lead automatically transitions to 'booked' and links customer_id.
@@ -405,19 +405,20 @@ class LeadsModulePatchesTest extends TestCase
             ->patchJson(route('appointments.updateStatus', $appointment), ['status' => 'cancelled'])
             ->assertOk();
 
-        // Still 1 lead row (reopened in-place, not duplicated)
+        // Still 1 lead row (reopened in-place, not duplicated, scheduled for follow-up today)
         $this->assertEquals(1, Lead::where('phone', '55544332')->count());
         $lead->refresh();
         $this->assertEquals('cancel', $lead->category);
         $this->assertNull($lead->needful_done);
-        $this->assertNull($lead->next_followup_date);
+        $this->assertNull($lead->appointment_id);
+        $this->assertEquals(now()->toDateString(), $lead->next_followup_date?->toDateString());
         $this->assertStringNotContainsString('[Auto-closed: Booked on', (string) $lead->customer_remarks);
         $this->assertStringContainsString('[Reopened: Cancel on ' . now()->format('d M Y') . ']', (string) $lead->customer_remarks);
 
-        // Verify it immediately enters unscheduledLeadsQuery() (Needs Follow-up Date pill)
+        // Verify bookedCount drops to 0 and lead stays visible on Leads index for follow-up today
         $indexResponse = $this->actingAs($user)->get(route('leads.index'));
         $indexResponse->assertOk()
-            ->assertViewHas('unscheduledCount', 1)
+            ->assertViewHas('dueTodayCount', 1)
             ->assertViewHas('bookedCount', 0);
     }
 
@@ -474,8 +475,8 @@ class LeadsModulePatchesTest extends TestCase
         $lead->refresh();
         $this->assertEquals('cancel', $lead->category);
         $this->assertNull($lead->needful_done);
-        $this->assertNull($lead->next_followup_date);
-        $this->assertEquals($appointment->id, $lead->appointment_id);
+        $this->assertEquals(now()->toDateString(), $lead->next_followup_date?->toDateString());
+        $this->assertNull($lead->appointment_id);
 
         // 2. Rescheduling/updating status back to 'pending' on the Bookings page via PUT /appointments/{id}
         $this->actingAs($user)->put(route('appointments.update', $appointment), [
@@ -500,7 +501,7 @@ class LeadsModulePatchesTest extends TestCase
         $lead->refresh();
         $this->assertNull($lead->needful_done);
         $this->assertNull($lead->appointment_id);
-        $this->assertNull($lead->next_followup_date);
+        $this->assertEquals(now()->toDateString(), $lead->next_followup_date?->toDateString());
         $this->assertStringContainsString('[Reopened: Booking deleted on ' . now()->format('d M Y') . ']', (string) $lead->customer_remarks);
     }
 

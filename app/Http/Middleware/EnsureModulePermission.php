@@ -17,6 +17,10 @@ class EnsureModulePermission
     {
         $user = $request->user();
 
+        if ($user && !$user->is_active) {
+            return EnsureActiveUser::logoutDeactivated($request);
+        }
+
         $allowed = $user && ($level === 'edit' ? $user->canEdit($module) : $user->canView($module));
 
         if (!$allowed) {

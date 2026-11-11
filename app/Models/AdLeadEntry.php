@@ -63,6 +63,12 @@ class AdLeadEntry extends Model
     }
 
     /**
+     * Attribution window (in days) after an AdLeadEntry's date during which
+     * a paid conversion (Sale / completed Appointment) can be attributed to it.
+     */
+    public const ATTRIBUTION_WINDOW_DAYS = 30;
+
+    /**
      * A lead is ONLY counted as booked/converted once it has a valid branch
      * AND a positive paid ticket_amount (> 0) from a completed/paid sale.
      */
@@ -70,6 +76,126 @@ class AdLeadEntry extends Model
     {
         return in_array($this->branch, array_keys(self::BRANCHES), true)
             && (float) $this->ticket_amount > 0;
+    }
+
+    /**
+     * Build normalized phone candidates and matching customer IDs for this entry.
+     *
+     * @return array{0: array<int, int>, 1: array<int, string>}
+     */
+    public function resolveIdentityCohort(): array
+    {
+        $rawPhones = array_filter([
+            $this->phone,
+            $this->customer?->phone,
+        ]);
+
+        $phoneCandidates = [];
+        foreach ($rawPhones as $raw) {
+            $digits = preg_replace('/\D+/', '', (string) $raw);
+            $normCustomer = Customer::normalizePhone((string) $raw);
+            [$cc, $local] = Lead::splitPhone($digits);
+            $normLead = Lead::normalizePhone($cc, $local);
+
+            foreach ([$raw, $digits, $normCustomer, $normLead] as $candidate) {
+                $trimmed = trim((string) $candidate);
+                if ($trimmed !== '') {
+                    $phoneCandidates[] = $trimmed;
+                }
+            }
+        }
+        $phoneCandidates = array_values(array_unique($phoneCandidates));
+
+        $customerIds = array_values(array_unique(array_filter([
+            $this->customer_id,
+        ])));
+
+        if (!empty($phoneCandidates) && Schema::hasTable('customers')) {
+            $matchedIds = Customer::whereIn('phone', $phoneCandidates)->pluck('id')->all();
+            $customerIds = array_values(array_unique(array_merge($customerIds, $matchedIds)));
+        }
+
+        return [$customerIds, $phoneCandidates];
+    }
+
+    /**
+     * Return a real non-cancelled / non-no-show Appointment for this client if one exists.
+     */
+    public function resolveVerifiedAppointment(): ?Appointment
+    {
+        if (!Schema::hasTable('appointments')) {
+            return null;
+        }
+
+        [$customerIds, $phoneCandidates] = $this->resolveIdentityCohort();
+        if (empty($customerIds) && empty($phoneCandidates)) {
+            return null;
+        }
+
+        $entryDateStr = $this->date ? Carbon::parse($this->date)->toDateString() : null;
+
+        $appointments = Appointment::query()
+            ->whereNotIn('status', ['cancelled', 'no_show'])
+            ->where(function ($q) use ($customerIds, $phoneCandidates) {
+                if (!empty($customerIds)) {
+                    $q->orWhereIn('customer_id', $customerIds);
+                }
+                if (!empty($phoneCandidates)) {
+                    $q->orWhereIn('phone', $phoneCandidates);
+                }
+            })
+            ->orderByDesc('appointment_datetime')
+            ->orderByDesc('id')
+            ->get();
+
+        if ($appointments->isEmpty()) {
+            return null;
+        }
+
+        $todayStr = today()->toDateString();
+        $minDateStr = $entryDateStr ?: $todayStr;
+
+        return $appointments->first(function (Appointment $a) use ($minDateStr, $todayStr) {
+            $apptDateStr = $a->appointment_date->toDateString();
+
+            return $apptDateStr >= $minDateStr || $apptDateStr >= $todayStr;
+        });
+    }
+
+    /**
+     * True ONLY if the client has a real non-cancelled/non-no-show Appointment
+     * OR a verified paid Sale record on or after $this->date.
+     */
+    public function hasVerifiedCustomerConversion(): bool
+    {
+        if ($this->resolveVerifiedAppointment() !== null) {
+            return true;
+        }
+
+        [$customerIds] = $this->resolveIdentityCohort();
+        if (empty($customerIds) || !Schema::hasTable('sales')) {
+            return false;
+        }
+
+        $entryDateStr = $this->date ? Carbon::parse($this->date)->toDateString() : null;
+
+        $sales = Sale::with('appointment')
+            ->whereIn('customer_id', $customerIds)
+            ->get();
+
+        foreach ($sales as $sale) {
+            if ($sale->appointment && in_array(strtolower((string) $sale->appointment->status), ['cancelled', 'no_show'], true)) {
+                continue;
+            }
+            if ($entryDateStr && self::resolveSaleDate($sale)->toDateString() < $entryDateStr) {
+                continue;
+            }
+            if (self::netSaleAmount($sale) > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static function resolveCategoryFromLead(Lead $lead): string
@@ -152,11 +278,11 @@ class AdLeadEntry extends Model
     }
 
     /**
-     * Synchronize the matching AdLeadEntry for a client within the SAME calendar
-     * month & year as $activityDate (where ad_lead_entries.date <= $activityDate).
-     * Strictly isolated by calendar month so activity in a later month never mutates
-     * an earlier month's AdLeadEntry, and adding a new AdLeadEntry in a new month
-     * never pulls in past sales or bookings from a previous month.
+     * Synchronize AdLeadEntry attribution for a client cohort using:
+     * - 30-day cross-month attribution window: [entry.date, entry.date + 30 days]
+     * - Last-touch single-winner attribution: each Sale (and standalone paid Appointment)
+     *   attributes to at most ONE AdLeadEntry — the most recent entry on or before
+     *   the conversion date within 30 days, preventing double-counting and cross-branch hijacking.
      */
     public static function syncFromCustomerActivity(
         ?Customer $customer,
@@ -254,44 +380,51 @@ class AdLeadEntry extends Model
         $hasLeadIdColumn = Schema::hasColumn('ad_lead_entries', 'lead_id');
         $hasCustomerIdColumn = Schema::hasColumn('ad_lead_entries', 'customer_id');
 
-        if (
-            $targetEntry
-            && $targetEntry->date
-            && Carbon::parse($targetEntry->date)->year === $activityCarbon->year
-            && Carbon::parse($targetEntry->date)->month === $activityCarbon->month
-        ) {
-            $entry = $targetEntry;
-        } else {
-            $entry = self::query()
-                ->where(function ($q) use ($customerIds, $leadIds, $phoneCandidates, $hasCustomerIdColumn, $hasLeadIdColumn) {
-                    if ($hasCustomerIdColumn && !empty($customerIds)) {
-                        $q->orWhereIn('customer_id', $customerIds);
-                    }
-                    if ($hasLeadIdColumn && !empty($leadIds)) {
-                        $q->orWhereIn('lead_id', $leadIds);
-                    }
-                    if (!empty($phoneCandidates)) {
-                        $q->orWhereIn('phone', $phoneCandidates);
-                    }
-                })
-                ->whereYear('date', $activityCarbon->year)
-                ->whereMonth('date', $activityCarbon->month)
-                ->whereDate('date', '<=', $activityCarbon->toDateString())
-                ->orderByDesc('date')
-                ->orderByDesc('id')
-                ->first();
-        }
+        $clientEntries = self::query()
+            ->where(function ($q) use ($customerIds, $leadIds, $phoneCandidates, $hasCustomerIdColumn, $hasLeadIdColumn, $targetEntry) {
+                if ($hasCustomerIdColumn && !empty($customerIds)) {
+                    $q->orWhereIn('customer_id', $customerIds);
+                }
+                if ($hasLeadIdColumn && !empty($leadIds)) {
+                    $q->orWhereIn('lead_id', $leadIds);
+                }
+                if (!empty($phoneCandidates)) {
+                    $q->orWhereIn('phone', $phoneCandidates);
+                }
+                if ($targetEntry?->id) {
+                    $q->orWhere('id', $targetEntry->id);
+                }
+            })
+            ->orderBy('date')
+            ->orderBy('id')
+            ->get();
 
-        if (!$entry && !empty($leadIds) && Schema::hasTable('leads')) {
-            $sameMonthLeads = Lead::whereIn('id', $leadIds)
-                ->whereYear('created_at', $activityCarbon->year)
-                ->whereMonth('created_at', $activityCarbon->month)
+        $activityDateStr = $activityCarbon->toDateString();
+        $windowEarliestEntryDate = $activityCarbon->copy()->subDays(self::ATTRIBUTION_WINDOW_DAYS)->toDateString();
+
+        $coveringEntry = $clientEntries
+            ->filter(function (self $e) use ($windowEarliestEntryDate, $activityDateStr) {
+                $d = Carbon::parse($e->date)->toDateString();
+
+                return $d >= $windowEarliestEntryDate && $d <= $activityDateStr;
+            })
+            ->sortBy([
+                [fn (self $e) => Carbon::parse($e->date)->toDateString(), 'desc'],
+                ['id', 'desc'],
+            ])
+            ->first();
+
+        if (!$coveringEntry && !$targetEntry && !empty($leadIds) && Schema::hasTable('leads')) {
+            $windowLeads = Lead::whereIn('id', $leadIds)
+                ->whereDate('created_at', '>=', $windowEarliestEntryDate)
+                ->whereDate('created_at', '<=', $activityDateStr)
+                ->orderByDesc('created_at')
                 ->orderByDesc('id')
                 ->get();
 
-            $paidAdLead = $sameMonthLeads->first(fn (Lead $l) => $l->isPaidAdLead());
+            $paidAdLead = $windowLeads->first(fn (Lead $l) => $l->isPaidAdLead());
             if ($paidAdLead) {
-                $leadDate = $paidAdLead->created_at ? Carbon::parse($paidAdLead->created_at)->toDateString() : $activityCarbon->toDateString();
+                $leadDate = $paidAdLead->created_at ? Carbon::parse($paidAdLead->created_at)->toDateString() : $activityDateStr;
                 $resolvedCustomer = $customer ?: ($paidAdLead->customer_id ? Customer::find($paidAdLead->customer_id) : null);
                 $resolvedCategory = self::resolveCategoryFromLead($paidAdLead);
                 $entryPayload = [
@@ -312,20 +445,25 @@ class AdLeadEntry extends Model
                 if ($hasLeadIdColumn) {
                     $entryPayload['lead_id'] = $paidAdLead->id;
                 }
-                $entry = self::create($entryPayload);
+                $createdEntry = self::create($entryPayload);
+                $clientEntries->push($createdEntry);
+                $coveringEntry = $createdEntry;
             }
         }
 
-        if (!$entry) {
+        if ($clientEntries->isEmpty()) {
             return null;
         }
 
-        $entryDate = Carbon::parse($entry->date)->startOfDay();
-        $entryDateStr = $entryDate->toDateString();
-        $cohortYear = $entryDate->year;
-        $cohortMonth = $entryDate->month;
+        // Order descending by (date, id) so the first matching entry is the last-touch winner
+        $entriesDesc = $clientEntries
+            ->sortBy([
+                [fn (self $e) => Carbon::parse($e->date)->toDateString(), 'desc'],
+                ['id', 'desc'],
+            ])
+            ->values();
 
-        // Collect all appointments for this client and filter to the exact same month/year on or after $entry->date
+        // Collect all appointments for this client cohort
         $allClientAppointments = collect();
         if (Schema::hasTable('appointments') && (!empty($customerIds) || !empty($phoneCandidates) || $appointmentId)) {
             $allClientAppointments = Appointment::query()
@@ -343,21 +481,11 @@ class AdLeadEntry extends Model
                 ->get();
         }
 
-        $cohortAppointments = $allClientAppointments->filter(function (Appointment $a) use ($cohortYear, $cohortMonth, $entryDateStr) {
-            $apptCarbon = Carbon::parse($a->appointment_datetime ?: $a->booking_date ?: $a->created_at);
-
-            return $apptCarbon->year === $cohortYear
-                && $apptCarbon->month === $cohortMonth
-                && $apptCarbon->toDateString() >= $entryDateStr;
-        })->values();
-
-        $activeAppointments = $cohortAppointments->filter(
-            fn (Appointment $a) => !in_array(strtolower((string) ($a->status ?? 'pending')), ['cancelled', 'no_show'], true)
-        )->values();
-
-        // Collect all paid Sales for this client in the exact same month/year on or after $entry->date
         $allClientAppointmentIds = $allClientAppointments->pluck('id')->all();
-        $cohortSales = collect();
+
+        // Build unified list of valid paid conversions (Sales + standalone paid Appointments without a Sale)
+        $conversions = [];
+        $saleAppointmentIds = [];
 
         if (Schema::hasTable('sales') && (!empty($customerIds) || !empty($allClientAppointmentIds))) {
             $clientSales = Sale::with('appointment')
@@ -371,86 +499,188 @@ class AdLeadEntry extends Model
                 })
                 ->get();
 
-            $cohortSales = $clientSales->filter(function (Sale $sale) use ($cohortYear, $cohortMonth, $entryDateStr) {
+            foreach ($clientSales as $sale) {
+                if ($sale->appointment_id) {
+                    $saleAppointmentIds[] = (int) $sale->appointment_id;
+                }
                 if ($sale->appointment && in_array(strtolower((string) $sale->appointment->status), ['cancelled', 'no_show'], true)) {
-                    return false;
+                    continue;
+                }
+                $amount = self::netSaleAmount($sale);
+                if ($amount <= 0) {
+                    continue;
+                }
+                $convDate = self::resolveSaleDate($sale);
+                $convBranch = $sale->appointment?->branch ?: $sale->branch;
+
+                $conversions[] = [
+                    'date_str' => $convDate->toDateString(),
+                    'timestamp' => $convDate->timestamp,
+                    'amount' => $amount,
+                    'branch' => in_array($convBranch, array_keys(self::BRANCHES), true) ? $convBranch : null,
+                    'appointment_id' => $sale->appointment_id ? (int) $sale->appointment_id : null,
+                ];
+            }
+        }
+
+        $saleAppointmentIds = array_values(array_unique($saleAppointmentIds));
+
+        foreach ($allClientAppointments as $appt) {
+            if (in_array((int) $appt->id, $saleAppointmentIds, true)) {
+                continue;
+            }
+            $statusLower = strtolower((string) ($appt->status ?? 'pending'));
+            if (in_array($statusLower, ['cancelled', 'no_show'], true)) {
+                continue;
+            }
+            if ($statusLower !== 'completed' && $appt->paid_at === null) {
+                continue;
+            }
+            $amount = self::appointmentBookedAmount($appt);
+            if ($amount <= 0) {
+                continue;
+            }
+            $convDate = $appt->appointment_date;
+            $convBranch = $appt->branch;
+
+            $conversions[] = [
+                'date_str' => $convDate->toDateString(),
+                'timestamp' => $convDate->timestamp,
+                'amount' => $amount,
+                'branch' => in_array($convBranch, array_keys(self::BRANCHES), true) ? $convBranch : null,
+                'appointment_id' => (int) $appt->id,
+            ];
+        }
+
+        // Last-touch single-winner attribution within [entry.date, entry.date + 30 days]
+        $attributedByEntryId = [];
+        $claimedConversionDates = [];
+
+        foreach ($conversions as $conv) {
+            $convDateStr = $conv['date_str'];
+            $winner = $entriesDesc->first(function (self $candidate) use ($convDateStr) {
+                $entryStartStr = Carbon::parse($candidate->date)->toDateString();
+                $entryEndStr = Carbon::parse($candidate->date)->addDays(self::ATTRIBUTION_WINDOW_DAYS)->toDateString();
+
+                return $convDateStr >= $entryStartStr && $convDateStr <= $entryEndStr;
+            });
+
+            if ($winner) {
+                $attributedByEntryId[$winner->id][] = $conv;
+                $claimedConversionDates[] = [
+                    'winner_id' => $winner->id,
+                    'date_str' => $convDateStr,
+                ];
+            }
+        }
+
+        $allLeadsCollection = (!empty($leadIds) && Schema::hasTable('leads'))
+            ? Lead::whereIn('id', $leadIds)->orderByDesc('id')->get()
+            : collect();
+
+        foreach ($entriesDesc as $entry) {
+            $entryStart = Carbon::parse($entry->date)->startOfDay();
+            $entryStartStr = $entryStart->toDateString();
+            $entryEndStr = $entryStart->copy()->addDays(self::ATTRIBUTION_WINDOW_DAYS)->toDateString();
+
+            $myConversions = $attributedByEntryId[$entry->id] ?? [];
+            $newBranch = $entry->branch;
+            $newTicketAmount = round((float) $entry->ticket_amount, 2);
+
+            if (!empty($myConversions)) {
+                $newTicketAmount = round((float) array_sum(array_column($myConversions, 'amount')), 2);
+
+                // Attribute branch from majority revenue among THIS entry's conversions (tie-break: earliest conversion)
+                $branchTotals = [];
+                $branchFirstTs = [];
+                foreach ($myConversions as $mc) {
+                    $b = $mc['branch'];
+                    if (!$b) {
+                        continue;
+                    }
+                    $branchTotals[$b] = ($branchTotals[$b] ?? 0.0) + (float) $mc['amount'];
+                    if (!isset($branchFirstTs[$b]) || $mc['timestamp'] < $branchFirstTs[$b]) {
+                        $branchFirstTs[$b] = $mc['timestamp'];
+                    }
                 }
 
-                $saleDate = self::resolveSaleDate($sale);
+                if (!empty($branchTotals)) {
+                    uksort($branchTotals, function (string $a, string $b) use ($branchTotals, $branchFirstTs) {
+                        $diff = $branchTotals[$b] <=> $branchTotals[$a];
+                        if ($diff !== 0) {
+                            return $diff;
+                        }
 
-                return $saleDate->year === $cohortYear
-                    && $saleDate->month === $cohortMonth
-                    && $saleDate->toDateString() >= $entryDateStr;
-            })->values();
-        }
+                        return ($branchFirstTs[$a] ?? 0) <=> ($branchFirstTs[$b] ?? 0);
+                    });
+                    $newBranch = array_key_first($branchTotals);
+                }
+            } else {
+                $conversionShiftedToNewerEntry = false;
+                foreach ($claimedConversionDates as $claimed) {
+                    if ($claimed['winner_id'] !== $entry->id
+                        && $claimed['date_str'] >= $entryStartStr
+                        && $claimed['date_str'] <= $entryEndStr
+                    ) {
+                        $conversionShiftedToNewerEntry = true;
+                        break;
+                    }
+                }
 
-        $paidAppointments = $activeAppointments->filter(
-            fn (Appointment $a) => strtolower((string) ($a->status ?? '')) === 'completed' || $a->paid_at !== null
-        )->values();
+                $activityInWindow = $activityDateStr >= $entryStartStr && $activityDateStr <= $entryEndStr;
 
-        $newBranch = $entry->branch;
-        $newTicketAmount = round((float) $entry->ticket_amount, 2);
+                $shouldReset = ($targetEntry && $entry->id === $targetEntry->id && $resetIfNoActivity)
+                    || (!$targetEntry && $resetIfNoActivity && $activityInWindow)
+                    || $conversionShiftedToNewerEntry;
 
-        if ($cohortSales->isNotEmpty()) {
-            $totalPaidRevenue = round((float) $cohortSales->sum(fn (Sale $s) => self::netSaleAmount($s)), 2);
-            $latestSale = $cohortSales->sortByDesc(fn (Sale $s) => self::resolveSaleDate($s)->timestamp)->first();
-            $primaryAppt = ($appointmentId ? $activeAppointments->firstWhere('id', $appointmentId) : null)
-                ?: $activeAppointments->sortByDesc(fn (Appointment $a) => Carbon::parse($a->appointment_datetime ?: $a->booking_date)->timestamp)->first();
-
-            $resolvedBranch = $primaryAppt?->branch
-                ?: ($latestSale->branch ?: ($latestSale->appointment?->branch ?: $entry->branch));
-
-            if (in_array($resolvedBranch, array_keys(self::BRANCHES), true)) {
-                $newBranch = $resolvedBranch;
+                if ($shouldReset) {
+                    $newBranch = null;
+                    $newTicketAmount = 0.0;
+                }
             }
-            $newTicketAmount = $totalPaidRevenue;
-        } elseif ($paidAppointments->isNotEmpty()) {
-            $primaryAppt = ($appointmentId ? $paidAppointments->firstWhere('id', $appointmentId) : null)
-                ?: $paidAppointments->sortByDesc(fn (Appointment $a) => Carbon::parse($a->appointment_datetime ?: $a->booking_date)->timestamp)->first();
 
-            if ($primaryAppt && in_array($primaryAppt->branch, array_keys(self::BRANCHES), true)) {
-                $newBranch = $primaryAppt->branch;
+            $updates = [];
+            if ($entry->branch !== $newBranch) {
+                $updates['branch'] = $newBranch;
+            }
+            if (round((float) $entry->ticket_amount, 2) !== round((float) $newTicketAmount, 2)) {
+                $updates['ticket_amount'] = $newTicketAmount;
+            }
+            if ($hasCustomerIdColumn && !$entry->customer_id && !empty($customerIds)) {
+                $updates['customer_id'] = $customerIds[0];
+            }
+            if ($hasLeadIdColumn && !$entry->lead_id && $allLeadsCollection->isNotEmpty()) {
+                $preferredLead = null;
+                if (!empty($myConversions)) {
+                    $attributedApptIds = array_values(array_filter(array_column($myConversions, 'appointment_id')));
+                    if (!empty($attributedApptIds)) {
+                        $preferredLead = $allLeadsCollection->first(
+                            fn (Lead $l) => $l->appointment_id && in_array((int) $l->appointment_id, $attributedApptIds, true)
+                        );
+                    }
+                }
+                if (!$preferredLead) {
+                    $preferredLead = $allLeadsCollection->first(function (Lead $l) use ($entryStartStr, $entryEndStr) {
+                        if (!$l->created_at) {
+                            return false;
+                        }
+                        $ld = Carbon::parse($l->created_at)->toDateString();
+
+                        return $ld >= Carbon::parse($entryStartStr)->subDays(self::ATTRIBUTION_WINDOW_DAYS)->toDateString()
+                            && $ld <= $entryEndStr;
+                    });
+                }
+                $updates['lead_id'] = ($preferredLead ?: $allLeadsCollection->first())->id;
             }
 
-            $paidTotal = round((float) $paidAppointments->sum(fn (Appointment $a) => self::appointmentBookedAmount($a)), 2);
-            if ($paidTotal > 0) {
-                $newTicketAmount = $paidTotal;
+            if (!empty($updates)) {
+                $entry->update($updates);
             }
-        } elseif ($resetIfNoActivity) {
-            $newBranch = null;
-            $newTicketAmount = 0.0;
         }
 
-        $updates = [];
-        if ($entry->branch !== $newBranch) {
-            $updates['branch'] = $newBranch;
-        }
-        if (round((float) $entry->ticket_amount, 2) !== round((float) $newTicketAmount, 2)) {
-            $updates['ticket_amount'] = $newTicketAmount;
-        }
-        if ($hasCustomerIdColumn && !$entry->customer_id && !empty($customerIds)) {
-            $updates['customer_id'] = $customerIds[0];
-        }
-        if ($hasLeadIdColumn && !$entry->lead_id && !empty($leadIds)) {
-            $preferredLeadId = null;
-            if ($appointmentId) {
-                $preferredLeadId = Lead::where('appointment_id', $appointmentId)->value('id');
-            }
-            if (!$preferredLeadId) {
-                $preferredLeadId = Lead::whereIn('id', $leadIds)
-                    ->whereYear('created_at', $cohortYear)
-                    ->whereMonth('created_at', $cohortMonth)
-                    ->orderByDesc('id')
-                    ->value('id');
-            }
-            $updates['lead_id'] = $preferredLeadId ?: $leadIds[0];
-        }
+        $returnEntry = $targetEntry ?: $coveringEntry;
 
-        if (!empty($updates)) {
-            $entry->update($updates);
-        }
-
-        return $entry->fresh();
+        return $returnEntry ? $returnEntry->fresh() : null;
     }
 
     /**
