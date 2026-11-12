@@ -37,6 +37,8 @@ class AdLeadEntry extends Model
         'phone',
         'category',
         'ticket_amount',
+        'old_airport_amount',
+        'wakrah_amount',
         'branch',
         'remarks',
         'created_by',
@@ -45,6 +47,8 @@ class AdLeadEntry extends Model
     protected $casts = [
         'date' => 'date',
         'ticket_amount' => 'decimal:2',
+        'old_airport_amount' => 'decimal:2',
+        'wakrah_amount' => 'decimal:2',
     ];
 
     public function customer()
@@ -63,8 +67,8 @@ class AdLeadEntry extends Model
     }
 
     /**
-     * Attribution window (in days) after an AdLeadEntry's date during which
-     * a paid conversion (Sale / completed Appointment) can be attributed to it.
+     * Legacy constant retained for backward compatibility; attribution now strictly
+     * enforces same-calendar-month boundaries [entry.date, endOfMonth(entry.date)].
      */
     public const ATTRIBUTION_WINDOW_DAYS = 30;
 
@@ -79,9 +83,214 @@ class AdLeadEntry extends Model
     }
 
     /**
+     * Return exact attributed net revenue for a specific branch ('old_airport' or 'wakrah'),
+     * supporting dual-branch visits in the same month while falling back to branch/ticket_amount
+     * when legacy/manual rows do not have explicit per-branch split columns populated.
+     */
+    public function branchRevenue(string $branch): float
+    {
+        if (!$this->isBooked() || !in_array($branch, array_keys(self::BRANCHES), true)) {
+            return 0.0;
+        }
+
+        if ($this->old_airport_amount !== null || $this->wakrah_amount !== null) {
+            return match ($branch) {
+                'old_airport' => round(max(0.0, (float) $this->old_airport_amount), 2),
+                'wakrah' => round(max(0.0, (float) $this->wakrah_amount), 2),
+                default => 0.0,
+            };
+        }
+
+        return $this->branch === $branch
+            ? round(max(0.0, (float) $this->ticket_amount), 2)
+            : 0.0;
+    }
+
+    /**
+     * True when this entry has positive attributed paid revenue at the given branch.
+     */
+    public function hasBranchConversion(string $branch): bool
+    {
+        return $this->branchRevenue($branch) > 0;
+    }
+
+    /**
+     * SQLite & MySQL compatible SQL expression stripping formatting characters from a phone column.
+     */
+    public static function normalizedPhoneSqlExpression(string $column = 'phone'): string
+    {
+        return "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE({$column}, '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')";
+    }
+
+    /**
+     * Build canonical normalized phone numbers, exact string candidates, and stripped-digit variants
+     * (covering 8-digit local Qatar numbers as well as +974, 974, 00974, leading-zero, spaced, and dashed variants).
+     *
+     * @param  array<int, string|null>  $rawPhones
+     * @return array{0: array<int, string>, 1: array<int, string>, 2: array<int, string>}
+     */
+    public static function buildPhoneLookupSets(array $rawPhones): array
+    {
+        $canonicalPhones = [];
+        $exactVariants = [];
+        $strippedDigitsSet = [];
+
+        foreach ($rawPhones as $raw) {
+            $rawStr = trim((string) $raw);
+            if ($rawStr === '') {
+                continue;
+            }
+
+            $exactVariants[] = $rawStr;
+            $digits = preg_replace('/\D+/', '', $rawStr);
+            if ($digits !== '') {
+                $exactVariants[] = $digits;
+                $strippedDigitsSet[] = $digits;
+            }
+
+            $normCustomer = Customer::normalizePhone($rawStr);
+            [$cc, $local] = Lead::splitPhone($digits);
+            $normLead = Lead::normalizePhone($cc, $local);
+
+            foreach ([$normCustomer, $normLead] as $norm) {
+                $norm = trim((string) $norm);
+                if ($norm === '') {
+                    continue;
+                }
+
+                $canonicalPhones[] = $norm;
+                $exactVariants[] = $norm;
+                $strippedDigitsSet[] = $norm;
+
+                if (strlen($norm) === 8) {
+                    $exactVariants[] = '974' . $norm;
+                    $exactVariants[] = '+974' . $norm;
+                    $exactVariants[] = '00974' . $norm;
+                    $exactVariants[] = '0' . $norm;
+
+                    $strippedDigitsSet[] = '974' . $norm;
+                    $strippedDigitsSet[] = '00974' . $norm;
+                    $strippedDigitsSet[] = '0' . $norm;
+                    $strippedDigitsSet[] = '9740' . $norm;
+                    $strippedDigitsSet[] = '009740' . $norm;
+                }
+            }
+        }
+
+        return [
+            array_values(array_unique(array_filter($canonicalPhones))),
+            array_values(array_unique(array_filter($exactVariants))),
+            array_values(array_unique(array_filter($strippedDigitsSet))),
+        ];
+    }
+
+    /**
+     * Add a phone matching clause matching both exact variants and stripped formatting variants.
+     */
+    public static function applyPhoneCohortClause(
+        $query,
+        array $exactVariants,
+        array $strippedDigitsSet,
+        string $boolean = 'or',
+        string $column = 'phone'
+    ): void {
+        if (empty($exactVariants) && empty($strippedDigitsSet)) {
+            return;
+        }
+
+        $method = strtolower($boolean) === 'and' ? 'where' : 'orWhere';
+        $sqlExpr = self::normalizedPhoneSqlExpression($column);
+
+        $query->{$method}(function ($sub) use ($exactVariants, $strippedDigitsSet, $column, $sqlExpr) {
+            if (!empty($exactVariants)) {
+                $sub->whereIn($column, $exactVariants);
+            }
+            if (!empty($strippedDigitsSet)) {
+                $placeholders = implode(', ', array_fill(0, count($strippedDigitsSet), '?'));
+                $sub->orWhereRaw("{$sqlExpr} IN ({$placeholders})", $strippedDigitsSet);
+            }
+        });
+    }
+
+    /**
+     * Resolve or create the single canonical Customer profile for a phone number,
+     * normalizing Qatar +974 / 974 / 00974 / spaced / dashed phones to the 8-digit local number.
+     */
+    public static function resolveOrCreateCanonicalCustomer(
+        ?string $rawPhone,
+        ?string $customerName = null,
+        ?Customer $hintCustomer = null
+    ): ?Customer {
+        if (!Schema::hasTable('customers')) {
+            return $hintCustomer;
+        }
+
+        $effectiveRaw = trim((string) ($rawPhone ?: $hintCustomer?->phone));
+        $canonicalPhone = Customer::normalizePhone($effectiveRaw);
+
+        if ($canonicalPhone === '' && $hintCustomer) {
+            return $hintCustomer;
+        }
+
+        if ($canonicalPhone === '') {
+            return null;
+        }
+
+        [, $exactVariants, $strippedDigits] = self::buildPhoneLookupSets([
+            $effectiveRaw,
+            $canonicalPhone,
+            $hintCustomer?->phone,
+        ]);
+
+        $matches = Customer::query()
+            ->where(function ($q) use ($hintCustomer, $exactVariants, $strippedDigits) {
+                if ($hintCustomer?->id) {
+                    $q->where('id', $hintCustomer->id);
+                }
+                self::applyPhoneCohortClause($q, $exactVariants, $strippedDigits, 'or', 'phone');
+            })
+            ->orderBy('id')
+            ->get();
+
+        // Prefer the Customer row already holding the canonical 8-digit phone; else earliest Customer record
+        $canonical = $matches->firstWhere('phone', $canonicalPhone) ?: $matches->first();
+        $cleanName = trim((string) $customerName);
+
+        if (!$canonical) {
+            return Customer::create([
+                'phone' => $canonicalPhone,
+                'name' => $cleanName !== '' ? $cleanName : 'Ad Lead Client',
+            ]);
+        }
+
+        $updates = [];
+        if (
+            $canonical->phone !== $canonicalPhone
+            && !Customer::where('phone', $canonicalPhone)->where('id', '!=', $canonical->id)->exists()
+        ) {
+            $updates['phone'] = $canonicalPhone;
+        }
+
+        $existingNameLower = strtolower(trim((string) $canonical->name));
+        if (
+            $cleanName !== ''
+            && strtolower($cleanName) !== 'ad lead client'
+            && ($existingNameLower === '' || $existingNameLower === 'walk-in' || $existingNameLower === 'ad lead client')
+        ) {
+            $updates['name'] = $cleanName;
+        }
+
+        if (!empty($updates)) {
+            $canonical->update($updates);
+        }
+
+        return $canonical;
+    }
+
+    /**
      * Build normalized phone candidates and matching customer IDs for this entry.
      *
-     * @return array{0: array<int, int>, 1: array<int, string>}
+     * @return array{0: array<int, int>, 1: array<int, string>, 2: array<int, string>}
      */
     public function resolveIdentityCohort(): array
     {
@@ -90,36 +299,27 @@ class AdLeadEntry extends Model
             $this->customer?->phone,
         ]);
 
-        $phoneCandidates = [];
-        foreach ($rawPhones as $raw) {
-            $digits = preg_replace('/\D+/', '', (string) $raw);
-            $normCustomer = Customer::normalizePhone((string) $raw);
-            [$cc, $local] = Lead::splitPhone($digits);
-            $normLead = Lead::normalizePhone($cc, $local);
-
-            foreach ([$raw, $digits, $normCustomer, $normLead] as $candidate) {
-                $trimmed = trim((string) $candidate);
-                if ($trimmed !== '') {
-                    $phoneCandidates[] = $trimmed;
-                }
-            }
-        }
-        $phoneCandidates = array_values(array_unique($phoneCandidates));
+        [, $phoneCandidates, $strippedDigits] = self::buildPhoneLookupSets($rawPhones);
 
         $customerIds = array_values(array_unique(array_filter([
             $this->customer_id,
         ])));
 
-        if (!empty($phoneCandidates) && Schema::hasTable('customers')) {
-            $matchedIds = Customer::whereIn('phone', $phoneCandidates)->pluck('id')->all();
+        if ((!empty($phoneCandidates) || !empty($strippedDigits)) && Schema::hasTable('customers')) {
+            $matchedIds = Customer::query()
+                ->where(function ($q) use ($phoneCandidates, $strippedDigits) {
+                    self::applyPhoneCohortClause($q, $phoneCandidates, $strippedDigits, 'or', 'phone');
+                })
+                ->pluck('id')
+                ->all();
             $customerIds = array_values(array_unique(array_merge($customerIds, $matchedIds)));
         }
 
-        return [$customerIds, $phoneCandidates];
+        return [$customerIds, $phoneCandidates, $strippedDigits];
     }
 
     /**
-     * Return a real non-cancelled / non-no-show Appointment for this client if one exists.
+     * Return a real non-cancelled / non-no-show Appointment for this client in the same month if one exists.
      */
     public function resolveVerifiedAppointment(): ?Appointment
     {
@@ -127,22 +327,22 @@ class AdLeadEntry extends Model
             return null;
         }
 
-        [$customerIds, $phoneCandidates] = $this->resolveIdentityCohort();
-        if (empty($customerIds) && empty($phoneCandidates)) {
+        [$customerIds, $phoneCandidates, $strippedDigits] = $this->resolveIdentityCohort();
+        if (empty($customerIds) && empty($phoneCandidates) && empty($strippedDigits)) {
             return null;
         }
 
-        $entryDateStr = $this->date ? Carbon::parse($this->date)->toDateString() : null;
+        $entryDate = $this->date ? Carbon::parse($this->date) : today();
+        $minDateStr = $entryDate->toDateString();
+        $maxDateStr = $entryDate->copy()->endOfMonth()->toDateString();
 
         $appointments = Appointment::query()
             ->whereNotIn('status', ['cancelled', 'no_show'])
-            ->where(function ($q) use ($customerIds, $phoneCandidates) {
+            ->where(function ($q) use ($customerIds, $phoneCandidates, $strippedDigits) {
                 if (!empty($customerIds)) {
                     $q->orWhereIn('customer_id', $customerIds);
                 }
-                if (!empty($phoneCandidates)) {
-                    $q->orWhereIn('phone', $phoneCandidates);
-                }
+                self::applyPhoneCohortClause($q, $phoneCandidates, $strippedDigits, 'or', 'phone');
             })
             ->orderByDesc('appointment_datetime')
             ->orderByDesc('id')
@@ -152,19 +352,16 @@ class AdLeadEntry extends Model
             return null;
         }
 
-        $todayStr = today()->toDateString();
-        $minDateStr = $entryDateStr ?: $todayStr;
-
-        return $appointments->first(function (Appointment $a) use ($minDateStr, $todayStr) {
+        return $appointments->first(function (Appointment $a) use ($minDateStr, $maxDateStr) {
             $apptDateStr = $a->appointment_date->toDateString();
 
-            return $apptDateStr >= $minDateStr || $apptDateStr >= $todayStr;
+            return $apptDateStr >= $minDateStr && $apptDateStr <= $maxDateStr;
         });
     }
 
     /**
      * True ONLY if the client has a real non-cancelled/non-no-show Appointment
-     * OR a verified paid Sale record on or after $this->date.
+     * OR a verified paid Sale record in the same calendar month on or after $this->date.
      */
     public function hasVerifiedCustomerConversion(): bool
     {
@@ -172,22 +369,50 @@ class AdLeadEntry extends Model
             return true;
         }
 
-        [$customerIds] = $this->resolveIdentityCohort();
-        if (empty($customerIds) || !Schema::hasTable('sales')) {
+        [$customerIds, $phoneCandidates, $strippedDigits] = $this->resolveIdentityCohort();
+        if ((empty($customerIds) && empty($phoneCandidates) && empty($strippedDigits)) || !Schema::hasTable('sales')) {
             return false;
         }
 
-        $entryDateStr = $this->date ? Carbon::parse($this->date)->toDateString() : null;
+        $entryDate = $this->date ? Carbon::parse($this->date) : today();
+        $minDateStr = $entryDate->toDateString();
+        $maxDateStr = $entryDate->copy()->endOfMonth()->toDateString();
+
+        $appointmentIds = [];
+        if (Schema::hasTable('appointments')) {
+            $appointmentIds = Appointment::query()
+                ->whereNotIn('status', ['cancelled', 'no_show'])
+                ->where(function ($q) use ($customerIds, $phoneCandidates, $strippedDigits) {
+                    if (!empty($customerIds)) {
+                        $q->orWhereIn('customer_id', $customerIds);
+                    }
+                    self::applyPhoneCohortClause($q, $phoneCandidates, $strippedDigits, 'or', 'phone');
+                })
+                ->pluck('id')
+                ->all();
+        }
+
+        if (empty($customerIds) && empty($appointmentIds)) {
+            return false;
+        }
 
         $sales = Sale::with('appointment')
-            ->whereIn('customer_id', $customerIds)
+            ->where(function ($q) use ($customerIds, $appointmentIds) {
+                if (!empty($customerIds)) {
+                    $q->orWhereIn('customer_id', $customerIds);
+                }
+                if (!empty($appointmentIds)) {
+                    $q->orWhereIn('appointment_id', $appointmentIds);
+                }
+            })
             ->get();
 
         foreach ($sales as $sale) {
             if ($sale->appointment && in_array(strtolower((string) $sale->appointment->status), ['cancelled', 'no_show'], true)) {
                 continue;
             }
-            if ($entryDateStr && self::resolveSaleDate($sale)->toDateString() < $entryDateStr) {
+            $saleDateStr = self::resolveSaleDate($sale)->toDateString();
+            if ($saleDateStr < $minDateStr || $saleDateStr > $maxDateStr) {
                 continue;
             }
             if (self::netSaleAmount($sale) > 0) {
@@ -279,10 +504,11 @@ class AdLeadEntry extends Model
 
     /**
      * Synchronize AdLeadEntry attribution for a client cohort using:
-     * - 30-day cross-month attribution window: [entry.date, entry.date + 30 days]
+     * - Canonical Customer Profile bridge (8-digit normalized Qatar phone across +974/974/00974/spaces/dashes)
+     * - Strict same-calendar-month attribution window: [entry.date, endOfMonth(entry.date)]
      * - Last-touch single-winner attribution: each Sale (and standalone paid Appointment)
-     *   attributes to at most ONE AdLeadEntry — the most recent entry on or before
-     *   the conversion date within 30 days, preventing double-counting and cross-branch hijacking.
+     *   attributes to at most ONE AdLeadEntry — the most recent entry in that calendar month
+     *   on or before the conversion date — with exact per-branch revenue splits.
      */
     public static function syncFromCustomerActivity(
         ?Customer $customer,
@@ -309,60 +535,56 @@ class AdLeadEntry extends Model
             $appointment?->phone,
         ]);
 
-        $phoneCandidates = [];
-        foreach ($rawPhones as $raw) {
-            $digits = preg_replace('/\D+/', '', (string) $raw);
-            $normCustomer = Customer::normalizePhone((string) $raw);
-            [$cc, $local] = Lead::splitPhone($digits);
-            $normLead = Lead::normalizePhone($cc, $local);
+        [$canonicalPhones, $phoneCandidates, $strippedDigits] = self::buildPhoneLookupSets($rawPhones);
 
-            foreach ([$raw, $digits, $normCustomer, $normLead] as $candidate) {
-                $trimmed = trim((string) $candidate);
-                if ($trimmed !== '') {
-                    $phoneCandidates[] = $trimmed;
-                }
-            }
-        }
-        $phoneCandidates = array_values(array_unique($phoneCandidates));
+        $preferredName = $targetEntry?->customer_name
+            ?: ($appointment?->customer_name ?: $customer?->name);
+        $preferredRawPhone = $phone
+            ?: ($targetEntry?->phone ?: ($appointment?->phone ?: $customer?->phone));
+
+        $canonicalCustomer = self::resolveOrCreateCanonicalCustomer(
+            rawPhone: $preferredRawPhone,
+            customerName: $preferredName,
+            hintCustomer: $customer
+        );
 
         $customerIds = array_values(array_unique(array_filter([
+            $canonicalCustomer?->id,
             $customer?->id,
             $targetEntry?->customer_id,
             $appointment?->customer_id,
         ])));
 
-        if (!empty($phoneCandidates) && Schema::hasTable('customers')) {
-            $matchedCustomerIds = Customer::whereIn('phone', $phoneCandidates)->pluck('id')->all();
+        if ((!empty($phoneCandidates) || !empty($strippedDigits)) && Schema::hasTable('customers')) {
+            $matchedCustomerIds = Customer::query()
+                ->where(function ($q) use ($phoneCandidates, $strippedDigits) {
+                    self::applyPhoneCohortClause($q, $phoneCandidates, $strippedDigits, 'or', 'phone');
+                })
+                ->pluck('id')
+                ->all();
             $customerIds = array_values(array_unique(array_merge($customerIds, $matchedCustomerIds)));
         }
 
         if (!empty($customerIds) && Schema::hasTable('customers')) {
             $extraPhones = Customer::whereIn('id', $customerIds)->pluck('phone')->filter()->all();
-            foreach ($extraPhones as $ep) {
-                $digits = preg_replace('/\D+/', '', (string) $ep);
-                $norm = Customer::normalizePhone((string) $ep);
-                foreach ([$ep, $digits, $norm] as $c) {
-                    if ($c !== '') {
-                        $phoneCandidates[] = $c;
-                    }
-                }
+            if (!empty($extraPhones)) {
+                [$canonicalPhones, $phoneCandidates, $strippedDigits] = self::buildPhoneLookupSets(
+                    array_merge($rawPhones, $extraPhones)
+                );
             }
-            $phoneCandidates = array_values(array_unique($phoneCandidates));
         }
 
         $leadIds = array_values(array_unique(array_filter([
             $targetEntry?->lead_id,
         ])));
 
-        if (Schema::hasTable('leads') && (!empty($customerIds) || !empty($phoneCandidates) || $appointmentId)) {
+        if (Schema::hasTable('leads') && (!empty($customerIds) || !empty($phoneCandidates) || !empty($strippedDigits) || $appointmentId)) {
             $matchedLeadIds = Lead::query()
-                ->where(function ($q) use ($customerIds, $phoneCandidates, $appointmentId) {
+                ->where(function ($q) use ($customerIds, $phoneCandidates, $strippedDigits, $appointmentId) {
                     if (!empty($customerIds)) {
                         $q->orWhereIn('customer_id', $customerIds);
                     }
-                    if (!empty($phoneCandidates)) {
-                        $q->orWhereIn('phone', $phoneCandidates);
-                    }
+                    self::applyPhoneCohortClause($q, $phoneCandidates, $strippedDigits, 'or', 'phone');
                     if ($appointmentId) {
                         $q->orWhere('appointment_id', $appointmentId);
                     }
@@ -373,24 +595,24 @@ class AdLeadEntry extends Model
             $leadIds = array_values(array_unique(array_merge($leadIds, $matchedLeadIds)));
         }
 
-        if (empty($customerIds) && empty($phoneCandidates) && empty($leadIds) && !$targetEntry) {
+        if (empty($customerIds) && empty($phoneCandidates) && empty($strippedDigits) && empty($leadIds) && !$targetEntry) {
             return null;
         }
 
         $hasLeadIdColumn = Schema::hasColumn('ad_lead_entries', 'lead_id');
         $hasCustomerIdColumn = Schema::hasColumn('ad_lead_entries', 'customer_id');
+        $hasSplitColumns = Schema::hasColumn('ad_lead_entries', 'old_airport_amount')
+            && Schema::hasColumn('ad_lead_entries', 'wakrah_amount');
 
         $clientEntries = self::query()
-            ->where(function ($q) use ($customerIds, $leadIds, $phoneCandidates, $hasCustomerIdColumn, $hasLeadIdColumn, $targetEntry) {
+            ->where(function ($q) use ($customerIds, $leadIds, $phoneCandidates, $strippedDigits, $hasCustomerIdColumn, $hasLeadIdColumn, $targetEntry) {
                 if ($hasCustomerIdColumn && !empty($customerIds)) {
                     $q->orWhereIn('customer_id', $customerIds);
                 }
                 if ($hasLeadIdColumn && !empty($leadIds)) {
                     $q->orWhereIn('lead_id', $leadIds);
                 }
-                if (!empty($phoneCandidates)) {
-                    $q->orWhereIn('phone', $phoneCandidates);
-                }
+                self::applyPhoneCohortClause($q, $phoneCandidates, $strippedDigits, 'or', 'phone');
                 if ($targetEntry?->id) {
                     $q->orWhere('id', $targetEntry->id);
                 }
@@ -400,13 +622,13 @@ class AdLeadEntry extends Model
             ->get();
 
         $activityDateStr = $activityCarbon->toDateString();
-        $windowEarliestEntryDate = $activityCarbon->copy()->subDays(self::ATTRIBUTION_WINDOW_DAYS)->toDateString();
+        $activityMonthStartStr = $activityCarbon->copy()->startOfMonth()->toDateString();
 
         $coveringEntry = $clientEntries
-            ->filter(function (self $e) use ($windowEarliestEntryDate, $activityDateStr) {
+            ->filter(function (self $e) use ($activityMonthStartStr, $activityDateStr) {
                 $d = Carbon::parse($e->date)->toDateString();
 
-                return $d >= $windowEarliestEntryDate && $d <= $activityDateStr;
+                return $d >= $activityMonthStartStr && $d <= $activityDateStr;
             })
             ->sortBy([
                 [fn (self $e) => Carbon::parse($e->date)->toDateString(), 'desc'],
@@ -416,7 +638,7 @@ class AdLeadEntry extends Model
 
         if (!$coveringEntry && !$targetEntry && !empty($leadIds) && Schema::hasTable('leads')) {
             $windowLeads = Lead::whereIn('id', $leadIds)
-                ->whereDate('created_at', '>=', $windowEarliestEntryDate)
+                ->whereDate('created_at', '>=', $activityMonthStartStr)
                 ->whereDate('created_at', '<=', $activityDateStr)
                 ->orderByDesc('created_at')
                 ->orderByDesc('id')
@@ -425,11 +647,19 @@ class AdLeadEntry extends Model
             $paidAdLead = $windowLeads->first(fn (Lead $l) => $l->isPaidAdLead());
             if ($paidAdLead) {
                 $leadDate = $paidAdLead->created_at ? Carbon::parse($paidAdLead->created_at)->toDateString() : $activityDateStr;
-                $resolvedCustomer = $customer ?: ($paidAdLead->customer_id ? Customer::find($paidAdLead->customer_id) : null);
+                $resolvedCustomer = $canonicalCustomer ?: self::resolveOrCreateCanonicalCustomer(
+                    rawPhone: $paidAdLead->phone ?: ($canonicalPhones[0] ?? ($phoneCandidates[0] ?? null)),
+                    customerName: $customer?->name,
+                    hintCustomer: $paidAdLead->customer_id ? Customer::find($paidAdLead->customer_id) : null
+                );
+                if ($resolvedCustomer && !in_array($resolvedCustomer->id, $customerIds, true)) {
+                    $customerIds[] = $resolvedCustomer->id;
+                }
+                $canonicalLeadPhone = Customer::normalizePhone($paidAdLead->phone ?: ($phoneCandidates[0] ?? ''));
                 $resolvedCategory = self::resolveCategoryFromLead($paidAdLead);
                 $entryPayload = [
                     'date' => $leadDate,
-                    'phone' => $paidAdLead->phone ?: ($phoneCandidates[0] ?? ''),
+                    'phone' => $canonicalLeadPhone !== '' ? $canonicalLeadPhone : ($paidAdLead->phone ?: ($phoneCandidates[0] ?? '')),
                     'category' => $resolvedCategory,
                     'ticket_amount' => 0,
                     'branch' => null,
@@ -448,6 +678,7 @@ class AdLeadEntry extends Model
                 $createdEntry = self::create($entryPayload);
                 $clientEntries->push($createdEntry);
                 $coveringEntry = $createdEntry;
+                $canonicalCustomer = $canonicalCustomer ?: $resolvedCustomer;
             }
         }
 
@@ -455,7 +686,11 @@ class AdLeadEntry extends Model
             return null;
         }
 
-        // Order descending by (date, id) so the first matching entry is the last-touch winner
+        if (!$canonicalCustomer && !empty($customerIds) && Schema::hasTable('customers')) {
+            $canonicalCustomer = Customer::find($customerIds[0]);
+        }
+
+        // Order descending by (date, id) so the first matching entry in that month is the last-touch winner
         $entriesDesc = $clientEntries
             ->sortBy([
                 [fn (self $e) => Carbon::parse($e->date)->toDateString(), 'desc'],
@@ -463,22 +698,28 @@ class AdLeadEntry extends Model
             ])
             ->values();
 
-        // Collect all appointments for this client cohort
+        // Collect all appointments for this client cohort and repair missing customer_id links
         $allClientAppointments = collect();
-        if (Schema::hasTable('appointments') && (!empty($customerIds) || !empty($phoneCandidates) || $appointmentId)) {
+        if (Schema::hasTable('appointments') && (!empty($customerIds) || !empty($phoneCandidates) || !empty($strippedDigits) || $appointmentId)) {
             $allClientAppointments = Appointment::query()
-                ->where(function ($q) use ($customerIds, $phoneCandidates, $appointmentId) {
+                ->where(function ($q) use ($customerIds, $phoneCandidates, $strippedDigits, $appointmentId) {
                     if (!empty($customerIds)) {
                         $q->orWhereIn('customer_id', $customerIds);
                     }
-                    if (!empty($phoneCandidates)) {
-                        $q->orWhereIn('phone', $phoneCandidates);
-                    }
+                    self::applyPhoneCohortClause($q, $phoneCandidates, $strippedDigits, 'or', 'phone');
                     if ($appointmentId) {
                         $q->orWhere('id', $appointmentId);
                     }
                 })
                 ->get();
+
+            if ($canonicalCustomer && Schema::hasColumn('appointments', 'customer_id')) {
+                foreach ($allClientAppointments as $apptRow) {
+                    if (!$apptRow->customer_id) {
+                        $apptRow->update(['customer_id' => $canonicalCustomer->id]);
+                    }
+                }
+            }
         }
 
         $allClientAppointmentIds = $allClientAppointments->pluck('id')->all();
@@ -500,6 +741,9 @@ class AdLeadEntry extends Model
                 ->get();
 
             foreach ($clientSales as $sale) {
+                if ($canonicalCustomer && !$sale->customer_id && Schema::hasColumn('sales', 'customer_id')) {
+                    $sale->update(['customer_id' => $canonicalCustomer->id]);
+                }
                 if ($sale->appointment_id) {
                     $saleAppointmentIds[] = (int) $sale->appointment_id;
                 }
@@ -552,15 +796,16 @@ class AdLeadEntry extends Model
             ];
         }
 
-        // Last-touch single-winner attribution within [entry.date, entry.date + 30 days]
+        // Strict same-calendar-month last-touch single-winner attribution: [entry.date, endOfMonth(entry.date)]
         $attributedByEntryId = [];
         $claimedConversionDates = [];
 
         foreach ($conversions as $conv) {
             $convDateStr = $conv['date_str'];
             $winner = $entriesDesc->first(function (self $candidate) use ($convDateStr) {
-                $entryStartStr = Carbon::parse($candidate->date)->toDateString();
-                $entryEndStr = Carbon::parse($candidate->date)->addDays(self::ATTRIBUTION_WINDOW_DAYS)->toDateString();
+                $entryStart = Carbon::parse($candidate->date);
+                $entryStartStr = $entryStart->toDateString();
+                $entryEndStr = $entryStart->copy()->endOfMonth()->toDateString();
 
                 return $convDateStr >= $entryStartStr && $convDateStr <= $entryEndStr;
             });
@@ -581,16 +826,22 @@ class AdLeadEntry extends Model
         foreach ($entriesDesc as $entry) {
             $entryStart = Carbon::parse($entry->date)->startOfDay();
             $entryStartStr = $entryStart->toDateString();
-            $entryEndStr = $entryStart->copy()->addDays(self::ATTRIBUTION_WINDOW_DAYS)->toDateString();
+            $entryMonthStartStr = $entryStart->copy()->startOfMonth()->toDateString();
+            $entryEndStr = $entryStart->copy()->endOfMonth()->toDateString();
 
             $myConversions = $attributedByEntryId[$entry->id] ?? [];
             $newBranch = $entry->branch;
             $newTicketAmount = round((float) $entry->ticket_amount, 2);
+            $newOaAmount = $entry->old_airport_amount !== null ? round((float) $entry->old_airport_amount, 2) : null;
+            $newWkAmount = $entry->wakrah_amount !== null ? round((float) $entry->wakrah_amount, 2) : null;
 
             if (!empty($myConversions)) {
                 $newTicketAmount = round((float) array_sum(array_column($myConversions, 'amount')), 2);
+                $newOaAmount = 0.0;
+                $newWkAmount = 0.0;
 
-                // Attribute branch from majority revenue among THIS entry's conversions (tie-break: earliest conversion)
+                // Attribute primary branch from majority revenue among THIS entry's conversions (tie-break: earliest conversion),
+                // while storing exact per-branch net revenue in old_airport_amount and wakrah_amount.
                 $branchTotals = [];
                 $branchFirstTs = [];
                 foreach ($myConversions as $mc) {
@@ -598,7 +849,13 @@ class AdLeadEntry extends Model
                     if (!$b) {
                         continue;
                     }
-                    $branchTotals[$b] = ($branchTotals[$b] ?? 0.0) + (float) $mc['amount'];
+                    $amt = (float) $mc['amount'];
+                    $branchTotals[$b] = ($branchTotals[$b] ?? 0.0) + $amt;
+                    if ($b === 'old_airport') {
+                        $newOaAmount = round($newOaAmount + $amt, 2);
+                    } elseif ($b === 'wakrah') {
+                        $newWkAmount = round($newWkAmount + $amt, 2);
+                    }
                     if (!isset($branchFirstTs[$b]) || $mc['timestamp'] < $branchFirstTs[$b]) {
                         $branchFirstTs[$b] = $mc['timestamp'];
                     }
@@ -636,6 +893,8 @@ class AdLeadEntry extends Model
                 if ($shouldReset) {
                     $newBranch = null;
                     $newTicketAmount = 0.0;
+                    $newOaAmount = 0.0;
+                    $newWkAmount = 0.0;
                 }
             }
 
@@ -646,8 +905,24 @@ class AdLeadEntry extends Model
             if (round((float) $entry->ticket_amount, 2) !== round((float) $newTicketAmount, 2)) {
                 $updates['ticket_amount'] = $newTicketAmount;
             }
-            if ($hasCustomerIdColumn && !$entry->customer_id && !empty($customerIds)) {
-                $updates['customer_id'] = $customerIds[0];
+            if ($hasSplitColumns) {
+                $currOa = $entry->old_airport_amount !== null ? round((float) $entry->old_airport_amount, 2) : null;
+                $currWk = $entry->wakrah_amount !== null ? round((float) $entry->wakrah_amount, 2) : null;
+                if ($currOa !== $newOaAmount) {
+                    $updates['old_airport_amount'] = $newOaAmount;
+                }
+                if ($currWk !== $newWkAmount) {
+                    $updates['wakrah_amount'] = $newWkAmount;
+                }
+            }
+            if ($hasCustomerIdColumn && $canonicalCustomer && (int) $entry->customer_id !== (int) $canonicalCustomer->id) {
+                if (!$entry->customer_id || in_array((int) $entry->customer_id, $customerIds, true)) {
+                    $updates['customer_id'] = $canonicalCustomer->id;
+                }
+            }
+            $normalizedEntryPhone = Customer::normalizePhone($entry->phone);
+            if ($normalizedEntryPhone !== '' && $entry->phone !== $normalizedEntryPhone) {
+                $updates['phone'] = $normalizedEntryPhone;
             }
             if ($hasLeadIdColumn && !$entry->lead_id && $allLeadsCollection->isNotEmpty()) {
                 $preferredLead = null;
@@ -660,14 +935,13 @@ class AdLeadEntry extends Model
                     }
                 }
                 if (!$preferredLead) {
-                    $preferredLead = $allLeadsCollection->first(function (Lead $l) use ($entryStartStr, $entryEndStr) {
+                    $preferredLead = $allLeadsCollection->first(function (Lead $l) use ($entryMonthStartStr, $entryEndStr) {
                         if (!$l->created_at) {
                             return false;
                         }
                         $ld = Carbon::parse($l->created_at)->toDateString();
 
-                        return $ld >= Carbon::parse($entryStartStr)->subDays(self::ATTRIBUTION_WINDOW_DAYS)->toDateString()
-                            && $ld <= $entryEndStr;
+                        return $ld >= $entryMonthStartStr && $ld <= $entryEndStr;
                     });
                 }
                 $updates['lead_id'] = ($preferredLead ?: $allLeadsCollection->first())->id;

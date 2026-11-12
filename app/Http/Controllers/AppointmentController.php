@@ -189,6 +189,14 @@ class AppointmentController extends Controller
 
     public function store(Request $request)
     {
+        if ($request->filled('phone') && is_string($request->input('phone'))) {
+            $sanitizedPhone = preg_replace('/[\s\-\(\)]+/', '', trim($request->input('phone')));
+            if (str_starts_with($sanitizedPhone, '00')) {
+                $sanitizedPhone = '+' . substr($sanitizedPhone, 2);
+            }
+            $request->merge(['phone' => $sanitizedPhone]);
+        }
+
         $isUnscheduled = $request->boolean('unscheduled')
             || ($request->filled('booking_date') && !$request->filled('start_time') && !$request->filled('appointment_datetime'));
 
@@ -586,23 +594,16 @@ class AppointmentController extends Controller
      */
     private function findOrCreateCustomer(?string $phone, ?string $name): ?Customer
     {
-        $rawPhone = preg_replace('/\D/', '', (string) $phone);
-        [$countryCode, $localNumber] = Lead::splitPhone($rawPhone);
-        $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
-        $withQatarCode = strlen($normalizedPhone) === 8 ? '974' . $normalizedPhone : null;
-        $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $rawPhone, $withQatarCode])));
-
-        if (empty($phoneCandidates)) {
+        $customer = AdLeadEntry::resolveOrCreateCanonicalCustomer($phone, $name);
+        if (!$customer) {
             return null;
         }
 
-        $customer = Customer::whereIn('phone', $phoneCandidates)->first()
-            ?: new Customer(['phone' => $normalizedPhone !== '' ? $normalizedPhone : $rawPhone]);
-
-        if ($name) {
-            $customer->name = $name;
+        $cleanName = trim((string) $name);
+        if ($cleanName !== '' && $customer->name !== $cleanName) {
+            $customer->name = $cleanName;
+            $customer->save();
         }
-        $customer->save();
 
         return $customer;
     }
@@ -693,6 +694,14 @@ class AppointmentController extends Controller
 
     public function update(Request $request, Appointment $appointment)
     {
+        if ($request->filled('phone') && is_string($request->input('phone'))) {
+            $sanitizedPhone = preg_replace('/[\s\-\(\)]+/', '', trim($request->input('phone')));
+            if (str_starts_with($sanitizedPhone, '00')) {
+                $sanitizedPhone = '+' . substr($sanitizedPhone, 2);
+            }
+            $request->merge(['phone' => $sanitizedPhone]);
+        }
+
         $request->validate([
             'customer_name' => 'nullable|string|max:255',
             'phone' => ['nullable', 'string', 'max:20', 'regex:/^\+?[1-9]\d{6,14}$/'],

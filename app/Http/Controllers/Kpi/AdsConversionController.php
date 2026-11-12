@@ -16,8 +16,20 @@ class AdsConversionController extends Controller
             ? 'analytics'
             : 'leads';
 
-        $entriesFrom = $request->date('entries_from');
-        $entriesTo = $request->date('entries_to');
+        $rawMonth = trim((string) $request->query('month', ''));
+        if ($rawMonth !== '' && preg_match('/^\d{4}-\d{2}$/', $rawMonth)) {
+            $monthStart = \Illuminate\Support\Carbon::createFromFormat('Y-m-d', $rawMonth . '-01')->startOfMonth()->startOfDay();
+            $defaultFrom = $monthStart->copy();
+            $defaultTo = $rawMonth === now()->format('Y-m')
+                ? now()->copy()->endOfDay()
+                : $monthStart->copy()->endOfMonth()->endOfDay();
+        } else {
+            $defaultFrom = now()->copy()->startOfMonth()->startOfDay();
+            $defaultTo = now()->copy()->endOfDay();
+        }
+
+        $entriesFrom = $request->date('entries_from') ?? $defaultFrom->copy();
+        $entriesTo = $request->date('entries_to') ?? $defaultTo->copy();
 
         $hasCustomerId = Schema::hasColumn('ad_lead_entries', 'customer_id');
 
@@ -31,22 +43,16 @@ class AdsConversionController extends Controller
             ->appends(array_filter([
                 'entries_from' => $entriesFrom?->format('Y-m-d'),
                 'entries_to' => $entriesTo?->format('Y-m-d'),
+                'month' => $rawMonth !== '' ? $rawMonth : null,
                 'tab' => 'leads',
             ]));
 
         $categories = AdLeadEntry::availableCategories();
         $branches = AdLeadEntry::BRANCHES;
 
-        // Ads Analytics: a live, non-persisted breakdown for a date range —
-        // no "report" needs to be generated/saved to see it. Defaults to the
-        // full span of logged leads when no range is picked.
-        $earliestLogged = AdLeadEntry::min('date');
-        $latestLogged = AdLeadEntry::max('date');
-
-        $analyticsFrom = $request->date('analytics_from')
-            ?? ($earliestLogged ? \Carbon\Carbon::parse($earliestLogged) : now());
-        $analyticsTo = $request->date('analytics_to')
-            ?? ($latestLogged ? \Carbon\Carbon::parse($latestLogged) : now());
+        // Ads Analytics: defaults to current month MTD (or selected ?month) when no explicit range is passed.
+        $analyticsFrom = $request->date('analytics_from') ?? $defaultFrom->copy();
+        $analyticsTo = $request->date('analytics_to') ?? $defaultTo->copy();
 
         $analyticsReport = new KpiAdsConversionReport([
             'date_from' => $analyticsFrom,
@@ -58,6 +64,7 @@ class AdsConversionController extends Controller
             ->appends(array_filter([
                 'analytics_from' => $request->filled('analytics_from') ? $analyticsFrom->format('Y-m-d') : null,
                 'analytics_to' => $request->filled('analytics_to') ? $analyticsTo->format('Y-m-d') : null,
+                'month' => $rawMonth !== '' ? $rawMonth : null,
                 'tab' => 'analytics',
             ]));
 

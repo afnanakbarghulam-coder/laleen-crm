@@ -33,6 +33,7 @@ use App\Support\StaffSalesAnalytics;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -814,17 +815,31 @@ class LaleenCommandCenterService
     public function read_marketing_and_ads_pulse(): array
     {
         $now = now();
+        $periodStart = $now->copy()->startOfMonth()->startOfDay();
+        $periodEnd = $now->copy()->endOfDay();
+
+        $adCols = ['id', 'branch', 'ticket_amount', 'category'];
+        if (Schema::hasColumn('ad_lead_entries', 'old_airport_amount')) {
+            $adCols[] = 'old_airport_amount';
+        }
+        if (Schema::hasColumn('ad_lead_entries', 'wakrah_amount')) {
+            $adCols[] = 'wakrah_amount';
+        }
+
         $adLeads = AdLeadEntry::query()
-            ->whereYear('date', $now->year)
-            ->whereMonth('date', $now->month)
-            ->get(['id', 'branch', 'ticket_amount', 'category']);
+            ->whereBetween('date', [$periodStart, $periodEnd])
+            ->get($adCols);
 
         $totalAdLeads = $adLeads->count();
-        $bookedAdLeads = $adLeads->filter(fn (AdLeadEntry $e) => $e->isBooked())->count();
+        $bookedAdLeadsCollection = $adLeads->filter(fn (AdLeadEntry $e) => $e->isBooked());
+        $bookedAdLeads = $bookedAdLeadsCollection->count();
         $adConversionPct = $totalAdLeads > 0 ? round(($bookedAdLeads / $totalAdLeads) * 100, 1) : 0.0;
-        $attributedRevenueQar = round((float) $adLeads->sum('ticket_amount'), 2);
+        $oaAdRevenueQar = round((float) $bookedAdLeadsCollection->sum(fn (AdLeadEntry $e) => $e->branchRevenue('old_airport')), 2);
+        $wkAdRevenueQar = round((float) $bookedAdLeadsCollection->sum(fn (AdLeadEntry $e) => $e->branchRevenue('wakrah')), 2);
+        $attributedRevenueQar = round((float) $bookedAdLeadsCollection->sum('ticket_amount'), 2);
 
         $adsByPhase = KpiMonthlyAd::query()
+            ->where('plan_month', $now->format('Y-m'))
             ->selectRaw('phase, COUNT(*) as total, SUM(COALESCE(total_budget, 0)) as budget_sum')
             ->groupBy('phase')
             ->get()
@@ -845,7 +860,21 @@ class LaleenCommandCenterService
         $reelTarget = SocialContentPlan::WEEKLY_REEL_TARGET;
         $storiesTarget = SocialContentPlan::WEEKLY_STORIES_TARGET;
 
-        $contentCompliancePct = round((($reelsPosted + $storiesPosted) / max(1, $reelTarget + $storiesTarget)) * 100, 1);
+        $daysElapsed = max(1, (int) $now->day);
+        $elapsedWeeks = max(1, min(4, (int) ceil($daysElapsed / 7)));
+        $weeklyItemsTarget = $reelTarget + $storiesTarget;
+        $cumulativeMtdTarget = min($weeklyItemsTarget * 4, $weeklyItemsTarget * $elapsedWeeks);
+
+        $mtdPlans = SocialContentPlan::query()
+            ->whereBetween('week_start_date', [
+                $periodStart->copy()->startOfWeek(Carbon::MONDAY)->startOfDay(),
+                $periodEnd,
+            ])
+            ->get(['is_reel_posted', 'are_stories_posted']);
+
+        $mtdItemsCompleted = $mtdPlans->where('is_reel_posted', true)->count()
+            + $mtdPlans->where('are_stories_posted', true)->count();
+        $contentCompliancePct = round(min(100.0, ($mtdItemsCompleted / max(1, $cumulativeMtdTarget)) * 100), 1);
 
         return [
             'current_month' => $now->format('F Y'),
@@ -855,12 +884,16 @@ class LaleenCommandCenterService
             'ad_conversion_target_pct' => 20.0,
             'ad_conversion_verdict' => $adConversionPct >= 20.0 ? 'PASS (>=20%)' : 'BELOW FLOOR (<20%)',
             'attributed_ad_revenue_qar' => $attributedRevenueQar,
+            'old_airport_ad_revenue_qar' => $oaAdRevenueQar,
+            'wakrah_ad_revenue_qar' => $wkAdRevenueQar,
             'monthly_ads_by_phase' => $adsByPhase,
             'week_start_date' => $weekStart,
             'reels_posted' => $reelsPosted,
             'reels_target' => $reelTarget,
             'stories_posted' => $storiesPosted,
             'stories_target' => $storiesTarget,
+            'mtd_items_completed' => $mtdItemsCompleted,
+            'cumulative_mtd_target' => $cumulativeMtdTarget,
             'content_compliance_pct' => $contentCompliancePct,
         ];
     }

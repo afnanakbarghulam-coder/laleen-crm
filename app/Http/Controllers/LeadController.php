@@ -1006,16 +1006,16 @@ class LeadController extends Controller
     private function linkSameMonthAdLeadEntries(Lead $lead, Customer $customer, string $normalizedPhone, ?int $mergedFromLeadId = null): void
     {
         $refDate = $lead->created_at ? Carbon::parse($lead->created_at) : now();
-        $windowStart = $refDate->copy()->subDays(AdLeadEntry::ATTRIBUTION_WINDOW_DAYS)->toDateString();
-        $windowEnd = $refDate->copy()->addDays(AdLeadEntry::ATTRIBUTION_WINDOW_DAYS)->toDateString();
+        $windowStart = $refDate->copy()->startOfMonth()->startOfDay();
+        $windowEnd = $refDate->copy()->endOfMonth()->endOfDay();
+
+        [, $phoneVariants, $strippedDigits] = AdLeadEntry::buildPhoneLookupSets([$normalizedPhone]);
 
         AdLeadEntry::query()
             ->whereBetween('date', [$windowStart, $windowEnd])
-            ->where(function ($q) use ($customer, $normalizedPhone, $mergedFromLeadId) {
+            ->where(function ($q) use ($customer, $phoneVariants, $strippedDigits, $mergedFromLeadId) {
                 $q->where('customer_id', $customer->id);
-                if ($normalizedPhone !== '') {
-                    $q->orWhere('phone', $normalizedPhone);
-                }
+                AdLeadEntry::applyPhoneCohortClause($q, $phoneVariants, $strippedDigits, 'or', 'phone');
                 if ($mergedFromLeadId) {
                     $q->orWhere('lead_id', $mergedFromLeadId);
                 }

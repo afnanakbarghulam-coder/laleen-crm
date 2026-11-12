@@ -451,9 +451,9 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
         $this->assertSame(0.0, (float) $adEntry->ticket_amount);
     }
 
-    public function test_thirty_day_cross_month_window_and_last_touch_single_winner_prevent_double_counting_and_branch_hijack(): void
+    public function test_same_calendar_month_window_and_last_touch_single_winner_prevent_double_counting_and_branch_hijack(): void
     {
-        // Scenario A: Cross-month conversion (Nov 29 Ad Lead -> Dec 02 Checkout = 3 days later)
+        // Scenario A: Strict same-month boundary (Nov 29 Ad Lead -> Dec 02 Checkout stays isolated; Nov 30 Checkout attributes)
         $this->actingAs($this->admin)
             ->post(route('kpi.ad-leads.store'), [
                 'date' => '2026-11-29',
@@ -482,6 +482,31 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
         $dec2Appt = Appointment::where('customer_id', $nov29Entry->customer_id)->firstOrFail();
         $this->actingAs($this->admin)
             ->post(route('appointments.revenue.storePayment', $dec2Appt->id), [
+                'payments' => ['card' => 300],
+            ]);
+
+        $nov29Entry->refresh();
+        $this->assertNull($nov29Entry->branch, 'December checkout must NOT bleed back into November AdLeadEntry');
+        $this->assertSame(0.0, (float) $nov29Entry->ticket_amount);
+
+        // Same-month checkout on Nov 30 DOES attribute to Nov 29 AdLeadEntry
+        $this->actingAs($this->admin)
+            ->post(route('appointments.store'), [
+                'customer_name' => 'Cross Month Client',
+                'phone' => '55991100',
+                'service_name' => [$this->facialService->name],
+                'appointment_datetime' => '2026-11-30 14:00:00',
+                'branch' => 'old_airport',
+                'staff_id' => $this->primaryStylist->id,
+                'status' => 'confirmed',
+                'price' => 300,
+            ]);
+
+        $nov30Appt = Appointment::where('customer_id', $nov29Entry->customer_id)
+            ->whereDate('booking_date', '2026-11-30')
+            ->firstOrFail();
+        $this->actingAs($this->admin)
+            ->post(route('appointments.revenue.storePayment', $nov30Appt->id), [
                 'payments' => ['card' => 300],
             ]);
 

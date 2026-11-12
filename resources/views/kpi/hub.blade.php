@@ -30,7 +30,9 @@
 
         $totalAdRev = (float) ($ayan['total_ad_revenue_qar'] ?? ($oaRev + $wkRev));
         $adConv = (float) ($ayan['ad_conversion_pct'] ?? 0);
+        $adConvBarPct = (float) ($ayan['ad_conversion_achievement_pct'] ?? min(100.0, ($adConv / 20.0) * 100));
         $adConvPass = $adConv >= 20.0;
+        $pipelineScheduledLeads = (int) ($ayan['pipeline_booked_ad_leads'] ?? 0);
 
         $ayanOversightPct = (float) ($ayan['social_oversight_pct'] ?? 0);
         $ayanOversightPass = !empty($ayan['social_oversight_passing']);
@@ -66,12 +68,13 @@
         // Sana metrics
         $sanaReels = (int) ($sana['published_reels'] ?? 0);
         $sanaStories = (int) ($sana['published_stories'] ?? 0);
-        $sanaPostedTotal = $sanaReels + $sanaStories;
+        $sanaPostedTotal = (int) ($sana['mtd_items_completed'] ?? ($sanaReels + $sanaStories));
+        $sanaCumulativeTarget = (int) ($sana['cumulative_mtd_target'] ?? 11);
         $execPct = (float) ($sana['weekly_execution_pct'] ?? 0);
         $contentPass = isset($sana['content_passing']) ? (bool) $sana['content_passing'] : ($sanaReels >= 4 && $sanaStories >= 7);
 
         $lateCount = (int) ($sana['late_replies_count'] ?? 0);
-        $repliesPass = ($lateCount === 0);
+        $repliesPass = isset($sana['replies_sla_passing']) ? (bool) $sana['replies_sla_passing'] : false;
 
         $sanaOverallPct = (float) ($sana['overall_score_pct'] ?? 0);
         $sanaPassingCount = (int) ($sana['passing_kpis_count'] ?? 0);
@@ -153,6 +156,14 @@
     @endphp
 
     <div class="luxe-exec-dashboard">
+        <svg width="0" height="0" aria-hidden="true" style="position:absolute;pointer-events:none;overflow:hidden;">
+            <defs>
+                <linearGradient id="gradEmerald" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#34d399" stop-opacity="0.38"/>
+                    <stop offset="100%" stop-color="#34d399" stop-opacity="0.0"/>
+                </linearGradient>
+            </defs>
+        </svg>
         {{-- =====================================================================
              1. TOP HEADER BAR
              ===================================================================== --}}
@@ -247,7 +258,7 @@
 
                 <div class="luxe-card-delta">
                     <span class="hl-rose">{{ number_format($totalAdRev, 0) }} / {{ number_format($mtdCombinedTarget, 0) }} QAR MTD</span> ({{ number_format($adConv, 1) }}% Conv) &bull;
-                    <span>{{ $sanaPostedTotal }}/11 Content</span>
+                    <span>{{ $sanaPostedTotal }}/{{ $sanaCumulativeTarget }} Content</span>
                 </div>
 
                 <div class="luxe-card-viz viz-bar">
@@ -516,7 +527,7 @@
                             <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.ads.index') }}" class="luxe-owner-tag tag-ayan" title="Open Ads Conversion">AYAN &nearr;</a>
+                    <a href="{{ route('kpi.ads.index', ['month' => $selectedMonth ?? now()->format('Y-m')]) }}" class="luxe-owner-tag tag-ayan" title="Open Ads Conversion">AYAN &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Old Airport Ad Revenue</div>
@@ -548,7 +559,7 @@
                             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.ads.index') }}" class="luxe-owner-tag tag-ayan" title="Open Ads Conversion">AYAN &nearr;</a>
+                    <a href="{{ route('kpi.ads.index', ['month' => $selectedMonth ?? now()->format('Y-m')]) }}" class="luxe-owner-tag tag-ayan" title="Open Ads Conversion">AYAN &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Wakrah Ad Revenue</div>
@@ -581,7 +592,7 @@
                             <polyline points="17 6 23 6 23 12"></polyline>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.ads-plan.index') }}" class="luxe-owner-tag tag-ayan" title="Open Ads Kanban">AYAN &nearr;</a>
+                    <a href="{{ route('kpi.ads.index', ['month' => $selectedMonth ?? now()->format('Y-m')]) }}" class="luxe-owner-tag tag-ayan" title="Open Ads Conversion">AYAN &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Paid Ad Conversion</div>
@@ -591,23 +602,17 @@
                 </div>
 
                 <div class="luxe-card-delta">
-                    Target: <span class="{{ $adConvPass ? 'hl-emerald' : 'hl-ruby' }}">&ge; 20.0%</span> booked ({{ $ayan['booked_ad_leads'] ?? 0 }}/{{ $ayan['total_ad_leads'] ?? 0 }})
+                    Target: <span class="{{ $adConvPass ? 'hl-emerald' : 'hl-ruby' }}">&ge; 20.0%</span> paid ({{ $ayan['booked_ad_leads'] ?? 0 }}/{{ $ayan['total_ad_leads'] ?? 0 }})@if($pipelineScheduledLeads > 0) &bull; <span class="hl-champagne">{{ $pipelineScheduledLeads }} scheduled on calendar</span>@endif
                 </div>
 
-                <div class="luxe-card-viz viz-spark">
-                    <svg viewBox="0 0 200 52" preserveAspectRatio="none" class="luxe-sparkline">
-                        <defs>
-                            <linearGradient id="gradEmerald" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="#34d399" stop-opacity="0.38"/>
-                                <stop offset="100%" stop-color="#34d399" stop-opacity="0.0"/>
-                            </linearGradient>
-                        </defs>
-                        <path d="M4,42 C36,38 56,18 92,26 C128,34 156,10 196,14 L196,50 L4,50 Z" fill="url(#gradEmerald)"/>
-                        <path d="M4,42 C36,38 56,18 92,26 C128,34 156,10 196,14" fill="none" stroke="#34d399" stroke-width="2.2" stroke-linecap="round"/>
-                        <circle cx="92" cy="26" r="3" fill="#140c0f" stroke="#34d399" stroke-width="2"/>
-                        <circle cx="164" cy="14" r="3" fill="#140c0f" stroke="#34d399" stroke-width="2"/>
-                        <circle cx="196" cy="14" r="3.5" fill="#34d399"/>
-                    </svg>
+                <div class="luxe-card-viz viz-bar">
+                    <div class="luxe-bar-track">
+                        <div class="luxe-bar-fill {{ $adConvPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $adConvBarPct)) }}%"></div>
+                    </div>
+                    <div class="luxe-bar-scale">
+                        <span>0%</span>
+                        <span>20% Target</span>
+                    </div>
                 </div>
             </article>
 
@@ -631,7 +636,7 @@
                 </div>
 
                 <div class="luxe-card-delta">
-                    <span class="{{ $contentPass ? 'hl-emerald' : 'hl-rose' }}">{{ $sanaPostedTotal }}/11 Content</span> &bull;
+                    <span class="{{ $contentPass ? 'hl-emerald' : 'hl-rose' }}">{{ $sanaPostedTotal }}/{{ $sanaCumulativeTarget }} Content</span> &bull;
                     <span class="{{ $repliesPass ? 'hl-emerald' : 'hl-ruby' }}">{{ $lateCount }} Late Replies</span>
                 </div>
 
@@ -810,7 +815,7 @@
                 <div class="luxe-card-label">Weekly Content Plan</div>
 
                 <div class="luxe-card-hero">
-                    {{ $sanaPostedTotal }} <span class="luxe-unit">/ 11</span>
+                    {{ $sanaPostedTotal }} <span class="luxe-unit">/ {{ $sanaCumulativeTarget }}</span>
                 </div>
 
                 <div class="luxe-card-delta">
@@ -855,7 +860,7 @@
                                 <button type="submit" class="luxe-micro-btn" title="Clear 1 Late Reply">&minus;</button>
                             </form>
                         @endif
-                        <a href="{{ route('kpi.content.index') }}" class="luxe-owner-tag tag-sana" title="Open Content KPIs">SANA &nearr;</a>
+                        <a href="{{ route('kpi.content-calendar.index') }}" class="luxe-owner-tag tag-sana" title="Open Weekly Content Schedule">SANA &nearr;</a>
                     </div>
                 </div>
 

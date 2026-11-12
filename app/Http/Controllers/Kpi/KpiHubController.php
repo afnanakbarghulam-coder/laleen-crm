@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AdLeadEntry;
 use App\Models\Appointment;
 use App\Models\BranchEvaluation;
+use App\Models\Customer;
 use App\Models\KpiAdsConversionReport;
 use App\Models\KpiAgentTargetReport;
 use App\Models\KpiChatEvaluation;
@@ -19,6 +20,8 @@ use App\Models\User;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class KpiHubController extends Controller
 {
@@ -166,17 +169,23 @@ class KpiHubController extends Controller
         // =========================================================================
         // A. AYAN — Marketing, Ads Revenue & Content Oversight (01 – Current Day)
         // =========================================================================
+        $adLeadColumns = ['id', 'date', 'customer_id', 'phone', 'branch', 'ticket_amount', 'category', 'lead_id'];
+        if (Schema::hasColumn('ad_lead_entries', 'old_airport_amount')) {
+            $adLeadColumns[] = 'old_airport_amount';
+        }
+        if (Schema::hasColumn('ad_lead_entries', 'wakrah_amount')) {
+            $adLeadColumns[] = 'wakrah_amount';
+        }
+
         $monthAdLeads = AdLeadEntry::query()
             ->whereBetween('date', [$periodStart, $periodEnd])
-            ->get(['id', 'branch', 'ticket_amount', 'category', 'lead_id']);
+            ->get($adLeadColumns);
 
-        $oaAdLeads = $monthAdLeads->where('branch', 'old_airport');
-        $wkAdLeads = $monthAdLeads->where('branch', 'wakrah');
-        $oaBookedAdLeads = $oaAdLeads->filter(fn (AdLeadEntry $e) => $e->isBooked());
-        $wkBookedAdLeads = $wkAdLeads->filter(fn (AdLeadEntry $e) => $e->isBooked());
+        $oaBookedAdLeads = $monthAdLeads->filter(fn (AdLeadEntry $e) => $e->hasBranchConversion('old_airport'));
+        $wkBookedAdLeads = $monthAdLeads->filter(fn (AdLeadEntry $e) => $e->hasBranchConversion('wakrah'));
 
-        $oaAdRevenueQar = round((float) $oaBookedAdLeads->sum('ticket_amount'), 2);
-        $wkAdRevenueQar = round((float) $wkBookedAdLeads->sum('ticket_amount'), 2);
+        $oaAdRevenueQar = round((float) $monthAdLeads->sum(fn (AdLeadEntry $e) => $e->branchRevenue('old_airport')), 2);
+        $wkAdRevenueQar = round((float) $monthAdLeads->sum(fn (AdLeadEntry $e) => $e->branchRevenue('wakrah')), 2);
         $totalAdRevenueQar = round($oaAdRevenueQar + $wkAdRevenueQar, 2);
 
         $dailyBranchAdTarget = round(self::AYAN_BRANCH_AD_REVENUE_TARGET_QAR / $daysInMonth, 2);
@@ -193,6 +202,7 @@ class KpiHubController extends Controller
 
         $totalAdLeadsCount = $monthAdLeads->count();
         $bookedAdLeadsCount = $monthAdLeads->filter(fn (AdLeadEntry $e) => $e->isBooked())->count();
+        $pipelineBookedAdLeadsCount = $this->countPipelineScheduledAdLeads($monthAdLeads, $monthStart, $monthEnd);
         $adConversionPct = $totalAdLeadsCount > 0 ? round(($bookedAdLeadsCount / $totalAdLeadsCount) * 100, 1) : 0.0;
         $adConversionAchievementPct = round(min(100.0, ($adConversionPct / self::AYAN_AD_CONVERSION_TARGET_PCT) * 100), 1);
 
@@ -239,6 +249,7 @@ class KpiHubController extends Controller
             'combined_mtd_pct' => $combinedAdMtdPct,
             'total_ad_leads' => $totalAdLeadsCount,
             'booked_ad_leads' => $bookedAdLeadsCount,
+            'pipeline_booked_ad_leads' => $pipelineBookedAdLeadsCount,
             'ad_conversion_pct' => $adConversionPct,
             'ad_conversion_target_pct' => self::AYAN_AD_CONVERSION_TARGET_PCT,
             'ad_conversion_achievement_pct' => $adConversionAchievementPct,
@@ -409,7 +420,16 @@ class KpiHubController extends Controller
             && $mtdPublishedStories >= $cumulativeMtdStoriesTarget
             && $mtdItemsCompleted >= $cumulativeMtdTarget
         );
-        $sanaRepliesPassing = ($effectiveLateReplies === 0);
+
+        $hasMtdSocialActivity = $monthContentPlans->isNotEmpty() && (
+            $mtdItemsCompleted > 0
+            || $effectiveLateReplies > 0
+            || $monthContentPlans->contains(
+                fn (SocialContentPlan $p) => filled($p->reel_content) || filled($p->stories_content) || filled($p->reel_link)
+            )
+        );
+
+        $sanaRepliesPassing = $hasMtdSocialActivity && ($effectiveLateReplies === 0);
         $sanaRepliesScorePct = $sanaRepliesPassing ? 100.0 : 0.0;
         $sanaOverallScorePct = round(($weeklyContentExecutionPct + $sanaRepliesScorePct) / 2, 1);
         $sanaPassingCount = ($sanaContentPassing ? 1 : 0) + ($sanaRepliesPassing ? 1 : 0);
@@ -438,15 +458,120 @@ class KpiHubController extends Controller
             'mtd_published_stories' => $mtdPublishedStories,
             'late_replies_count' => $effectiveLateReplies,
             'replies_sla_passing' => $sanaRepliesPassing,
-            'replies_sla_status_label' => $sanaRepliesPassing
-                ? '100% SLA PASS (0 Late Replies)'
-                : "SLA BREACH ({$effectiveLateReplies} Reported Late " . ($effectiveLateReplies === 1 ? 'Reply' : 'Replies') . ')',
+            'replies_sla_status_label' => !$hasMtdSocialActivity
+                ? 'NO ACTIVITY LOGGED (0% SLA)'
+                : ($sanaRepliesPassing
+                    ? '100% SLA PASS (0 Late Replies)'
+                    : "SLA BREACH ({$effectiveLateReplies} Reported Late " . ($effectiveLateReplies === 1 ? 'Reply' : 'Replies') . ')'),
             'overall_score_pct' => $sanaOverallScorePct,
             'passing_kpis_count' => $sanaPassingCount,
             'total_kpis_count' => $sanaTotalKpis,
             'below_floor_count' => $sanaFailingCount,
             'is_passing_all' => $sanaFailingCount === 0,
         ];
+    }
+
+    /**
+     * Count unpaid AdLeadEntry customer profiles in the selected month that already have
+     * an active ('pending', 'confirmed', 'arrived', 'in_progress') unpaid appointment
+     * on the Enhanced Calendar this month on or after the ad lead date.
+     */
+    private function countPipelineScheduledAdLeads(Collection $monthAdLeads, Carbon $monthStart, Carbon $monthEnd): int
+    {
+        $unpaidLeads = $monthAdLeads->reject(fn (AdLeadEntry $e) => $e->isBooked());
+        if ($unpaidLeads->isEmpty() || !Schema::hasTable('appointments')) {
+            return 0;
+        }
+
+        $cohorts = [];
+        $allCustomerIds = [];
+        $allRawPhones = [];
+
+        foreach ($unpaidLeads as $entry) {
+            $normPhone = Customer::normalizePhone($entry->phone);
+            $customerId = $entry->customer_id ? (int) $entry->customer_id : null;
+            $key = $customerId ? "cid:{$customerId}" : ($normPhone !== '' ? "ph:{$normPhone}" : "entry:{$entry->id}");
+            $entryDateStr = Carbon::parse($entry->date)->toDateString();
+
+            if (!isset($cohorts[$key])) {
+                $cohorts[$key] = [
+                    'customer_id' => $customerId,
+                    'norm_phone' => $normPhone,
+                    'min_date_str' => $entryDateStr,
+                ];
+            } else {
+                if ($entryDateStr < $cohorts[$key]['min_date_str']) {
+                    $cohorts[$key]['min_date_str'] = $entryDateStr;
+                }
+                if (!$cohorts[$key]['customer_id'] && $customerId) {
+                    $cohorts[$key]['customer_id'] = $customerId;
+                }
+                if ($cohorts[$key]['norm_phone'] === '' && $normPhone !== '') {
+                    $cohorts[$key]['norm_phone'] = $normPhone;
+                }
+            }
+
+            if ($customerId) {
+                $allCustomerIds[] = $customerId;
+            }
+            if ($entry->phone) {
+                $allRawPhones[] = $entry->phone;
+            }
+        }
+
+        $allCustomerIds = array_values(array_unique($allCustomerIds));
+        [, $phoneCandidates, $strippedDigits] = AdLeadEntry::buildPhoneLookupSets($allRawPhones);
+
+        if (empty($allCustomerIds) && empty($phoneCandidates) && empty($strippedDigits)) {
+            return 0;
+        }
+
+        $activeAppointments = Appointment::query()
+            ->whereIn('status', ['pending', 'confirmed', 'arrived', 'in_progress'])
+            ->whereNull('paid_at')
+            ->doesntHave('sale')
+            ->where(function ($q) use ($monthStart, $monthEnd) {
+                $q->whereBetween('appointment_datetime', [$monthStart->copy()->startOfDay(), $monthEnd->copy()->endOfDay()])
+                    ->orWhere(function ($sq) use ($monthStart, $monthEnd) {
+                        $sq->whereNull('appointment_datetime')
+                            ->whereBetween('booking_date', [$monthStart->toDateString(), $monthEnd->toDateString()]);
+                    });
+            })
+            ->where(function ($q) use ($allCustomerIds, $phoneCandidates, $strippedDigits) {
+                if (!empty($allCustomerIds)) {
+                    $q->orWhereIn('customer_id', $allCustomerIds);
+                }
+                AdLeadEntry::applyPhoneCohortClause($q, $phoneCandidates, $strippedDigits, 'or', 'phone');
+            })
+            ->get(['id', 'customer_id', 'phone', 'appointment_datetime', 'booking_date', 'created_at', 'status']);
+
+        if ($activeAppointments->isEmpty()) {
+            return 0;
+        }
+
+        $scheduledCount = 0;
+        foreach ($cohorts as $cohort) {
+            $hasScheduled = $activeAppointments->contains(function (Appointment $appt) use ($cohort) {
+                $matchesCustomer = $cohort['customer_id']
+                    && $appt->customer_id
+                    && (int) $appt->customer_id === (int) $cohort['customer_id'];
+
+                $matchesPhone = $cohort['norm_phone'] !== ''
+                    && Customer::normalizePhone($appt->phone) === $cohort['norm_phone'];
+
+                if (!$matchesCustomer && !$matchesPhone) {
+                    return false;
+                }
+
+                return $appt->appointment_date->toDateString() >= $cohort['min_date_str'];
+            });
+
+            if ($hasScheduled) {
+                $scheduledCount++;
+            }
+        }
+
+        return $scheduledCount;
     }
 
     private function buildChatAgentScorecard(

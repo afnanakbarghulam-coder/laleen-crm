@@ -151,17 +151,12 @@ class AdLeadEntryController extends Controller
         $validated['phone'] = $phone;
 
         $customerName = trim($validated['customer_name']);
-        $rawDigits = preg_replace('/\D/', '', $phone);
-        $candidates = array_values(array_unique(array_filter([$phone, $rawCombined, $rawDigits])));
-
-        $customer = Customer::whereIn('phone', $candidates)->first();
+        $customer = AdLeadEntry::resolveOrCreateCanonicalCustomer($phone, $customerName);
         if (!$customer) {
             $customer = Customer::create([
                 'phone' => $phone,
                 'name' => $customerName,
             ]);
-        } elseif ((empty($customer->name) || strtolower($customer->name) === 'walk-in') && $customerName !== '') {
-            $customer->update(['name' => $customerName]);
         }
 
         if (Schema::hasColumn('ad_lead_entries', 'customer_id')) {
@@ -171,6 +166,10 @@ class AdLeadEntryController extends Controller
             $validated['customer_name'] = $customerName;
         } else {
             unset($validated['customer_name']);
+        }
+        if (Schema::hasColumn('ad_lead_entries', 'old_airport_amount')) {
+            $validated['old_airport_amount'] = null;
+            $validated['wakrah_amount'] = null;
         }
         $validated['ticket_amount'] = $validated['ticket_amount'] ?? 0;
 
@@ -183,8 +182,7 @@ class AdLeadEntryController extends Controller
             return;
         }
 
-        $rawDigits = preg_replace('/\D/', '', (string) $entry->phone);
-        $candidates = array_values(array_unique(array_filter([$entry->phone, $rawDigits])));
+        [, $candidates, $strippedDigits] = AdLeadEntry::buildPhoneLookupSets([$entry->phone]);
         $hasLeadIdColumn = Schema::hasColumn('ad_lead_entries', 'lead_id');
         $entryDate = $entry->date ? Carbon::parse($entry->date) : now();
 
@@ -195,13 +193,11 @@ class AdLeadEntryController extends Controller
 
         if (!$existingLead) {
             $existingLead = Lead::open()
-                ->where(function ($q) use ($entry, $candidates) {
+                ->where(function ($q) use ($entry, $candidates, $strippedDigits) {
                     if ($entry->customer_id) {
                         $q->where('customer_id', $entry->customer_id);
                     }
-                    if (!empty($candidates)) {
-                        $q->orWhereIn('phone', $candidates);
-                    }
+                    AdLeadEntry::applyPhoneCohortClause($q, $candidates, $strippedDigits, 'or', 'phone');
                 })
                 ->latest('id')
                 ->first();
@@ -209,17 +205,15 @@ class AdLeadEntryController extends Controller
 
         if (!$existingLead) {
             $existingLead = Lead::query()
-                ->where(function ($q) use ($entry, $candidates) {
+                ->where(function ($q) use ($entry, $candidates, $strippedDigits) {
                     if ($entry->customer_id) {
                         $q->where('customer_id', $entry->customer_id);
                     }
-                    if (!empty($candidates)) {
-                        $q->orWhereIn('phone', $candidates);
-                    }
+                    AdLeadEntry::applyPhoneCohortClause($q, $candidates, $strippedDigits, 'or', 'phone');
                 })
                 ->whereBetween('created_at', [
-                    $entryDate->copy()->subDays(AdLeadEntry::ATTRIBUTION_WINDOW_DAYS)->startOfDay(),
-                    $entryDate->copy()->addDays(AdLeadEntry::ATTRIBUTION_WINDOW_DAYS)->endOfDay(),
+                    $entryDate->copy()->startOfMonth()->startOfDay(),
+                    $entryDate->copy()->endOfMonth()->endOfDay(),
                 ])
                 ->latest('id')
                 ->first();

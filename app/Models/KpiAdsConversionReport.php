@@ -68,13 +68,12 @@ class KpiAdsConversionReport extends Model
     private function branchStats(string $branch): array
     {
         $booked = AdLeadEntry::whereBetween('date', $this->dateRangeBounds())
-            ->where('branch', $branch)
             ->get()
-            ->filter(fn (AdLeadEntry $e) => $e->isBooked());
+            ->filter(fn (AdLeadEntry $e) => $e->hasBranchConversion($branch));
 
         return [
             'bookings' => $booked->count(),
-            'revenue' => (float) $booked->sum('ticket_amount'),
+            'revenue' => round((float) $booked->sum(fn (AdLeadEntry $e) => $e->branchRevenue($branch)), 2),
         ];
     }
 
