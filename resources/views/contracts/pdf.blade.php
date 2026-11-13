@@ -1,6 +1,6 @@
 @php
     $logoDataUri = \App\Models\StaffContract::logoDataUri();
-    $staffName = $contract->staff?->name ?? 'Team Member';
+    $staffName = $contract->memberName();
     $currency = strtoupper((string) ($contract->currency ?: 'QAR'));
     $monthlyComp = number_format($contract->monthlyCompensation(), 2);
     $startLabel = $contract->start_date ? $contract->start_date->format('d M Y') : 'Immediate';

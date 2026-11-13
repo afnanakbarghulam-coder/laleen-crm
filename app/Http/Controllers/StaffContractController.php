@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Staff;
 use App\Models\StaffContract;
 use App\Models\StaffContractCategory;
+use App\Models\User;
 use App\Support\StaffContractPdfGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -73,7 +74,8 @@ class StaffContractController extends Controller
     }
 
     /**
-     * Admin: Create a new staff contract from a built-in or custom category (or inline + Add Category).
+     * Admin: Create a new staff contract for either a Salon Staff record ("staff:{id}")
+     * or a CRM Staff Access account ("user:{id}").
      */
     public function store(Request $request)
     {
@@ -84,6 +86,13 @@ class StaffContractController extends Controller
             $request->merge(['base_salary' => $request->input('compensation')]);
         }
 
+        $member = $this->resolveTargetMember($request);
+        $userProfile = $member instanceof User ? StaffContract::resolveUserContractProfile($member) : null;
+
+        if (!$request->filled('template_key') && $userProfile) {
+            $request->merge(['template_key' => $userProfile['template_key']]);
+        }
+
         $allTemplates = StaffContract::allTemplates();
         $allowedTemplateKeys = array_merge(
             array_keys($allTemplates),
@@ -91,7 +100,9 @@ class StaffContractController extends Controller
         );
 
         $validated = $request->validate([
-            'staff_id' => ['required', 'integer', 'exists:staff,id'],
+            'team_member' => ['nullable', 'string', 'max:60'],
+            'staff_id' => ['nullable'],
+            'user_id' => ['nullable', 'integer', 'exists:users,id'],
             'template_key' => ['required', 'string', Rule::in($allowedTemplateKeys)],
             'custom_category_name' => ['nullable', 'string', 'max:120'],
             'custom_category_currency' => ['nullable', 'string', Rule::in(StaffContract::CURRENCIES)],
@@ -110,7 +121,6 @@ class StaffContractController extends Controller
             'pin' => ['nullable', 'string', 'regex:/^\d{4}$/'],
         ]);
 
-        $staff = Staff::findOrFail((int) $validated['staff_id']);
         $templateKey = $validated['template_key'];
 
         if ($templateKey === StaffContract::NEW_CATEGORY_SENTINEL) {
@@ -157,7 +167,11 @@ class StaffContractController extends Controller
             $template = $allTemplates[$templateKey];
         }
 
-        $currency = strtoupper((string) ($validated['currency'] ?? $template['default_currency']));
+        $currency = strtoupper((string) (
+            $validated['currency']
+            ?? ($userProfile && $templateKey === $userProfile['template_key'] ? $userProfile['currency'] : null)
+            ?? $template['default_currency']
+        ));
         if (!in_array($currency, $template['allowed_currencies'], true)) {
             throw ValidationException::withMessages([
                 'currency' => sprintf(
@@ -168,14 +182,25 @@ class StaffContractController extends Controller
             ]);
         }
 
-        $branch = $validated['branch']
-            ?? (($templateKey === 'remote_chat_creative' || $template['default_branch'] === 'remote')
-                ? $template['default_branch']
-                : (array_key_exists((string) $staff->branch, StaffContract::BRANCHES) ? $staff->branch : $template['default_branch']));
+        if ($validated['branch'] ?? null) {
+            $branch = $validated['branch'];
+        } elseif ($templateKey === 'remote_chat_creative' || $template['default_branch'] === 'remote') {
+            $branch = 'remote';
+        } elseif ($member instanceof Staff && array_key_exists((string) $member->branch, StaffContract::BRANCHES)) {
+            $branch = (string) $member->branch;
+        } elseif ($userProfile && array_key_exists($userProfile['branch'], StaffContract::BRANCHES)) {
+            $branch = $userProfile['branch'];
+        } else {
+            $branch = $template['default_branch'];
+        }
 
         $roleTitle = trim((string) ($validated['role_title'] ?? ''));
         if ($roleTitle === '') {
-            $roleTitle = $template['default_role'];
+            if ($userProfile && $templateKey === $userProfile['template_key'] && isset(StaffContract::TEMPLATES[$templateKey])) {
+                $roleTitle = $userProfile['role_title'];
+            } else {
+                $roleTitle = $template['default_role'];
+            }
         }
 
         $clausesBody = trim((string) ($validated['clauses_body'] ?? ''));
@@ -186,9 +211,20 @@ class StaffContractController extends Controller
         $status = $validated['status'] ?? StaffContract::STATUS_PENDING_SIGNATURE;
         $monthlyCompensation = (float) ($validated['compensation'] ?? $validated['base_salary']);
 
+        if ($member instanceof Staff) {
+            $staffId = $member->id;
+            $userId = $member->user_id ?: null;
+        } else {
+            $userId = $member->id;
+            $linkedStaffId = Staff::where('user_id', $member->id)->value('id');
+            $staffId = $linkedStaffId ? (int) $linkedStaffId : null;
+        }
+
         $contract = DB::transaction(function () use (
             $request,
-            $staff,
+            $member,
+            $staffId,
+            $userId,
             $validated,
             $templateKey,
             $roleTitle,
@@ -199,11 +235,12 @@ class StaffContractController extends Controller
             $status
         ) {
             if (!empty($validated['pin'])) {
-                $staff->setContractPin($validated['pin']);
+                $this->syncPinAcrossMember($member, $validated['pin']);
             }
 
             return StaffContract::create([
-                'staff_id' => $staff->id,
+                'staff_id' => $staffId,
+                'user_id' => $userId,
                 'template_key' => $templateKey,
                 'role_title' => $roleTitle,
                 'branch' => $branch,
@@ -218,7 +255,7 @@ class StaffContractController extends Controller
                 'status' => $status,
                 'secure_token' => StaffContract::generateUniqueToken(),
                 'signed_at' => $status === StaffContract::STATUS_ACTIVE ? now() : null,
-                'signed_name' => $status === StaffContract::STATUS_ACTIVE ? $staff->name : null,
+                'signed_name' => $status === StaffContract::STATUS_ACTIVE ? $member->name : null,
                 'signature_type' => $status === StaffContract::STATUS_ACTIVE ? 'typed' : null,
                 'created_by' => $request->user()->id,
             ]);
@@ -236,7 +273,7 @@ class StaffContractController extends Controller
 
         return redirect()
             ->route('staffs.index', ['tab' => 'contracts'])
-            ->with('success', "Contract {$contract->contract_number} created for {$staff->name}.");
+            ->with('success', "Contract {$contract->contract_number} created for {$member->name}.");
     }
 
     /**
@@ -281,6 +318,8 @@ class StaffContractController extends Controller
     {
         $this->ensureAdmin($request);
 
+        $contract->loadMissing(['staff', 'user']);
+
         $contract->update([
             'secure_token' => StaffContract::generateUniqueToken(),
         ]);
@@ -297,38 +336,39 @@ class StaffContractController extends Controller
 
         return redirect()
             ->route('staffs.index', ['tab' => 'contracts'])
-            ->with('success', "Private contract link regenerated for {$contract->staff?->name}.");
+            ->with('success', "Private contract link regenerated for {$contract->memberName()}.");
     }
 
     /**
-     * Admin: Set or reset a staff member's 4-digit contract portal PIN.
+     * Admin: Set or reset a Salon Staff member's 4-digit contract portal PIN.
      */
     public function updatePin(Request $request, Staff $staff)
     {
         $this->ensureAdmin($request);
 
-        $validated = $request->validate([
-            'pin' => ['required', 'string', 'regex:/^\d{4}$/'],
-        ], [
-            'pin.regex' => 'The contract PIN must be an exact 4-digit number (e.g. 2456).',
-        ]);
+        return $this->applyMemberPinUpdate($request, $staff);
+    }
 
-        $staff->setContractPin($validated['pin']);
+    /**
+     * Admin: Set or reset a Staff Access User's 4-digit contract portal PIN.
+     */
+    public function updateUserPin(Request $request, User $user)
+    {
+        $this->ensureAdmin($request);
 
-        foreach ($staff->contracts()->pluck('id') as $contractId) {
-            $request->session()->forget("contract_pin_unlocked.{$contractId}");
-        }
+        return $this->applyMemberPinUpdate($request, $user);
+    }
 
-        if ($request->expectsJson()) {
-            return response()->json([
-                'success' => true,
-                'message' => "4-digit PIN updated for {$staff->name}.",
-            ]);
-        }
+    /**
+     * Admin: Set or reset 4-digit contract portal PIN using composite team_member ("staff:{id}" or "user:{id}").
+     */
+    public function updateMemberPin(Request $request)
+    {
+        $this->ensureAdmin($request);
 
-        return redirect()
-            ->route('staffs.index', ['tab' => 'contracts'])
-            ->with('success', "4-digit contract PIN updated for {$staff->name}.");
+        $member = $this->resolveTargetMember($request);
+
+        return $this->applyMemberPinUpdate($request, $member);
     }
 
     /**
@@ -365,6 +405,7 @@ class StaffContractController extends Controller
         $this->authorizePortalVisitor($request, $contract);
 
         $logoUrl = StaffContract::logoPublicUrl();
+        $memberName = $contract->memberName();
 
         if (!$this->isUnlocked($request, $contract)) {
             $throttleKey = $this->throttleKey($request, $contract);
@@ -373,7 +414,7 @@ class StaffContractController extends Controller
 
             return response()
                 ->view('contracts.portal-locked', [
-                    'staffName' => $contract->staff?->name ?? 'Team Member',
+                    'staffName' => $memberName,
                     'roleTitle' => $contract->designationLabel(),
                     'branchLabel' => $contract->branchLabel(),
                     'statusLabel' => $contract->statusLabel(),
@@ -395,7 +436,7 @@ class StaffContractController extends Controller
         return response()
             ->view('contracts.portal-unlocked', [
                 'contract' => $contract,
-                'staffName' => $contract->staff?->name ?? 'Team Member',
+                'staffName' => $memberName,
                 'isAdminViewer' => $isAdminViewer,
                 'remainingSeconds' => $remainingSeconds,
                 'signUrl' => route('contracts.portal.sign', $contract->secure_token),
@@ -414,6 +455,7 @@ class StaffContractController extends Controller
         $this->authorizePortalVisitor($request, $contract);
 
         $throttleKey = $this->throttleKey($request, $contract);
+        $memberName = $contract->memberName();
 
         if (RateLimiter::tooManyAttempts($throttleKey, self::MAX_PIN_ATTEMPTS)) {
             $retryAfter = RateLimiter::availableIn($throttleKey);
@@ -425,7 +467,7 @@ class StaffContractController extends Controller
 
             return response()
                 ->view('contracts.portal-locked', [
-                    'staffName' => $contract->staff?->name ?? 'Team Member',
+                    'staffName' => $memberName,
                     'roleTitle' => $contract->designationLabel(),
                     'branchLabel' => $contract->branchLabel(),
                     'statusLabel' => $contract->statusLabel(),
@@ -441,9 +483,8 @@ class StaffContractController extends Controller
         }
 
         $pin = trim((string) $request->input('pin', ''));
-        $staff = $contract->staff;
 
-        if (!$staff || !$staff->verifyContractPin($pin)) {
+        if (!$contract->verifyMemberPin($pin)) {
             RateLimiter::hit($throttleKey, self::UNLOCK_TTL_SECONDS);
             $attemptsUsed = RateLimiter::attempts($throttleKey);
             $remainingAttempts = max(0, self::MAX_PIN_ATTEMPTS - $attemptsUsed);
@@ -523,7 +564,7 @@ class StaffContractController extends Controller
         $signatureType = $isDrawn ? 'drawn' : 'typed';
         $finalSignedName = $signedNameInput !== ''
             ? $signedNameInput
-            : ($contract->staff?->name ?? 'Employee');
+            : $contract->memberName();
 
         $finalSignatureData = $signatureDataInput !== ''
             ? $signatureDataInput
@@ -573,7 +614,7 @@ class StaffContractController extends Controller
         }
 
         $pdfBinary = $pdfGenerator->render($contract);
-        $slugName = Str::slug($contract->staff?->name ?: 'staff');
+        $slugName = Str::slug($contract->memberName() ?: 'staff');
         $filename = "Laleen-Contract-{$contract->contract_number}-{$slugName}.pdf";
 
         return response($pdfBinary, 200, [
@@ -582,6 +623,117 @@ class StaffContractController extends Controller
             'Content-Length' => (string) strlen($pdfBinary),
             'Cache-Control' => 'no-store, private',
         ]);
+    }
+
+    /**
+     * Resolve target person (Staff or User) from composite team_member ("staff:{id}" / "user:{id}")
+     * or explicit staff_id / user_id fields.
+     */
+    private function resolveTargetMember(Request $request): Staff|User
+    {
+        $composite = trim((string) ($request->input('team_member') ?? ''));
+        if ($composite === '' && is_string($request->input('staff_id')) && str_contains($request->input('staff_id'), ':')) {
+            $composite = trim($request->input('staff_id'));
+        }
+
+        if ($composite !== '') {
+            if (preg_match('/^staff:(\d+)$/i', $composite, $m)) {
+                $staff = Staff::find((int) $m[1]);
+                if ($staff) {
+                    return $staff;
+                }
+            } elseif (preg_match('/^user:(\d+)$/i', $composite, $m)) {
+                $user = User::find((int) $m[1]);
+                if ($user) {
+                    return $user;
+                }
+            }
+
+            throw ValidationException::withMessages([
+                'team_member' => 'Selected team member was not found.',
+            ]);
+        }
+
+        $rawStaffId = $request->input('staff_id');
+        if ($rawStaffId !== null && $rawStaffId !== '' && is_numeric($rawStaffId)) {
+            $staff = Staff::find((int) $rawStaffId);
+            if ($staff) {
+                return $staff;
+            }
+
+            throw ValidationException::withMessages([
+                'staff_id' => 'Selected salon staff member was not found.',
+            ]);
+        }
+
+        $rawUserId = $request->input('user_id');
+        if ($rawUserId !== null && $rawUserId !== '' && is_numeric($rawUserId)) {
+            $user = User::find((int) $rawUserId);
+            if ($user) {
+                return $user;
+            }
+
+            throw ValidationException::withMessages([
+                'user_id' => 'Selected Staff Access account was not found.',
+            ]);
+        }
+
+        throw ValidationException::withMessages([
+            'team_member' => 'Please select a team member.',
+        ]);
+    }
+
+    private function syncPinAcrossMember(Staff|User $member, string $pin): void
+    {
+        $member->setContractPin($pin);
+
+        if ($member instanceof Staff && $member->user_id) {
+            $linkedUser = $member->user ?? User::find($member->user_id);
+            $linkedUser?->setContractPin($pin);
+        } elseif ($member instanceof User) {
+            $linkedStaff = Staff::where('user_id', $member->id)->first();
+            $linkedStaff?->setContractPin($pin);
+        }
+    }
+
+    private function applyMemberPinUpdate(Request $request, Staff|User $member)
+    {
+        $validated = $request->validate([
+            'pin' => ['required', 'string', 'regex:/^\d{4}$/'],
+        ], [
+            'pin.regex' => 'The contract PIN must be an exact 4-digit number (e.g. 2456).',
+        ]);
+
+        $this->syncPinAcrossMember($member, $validated['pin']);
+
+        $contractIds = collect();
+        if ($member instanceof Staff) {
+            $contractIds = $contractIds->merge(StaffContract::where('staff_id', $member->id)->pluck('id'));
+            if ($member->user_id) {
+                $contractIds = $contractIds->merge(StaffContract::where('user_id', $member->user_id)->pluck('id'));
+            }
+        } else {
+            $contractIds = $contractIds->merge(StaffContract::where('user_id', $member->id)->pluck('id'));
+            $linkedStaffId = Staff::where('user_id', $member->id)->value('id');
+            if ($linkedStaffId) {
+                $contractIds = $contractIds->merge(StaffContract::where('staff_id', $linkedStaffId)->pluck('id'));
+            }
+        }
+
+        foreach ($contractIds->unique() as $contractId) {
+            $request->session()->forget("contract_pin_unlocked.{$contractId}");
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "4-digit PIN updated for {$member->name}.",
+            ]);
+        }
+
+        return redirect()
+            ->route('staffs.index', ['tab' => 'contracts'])
+            ->with('success', "4-digit contract PIN updated for {$member->name}.");
     }
 
     private function ensureAdmin(Request $request): void
@@ -598,15 +750,15 @@ class StaffContractController extends Controller
             abort(404);
         }
 
-        return StaffContract::with('staff')
+        return StaffContract::with(['staff', 'user'])
             ->where('secure_token', $token)
             ->firstOrFail();
     }
 
     /**
      * Admins view all contracts freely; logged-in non-admin CRM users can only access
-     * a token belonging to their own linked Staff profile. Unauthenticated staff using
-     * their private link proceed to the 4-digit PIN gate.
+     * a token belonging to their own user_id or linked Staff profile. Unauthenticated
+     * team members using their private link proceed to the 4-digit PIN gate.
      */
     private function authorizePortalVisitor(Request $request, StaffContract $contract): void
     {
@@ -619,8 +771,11 @@ class StaffContractController extends Controller
             return;
         }
 
+        $ownsViaUser = $contract->user_id && (int) $contract->user_id === (int) $user->id;
         $viewerStaffId = Staff::where('user_id', $user->id)->value('id');
-        if (!$viewerStaffId || (int) $viewerStaffId !== (int) $contract->staff_id) {
+        $ownsViaStaff = $viewerStaffId && $contract->staff_id && (int) $viewerStaffId === (int) $contract->staff_id;
+
+        if (!$ownsViaUser && !$ownsViaStaff) {
             abort(403, 'You may only access your own secure contract link.');
         }
     }

@@ -12,7 +12,7 @@ class StaffContractPdfGenerator
      */
     public function render(StaffContract $contract): string
     {
-        $contract->loadMissing('staff');
+        $contract->loadMissing(['staff', 'user']);
 
         if (class_exists(\Dompdf\Dompdf::class)) {
             $html = view('contracts.pdf', ['contract' => $contract])->render();
@@ -24,7 +24,7 @@ class StaffContractPdfGenerator
             return $dompdf->output();
         }
 
-        $staffName = (string) ($contract->staff?->name ?? 'Team Member');
+        $staffName = $contract->memberName();
         $currency = strtoupper((string) ($contract->currency ?: 'QAR'));
         $compensation = number_format($contract->monthlyCompensation(), 2);
 

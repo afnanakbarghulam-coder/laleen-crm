@@ -537,4 +537,171 @@ class StaffContractTest extends TestCase
         $this->assertStringContainsString('QAR 4,200.00', $renderedPdfHtml);
         $this->assertStringNotContainsString('Housing Allowance', $renderedPdfHtml);
     }
+
+    public function test_staff_access_users_appear_with_composite_keys_auto_fill_defaults_and_support_full_pin_sign_pdf_lifecycle(): void
+    {
+        $chatAgent = User::factory()->create([
+            'name' => 'Areeba Khan',
+            'email' => 'areeba@laleen.qa',
+            'role' => 'agent',
+            'is_active' => true,
+        ]);
+
+        $opsLead = User::factory()->create([
+            'name' => 'Arbab Ops',
+            'email' => 'arbab@laleen.qa',
+            'role' => 'manager',
+            'is_active' => true,
+        ]);
+
+        $marketingUser = User::factory()->create([
+            'name' => 'Hina Marketing',
+            'email' => 'hina.marketing@laleen.qa',
+            'role' => 'user',
+            'is_active' => true,
+        ]);
+
+        // 1. Both Salon Staff ("staff:{id}") and Staff Access Users ("user:{id}") render in Staff Contracts
+        $tabRes = $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'contracts']))
+            ->assertOk();
+
+        // Salon Staff composite option
+        $tabRes->assertSee('value="staff:' . $this->beautician->id . '"', false);
+        $tabRes->assertSee('Mariam Al-Dosari');
+
+        // Staff Access CRM Users with role tags & auto-fill data attributes
+        $tabRes->assertSee('value="user:' . $chatAgent->id . '"', false);
+        $tabRes->assertSee('Areeba Khan — Chat Agent');
+        $tabRes->assertSee('data-template-key="remote_chat_creative"', false);
+
+        $tabRes->assertSee('value="user:' . $this->manager->id . '"', false);
+        $tabRes->assertSee('Floor Supervisor — Branch Manager');
+        $tabRes->assertSee('data-template-key="branch_manager"', false);
+
+        $tabRes->assertSee('value="user:' . $opsLead->id . '"', false);
+        $tabRes->assertSee('Arbab Ops — Ops');
+
+        $tabRes->assertSee('value="user:' . $marketingUser->id . '"', false);
+        $tabRes->assertSee('Hina Marketing — Marketing');
+
+        // Linked Staff user (Colleague Stylist) is NOT duplicated under user:{id}
+        $tabRes->assertDontSee('value="user:' . $this->colleagueUser->id . '"', false);
+
+        // 2. Admin issues a contract for Staff Access Chat Agent via composite "user:{id}"
+        $this->actingAs($this->admin)->post(route('staff-contracts.store'), [
+            'team_member' => 'user:' . $chatAgent->id,
+            'template_key' => 'remote_chat_creative',
+            'compensation' => 135000,
+            'start_date' => '2026-12-01',
+            'expiry_date' => '2027-11-30',
+            'status' => 'pending_signature',
+        ])->assertRedirect(route('staffs.index', ['tab' => 'contracts']));
+
+        $agentContract = StaffContract::where('user_id', $chatAgent->id)->firstOrFail();
+        $this->assertNull($agentContract->staff_id);
+        $this->assertSame($chatAgent->id, $agentContract->user_id);
+        $this->assertSame('user:' . $chatAgent->id, $agentContract->memberKey());
+        $this->assertSame('Areeba Khan', $agentContract->memberName());
+        $this->assertSame('Chat Agent', $agentContract->memberRole());
+        $this->assertSame('remote', $agentContract->branch);
+        $this->assertSame('PKR', $agentContract->currency);
+        $this->assertSame(135000.00, $agentContract->monthlyCompensation());
+
+        // 3. Admin sets/resets Areeba's 4-digit PIN via unified member PIN endpoint
+        $this->actingAs($this->admin)->patch(route('staff-contracts.update-member-pin'), [
+            'team_member' => 'user:' . $chatAgent->id,
+            'pin' => '6492',
+        ])->assertRedirect(route('staffs.index', ['tab' => 'contracts']));
+
+        $chatAgent->refresh();
+        $this->assertTrue($chatAgent->hasCustomContractPin());
+        $this->assertNotEmpty($agentContract->fresh()->memberPin());
+
+        // Contracts table displays Areeba Khan and her Set / Reset PIN action
+        $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'contracts']))
+            ->assertOk()
+            ->assertSee('Areeba Khan')
+            ->assertSee('PKR 135,000.00');
+
+        // 4. Isolation: another logged-in non-admin user cannot view Areeba's link, while Areeba can view her PIN cover
+        $this->actingAs($this->colleagueUser)
+            ->get(route('contracts.portal.show', $agentContract->secure_token))
+            ->assertForbidden();
+
+        $lockedPortal = $this->actingAs($chatAgent)
+            ->get(route('contracts.portal.show', $agentContract->secure_token))
+            ->assertOk();
+
+        $lockedPortal->assertSee('Areeba Khan');
+        $lockedPortal->assertSee('Chat Agent');
+        $lockedPortal->assertSee('Unlock Agreement');
+        $lockedPortal->assertDontSee('135,000.00');
+
+        // Default PIN 2456 fails now that custom PIN 6492 is set
+        $this->actingAs($chatAgent)->post(route('contracts.portal.unlock', $agentContract->secure_token), [
+            'pin' => '2456',
+        ])->assertRedirect(route('contracts.portal.show', $agentContract->secure_token));
+
+        $this->actingAs($chatAgent)
+            ->get(route('contracts.portal.show', $agentContract->secure_token))
+            ->assertDontSee('135,000.00');
+
+        // Unlock with custom 4-digit PIN 6492
+        $this->actingAs($chatAgent)->post(route('contracts.portal.unlock', $agentContract->secure_token), [
+            'pin' => '6492',
+        ])->assertRedirect(route('contracts.portal.show', $agentContract->secure_token));
+
+        $this->actingAs($chatAgent)
+            ->get(route('contracts.portal.show', $agentContract->secure_token))
+            ->assertOk()
+            ->assertSee('PKR 135,000.00')
+            ->assertSee('Sign &amp; Accept', false);
+
+        // 5. Sign to permanently lock as Active and download PDF with zero errors
+        $this->actingAs($chatAgent)->post(route('contracts.portal.sign', $agentContract->secure_token), [
+            'signed_name' => 'Areeba Khan',
+            'signature_type' => 'typed',
+            'signature_data' => 'Areeba Khan',
+        ])->assertRedirect(route('contracts.portal.show', $agentContract->secure_token));
+
+        $agentContract->refresh();
+        $this->assertSame(StaffContract::STATUS_ACTIVE, $agentContract->status);
+        $this->assertTrue($agentContract->isLocked());
+        $this->assertSame('Areeba Khan', $agentContract->signed_name);
+
+        $pdfRes = $this->actingAs($chatAgent)
+            ->get(route('contracts.portal.pdf', $agentContract->secure_token))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+
+        $this->assertStringStartsWith('%PDF-1.4', $pdfRes->getContent());
+        $this->assertStringContainsString('Areeba Khan', $pdfRes->getContent());
+        $this->assertStringContainsString('PKR 135,000.00', $pdfRes->getContent());
+        $this->assertStringContainsString('Signed By: Areeba Khan', $pdfRes->getContent());
+    }
+
+    public function test_create_contract_modal_uses_alpine_data_with_js_from_safe_quotes_and_prefills_default_template(): void
+    {
+        User::factory()->create([
+            'name' => 'Nadia O\'Connor "Lead"',
+            'email' => 'nadia.oconnor@laleen.qa',
+            'role' => 'agent',
+            'is_active' => true,
+        ]);
+
+        $res = $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'contracts']))
+            ->assertOk();
+
+        $html = $res->getContent();
+        $this->assertStringContainsString('x-data="contractModal"', $html);
+        $this->assertStringContainsString("Alpine.data('contractModal'", $html);
+        $this->assertStringContainsString('JSON.parse(', $html);
+        $this->assertStringContainsString('value="Salon Beautician"', $html);
+        $this->assertStringContainsString('1. ROLE &amp; SALON FLOOR STANDARDS', $html);
+        $this->assertStringContainsString('id="ccInitialStatusTrigger"', $html);
+        $this->assertStringContainsString('Pending Signature', $html);
+    }
 }

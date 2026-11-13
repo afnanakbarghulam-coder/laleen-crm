@@ -391,12 +391,89 @@ class StaffController extends Controller
 
         $isAdminViewer = (bool) ($request->user() && $request->user()->isAdmin());
         $staffContracts = collect();
+        $contractSalonMembers = collect();
+        $contractAccessMembers = collect();
+
         if ($isAdminViewer) {
             try {
+                $todayDate = now('Asia/Qatar')->startOfDay();
+                $activeSalonStaff = $allStaff->filter(function (Staff $s) use ($todayDate) {
+                    return !$s->end_date || $s->end_date->gte($todayDate);
+                })->values();
+
+                $contractSalonMembers = $activeSalonStaff->map(function (Staff $s) {
+                    $branchKey = array_key_exists((string) $s->branch, StaffContract::BRANCHES)
+                        ? (string) $s->branch
+                        : 'old_airport';
+
+                    return [
+                        'key' => 'staff:' . $s->id,
+                        'type' => 'staff',
+                        'id' => $s->id,
+                        'name' => $s->name,
+                        'tag' => StaffContract::BRANCHES[$branchKey] ?? 'Salon Staff',
+                        'template_key' => 'salon_beautician',
+                        'role_title' => 'Salon Beautician',
+                        'branch' => $branchKey,
+                        'currency' => 'QAR',
+                        'base_salary' => (float) ($s->base_salary ?? 0),
+                        'has_custom_pin' => $s->hasCustomContractPin(),
+                    ];
+                })->values();
+
+                $linkedUserIds = $allStaff->pluck('user_id')
+                    ->filter()
+                    ->map(fn ($id) => (int) $id)
+                    ->unique()
+                    ->all();
+
+                $linkedStaffEmails = $allStaff->pluck('email')
+                    ->filter()
+                    ->map(fn ($email) => strtolower(trim((string) $email)))
+                    ->unique()
+                    ->all();
+
+                $accessUsers = User::where('is_active', true)
+                    ->orderByRaw("CASE role WHEN 'manager' THEN 1 WHEN 'agent' THEN 2 WHEN 'staff' THEN 3 WHEN 'user' THEN 4 WHEN 'admin' THEN 5 ELSE 6 END ASC")
+                    ->orderBy('name')
+                    ->get();
+
+                $contractAccessMembers = $accessUsers
+                    ->reject(function (User $u) use ($linkedUserIds, $linkedStaffEmails) {
+                        if (in_array((int) $u->id, $linkedUserIds, true)) {
+                            return true;
+                        }
+                        $cleanEmail = strtolower(trim((string) $u->email));
+                        return $cleanEmail !== '' && in_array($cleanEmail, $linkedStaffEmails, true);
+                    })
+                    ->map(function (User $u) {
+                        $profile = StaffContract::resolveUserContractProfile($u);
+
+                        return [
+                            'key' => 'user:' . $u->id,
+                            'type' => 'user',
+                            'id' => $u->id,
+                            'name' => $u->name,
+                            'tag' => $profile['tag'],
+                            'template_key' => $profile['template_key'],
+                            'role_title' => $profile['role_title'],
+                            'branch' => $profile['branch'],
+                            'currency' => $profile['currency'],
+                            'base_salary' => 0.0,
+                            'has_custom_pin' => $u->hasCustomContractPin(),
+                        ];
+                    })
+                    ->values();
+
                 $allStaffById = $allStaff->keyBy('id');
-                $staffContracts = StaffContract::orderByDesc('id')
+                $staffContracts = StaffContract::with(['staff', 'user'])
+                    ->orderByDesc('id')
                     ->get()
-                    ->each(fn (StaffContract $c) => $c->setRelation('staff', $allStaffById->get($c->staff_id)));
+                    ->each(function (StaffContract $c) use ($allStaffById) {
+                        if ($c->staff_id && $allStaffById->has($c->staff_id)) {
+                            $c->setRelation('staff', $allStaffById->get($c->staff_id));
+                        }
+                    });
             } catch (\Throwable) {
                 $staffContracts = collect();
             }
@@ -416,7 +493,7 @@ class StaffController extends Controller
             'opsMyOpenCount', 'opsStatus', 'opsMine', 'opsSelectedStaffId', 'opsSelectedStaffName',
             'opsAssigneeOptions', 'opsMonday', 'opsSunday', 'opsPrevWeek', 'opsNextWeek', 'opsIsCurrentWeek',
             'opsScopes', 'opsSlaOptions',
-            'staffContracts', 'contractTemplates', 'isAdminViewer',
+            'staffContracts', 'contractTemplates', 'contractSalonMembers', 'contractAccessMembers', 'isAdminViewer',
             'complaints', 'deductions', 'complaintsStaffFilter', 'complaintsSearch',
             'complaintsDate', 'complaintsFrom', 'complaintsTo',
             'deductionsDate', 'deductionsFrom', 'deductionsTo',

@@ -177,6 +177,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/staff-contracts/{contract}/regenerate-token', [StaffContractController::class, 'regenerateToken'])->name('staff-contracts.regenerate-token');
         Route::delete('/staff-contracts/{contract}', [StaffContractController::class, 'destroy'])->name('staff-contracts.destroy');
         Route::match(['patch', 'post', 'put'], '/staffs/{staff}/contract-pin', [StaffContractController::class, 'updatePin'])->name('staff-contracts.update-pin');
+        Route::match(['patch', 'post', 'put'], '/users/{user}/contract-pin', [StaffContractController::class, 'updateUserPin'])->name('staff-contracts.update-user-pin');
+        Route::match(['patch', 'post', 'put'], '/staff-contracts/member-pin', [StaffContractController::class, 'updateMemberPin'])->name('staff-contracts.update-member-pin');
         Route::post('/scheduled-shifts/{staff}/pattern', [ShiftController::class, 'savePattern'])->name('shifts.pattern.store');
         Route::post('/scheduled-shifts/{staff}/time-off', [ShiftController::class, 'storeTimeOff'])->name('shifts.timeoff.store');
         Route::delete('/scheduled-shifts/time-off/{timeOff}', [ShiftController::class, 'destroyTimeOff'])->name('shifts.timeoff.destroy');

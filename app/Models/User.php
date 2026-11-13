@@ -7,11 +7,14 @@ use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Support\Facades\Hash;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasRoles;
+
+    public const DEFAULT_CONTRACT_PIN = '2456';
 
     /**
      * The attributes that are mass assignable.
@@ -26,6 +29,7 @@ class User extends Authenticatable
         'is_active',
         'permissions',
         'profile_photo',
+        'contract_pin',
     ];
 
     /**
@@ -45,6 +49,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'contract_pin',
     ];
 
     /**
@@ -70,6 +75,42 @@ class User extends Authenticatable
     public function staff()
     {
         return $this->hasOne(Staff::class, 'user_id');
+    }
+
+    public function contracts()
+    {
+        return $this->hasMany(StaffContract::class, 'user_id');
+    }
+
+    public function setContractPin(string $pin): void
+    {
+        $this->forceFill([
+            'contract_pin' => Hash::make($pin),
+        ])->save();
+    }
+
+    public function hasCustomContractPin(): bool
+    {
+        return !empty($this->contract_pin);
+    }
+
+    public function verifyContractPin(string $inputPin): bool
+    {
+        $cleanInput = trim($inputPin);
+        if (!preg_match('/^\d{4}$/', $cleanInput)) {
+            return false;
+        }
+
+        $stored = (string) ($this->contract_pin ?? '');
+        if ($stored === '') {
+            return hash_equals(self::DEFAULT_CONTRACT_PIN, $cleanInput);
+        }
+
+        if (str_starts_with($stored, '$2y$') || str_starts_with($stored, '$2a$') || str_starts_with($stored, '$argon2')) {
+            return Hash::check($cleanInput, $stored);
+        }
+
+        return hash_equals($stored, $cleanInput);
     }
 
     /**

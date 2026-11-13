@@ -108,6 +108,7 @@ EOT,
     protected $fillable = [
         'contract_number',
         'staff_id',
+        'user_id',
         'template_key',
         'role_title',
         'branch',
@@ -265,9 +266,211 @@ EOT;
         return $this->belongsTo(Staff::class, 'staff_id');
     }
 
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Resolve the underlying team member model (Salon Staff or CRM Staff Access User).
+     */
+    public function memberEntity(): Staff|User|null
+    {
+        if ($this->staff_id) {
+            return $this->staff;
+        }
+
+        if ($this->user_id) {
+            return $this->user;
+        }
+
+        return null;
+    }
+
+    /**
+     * Composite dropdown key ("staff:{id}" or "user:{id}") for modals and PIN selectors.
+     */
+    public function memberKey(): string
+    {
+        if ($this->staff_id) {
+            return 'staff:' . $this->staff_id;
+        }
+
+        if ($this->user_id) {
+            return 'user:' . $this->user_id;
+        }
+
+        return '';
+    }
+
+    public function memberName(): string
+    {
+        $name = trim((string) ($this->staff?->name ?? $this->user?->name ?? ''));
+
+        return $name !== '' ? $name : 'Team Member';
+    }
+
+    public function memberRole(): string
+    {
+        return $this->designationLabel();
+    }
+
+    public function memberPin(): ?string
+    {
+        if ($this->staff && !empty($this->staff->contract_pin)) {
+            return $this->staff->contract_pin;
+        }
+
+        if ($this->user && !empty($this->user->contract_pin)) {
+            return $this->user->contract_pin;
+        }
+
+        return null;
+    }
+
+    public function hasCustomMemberPin(): bool
+    {
+        if ($this->staff && $this->staff->hasCustomContractPin()) {
+            return true;
+        }
+
+        if ($this->user && $this->user->hasCustomContractPin()) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public function verifyMemberPin(string $inputPin): bool
+    {
+        if ($this->staff && $this->user) {
+            if ($this->staff->hasCustomContractPin()) {
+                return $this->staff->verifyContractPin($inputPin);
+            }
+            if ($this->user->hasCustomContractPin()) {
+                return $this->user->verifyContractPin($inputPin);
+            }
+
+            return $this->staff->verifyContractPin($inputPin);
+        }
+
+        $entity = $this->memberEntity();
+
+        return $entity ? $entity->verifyContractPin($inputPin) : false;
+    }
+
+    public function setMemberPin(string $pin): void
+    {
+        if ($this->staff) {
+            $this->staff->setContractPin($pin);
+        }
+
+        if ($this->user) {
+            $this->user->setContractPin($pin);
+        }
+    }
+
+    /**
+     * Resolve Staff Access User role tag, default contract template, designation, branch, and currency.
+     *
+     * @return array{tag: string, template_key: string, role_title: string, branch: string, currency: string}
+     */
+    public static function resolveUserContractProfile(User $user): array
+    {
+        $role = strtolower(trim((string) $user->role));
+        $haystack = strtolower(trim($user->name . ' ' . $user->email));
+        $perms = is_array($user->permissions) ? $user->permissions : [];
+
+        // Ops Lead / Operations
+        if (preg_match('/\b(arbab|ops|operations)\b/i', $haystack)) {
+            return [
+                'tag' => 'Ops',
+                'template_key' => 'remote_chat_creative',
+                'role_title' => 'Operations Lead',
+                'branch' => 'remote',
+                'currency' => 'PKR',
+            ];
+        }
+
+        // Marketing / Creative / Content / Video / E-commerce
+        if (
+            preg_match('/\b(marketing|content|creative|video|editor|social|ads|seo)\b/i', $haystack)
+            || (
+                in_array($role, ['staff', 'user'], true)
+                && (($perms['ecommerce'] ?? 'none') === 'edit' || ($perms['kpis'] ?? 'none') === 'edit')
+                && ($perms['bookings'] ?? 'none') !== 'edit'
+            )
+        ) {
+            return [
+                'tag' => 'Marketing',
+                'template_key' => 'remote_chat_creative',
+                'role_title' => 'Marketing & Creative Specialist',
+                'branch' => 'remote',
+                'currency' => 'PKR',
+            ];
+        }
+
+        // Chat Agent
+        if ($role === 'agent') {
+            return [
+                'tag' => 'Chat Agent',
+                'template_key' => 'remote_chat_creative',
+                'role_title' => 'Chat Agent',
+                'branch' => 'remote',
+                'currency' => 'PKR',
+            ];
+        }
+
+        // Branch Manager
+        if ($role === 'manager') {
+            $inferredBranch = preg_match('/\b(wakrah|rhea)\b/i', $haystack) ? 'wakrah' : 'old_airport';
+
+            return [
+                'tag' => 'Branch Manager',
+                'template_key' => 'branch_manager',
+                'role_title' => 'Branch Manager',
+                'branch' => $inferredBranch,
+                'currency' => 'QAR',
+            ];
+        }
+
+        // Admin / Owner / Super Admin
+        if (in_array($role, ['admin', 'owner', 'super_admin'], true)) {
+            return [
+                'tag' => 'Admin',
+                'template_key' => 'branch_manager',
+                'role_title' => 'Management / Admin',
+                'branch' => 'both',
+                'currency' => 'QAR',
+            ];
+        }
+
+        // Front-Desk / Salon Staff Access
+        if ($role === 'staff') {
+            $isFrontDesk = ($perms['bookings'] ?? 'none') === 'edit' || ($perms['finance'] ?? 'none') === 'edit';
+
+            return [
+                'tag' => $isFrontDesk ? 'Front-Desk' : 'Salon Staff',
+                'template_key' => 'salon_beautician',
+                'role_title' => $isFrontDesk ? 'Front-Desk Receptionist' : 'Salon Beautician',
+                'branch' => 'old_airport',
+                'currency' => 'QAR',
+            ];
+        }
+
+        // Default CRM Team / Remote
+        return [
+            'tag' => 'CRM Team',
+            'template_key' => 'remote_chat_creative',
+            'role_title' => 'Remote Chat & Creative Specialist',
+            'branch' => 'remote',
+            'currency' => 'PKR',
+        ];
     }
 
     public function designationLabel(): string
