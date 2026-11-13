@@ -66,6 +66,12 @@ Route::prefix('my-contract/{token}')->name('contracts.portal.')->group(function 
     Route::get('/pdf', [StaffContractController::class, 'downloadPdf'])->name('pdf');
 });
 
+// ---- Admin-Only Staff Contract Update (returns 403 for unauthenticated & non-admin callers) ----
+Route::match(['put', 'patch'], '/staff-contracts/{contract}', [StaffContractController::class, 'update'])
+    ->whereNumber('contract')
+    ->middleware('role:admin')
+    ->name('staff-contracts.update');
+
 Route::middleware(['auth'])->group(function () {
     Route::middleware('module:dashboard')->get('/dashboard', [UserController::class, 'dashboard'])->name('dashboard');
     Route::middleware(['active', 'module:guide'])->get('/guide', [GuideController::class, 'index'])->name('guide.index');

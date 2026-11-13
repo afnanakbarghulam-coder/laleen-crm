@@ -166,6 +166,29 @@
 
         .lc-btn-primary:hover { filter: brightness(1.06); }
 
+        .lc-btn-ghost {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: rgba(229, 184, 168, 0.08);
+            color: var(--lc-cream);
+            font-weight: 600;
+            font-size: 13px;
+            text-decoration: none;
+            border: 1px solid rgba(229, 184, 168, 0.24);
+            border-radius: 999px;
+            padding: 9px 16px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: border-color 0.15s ease, background 0.15s ease;
+        }
+
+        .lc-btn-ghost:hover {
+            border-color: var(--lc-rose);
+            background: rgba(229, 184, 168, 0.14);
+        }
+
         /* Clean 3-Stat Executive Strip */
         .lc-stat-strip {
             display: grid;
@@ -441,8 +464,9 @@
                 </div>
 
                 <div class="lc-pill-row lc-no-print">
-                    @if ($isAdminViewer)
+                    @if (($isAdminViewer ?? false) && auth()->user()?->isAdmin())
                         <span class="ui-chip">Admin View</span>
+                        <button type="button" class="lc-btn-ghost" id="lcOpenEditModalBtn" onclick="openPortalEditModal()">Edit Contract</button>
                     @else
                         <span class="ui-chip" id="lcTimerChip">Unlocked &middot; {{ ceil($remainingSeconds / 60) }}m window</span>
                     @endif
@@ -640,5 +664,305 @@
             }
         })();
     </script>
+
+    @if (($isAdminViewer ?? false) && auth()->user()?->isAdmin())
+        @php
+            $pTemplates = $contractTemplates ?? \App\Models\StaffContract::allTemplates();
+            $pSalonMembers = $portalSalonMembers ?? [];
+            $pAccessMembers = $portalAccessMembers ?? [];
+            $pNewCatSentinel = \App\Models\StaffContract::NEW_CATEGORY_SENTINEL;
+            $pCurrentMemberKey = $contract->memberKey();
+            $pIsActive = $contract->status === \App\Models\StaffContract::STATUS_ACTIVE;
+        @endphp
+        <style>
+            .lc-edit-backdrop {
+                display: none;
+                position: fixed;
+                inset: 0;
+                z-index: 2000;
+                background: rgba(10, 6, 8, 0.78);
+                backdrop-filter: blur(4px);
+                align-items: center;
+                justify-content: center;
+                padding: 20px 14px;
+                overflow-y: auto;
+            }
+            .lc-edit-backdrop.is-open { display: flex; }
+            .lc-edit-dialog {
+                width: 100%;
+                max-width: 780px;
+                background: linear-gradient(180deg, #22161b 0%, #160e12 100%);
+                border: 1px solid rgba(229, 184, 168, 0.22);
+                border-radius: 18px;
+                color: var(--lc-cream);
+                box-shadow: 0 24px 60px rgba(0, 0, 0, 0.72);
+                margin: auto;
+            }
+            .lc-edit-header, .lc-edit-footer {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 18px 24px;
+                border-bottom: 1px solid var(--lc-hairline);
+            }
+            .lc-edit-footer {
+                border-bottom: none;
+                border-top: 1px solid var(--lc-hairline);
+                justify-content: flex-end;
+            }
+            .lc-edit-body {
+                padding: 20px 24px;
+                display: grid;
+                grid-template-columns: repeat(12, 1fr);
+                gap: 14px;
+            }
+            .lc-col-12 { grid-column: span 12; }
+            .lc-col-6 { grid-column: span 6; }
+            .lc-col-4 { grid-column: span 4; }
+            .lc-col-3 { grid-column: span 3; }
+            .lc-col-2 { grid-column: span 2; }
+            @media (max-width: 680px) {
+                .lc-col-6, .lc-col-4, .lc-col-3, .lc-col-2 { grid-column: span 12; }
+            }
+            .lc-field-label {
+                display: block;
+                font-size: 11.5px;
+                font-weight: 600;
+                color: var(--lc-taupe);
+                margin-bottom: 6px;
+            }
+            .lc-field-input, .lc-field-select, .lc-field-textarea {
+                width: 100%;
+                background: #1b1214;
+                color: #f5ebe6;
+                border: 1px solid rgba(229, 184, 168, 0.22);
+                border-radius: 10px;
+                padding: 8px 12px;
+                font-size: 13px;
+                font-family: inherit;
+                color-scheme: dark;
+                outline: none;
+            }
+            .lc-field-select option, .lc-field-select optgroup {
+                background: #1b1214;
+                color: #f5ebe6;
+            }
+            .lc-field-input:focus, .lc-field-select:focus, .lc-field-textarea:focus {
+                border-color: var(--lc-rose);
+                box-shadow: 0 0 0 3px rgba(229, 184, 168, 0.12);
+            }
+            .lc-resig-bar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 10px;
+                padding: 11px 14px;
+                border-radius: 12px;
+                background: rgba(212, 163, 115, 0.09);
+                border: 1px solid rgba(212, 163, 115, 0.26);
+            }
+        </style>
+
+        <div class="lc-edit-backdrop lc-no-print" id="portalEditContractModal" aria-hidden="true">
+            <div class="lc-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="portalEditModalTitle">
+                <form method="POST" action="{{ route('staff-contracts.update', $contract) }}">
+                    @csrf
+                    @method('PUT')
+                    <input type="hidden" name="redirect_to" value="portal">
+
+                    <div class="lc-edit-header">
+                        <h3 id="portalEditModalTitle" style="margin: 0; font-size: 17px; font-weight: 700;">
+                            Edit Staff Contract &middot; {{ $contract->contract_number }}
+                        </h3>
+                        <button type="button" class="lc-btn-ghost" style="padding: 5px 12px; font-size: 12px;" onclick="closePortalEditModal()">✕</button>
+                    </div>
+
+                    <div class="lc-edit-body">
+                        <div class="lc-col-6">
+                            <label class="lc-field-label" for="peTeamMember">Team Member</label>
+                            <select name="team_member" id="peTeamMember" class="lc-field-select" required>
+                                @if (!empty($pSalonMembers))
+                                    <optgroup label="Salon Staff">
+                                        @foreach ($pSalonMembers as $m)
+                                            <option value="{{ $m['key'] }}" @selected($pCurrentMemberKey === $m['key'])>{{ $m['label'] }}</option>
+                                        @endforeach
+                                    </optgroup>
+                                @endif
+                                @if (!empty($pAccessMembers))
+                                    <optgroup label="Staff Access · CRM Team">
+                                        @foreach ($pAccessMembers as $m)
+                                            <option value="{{ $m['key'] }}" @selected($pCurrentMemberKey === $m['key'])>{{ $m['label'] }}</option>
+                                        @endforeach
+                                    </optgroup>
+                                @endif
+                            </select>
+                        </div>
+
+                        <div class="lc-col-6">
+                            <label class="lc-field-label" for="peTemplateKey">Contract Template / Category</label>
+                            <select name="template_key" id="peTemplateKey" class="lc-field-select" onchange="onPortalTemplateChange(this.value)">
+                                @foreach ($pTemplates as $tKey => $tpl)
+                                    <option value="{{ $tKey }}" @selected($contract->template_key === $tKey)>
+                                        {{ $tpl['label'] }} ({{ implode('/', $tpl['allowed_currencies'] ?? ['QAR']) }})
+                                    </option>
+                                @endforeach
+                                @if (!isset($pTemplates[$contract->template_key]))
+                                    <option value="{{ $contract->template_key }}" selected>{{ $contract->designationLabel() }}</option>
+                                @endif
+                                <option value="{{ $pNewCatSentinel }}">+ Add Category</option>
+                            </select>
+                        </div>
+
+                        <div class="lc-col-12" id="peNewCatWrap" style="display: none;">
+                            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(229, 184, 168, 0.2);">
+                                <div>
+                                    <label class="lc-field-label" for="peCustomCatName">New Category / Designation Name *</label>
+                                    <input type="text" name="custom_category_name" id="peCustomCatName" class="lc-field-input" maxlength="120" placeholder="e.g. Nail Technician, Video Editor">
+                                </div>
+                                <div>
+                                    <label class="lc-field-label" for="peCustomCatCurr">Category Currency</label>
+                                    <select name="custom_category_currency" id="peCustomCatCurr" class="lc-field-select">
+                                        <option value="QAR" @selected($contract->currency === 'QAR')>QAR</option>
+                                        <option value="PKR" @selected($contract->currency === 'PKR')>PKR</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lc-col-4">
+                            <label class="lc-field-label" for="peRoleTitle">Designation</label>
+                            <input type="text" name="role_title" id="peRoleTitle" class="lc-field-input" maxlength="120" value="{{ $contract->designationLabel() }}" required>
+                        </div>
+
+                        <div class="lc-col-3">
+                            <label class="lc-field-label" for="peBranch">Branch / Location</label>
+                            <select name="branch" id="peBranch" class="lc-field-select">
+                                @foreach (\App\Models\StaffContract::BRANCHES as $bKey => $bLabel)
+                                    <option value="{{ $bKey }}" @selected($contract->branch === $bKey)>{{ $bLabel }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="lc-col-2">
+                            <label class="lc-field-label" for="peCurrency">Currency</label>
+                            <select name="currency" id="peCurrency" class="lc-field-select">
+                                @foreach (\App\Models\StaffContract::CURRENCIES as $curr)
+                                    <option value="{{ $curr }}" @selected($contract->currency === $curr)>{{ $curr }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="lc-col-3">
+                            <label class="lc-field-label" for="peCompensation">Compensation</label>
+                            <input type="number" name="compensation" id="peCompensation" class="lc-field-input" min="0" step="0.01" value="{{ number_format($contract->monthlyCompensation(), 2, '.', '') }}" required>
+                        </div>
+
+                        <div class="lc-col-3">
+                            <label class="lc-field-label" for="peStartDate">Start Date</label>
+                            <input type="date" name="start_date" id="peStartDate" class="lc-field-input" value="{{ $contract->start_date ? $contract->start_date->format('Y-m-d') : '' }}">
+                        </div>
+
+                        <div class="lc-col-3">
+                            <label class="lc-field-label" for="peExpiryDate">Expiry Date</label>
+                            <input type="date" name="expiry_date" id="peExpiryDate" class="lc-field-input" value="{{ $contract->expiry_date ? $contract->expiry_date->format('Y-m-d') : '' }}">
+                        </div>
+
+                        <div class="lc-col-4">
+                            <label class="lc-field-label" for="peStatus">Status</label>
+                            <select name="status" id="peStatus" class="lc-field-select">
+                                <option value="pending_signature" @selected($contract->status === 'pending_signature' || $pIsActive)>Pending Signature</option>
+                                <option value="draft" @selected($contract->status === 'draft')>Draft</option>
+                                <option value="active">Active</option>
+                            </select>
+                        </div>
+
+                        <div class="lc-col-2">
+                            <label class="lc-field-label" for="pePin">4-Digit PIN</label>
+                            <input type="text" name="pin" id="pePin" class="lc-field-input" inputmode="numeric" pattern="\d{4}" maxlength="4" placeholder="Keep">
+                        </div>
+
+                        @if ($pIsActive)
+                            <div class="lc-col-12">
+                                <div class="lc-resig-bar">
+                                    <label style="display: flex; align-items: center; gap: 9px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                                        <input type="hidden" name="require_resignature" value="0">
+                                        <input type="checkbox" name="require_resignature" id="peRequireResig" value="1" checked onchange="onPortalResigToggle(this.checked)" style="accent-color: #e5b8a8; width: 16px; height: 16px;">
+                                        <span>Require staff re-signature (resets status to Pending Signature &amp; clears prior signature)</span>
+                                    </label>
+                                    <span class="ui-chip" id="peResigBadge">Resets to Pending Signature</span>
+                                </div>
+                            </div>
+                        @endif
+
+                        <div class="lc-col-12">
+                            <label class="lc-field-label" for="peClausesBody">Contract Clauses &amp; Terms</label>
+                            <textarea name="clauses_body" id="peClausesBody" class="lc-field-textarea" rows="7" required>{{ $contract->clauses_body }}</textarea>
+                        </div>
+                    </div>
+
+                    <div class="lc-edit-footer">
+                        <button type="button" class="lc-btn-ghost" onclick="closePortalEditModal()">Cancel</button>
+                        <button type="submit" class="lc-btn-primary">Save Contract Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+            (function () {
+                const portalTemplates = {{ \Illuminate\Support\Js::from($pTemplates) }};
+                const newCatSentinel = {{ \Illuminate\Support\Js::from($pNewCatSentinel) }};
+                const modal = document.getElementById('portalEditContractModal');
+
+                window.openPortalEditModal = function () {
+                    if (!modal) return;
+                    modal.classList.add('is-open');
+                    modal.setAttribute('aria-hidden', 'false');
+                };
+
+                window.closePortalEditModal = function () {
+                    if (!modal) return;
+                    modal.classList.remove('is-open');
+                    modal.setAttribute('aria-hidden', 'true');
+                };
+
+                window.onPortalTemplateChange = function (val) {
+                    const newWrap = document.getElementById('peNewCatWrap');
+                    if (newWrap) {
+                        newWrap.style.display = (val === newCatSentinel) ? 'block' : 'none';
+                    }
+                    const tpl = portalTemplates[val];
+                    if (tpl) {
+                        const roleEl = document.getElementById('peRoleTitle');
+                        const currEl = document.getElementById('peCurrency');
+                        const clausesEl = document.getElementById('peClausesBody');
+                        if (roleEl && tpl.default_role) roleEl.value = tpl.default_role;
+                        if (currEl && tpl.default_currency) currEl.value = tpl.default_currency;
+                        if (clausesEl && tpl.clauses) clausesEl.value = tpl.clauses;
+                    }
+                };
+
+                window.onPortalResigToggle = function (checked) {
+                    const statusEl = document.getElementById('peStatus');
+                    const badgeEl = document.getElementById('peResigBadge');
+                    if (statusEl) statusEl.value = checked ? 'pending_signature' : 'active';
+                    if (badgeEl) badgeEl.textContent = checked ? 'Resets to Pending Signature' : 'Keeps Active';
+                };
+
+                if (modal) {
+                    modal.addEventListener('click', function (e) {
+                        if (e.target === modal) closePortalEditModal();
+                    });
+                    document.addEventListener('keydown', function (e) {
+                        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
+                            closePortalEditModal();
+                        }
+                    });
+                }
+            })();
+        </script>
+    @endif
 </body>
 </html>

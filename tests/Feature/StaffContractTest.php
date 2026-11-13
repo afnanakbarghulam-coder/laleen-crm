@@ -704,4 +704,242 @@ class StaffContractTest extends TestCase
         $this->assertStringContainsString('id="ccInitialStatusTrigger"', $html);
         $this->assertStringContainsString('Pending Signature', $html);
     }
+
+    public function test_admin_can_edit_contract_fields_from_table_and_portal_while_preserving_secure_token(): void
+    {
+        $contract = StaffContract::create([
+            'staff_id' => $this->beautician->id,
+            'template_key' => 'salon_beautician',
+            'role_title' => 'Salon Beautician',
+            'branch' => 'old_airport',
+            'currency' => 'QAR',
+            'base_salary' => 4500.00,
+            'start_date' => '2026-11-15',
+            'expiry_date' => '2028-11-14',
+            'clauses_body' => '1. INITIAL CLAUSE\nOriginal floor terms.',
+            'status' => StaffContract::STATUS_PENDING_SIGNATURE,
+            'created_by' => $this->admin->id,
+        ]);
+
+        $originalToken = $contract->secure_token;
+        $originalNumber = $contract->contract_number;
+
+        // 1. Admin sees compact single-line Edit trigger in Staff Contracts table and Edit Contract in Agreement View
+        $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'contracts']))
+            ->assertOk()
+            ->assertSee('openEditContractModal(' . $contract->id . ')', false)
+            ->assertSee('Signed Active agreements lock permanently for staff and are editable only by Admin');
+
+        $this->actingAs($this->admin)
+            ->get(route('contracts.portal.show', $originalToken))
+            ->assertOk()
+            ->assertSee('Edit Contract')
+            ->assertSee('portalEditContractModal', false)
+            ->assertSee('Edit Staff Contract &middot; ' . $originalNumber, false);
+
+        // 2. Admin updates compensation, expiry date, designation, branch, PIN, and clauses via PUT
+        $updatedClauses = "1. SENIOR DESIGNATION\nUpdated luxury hair & keratin floor clauses.\n\n2. COMPENSATION\nRevised QAR 5,400 monthly package.";
+
+        $this->actingAs($this->admin)->put(route('staff-contracts.update', $contract), [
+            'team_member' => 'staff:' . $this->beautician->id,
+            'template_key' => 'salon_beautician',
+            'role_title' => 'Master Hair & Keratin Stylist',
+            'branch' => 'wakrah',
+            'currency' => 'QAR',
+            'compensation' => 5400,
+            'start_date' => '2026-12-01',
+            'expiry_date' => '2029-11-30',
+            'status' => 'pending_signature',
+            'pin' => '7531',
+            'clauses_body' => $updatedClauses,
+        ])->assertRedirect(route('staffs.index', ['tab' => 'contracts']))->assertSessionHasNoErrors();
+
+        $contract->refresh();
+        $this->assertSame($originalToken, $contract->secure_token);
+        $this->assertSame($originalNumber, $contract->contract_number);
+        $this->assertSame('Master Hair & Keratin Stylist', $contract->role_title);
+        $this->assertSame('wakrah', $contract->branch);
+        $this->assertSame(5400.00, $contract->monthlyCompensation());
+        $this->assertSame('2026-12-01', $contract->start_date->format('Y-m-d'));
+        $this->assertSame('2029-11-30', $contract->expiry_date->format('Y-m-d'));
+        $this->assertSame($updatedClauses, $contract->clauses_body);
+        $this->assertTrue($contract->verifyMemberPin('7531'));
+
+        // 3. Admin also updates directly from the Agreement View (redirect_to = portal)
+        $this->actingAs($this->admin)->patch(route('staff-contracts.update', $contract), [
+            'compensation' => 5650,
+            'role_title' => 'Principal Hair Director',
+            'redirect_to' => 'portal',
+        ])->assertRedirect(route('contracts.portal.show', $originalToken))->assertSessionHasNoErrors();
+
+        $contract->refresh();
+        $this->assertSame($originalToken, $contract->secure_token);
+        $this->assertSame(5650.00, $contract->monthlyCompensation());
+        $this->assertSame('Principal Hair Director', $contract->role_title);
+    }
+
+    public function test_editing_active_contract_supports_keeping_active_or_requiring_staff_resignature(): void
+    {
+        $signedTimestamp = now()->subDays(3);
+        $contract = StaffContract::create([
+            'staff_id' => $this->beautician->id,
+            'template_key' => 'salon_beautician',
+            'role_title' => 'Salon Beautician',
+            'branch' => 'old_airport',
+            'currency' => 'QAR',
+            'base_salary' => 4500.00,
+            'start_date' => '2026-11-01',
+            'expiry_date' => '2028-10-31',
+            'clauses_body' => '1. FLOOR TERMS\nOriginal signed clauses.',
+            'status' => StaffContract::STATUS_ACTIVE,
+            'signed_name' => 'Mariam Al-Dosari',
+            'signature_data' => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            'signature_type' => 'drawn',
+            'signed_at' => $signedTimestamp,
+            'signed_ip' => '127.0.0.1',
+            'created_by' => $this->admin->id,
+        ]);
+
+        $originalToken = $contract->secure_token;
+
+        // 1. Minor typo/date edit with require_resignature = false keeps Active status & prior signature intact
+        $this->actingAs($this->admin)->put(route('staff-contracts.update', $contract), [
+            'role_title' => 'Senior Salon Beautician',
+            'expiry_date' => '2028-12-31',
+            'require_resignature' => false,
+        ])->assertRedirect(route('staffs.index', ['tab' => 'contracts']))->assertSessionHasNoErrors();
+
+        $contract->refresh();
+        $this->assertSame($originalToken, $contract->secure_token);
+        $this->assertSame(StaffContract::STATUS_ACTIVE, $contract->status);
+        $this->assertSame('Senior Salon Beautician', $contract->role_title);
+        $this->assertSame('2028-12-31', $contract->expiry_date->format('Y-m-d'));
+        $this->assertSame('Mariam Al-Dosari', $contract->signed_name);
+        $this->assertSame('drawn', $contract->signature_type);
+        $this->assertNotNull($contract->signature_data);
+        $this->assertNotNull($contract->signed_at);
+
+        // 2. Material compensation & clause revision with require_resignature = true resets to Pending Signature & clears signature fields
+        $this->actingAs($this->admin)->put(route('staff-contracts.update', $contract), [
+            'compensation' => 5200,
+            'clauses_body' => '1. REVISED PACKAGE\nUpdated QAR 5,200 terms requiring fresh employee sign-off.',
+            'require_resignature' => true,
+        ])->assertRedirect(route('staffs.index', ['tab' => 'contracts']))->assertSessionHasNoErrors();
+
+        $contract->refresh();
+        $this->assertSame($originalToken, $contract->secure_token);
+        $this->assertSame(StaffContract::STATUS_PENDING_SIGNATURE, $contract->status);
+        $this->assertSame(5200.00, $contract->monthlyCompensation());
+        $this->assertNull($contract->signed_name);
+        $this->assertNull($contract->signature_data);
+        $this->assertNull($contract->signature_type);
+        $this->assertNull($contract->signed_at);
+        $this->assertNull($contract->signed_ip);
+
+        // Staff can immediately unlock the preserved private link and sign the revised agreement
+        auth()->logout();
+        $this->post(route('contracts.portal.unlock', $originalToken), ['pin' => '2456'])->assertRedirect();
+        $this->post(route('contracts.portal.sign', $originalToken), [
+            'signed_name' => 'Mariam Al-Dosari',
+            'signature_type' => 'typed',
+            'signature_data' => 'Mariam Al-Dosari',
+        ])->assertRedirect(route('contracts.portal.show', $originalToken));
+
+        $this->assertSame(StaffContract::STATUS_ACTIVE, $contract->fresh()->status);
+    }
+
+    public function test_non_admin_roles_and_unauthenticated_visitors_receive_403_on_update_and_never_see_edit_controls(): void
+    {
+        $agent = User::factory()->create([
+            'name' => 'Chat Agent User',
+            'email' => 'agent.test@laleen.qa',
+            'role' => 'agent',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('agent'),
+        ]);
+
+        $marketingSpecialist = User::factory()->create([
+            'name' => 'Marketing Specialist User',
+            'email' => 'marketing.test@laleen.qa',
+            'role' => 'marketing_specialist',
+            'is_active' => true,
+            'permissions' => array_merge(User::defaultPermissionsForRole('marketing_specialist'), ['staff' => 'view']),
+        ]);
+
+        $socialMediaEditor = User::factory()->create([
+            'name' => 'Social Editor User',
+            'email' => 'social.test@laleen.qa',
+            'role' => 'social_media_editor',
+            'is_active' => true,
+            'permissions' => array_merge(User::defaultPermissionsForRole('social_media_editor'), ['staff' => 'view']),
+        ]);
+
+        $contract = StaffContract::create([
+            'user_id' => $agent->id,
+            'template_key' => 'remote_chat_creative',
+            'role_title' => 'Chat Agent',
+            'branch' => 'remote',
+            'currency' => 'PKR',
+            'base_salary' => 125000.00,
+            'status' => StaffContract::STATUS_PENDING_SIGNATURE,
+            'created_by' => $this->admin->id,
+        ]);
+
+        // 1. Unauthenticated visitor gets 403 Forbidden on both PUT and PATCH
+        $this->put(route('staff-contracts.update', $contract), ['compensation' => 999999])->assertForbidden();
+        $this->patchJson(route('staff-contracts.update', $contract), ['compensation' => 999999])->assertForbidden();
+
+        // 2. Every non-admin CRM role gets 403 Forbidden on update and sees zero Edit controls on /staff?tab=contracts
+        foreach ([$this->manager, $agent, $marketingSpecialist, $socialMediaEditor, $this->colleagueUser] as $nonAdmin) {
+            $this->actingAs($nonAdmin)
+                ->put(route('staff-contracts.update', $contract), [
+                    'compensation' => 999999,
+                    'role_title' => 'Tampered Role',
+                ])
+                ->assertForbidden();
+
+            $this->actingAs($nonAdmin)
+                ->patchJson(route('staff-contracts.update', $contract), [
+                    'compensation' => 999999,
+                ])
+                ->assertForbidden();
+        }
+
+        foreach ([$this->manager, $marketingSpecialist, $socialMediaEditor, $this->colleagueUser] as $staffViewer) {
+            $tabResp = $this->actingAs($staffViewer)
+                ->get(route('staffs.index', ['tab' => 'contracts']))
+                ->assertOk();
+
+            $tabResp->assertDontSee('openEditContractModal', false);
+            $tabResp->assertDontSee('Edit Staff Contract', false);
+            $tabResp->assertDontSee('id="createContractModal"', false);
+        }
+
+        // 3. External / unlocked staff portal visitor never receives Edit Contract button or Edit modal HTML
+        auth()->logout();
+        $this->get(route('contracts.portal.show', $contract->secure_token))
+            ->assertOk()
+            ->assertDontSee('Edit Contract')
+            ->assertDontSee('portalEditContractModal', false);
+
+        $this->post(route('contracts.portal.unlock', $contract->secure_token), ['pin' => '2456'])->assertRedirect();
+        $this->get(route('contracts.portal.show', $contract->secure_token))
+            ->assertOk()
+            ->assertSee('PKR 125,000.00')
+            ->assertDontSee('Edit Contract')
+            ->assertDontSee('portalEditContractModal', false);
+
+        // Logged-in contract owner (non-admin Agent) also never sees Edit Contract button or modal HTML
+        $this->actingAs($agent)->post(route('contracts.portal.unlock', $contract->secure_token), ['pin' => '2456']);
+        $this->actingAs($agent)
+            ->get(route('contracts.portal.show', $contract->secure_token))
+            ->assertOk()
+            ->assertSee('PKR 125,000.00')
+            ->assertDontSee('Edit Contract')
+            ->assertDontSee('portalEditContractModal', false);
+
+        // Compensation remains completely untouched
+        $this->assertSame(125000.00, $contract->fresh()->monthlyCompensation());
+    }
 }

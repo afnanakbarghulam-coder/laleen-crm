@@ -1,4 +1,4 @@
-@if ($isAdminViewer ?? false)
+@if (($isAdminViewer ?? false) && auth()->user()?->isAdmin())
     @php
         $contractsCollection = $staffContracts ?? collect();
         $templatesMap = $contractTemplates ?? \App\Models\StaffContract::allTemplates();
@@ -25,6 +25,27 @@
             'default_branch' => 'old_airport',
             'clauses' => '',
         ];
+        $defaultStartDate = now('Asia/Qatar')->toDateString();
+        $contractsEditMap = $contractsCollection->mapWithKeys(fn (\App\Models\StaffContract $c) => [
+            $c->id => [
+                'id' => $c->id,
+                'contract_number' => $c->contract_number,
+                'update_url' => route('staff-contracts.update', $c),
+                'member_key' => $c->memberKey(),
+                'member_name' => $c->memberName(),
+                'member_tag' => $c->memberRole(),
+                'member_type' => $c->staff_id ? 'staff' : 'user',
+                'template_key' => $c->template_key,
+                'role_title' => $c->designationLabel(),
+                'branch' => $c->branch ?: 'old_airport',
+                'currency' => $c->currency ?: 'QAR',
+                'compensation' => number_format($c->monthlyCompensation(), 2, '.', ''),
+                'start_date' => $c->start_date ? $c->start_date->format('Y-m-d') : $defaultStartDate,
+                'expiry_date' => $c->expiry_date ? $c->expiry_date->format('Y-m-d') : '',
+                'status' => $c->status,
+                'clauses_body' => (string) $c->clauses_body,
+            ],
+        ]);
     @endphp
 
     <style>
@@ -255,6 +276,24 @@
             background: rgba(255, 255, 255, 0.025);
             border: 1px solid rgba(229, 184, 168, 0.18);
         }
+
+        .sc-resig-row {
+            padding: 10px 14px;
+            border-radius: 12px;
+            background: rgba(212, 163, 115, 0.08);
+            border: 1px solid rgba(212, 163, 115, 0.24);
+        }
+
+        .sc-check {
+            cursor: pointer;
+            background-color: #1b1214;
+            border-color: rgba(229, 184, 168, 0.35);
+        }
+
+        .sc-check:checked {
+            background-color: #e5b8a8 !important;
+            border-color: #e5b8a8 !important;
+        }
     </style>
 
     <div class="laleen-contract-card mb-4">
@@ -264,7 +303,7 @@
                 <span class="sc-inline-chip">{{ $contractsCollection->count() }} Contracts</span>
             </div>
             <div class="d-flex align-items-center gap-2 flex-wrap">
-                <button type="button" class="sc-btn-rosegold" data-bs-toggle="modal" data-bs-target="#createContractModal">
+                <button type="button" class="sc-btn-rosegold" data-bs-toggle="modal" data-bs-target="#createContractModal" onclick="openCreateContractModal()">
                     + Create Contract
                 </button>
             </div>
@@ -317,11 +356,18 @@
                             <td class="text-nowrap">
                                 {{ $contract->expiry_date ? $contract->expiry_date->format('d M Y') : 'Open-Ended' }}
                             </td>
-                            <td class="text-end">
-                                <div class="d-inline-flex align-items-center gap-1 justify-content-end">
+                            <td class="text-end text-nowrap">
+                                <div class="d-inline-flex align-items-center gap-1 justify-content-end flex-nowrap text-nowrap" style="white-space: nowrap;">
                                     <a href="{{ $cPortalUrl }}" target="_blank" rel="noopener" class="sc-action-pill" title="Open official agreement">
                                         Open ↗
                                     </a>
+                                    <button type="button"
+                                        class="sc-action-pill"
+                                        data-edit-contract-id="{{ $contract->id }}"
+                                        onclick="openEditContractModal({{ $contract->id }})"
+                                        title="Edit contract">
+                                        Edit
+                                    </button>
                                     <button type="button"
                                         class="sc-action-pill"
                                         data-copy-contract-link="{{ $cPortalUrl }}"
@@ -397,17 +443,22 @@
 
         <div class="laleen-contract-guardrail">
             <span style="color: #6ee7b7;">✓ Default staff PIN is 2456 until customized via ⋯ &rarr; Set / Reset PIN</span>
-            <span style="color: #fda4af;">✕ Signed Active agreements lock permanently against edits or deletion</span>
+            <span style="color: #fda4af;">✕ Signed Active agreements lock permanently for staff and are editable only by Admin</span>
         </div>
     </div>
 
-    {{-- Create Contract Modal (Admin Only — Declarative Alpine State via Alpine.data('contractModal')) --}}
-    <div class="modal fade sc-modal" id="createContractModal" tabindex="-1" aria-hidden="true" x-data="contractModal">
+    {{-- Create / Edit Contract Modal (Admin Only — Declarative Alpine State via Alpine.data('contractModal')) --}}
+    <div class="modal fade sc-modal" id="createContractModal" tabindex="-1" aria-hidden="true" x-data="contractModal"
+        @open-contract-create.window="resetCreateMode()"
+        @open-contract-edit.window="openEditMode($event.detail)">
         <div class="modal-dialog modal-lg modal-dialog-centered">
-            <form method="POST" action="{{ route('staff-contracts.store') }}" class="modal-content" id="createContractForm" @submit="validateBeforeSubmit($event)">
+            <form method="POST" action="{{ route('staff-contracts.store') }}" :action="mode === 'edit' ? editActionUrl : storeActionUrl" class="modal-content" id="createContractForm" @submit="validateBeforeSubmit($event)">
                 @csrf
+                <template x-if="mode === 'edit'">
+                    <input type="hidden" name="_method" value="PUT">
+                </template>
                 <div class="modal-header">
-                    <h5 class="modal-title fw-bold">Create Staff Contract</h5>
+                    <h5 class="modal-title fw-bold" x-text="mode === 'edit' ? ('Edit Staff Contract · ' + editingContractNumber) : 'Create Staff Contract'">Create Staff Contract</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -416,7 +467,8 @@
                         <div class="col-md-6">
                             <label class="form-label">Team Member</label>
                             <div class="sc-cselect-wrap" :class="{ 'is-open': openMenu === 'member' }" @click.outside="closeMenu('member')">
-                                <select name="team_member" id="ccStaffSelect" class="d-none" x-model="selectedMemberKey">
+                                <input type="hidden" name="team_member" :value="selectedMemberKey">
+                                <select id="ccStaffSelect" class="d-none" aria-hidden="true">
                                     <option value="">Select team member</option>
                                     @if ($salonMembers->isNotEmpty())
                                         <optgroup label="Salon Staff">
@@ -628,19 +680,19 @@
                             <input type="number" name="compensation" id="ccCompensation" class="form-control" min="0" step="0.01" x-model="compensation" required>
                         </div>
 
-                        {{-- 4. Dates, Generous Initial Status Column (col-md-4 — never truncates "Pending Signature"), & 4-Digit PIN --}}
+                        {{-- 4. Dates, Generous Status Column (col-md-4 — never truncates "Pending Signature"), & 4-Digit PIN --}}
                         <div class="col-md-3">
                             <label class="form-label">Start Date</label>
-                            <input type="date" name="start_date" class="form-control" value="{{ now('Asia/Qatar')->toDateString() }}">
+                            <input type="date" name="start_date" class="form-control" value="{{ $defaultStartDate }}" x-model="startDate">
                         </div>
 
                         <div class="col-md-3">
                             <label class="form-label">Expiry Date</label>
-                            <input type="date" name="expiry_date" class="form-control">
+                            <input type="date" name="expiry_date" class="form-control" x-model="expiryDate">
                         </div>
 
                         <div class="col-md-4">
-                            <label class="form-label">Initial Status</label>
+                            <label class="form-label" x-text="mode === 'edit' ? 'Status' : 'Initial Status'">Initial Status</label>
                             <div class="sc-cselect-wrap" :class="{ 'is-open': openMenu === 'status' }" @click.outside="closeMenu('status')">
                                 <input type="hidden" name="status" :value="status">
                                 <button type="button" class="sc-cselect-trigger" id="ccInitialStatusTrigger" @click="toggleMenu('status')">
@@ -651,22 +703,48 @@
                                     <button type="button"
                                         class="sc-cselect-option"
                                         :class="{ 'is-selected': status === 'pending_signature' }"
-                                        @click="status = 'pending_signature'; openMenu = null;">
+                                        @click="selectStatus('pending_signature')">
                                         <span>Pending Signature</span>
                                     </button>
                                     <button type="button"
                                         class="sc-cselect-option"
                                         :class="{ 'is-selected': status === 'draft' }"
-                                        @click="status = 'draft'; openMenu = null;">
+                                        @click="selectStatus('draft')">
                                         <span>Draft</span>
                                     </button>
+                                    <template x-if="mode === 'edit'">
+                                        <button type="button"
+                                            class="sc-cselect-option"
+                                            :class="{ 'is-selected': status === 'active' }"
+                                            @click="selectStatus('active')">
+                                            <span>Active</span>
+                                        </button>
+                                    </template>
                                 </div>
                             </div>
                         </div>
 
                         <div class="col-md-2">
                             <label class="form-label">4-Digit PIN</label>
-                            <input type="text" name="pin" class="form-control" inputmode="numeric" pattern="\d{4}" maxlength="4" placeholder="2456">
+                            <input type="text" name="pin" class="form-control" x-model="pin" inputmode="numeric" pattern="\d{4}" maxlength="4" :placeholder="mode === 'edit' ? 'Keep' : '2456'" placeholder="2456">
+                        </div>
+
+                        {{-- Smart Re-Signature Guardrail Toggle when editing an already-signed Active contract --}}
+                        <div class="col-12" x-show="mode === 'edit' && wasActive" x-cloak>
+                            <div class="sc-resig-row d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <label class="d-flex align-items-center gap-2 mb-0" style="cursor: pointer; color: #f8efe6; font-size: 13px; font-weight: 600;">
+                                    <input type="hidden" name="require_resignature" value="0" :disabled="!(mode === 'edit' && wasActive)">
+                                    <input type="checkbox"
+                                        name="require_resignature"
+                                        value="1"
+                                        class="form-check-input m-0 sc-check"
+                                        :disabled="!(mode === 'edit' && wasActive)"
+                                        x-model="requireResignature"
+                                        @change="onToggleResignature()">
+                                    <span>Require staff re-signature (resets status to Pending Signature &amp; clears prior signature)</span>
+                                </label>
+                                <span class="sc-inline-chip" x-text="requireResignature ? 'Resets to Pending Signature' : 'Keeps Active'"></span>
+                            </div>
                         </div>
 
                         <div class="col-12">
@@ -683,7 +761,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="sc-btn-ghost" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="sc-btn-rosegold">Issue Contract &amp; Generate Private Link</button>
+                    <button type="submit" class="sc-btn-rosegold" x-text="mode === 'edit' ? 'Save Contract Changes' : 'Issue Contract & Generate Private Link'">Issue Contract &amp; Generate Private Link</button>
                 </div>
             </form>
         </div>
@@ -780,8 +858,12 @@
                 branches: {{ \Illuminate\Support\Js::from(\App\Models\StaffContract::BRANCHES) }},
                 statuses: {
                     pending_signature: 'Pending Signature',
-                    draft: 'Draft'
+                    draft: 'Draft',
+                    active: 'Active'
                 },
+                storeUrl: {{ \Illuminate\Support\Js::from(route('staff-contracts.store')) }},
+                defaultStartDate: {{ \Illuminate\Support\Js::from($defaultStartDate) }},
+                contractsById: {{ \Illuminate\Support\Js::from($contractsEditMap) }},
                 saveCategoryUrl: {{ \Illuminate\Support\Js::from(route('staff-contracts.categories.store')) }},
                 csrfToken: {{ \Illuminate\Support\Js::from(csrf_token()) }}
             };
@@ -804,6 +886,14 @@
                 const initialTpl = (LALEEN_CONTRACT_BOOT.templates || {})[initialTplKey] || {};
 
                 return {
+                    mode: 'create',
+                    editingContractId: null,
+                    editingContractNumber: '',
+                    storeActionUrl: LALEEN_CONTRACT_BOOT.storeUrl || '',
+                    editActionUrl: '',
+                    wasActive: false,
+                    requireResignature: true,
+
                     openMenu: null,
                     memberError: '',
                     newCatSentinel: LALEEN_CONTRACT_BOOT.newCategorySentinel,
@@ -828,12 +918,104 @@
                     branch: initialTpl.default_branch || 'old_airport',
                     currency: initialTpl.default_currency || 'QAR',
                     compensation: '0.00',
+                    startDate: LALEEN_CONTRACT_BOOT.defaultStartDate || '',
+                    expiryDate: '',
                     status: 'pending_signature',
+                    pin: '',
                     clausesBody: initialTpl.clauses || '',
                     clausesOverridden: false,
 
                     init() {
                         this.applyTemplateDefaults();
+                    },
+
+                    resetCreateMode() {
+                        this.mode = 'create';
+                        this.editingContractId = null;
+                        this.editingContractNumber = '';
+                        this.editActionUrl = '';
+                        this.wasActive = false;
+                        this.requireResignature = true;
+                        this.openMenu = null;
+                        this.memberError = '';
+                        this.selectedMemberKey = '';
+                        this.selectedMemberName = '';
+                        this.selectedMemberTag = '';
+                        this.selectedMemberType = '';
+                        this.templateKey = initialTplKey;
+                        this.customCategoryName = '';
+                        this.customCategoryCurrency = 'QAR';
+                        this.compensation = '0.00';
+                        this.startDate = LALEEN_CONTRACT_BOOT.defaultStartDate || '';
+                        this.expiryDate = '';
+                        this.status = 'pending_signature';
+                        this.pin = '';
+                        this.applyTemplateDefaults();
+                    },
+
+                    openEditMode(detail) {
+                        const c = detail?.contract;
+                        if (!c) return;
+
+                        this.mode = 'edit';
+                        this.editingContractId = c.id;
+                        this.editingContractNumber = c.contract_number || '';
+                        this.editActionUrl = c.update_url || '';
+                        this.openMenu = null;
+                        this.memberError = '';
+
+                        this.selectedMemberKey = c.member_key || '';
+                        this.selectedMemberName = c.member_name || '';
+                        this.selectedMemberTag = c.member_tag || '';
+                        this.selectedMemberType = c.member_type || 'staff';
+
+                        if (c.template_key && !this.templates[c.template_key]) {
+                            this.templates[c.template_key] = {
+                                label: c.role_title || 'Custom Category',
+                                default_role: c.role_title || 'Custom Category',
+                                default_currency: c.currency || 'QAR',
+                                allowed_currencies: ['QAR', 'PKR'],
+                                default_branch: c.branch || 'old_airport',
+                                clauses: c.clauses_body || ''
+                            };
+                        }
+
+                        this.templateKey = c.template_key || initialTplKey;
+                        this.customCategoryName = '';
+                        this.customCategoryCurrency = c.currency || 'QAR';
+
+                        this.roleTitle = c.role_title || '';
+                        this.roleOverridden = true;
+                        this.branch = c.branch || 'old_airport';
+                        this.currency = c.currency || 'QAR';
+                        this.compensation = c.compensation || '0.00';
+                        this.startDate = c.start_date || LALEEN_CONTRACT_BOOT.defaultStartDate || '';
+                        this.expiryDate = c.expiry_date || '';
+                        this.pin = '';
+                        this.clausesBody = c.clauses_body || '';
+                        this.clausesOverridden = true;
+
+                        this.wasActive = (c.status === 'active');
+                        if (this.wasActive) {
+                            this.requireResignature = true;
+                            this.status = 'pending_signature';
+                        } else {
+                            this.requireResignature = false;
+                            this.status = c.status || 'pending_signature';
+                        }
+                    },
+
+                    selectStatus(nextStatus) {
+                        this.status = nextStatus;
+                        if (this.mode === 'edit' && this.wasActive) {
+                            this.requireResignature = (nextStatus !== 'active');
+                        }
+                        this.openMenu = null;
+                    },
+
+                    onToggleResignature() {
+                        if (!this.wasActive) return;
+                        this.status = this.requireResignature ? 'pending_signature' : 'active';
                     },
 
                     toggleMenu(name) {
@@ -1130,6 +1312,24 @@
                 const wasOpen = wrap.classList.contains('open');
                 closeAllContractMenus();
                 if (!wasOpen) wrap.classList.add('open');
+            };
+
+            window.openCreateContractModal = function () {
+                closeAllContractMenus();
+                window.dispatchEvent(new CustomEvent('open-contract-create'));
+            };
+
+            window.openEditContractModal = function (contractId) {
+                closeAllContractMenus();
+                const contract = (LALEEN_CONTRACT_BOOT.contractsById || {})[String(contractId)]
+                    || (LALEEN_CONTRACT_BOOT.contractsById || {})[contractId];
+                if (!contract) return;
+                const modalEl = document.getElementById('createContractModal');
+                if (!modalEl) return;
+                window.dispatchEvent(new CustomEvent('open-contract-edit', {
+                    detail: { contract }
+                }));
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
             };
 
             window.openContractPinModal = function (memberKey = null, staffName = '', hasCustomPin = false) {

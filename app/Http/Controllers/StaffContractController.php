@@ -277,6 +277,298 @@ class StaffContractController extends Controller
     }
 
     /**
+     * Admin: Update an existing staff contract while preserving its unguessable secure_token.
+     */
+    public function update(Request $request, StaffContract $contract)
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can edit staff contracts.');
+
+        $contract->loadMissing(['staff', 'user']);
+
+        if ($request->filled('compensation')) {
+            $request->merge(['base_salary' => $request->input('compensation')]);
+        } elseif (!$request->filled('base_salary')) {
+            $request->merge(['base_salary' => (float) $contract->base_salary]);
+        }
+
+        if (!$request->filled('template_key')) {
+            $request->merge(['template_key' => $contract->template_key]);
+        }
+
+        if (!$request->exists('start_date') && $contract->start_date) {
+            $request->merge(['start_date' => $contract->start_date->toDateString()]);
+        }
+
+        $hasExplicitMember = $request->filled('team_member')
+            || $request->filled('staff_id')
+            || $request->filled('user_id');
+
+        $member = $hasExplicitMember
+            ? $this->resolveTargetMember($request)
+            : $contract->memberEntity();
+
+        if (!$member) {
+            throw ValidationException::withMessages([
+                'team_member' => 'Please select a valid team member for this contract.',
+            ]);
+        }
+
+        $allTemplates = StaffContract::allTemplates();
+        $allowedTemplateKeys = array_values(array_unique(array_merge(
+            array_keys($allTemplates),
+            [StaffContract::NEW_CATEGORY_SENTINEL, (string) $contract->template_key]
+        )));
+
+        $validated = $request->validate([
+            'team_member' => ['nullable', 'string', 'max:60'],
+            'staff_id' => ['nullable'],
+            'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'template_key' => ['required', 'string', Rule::in($allowedTemplateKeys)],
+            'custom_category_name' => ['nullable', 'string', 'max:120'],
+            'custom_category_currency' => ['nullable', 'string', Rule::in(StaffContract::CURRENCIES)],
+            'role_title' => ['nullable', 'string', 'max:120'],
+            'branch' => ['nullable', 'string', Rule::in(array_keys(StaffContract::BRANCHES))],
+            'currency' => ['nullable', 'string', Rule::in(StaffContract::CURRENCIES)],
+            'compensation' => ['nullable', 'numeric', 'min:0'],
+            'base_salary' => ['required', 'numeric', 'min:0'],
+            'housing_allowance' => ['nullable', 'numeric', 'min:0'],
+            'transport_allowance' => ['nullable', 'numeric', 'min:0'],
+            'other_allowance' => ['nullable', 'numeric', 'min:0'],
+            'start_date' => ['nullable', 'date'],
+            'expiry_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'clauses_body' => ['nullable', 'string', 'max:30000'],
+            'status' => ['nullable', 'string', Rule::in(array_keys(StaffContract::STATUSES))],
+            'pin' => ['nullable', 'string', 'regex:/^\d{4}$/'],
+            'require_resignature' => ['nullable', 'boolean'],
+            'redirect_to' => ['nullable', 'string', Rule::in(['index', 'portal'])],
+        ]);
+
+        $templateKey = $validated['template_key'];
+
+        if ($templateKey === StaffContract::NEW_CATEGORY_SENTINEL) {
+            $newCategoryName = trim((string) ($validated['custom_category_name'] ?? ''));
+            if ($newCategoryName === '') {
+                throw ValidationException::withMessages([
+                    'custom_category_name' => 'Please enter a Category / Designation Name when creating a new category.',
+                ]);
+            }
+
+            $newCurrency = strtoupper((string) (
+                $validated['custom_category_currency']
+                ?? $validated['currency']
+                ?? $contract->currency
+                ?? 'QAR'
+            ));
+            $newDefaultBranch = $validated['branch']
+                ?? $contract->branch
+                ?? ($newCurrency === 'PKR' ? 'remote' : 'old_airport');
+            $submittedClauses = trim((string) ($validated['clauses_body'] ?? ''));
+            $finalCategoryClauses = $submittedClauses !== ''
+                ? $submittedClauses
+                : StaffContract::defaultCustomClauses($newCategoryName, $newCurrency);
+
+            $existingCategory = StaffContractCategory::whereRaw('LOWER(label) = ?', [strtolower($newCategoryName)])->first();
+            if ($existingCategory) {
+                $existingCategory->update([
+                    'default_currency' => $newCurrency,
+                    'default_branch' => $newDefaultBranch,
+                    'clauses' => $finalCategoryClauses,
+                ]);
+                $savedCategory = $existingCategory;
+            } else {
+                $savedCategory = StaffContractCategory::create([
+                    'slug' => StaffContractCategory::generateUniqueSlug($newCategoryName),
+                    'label' => $newCategoryName,
+                    'default_currency' => $newCurrency,
+                    'default_branch' => $newDefaultBranch,
+                    'clauses' => $finalCategoryClauses,
+                    'created_by' => $request->user()->id,
+                ]);
+            }
+
+            $templateKey = $savedCategory->slug;
+            $template = $savedCategory->toTemplateArray();
+        } else {
+            $template = $allTemplates[$templateKey] ?? [
+                'label' => $contract->designationLabel(),
+                'default_role' => $contract->designationLabel(),
+                'default_currency' => $contract->currency ?: 'QAR',
+                'allowed_currencies' => StaffContract::CURRENCIES,
+                'default_branch' => $contract->branch ?: 'old_airport',
+                'clauses' => (string) $contract->clauses_body,
+            ];
+        }
+
+        $currency = strtoupper((string) ($validated['currency'] ?? $contract->currency ?? $template['default_currency']));
+        if (!in_array($currency, $template['allowed_currencies'], true)) {
+            if (!$request->filled('currency')) {
+                $currency = $template['default_currency'];
+            } else {
+                throw ValidationException::withMessages([
+                    'currency' => sprintf(
+                        'The %s template only supports %s currency.',
+                        $template['label'],
+                        implode(' / ', $template['allowed_currencies'])
+                    ),
+                ]);
+            }
+        }
+
+        $branch = $validated['branch'] ?? $contract->branch ?? $template['default_branch'];
+
+        $roleTitle = $request->exists('role_title') && trim((string) $validated['role_title']) !== ''
+            ? trim((string) $validated['role_title'])
+            : ($contract->role_title ?: $template['default_role']);
+
+        $clausesBody = $request->exists('clauses_body') && trim((string) $validated['clauses_body']) !== ''
+            ? trim((string) $validated['clauses_body'])
+            : ($contract->clauses_body ?: $template['clauses']);
+
+        $monthlyCompensation = (float) ($validated['compensation'] ?? $validated['base_salary']);
+
+        if ($member instanceof Staff) {
+            $staffId = $member->id;
+            $userId = $member->user_id ?: null;
+        } else {
+            $userId = $member->id;
+            $linkedStaffId = Staff::where('user_id', $member->id)->value('id');
+            $staffId = $linkedStaffId ? (int) $linkedStaffId : null;
+        }
+
+        $wasActive = $contract->status === StaffContract::STATUS_ACTIVE;
+
+        if ($wasActive) {
+            if ($request->has('require_resignature')) {
+                $requireResignature = $request->boolean('require_resignature');
+            } elseif ($request->filled('status')) {
+                $requireResignature = $validated['status'] !== StaffContract::STATUS_ACTIVE;
+            } else {
+                $requireResignature = true;
+            }
+
+            if ($requireResignature) {
+                $requestedNonActiveStatus = $validated['status'] ?? null;
+                $finalStatus = in_array($requestedNonActiveStatus, [
+                    StaffContract::STATUS_DRAFT,
+                    StaffContract::STATUS_PENDING_SIGNATURE,
+                ], true)
+                    ? $requestedNonActiveStatus
+                    : StaffContract::STATUS_PENDING_SIGNATURE;
+
+                $signaturePayload = [
+                    'signed_name' => null,
+                    'signature_data' => null,
+                    'signature_type' => null,
+                    'signed_at' => null,
+                    'signed_ip' => null,
+                ];
+            } else {
+                $finalStatus = StaffContract::STATUS_ACTIVE;
+                $signaturePayload = [
+                    'signed_name' => $contract->signed_name,
+                    'signature_data' => $contract->signature_data,
+                    'signature_type' => $contract->signature_type,
+                    'signed_at' => $contract->signed_at,
+                    'signed_ip' => $contract->signed_ip,
+                ];
+            }
+        } else {
+            $finalStatus = $validated['status'] ?? $contract->status;
+            if ($finalStatus === StaffContract::STATUS_ACTIVE) {
+                $signaturePayload = [
+                    'signed_name' => $contract->signed_name ?: $member->name,
+                    'signature_data' => $contract->signature_data ?: $member->name,
+                    'signature_type' => $contract->signature_type ?: 'typed',
+                    'signed_at' => $contract->signed_at ?? now(),
+                    'signed_ip' => $contract->signed_ip,
+                ];
+            } else {
+                $signaturePayload = [
+                    'signed_name' => null,
+                    'signature_data' => null,
+                    'signature_type' => null,
+                    'signed_at' => null,
+                    'signed_ip' => null,
+                ];
+            }
+        }
+
+        $startDate = array_key_exists('start_date', $validated)
+            ? $validated['start_date']
+            : $contract->start_date?->toDateString();
+
+        $expiryDate = $request->exists('expiry_date')
+            ? ($validated['expiry_date'] ?? null)
+            : $contract->expiry_date?->toDateString();
+
+        DB::transaction(function () use (
+            $request,
+            $contract,
+            $member,
+            $staffId,
+            $userId,
+            $validated,
+            $templateKey,
+            $roleTitle,
+            $branch,
+            $currency,
+            $monthlyCompensation,
+            $startDate,
+            $expiryDate,
+            $clausesBody,
+            $finalStatus,
+            $signaturePayload
+        ) {
+            if (!empty($validated['pin'])) {
+                $this->syncPinAcrossMember($member, $validated['pin']);
+                $request->session()->forget($this->sessionKey($contract));
+            }
+
+            // Intentionally preserve secure_token and contract_number so private links remain valid
+            $contract->update(array_merge([
+                'staff_id' => $staffId,
+                'user_id' => $userId,
+                'template_key' => $templateKey,
+                'role_title' => $roleTitle,
+                'branch' => $branch,
+                'currency' => $currency,
+                'base_salary' => $monthlyCompensation,
+                'housing_allowance' => $validated['housing_allowance'] ?? $contract->housing_allowance ?? 0,
+                'transport_allowance' => $validated['transport_allowance'] ?? $contract->transport_allowance ?? 0,
+                'other_allowance' => $validated['other_allowance'] ?? $contract->other_allowance ?? 0,
+                'start_date' => $startDate,
+                'expiry_date' => $expiryDate,
+                'clauses_body' => $clausesBody,
+                'status' => $finalStatus,
+            ], $signaturePayload));
+        });
+
+        $contract->refresh();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'contract_id' => $contract->id,
+                'contract_number' => $contract->contract_number,
+                'secure_token' => $contract->secure_token,
+                'status' => $contract->status,
+                'status_label' => $contract->statusLabel(),
+                'portal_url' => route('contracts.portal.show', $contract->secure_token),
+            ]);
+        }
+
+        if (($validated['redirect_to'] ?? null) === 'portal') {
+            return redirect()
+                ->route('contracts.portal.show', $contract->secure_token)
+                ->with('success', "Contract {$contract->contract_number} updated.");
+        }
+
+        return redirect()
+            ->route('staffs.index', ['tab' => 'contracts'])
+            ->with('success', "Contract {$contract->contract_number} updated for {$member->name}.");
+    }
+
+    /**
      * Admin: Transition a non-locked contract between Draft and Pending Signature.
      */
     public function updateStatus(Request $request, StaffContract $contract)
@@ -433,8 +725,10 @@ class StaffContractController extends Controller
             ? self::UNLOCK_TTL_SECONDS
             : max(0, self::UNLOCK_TTL_SECONDS - (now()->timestamp - $unlockedAt));
 
+        $adminEditData = $isAdminViewer ? $this->buildAdminPortalEditData($contract) : [];
+
         return response()
-            ->view('contracts.portal-unlocked', [
+            ->view('contracts.portal-unlocked', array_merge([
                 'contract' => $contract,
                 'staffName' => $memberName,
                 'isAdminViewer' => $isAdminViewer,
@@ -442,7 +736,7 @@ class StaffContractController extends Controller
                 'signUrl' => route('contracts.portal.sign', $contract->secure_token),
                 'pdfUrl' => route('contracts.portal.pdf', $contract->secure_token),
                 'logoUrl' => $logoUrl,
-            ])
+            ], $adminEditData))
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     }
 
@@ -811,5 +1105,74 @@ class StaffContractController extends Controller
     private function throttleKey(Request $request, StaffContract $contract): string
     {
         return 'contract-pin:' . $contract->id . ':' . ($request->ip() ?: 'unknown');
+    }
+
+    /**
+     * Prepare dropdown options for the inline Admin Edit modal on the Agreement View.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildAdminPortalEditData(StaffContract $contract): array
+    {
+        $todayDate = now('Asia/Qatar')->startOfDay();
+        $allStaff = Staff::with('user')->orderBy('name')->get();
+
+        $salonMembers = $allStaff
+            ->filter(fn (Staff $s) => !$s->end_date || $s->end_date->gte($todayDate) || (int) $s->id === (int) $contract->staff_id)
+            ->map(function (Staff $s) {
+                $branchKey = array_key_exists((string) $s->branch, StaffContract::BRANCHES)
+                    ? (string) $s->branch
+                    : 'old_airport';
+
+                return [
+                    'key' => 'staff:' . $s->id,
+                    'label' => $s->name . ' — ' . (StaffContract::BRANCHES[$branchKey] ?? 'Salon Staff'),
+                ];
+            })
+            ->values()
+            ->all();
+
+        $linkedUserIds = $allStaff->pluck('user_id')->filter()->map(fn ($id) => (int) $id)->all();
+        $linkedEmails = $allStaff
+            ->map(fn (Staff $s) => strtolower(trim((string) ($s->email ?? $s->user?->email ?? ''))))
+            ->filter()
+            ->all();
+
+        $accessMembers = User::query()
+            ->where(function ($q) use ($contract) {
+                $q->where('is_active', true);
+                if ($contract->user_id) {
+                    $q->orWhere('id', $contract->user_id);
+                }
+            })
+            ->orderBy('name')
+            ->get()
+            ->reject(function (User $u) use ($linkedUserIds, $linkedEmails, $contract) {
+                if ($contract->user_id && !$contract->staff_id && (int) $u->id === (int) $contract->user_id) {
+                    return false;
+                }
+                if (in_array((int) $u->id, $linkedUserIds, true)) {
+                    return true;
+                }
+                $cleanEmail = strtolower(trim((string) $u->email));
+
+                return $cleanEmail !== '' && in_array($cleanEmail, $linkedEmails, true);
+            })
+            ->map(function (User $u) {
+                $profile = StaffContract::resolveUserContractProfile($u);
+
+                return [
+                    'key' => 'user:' . $u->id,
+                    'label' => $u->name . ' — ' . $profile['tag'],
+                ];
+            })
+            ->values()
+            ->all();
+
+        return [
+            'contractTemplates' => StaffContract::allTemplates(),
+            'portalSalonMembers' => $salonMembers,
+            'portalAccessMembers' => $accessMembers,
+        ];
     }
 }
