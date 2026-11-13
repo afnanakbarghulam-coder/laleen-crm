@@ -608,11 +608,18 @@
         cursor: pointer;
     }
 
-    .fb-combo-staff-select {
+    .fb-combo-staff-select,
+    .fb-redeem-staff-select {
         margin: 2px 0 6px;
         font-size: 12px;
         max-width: 220px;
         margin-left: auto;
+    }
+
+    .fb-redeem-pick-row.disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
     }
 
     .fb-redeem-pill {
@@ -904,6 +911,9 @@
         let clientSearchTimer = null;
         let clientPendingPackages = []; // this client's redeemable package services, fetched once picked
         let selectedRedemptions = []; // subset of the above actually being applied to this booking
+        let redeemStaffMap = {}; // { "pkgId:svcId": staffId }
+        let redeemStaffOptionsMap = {}; // { "pkgId:svcId": { sig, options } }
+        let redeemStaffRequestSeq = 0;
 
         window.openCalendarBookModal = function(prefill) {
             prefill = prefill || {};
@@ -915,6 +925,8 @@
             selectedClient = null;
             clientPendingPackages = [];
             selectedRedemptions = [];
+            redeemStaffMap = {};
+            redeemStaffOptionsMap = {};
             pendingStaffId = prefill.staffId || null;
 
             document.getElementById('bookStaffSelect').innerHTML = '<option value="">-- Select Staff --</option>';
@@ -1003,6 +1015,8 @@
             fbUpdateRedeemButton();
             if (selectedClient && selectedClient.id) {
                 fbLoadClientPendingPackages();
+            } else if (selectedClient && selectedClient.phone) {
+                fbResolveClientByPhone(selectedClient.phone);
             }
             fbUpdateDateLabel();
             fbUpdateTeamMemberVisibility();
@@ -1052,8 +1066,8 @@
                 document.getElementById('fbDateSub').textContent = `${hh}:${m.toString().padStart(2,'0')} ${p} · Doesn't repeat`;
             }
         }
-        document.getElementById('bookDateInput').addEventListener('change', () => { fbUpdateDateLabel(); loadAvailableStaff(); fbRefreshComboStaffOptions(); });
-        document.getElementById('bookTimeInput').addEventListener('change', () => { fbUpdateDateLabel(); loadAvailableStaff(); fbRefreshComboStaffOptions(); });
+        document.getElementById('bookDateInput').addEventListener('change', () => { fbUpdateDateLabel(); loadAvailableStaff(); fbRefreshComboStaffOptions(); fbRefreshRedeemStaffOptions(); });
+        document.getElementById('bookTimeInput').addEventListener('change', () => { fbUpdateDateLabel(); loadAvailableStaff(); fbRefreshComboStaffOptions(); fbRefreshRedeemStaffOptions(); });
         document.getElementById('bookUnscheduledToggle').addEventListener('change', function() {
             const timeInput = document.getElementById('bookTimeInput');
             timeInput.disabled = this.checked;
@@ -1067,7 +1081,7 @@
             fbUpdateTeamMemberVisibility();
             loadAvailableStaff();
         });
-        document.getElementById('bookBranch').addEventListener('change', () => { loadAvailableStaff(); fbRefreshComboStaffOptions(); });
+        document.getElementById('bookBranch').addEventListener('change', () => { loadAvailableStaff(); fbRefreshComboStaffOptions(); fbRefreshRedeemStaffOptions(); });
 
         /* ---------------- RAIL / CLIENT ---------------- */
         function fbUpdateRail() {
@@ -1261,6 +1275,43 @@
             });
         })();
 
+        function fbLookupPhoneRequest(fullPhone) {
+            return fetch("{{ route('customers.lookup') }}?phone=" + encodeURIComponent(fullPhone), {
+                headers: { 'Accept': 'application/json' }
+            }).then(r => r.json()).catch(() => ({ found: false }));
+        }
+
+        function fbResolveClientByPhone(fullPhone) {
+            if (!fullPhone) return Promise.resolve(null);
+            return fbLookupPhoneRequest(fullPhone).then(data => {
+                if (data && data.found && data.id && selectedClient && selectedClient.phone === fullPhone) {
+                    selectedClient.id = data.id;
+                    if (!selectedClient.name || selectedClient.name === 'Client') {
+                        selectedClient.name = data.name || selectedClient.name;
+                    }
+                    fbUpdateRail();
+                    fbLoadClientPendingPackages();
+                    return data;
+                }
+                return null;
+            });
+        }
+
+        document.getElementById('fbNewClientPhone').addEventListener('blur', function() {
+            const countryCode = document.getElementById('fbNewClientCountryCode').value;
+            const localDigits = this.value.trim().replace(/\D/g, '');
+            if (localDigits.length < 4) return;
+            const fullPhone = countryCode + localDigits;
+            fbLookupPhoneRequest(fullPhone).then(data => {
+                if (data && data.found) {
+                    const nameInput = document.getElementById('fbNewClientName');
+                    if (nameInput && !nameInput.value.trim() && data.name) {
+                        nameInput.value = data.name;
+                    }
+                }
+            });
+        });
+
         window.fbConfirmNewClient = function() {
             const name = document.getElementById('fbNewClientName').value.trim();
             const countryCode = document.getElementById('fbNewClientCountryCode').value;
@@ -1288,20 +1339,48 @@
 
             selectedClient = { name, phone: fullPhone };
             selectedRedemptions = [];
+            redeemStaffMap = {};
+            redeemStaffOptionsMap = {};
             fbLoadClientPendingPackages();
             fbUpdateRail();
             fbShowPanel('main');
+            fbResolveClientByPhone(fullPhone);
         };
 
         function fbSelectExistingClient(client) {
             selectedClient = { id: client.id, name: client.name, phone: client.phone };
             selectedRedemptions = [];
+            redeemStaffMap = {};
+            redeemStaffOptionsMap = {};
             fbUpdateRail();
             fbShowPanel('main');
             fbLoadClientPendingPackages();
         }
 
         /* ---------------- REDEEM PENDING PACKAGE SERVICE ---------------- */
+        function fbPackageRemainingSlots(pkgId) {
+            const pkgEntries = clientPendingPackages.filter(p => p.client_package_id === pkgId);
+            if (!pkgEntries.length) return 0;
+            const serverRemaining = (pkgEntries[0].remaining_count !== undefined && pkgEntries[0].remaining_count !== null)
+                ? Number(pkgEntries[0].remaining_count)
+                : pkgEntries.length;
+            const pickedForPkg = selectedRedemptions.filter(r => r.client_package_id === pkgId).length;
+            const unpickedOptions = pkgEntries.filter(p => !selectedRedemptions.some(r => r.id === p.id)).length;
+            return Math.max(0, Math.min(serverRemaining - pickedForPkg, unpickedOptions));
+        }
+
+        function fbTotalRemainingRedeemSlots() {
+            const seenPkgIds = new Set();
+            let total = 0;
+            clientPendingPackages.forEach(p => {
+                if (!seenPkgIds.has(p.client_package_id)) {
+                    seenPkgIds.add(p.client_package_id);
+                    total += fbPackageRemainingSlots(p.client_package_id);
+                }
+            });
+            return total;
+        }
+
         function fbLoadClientPendingPackages() {
             clientPendingPackages = [];
             fbUpdateRedeemButton();
@@ -1319,9 +1398,9 @@
 
         function fbUpdateRedeemButton() {
             const btn = document.getElementById('fbOpenRedeemPanel');
-            const available = clientPendingPackages.filter(p => !selectedRedemptions.some(r => r.id === p.id));
+            const totalRemaining = fbTotalRemainingRedeemSlots();
             btn.classList.toggle('d-none', clientPendingPackages.length === 0);
-            document.getElementById('fbRedeemBadge').textContent = available.length;
+            document.getElementById('fbRedeemBadge').textContent = totalRemaining;
         }
 
         function fbRenderRedeemPicker() {
@@ -1333,23 +1412,33 @@
                 return;
             }
 
-            box.innerHTML = available.map((p, i) => `
-                <div class="fb-redeem-pick-row" data-idx="${i}">
+            box.innerHTML = available.map((p, i) => {
+                const pkgSlotsLeft = fbPackageRemainingSlots(p.client_package_id);
+                const isCapped = pkgSlotsLeft <= 0;
+                const expiryHtml = p.expires_at === null
+                    ? '<span class="fb-redeem-expiry ok">starts at Visit 1 checkout</span>'
+                    : `<span class="fb-redeem-expiry ${p.days_left <= 2 ? 'soon' : 'ok'}">${p.days_left <= 0 ? 'expires today' : 'expires ' + p.expires_at + ' (' + p.days_left + 'd left)'}</span>`;
+                const capNote = isCapped
+                    ? ' · <span class="text-warning">package slot limit reached</span>'
+                    : ` · <span>${pkgSlotsLeft} slot${pkgSlotsLeft === 1 ? '' : 's'} left</span>`;
+
+                return `
+                <div class="fb-redeem-pick-row ${isCapped ? 'disabled' : ''}" data-idx="${i}" data-disabled="${isCapped ? '1' : '0'}">
                     <div class="flex-grow-1">
                         <div class="name">${p.service_name} <span class="text-muted">(${p.duration} min)</span></div>
                         <div class="fb-redeem-row-meta">
-                            from ${p.combo_name} ·
-                            <span class="fb-redeem-expiry ${p.days_left <= 2 ? 'soon' : 'ok'}">
-                                ${p.days_left <= 0 ? 'expires today' : 'expires ' + p.expires_at + ' (' + p.days_left + 'd left)'}
-                            </span>
+                            from ${p.combo_name} · ${expiryHtml}${capNote}
                         </div>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
 
             box.querySelectorAll('.fb-redeem-pick-row').forEach(row => {
                 row.addEventListener('click', () => {
+                    if (row.dataset.disabled === '1') return;
                     const item = available[Number(row.dataset.idx)];
+                    if (!item || fbPackageRemainingSlots(item.client_package_id) <= 0) return;
                     selectedRedemptions.push(item);
                     fbRenderRedemptions();
                     fbUpdateRedeemButton();
@@ -1359,10 +1448,61 @@
             });
         }
 
+        function fbFetchRedeemServiceStaff(redemption) {
+            const dateVal = document.getElementById('bookDateInput').value;
+            const timeVal = document.getElementById('bookTimeInput').value;
+            const branch = document.getElementById('bookBranch').value;
+            const datetime = (dateVal && timeVal) ? `${dateVal}T${timeVal}` : '';
+            if (!datetime || !branch) return;
+
+            const token = redemption.id;
+            const sig = fbComboStaffSignature();
+            const requestId = ++redeemStaffRequestSeq;
+
+            const params = new URLSearchParams();
+            params.append('services[]', redemption.service_name);
+            params.append('appointment_datetime', datetime);
+            params.append('branch', branch);
+
+            fetch("{{ route('appointments.availableStaff') }}?" + params.toString())
+                .then(res => res.json())
+                .then(data => {
+                    redeemStaffOptionsMap[token] = { sig, options: data };
+
+                    const select = document.querySelector(`.fb-redeem-staff-select[data-token="${token}"]`);
+                    if (!select) return;
+                    const current = redeemStaffMap[token] || '';
+                    select.innerHTML = '<option value="">-- Same as main staff --</option>' +
+                        data.map(st => `<option value="${st.id}">${st.name}</option>`).join('');
+                    if (current && data.some(st => st.id == current)) {
+                        select.value = current;
+                    } else if (current) {
+                        delete redeemStaffMap[token];
+                        fbUpdateTeamMemberVisibility();
+                        fbSyncHiddenAndTotals();
+                        loadAvailableStaff();
+                    }
+                })
+                .catch(err => console.error('Fetch error:', err));
+        }
+
+        function fbRefreshRedeemStaffOptions() {
+            selectedRedemptions.forEach(r => {
+                const entry = redeemStaffOptionsMap[r.id];
+                if (!entry || entry.sig !== fbComboStaffSignature()) {
+                    fbFetchRedeemServiceStaff(r);
+                }
+            });
+        }
+
         function fbRenderRedemptions() {
             const list = document.getElementById('fbRedeemList');
 
-            list.innerHTML = selectedRedemptions.map((r, i) => `
+            list.innerHTML = selectedRedemptions.map((r, i) => {
+                const staffEntry = redeemStaffOptionsMap[r.id];
+                const staffOpts = staffEntry ? staffEntry.options : [];
+                const currentStaff = redeemStaffMap[r.id] || '';
+                return `
                 <div class="fb-svc-row">
                     <div class="fb-svc-row-main">
                         <div>
@@ -1371,12 +1511,26 @@
                         </div>
                         <button type="button" class="remove-btn fb-redeem-remove-btn" data-idx="${i}"><i class="bx bx-x"></i></button>
                     </div>
+                    <div class="d-flex align-items-center justify-content-between gap-2 pt-1">
+                        <span class="meta">Stylist for this service:</span>
+                        <select class="form-select form-select-sm fb-redeem-staff-select" data-token="${r.id}">
+                            <option value="">-- Same as main staff --</option>
+                            ${(staffOpts || []).map(st => `<option value="${st.id}" ${currentStaff == st.id ? 'selected' : ''}>${st.name}</option>`).join('')}
+                        </select>
+                    </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
+
+            fbUpdateTeamMemberVisibility();
 
             list.querySelectorAll('.fb-redeem-remove-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    selectedRedemptions.splice(Number(btn.dataset.idx), 1);
+                    const removed = selectedRedemptions.splice(Number(btn.dataset.idx), 1)[0];
+                    if (removed) {
+                        delete redeemStaffMap[removed.id];
+                        delete redeemStaffOptionsMap[removed.id];
+                    }
                     fbRenderRedemptions();
                     fbUpdateRedeemButton();
                     fbSyncHiddenAndTotals();
@@ -1384,7 +1538,22 @@
                 });
             });
 
+            list.querySelectorAll('.fb-redeem-staff-select').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    const token = sel.dataset.token;
+                    if (sel.value) {
+                        redeemStaffMap[token] = sel.value;
+                    } else {
+                        delete redeemStaffMap[token];
+                    }
+                    fbUpdateTeamMemberVisibility();
+                    fbSyncHiddenAndTotals();
+                    loadAvailableStaff();
+                });
+            });
+
             fbSyncHiddenAndTotals();
+            fbRefreshRedeemStaffOptions();
         }
 
         document.getElementById('fbOpenRedeemPanel').addEventListener('click', () => fbShowPanel('redeem'));
@@ -1646,17 +1815,21 @@
             `).join('');
 
             const redeemHidden = document.getElementById('fbRedeemHiddenInputs');
-            redeemHidden.innerHTML = selectedRedemptions.map(r => `
+            redeemHidden.innerHTML = selectedRedemptions.map(r => {
+                const assignedStaff = redeemStaffMap[r.id] || '';
+                return `
                 <input type="hidden" name="redeem_service_ids[]" value="${r.id}">
-            `).join('');
+                ${assignedStaff ? `<input type="hidden" name="redeem_service_staff[${r.id}]" value="${assignedStaff}">` : ''}
+            `;
+            }).join('');
 
-            // Package services - new or redeemed - are already covered by
-            // what the client already paid, so only their duration - never
-            // a QAR amount - feeds into this visit's running total here.
+            // Redeemed package services are already covered (0 QAR), while newly
+            // added Combo packages charge the package price on Visit 1.
             const comboImmediateMinutes = selectedCombos.reduce((sum, r) => sum + fbComboImmediateDuration(r), 0);
             const redeemMinutes = selectedRedemptions.reduce((sum, r) => sum + (r.duration || 0), 0);
+            const comboPackagesPrice = selectedCombos.reduce((sum, r) => sum + (Number(r.combo.price) || 0), 0);
 
-            const totalPrice = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
+            const totalPrice = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0) + comboPackagesPrice;
             const totalDiscount = selectedServices.reduce((sum, s) => sum + fbServiceDiscount(s), 0);
             const totalMin = selectedServices.reduce((sum, s) => sum + s.duration, 0) + comboImmediateMinutes + redeemMinutes;
 
@@ -1789,7 +1962,10 @@
            in loadAvailableStaff's callback) whenever any combo is present. */
         function fbUpdateTeamMemberVisibility() {
             const isUnscheduled = document.getElementById('bookUnscheduledToggle').checked;
-            const hide = selectedCombos.length > 0 || isUnscheduled;
+            const allRedemptionsAssignedInline = selectedRedemptions.length > 0
+                && selectedServices.length === 0
+                && selectedRedemptions.every(r => Boolean(redeemStaffMap[r.id]));
+            const hide = selectedCombos.length > 0 || isUnscheduled || allRedemptionsAssignedInline;
             document.getElementById('fbTeamMemberSection').classList.toggle('d-none', hide);
             // A hidden-but-required field blocks native form submission
             // silently (a display:none control can't be focused for the
@@ -1798,17 +1974,14 @@
             document.getElementById('bookStaffSelect').required = !hide;
         }
 
-        /* With the Team Member field hidden behind a combo, its value still
-           has to be a real staff id for the appointment record - filled in
-           automatically instead of asking the user to redundantly repick
-           someone already assigned inline to one of today's combo services. */
+        /* With the Team Member field hidden behind a combo or multi-stylist
+           redemption, its value still has to be a real staff id for the
+           appointment record - filled in automatically instead of asking the
+           user to redundantly repick someone already assigned inline. */
         function fbAutoAssignMainStaffForCombo() {
-            if (!selectedCombos.length) return;
+            if (!selectedCombos.length && !selectedRedemptions.length) return;
 
             const staffSelect = document.getElementById('bookStaffSelect');
-            // Never override an explicit value already sitting there
-            // (a pending reschedule id, or one the flow set for another
-            // reason) - this only fills in a genuinely empty selection.
             if (!staffSelect || staffSelect.disabled || !staffSelect.options.length || staffSelect.value) return;
 
             let preferred = null;
@@ -1818,10 +1991,15 @@
                 }
                 if (preferred) break;
             }
+            if (!preferred) {
+                for (const r of selectedRedemptions) {
+                    if (redeemStaffMap[r.id]) { preferred = redeemStaffMap[r.id]; break; }
+                }
+            }
 
             if (preferred && [...staffSelect.options].some(o => o.value == preferred)) {
                 staffSelect.value = preferred;
-            } else if (staffSelect.options.length > 1) {
+            } else if (selectedCombos.length > 0 && staffSelect.options.length > 1) {
                 staffSelect.value = staffSelect.options[1].value;
             }
         }
@@ -1991,9 +2169,11 @@
                     }
                 });
             });
-            const redeemNames = selectedRedemptions.map(r => r.service_name);
+            const redeemNames = selectedRedemptions
+                .filter(r => !redeemStaffMap[r.id])
+                .map(r => r.service_name);
             const hasImmediate = selectedServices.length > 0 || comboImmediateNames.length > 0 || redeemNames.length > 0;
-            const decideMode = decideInSalon || (selectedCombos.length > 0 && !hasImmediate);
+            const decideMode = decideInSalon || ((selectedCombos.length > 0 || selectedRedemptions.length > 0) && !hasImmediate);
 
             if ((!hasImmediate && !decideMode) || !datetime || !branch) return;
 

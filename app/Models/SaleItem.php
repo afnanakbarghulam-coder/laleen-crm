@@ -10,6 +10,7 @@ class SaleItem extends Model
         'sale_id',
         'type',
         'product_id',
+        'client_package_service_id',
         'staff_id',
         'name',
         'price',
@@ -18,6 +19,11 @@ class SaleItem extends Model
         'quantity',
         'total',
     ];
+
+    public function clientPackageService()
+    {
+        return $this->belongsTo(ClientPackageService::class);
+    }
 
     public function sale()
     {

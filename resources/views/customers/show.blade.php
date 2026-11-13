@@ -430,13 +430,35 @@
                         <div class="package-item">
                             <div class="package-item-head">
                                 <span class="name">{{ $pkg->combo_name }}</span>
-                                <span class="package-status-badge" style="background:{{ $packageStatusColors[$pkg->status] ?? '#c9a39a' }}">
-                                    {{ $pkg->status }}
-                                </span>
+                                <div class="d-flex align-items-center gap-1">
+                                    @if ($pkg->sale_id === null)
+                                        <span class="badge bg-info text-dark" style="font-size:10.5px;">
+                                            Starts at Visit 1 checkout ({{ $pkg->effective_validity_days }} days)
+                                        </span>
+                                    @else
+                                        <span class="package-status-badge" style="background:{{ $packageStatusColors[$pkg->status] ?? '#c9a39a' }}">
+                                            {{ $pkg->status }}
+                                        </span>
+                                    @endif
+                                    @if (auth()->user()?->isAdmin())
+                                        <button type="button"
+                                            class="btn btn-sm btn-outline-warning py-0 px-2"
+                                            style="font-size:11px;"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#managePackageModal-{{ $pkg->id }}">
+                                            Manage / Extend
+                                        </button>
+                                    @endif
+                                </div>
                             </div>
                             <div class="package-item-meta">
-                                Bought {{ $pkg->purchased_at->format('d M Y') }} · {{ number_format($pkg->price_paid, 2) }} QAR ·
-                                {{ $pkg->is_expired ? 'expired ' . $pkg->expires_at->format('d M Y') : 'valid until ' . $pkg->expires_at->format('d M Y') }}
+                                @if ($pkg->sale_id === null || !$pkg->expires_at)
+                                    Booked {{ $pkg->created_at->format('d M Y') }} · {{ number_format($pkg->price_paid, 2) }} QAR · awaiting Visit 1 payment
+                                @else
+                                    Bought {{ ($pkg->purchased_at ?? $pkg->created_at)->format('d M Y') }} · {{ number_format($pkg->price_paid, 2) }} QAR ·
+                                    {{ $pkg->is_expired ? 'expired ' . $pkg->expires_at->format('d M Y') : 'valid until ' . $pkg->expires_at->format('d M Y') }}
+                                @endif
+                                · {{ $pkg->redeemed_count }} / {{ $pkg->effective_quantity_included }} redeemed
                             </div>
                             <div class="package-svc-list">
                                 @foreach ($pkg->services as $svc)
@@ -638,6 +660,99 @@
             });
         </script>
     @endmoduleEdit
+
+    @if (auth()->user()?->isAdmin())
+        @foreach ($clientPackages as $pkg)
+            @php
+                $poolMax = ($pkg->combo && $pkg->combo->services->count() > 0)
+                    ? $pkg->combo->services->count()
+                    : max(50, $pkg->effective_quantity_included);
+                $defaultExpiryValue = $pkg->expires_at
+                    ? $pkg->expires_at->copy()->timezone(config('app.timezone', 'Asia/Qatar'))->format('Y-m-d')
+                    : now(config('app.timezone', 'Asia/Qatar'))->addDays($pkg->effective_validity_days)->format('Y-m-d');
+            @endphp
+            <div class="modal fade" id="managePackageModal-{{ $pkg->id }}" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <form method="POST" action="{{ route('customers.packages.update', [$customer->id, $pkg->id]) }}">
+                            @csrf
+                            @method('PATCH')
+                            <div class="modal-header">
+                                <h5 class="modal-title">Manage / Extend Package</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3 p-2 rounded" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(217,143,131,0.2);">
+                                    <div class="fw-bold" style="color: #e79a91;">{{ $pkg->combo_name }}</div>
+                                    <div class="small text-muted">
+                                        Status: <strong>{{ strtoupper($pkg->status) }}</strong> ·
+                                        Redeemed: <strong>{{ $pkg->redeemed_count }} / {{ $pkg->effective_quantity_included }}</strong> ·
+                                        Remaining: <strong>{{ $pkg->remaining_count }}</strong>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold" for="pkgExpiresAt-{{ $pkg->id }}">Expiry Date (end of day, Doha time)</label>
+                                    <input type="date"
+                                        name="expires_at"
+                                        id="pkgExpiresAt-{{ $pkg->id }}"
+                                        class="form-control mb-2"
+                                        value="{{ $defaultExpiryValue }}"
+                                        required>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="small text-muted">Quick extend:</span>
+                                        <button type="button" class="btn btn-xs btn-outline-info py-0 px-2 pkg-quick-extend-btn"
+                                            data-target="pkgExpiresAt-{{ $pkg->id }}" data-days="7">+7 days</button>
+                                        <button type="button" class="btn btn-xs btn-outline-info py-0 px-2 pkg-quick-extend-btn"
+                                            data-target="pkgExpiresAt-{{ $pkg->id }}" data-days="14">+14 days</button>
+                                    </div>
+                                </div>
+
+                                <div class="mb-1">
+                                    <label class="form-label fw-semibold" for="pkgQtyIncluded-{{ $pkg->id }}">Total Included Services</label>
+                                    <input type="number"
+                                        name="quantity_included"
+                                        id="pkgQtyIncluded-{{ $pkg->id }}"
+                                        class="form-control"
+                                        min="{{ $pkg->redeemed_count }}"
+                                        max="{{ $poolMax }}"
+                                        step="1"
+                                        value="{{ $pkg->effective_quantity_included }}"
+                                        required>
+                                    <div class="form-text text-muted">
+                                        Minimum {{ $pkg->redeemed_count }} (already redeemed) · Maximum {{ $poolMax }} (distinct services in pool).
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary btn-sm">Save Override</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endforeach
+
+        <script>
+            document.querySelectorAll('.pkg-quick-extend-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const input = document.getElementById(this.dataset.target);
+                    if (!input) return;
+                    const days = parseInt(this.dataset.days || '7', 10);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const current = input.value ? new Date(input.value + 'T00:00:00') : today;
+                    const base = current > today ? current : today;
+                    base.setDate(base.getDate() + days);
+                    const yyyy = base.getFullYear();
+                    const mm = String(base.getMonth() + 1).padStart(2, '0');
+                    const dd = String(base.getDate()).padStart(2, '0');
+                    input.value = `${yyyy}-${mm}-${dd}`;
+                });
+            });
+        </script>
+    @endif
 
     @include('customers._whatsapp_drawer')
 @endsection

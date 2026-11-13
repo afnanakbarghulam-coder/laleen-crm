@@ -239,7 +239,11 @@
                         <div class="line-item">
                             <span class="item-name">
                                 {{ $item['name'] }} <span class="muted">({{ $item['duration'] }} min)</span>
-                                @if (($item['discount_amount'] ?? 0) > 0)
+                                @if (!empty($item['is_package_redemption']))
+                                    <span class="discount-note">
+                                        <i class="bx bx-package"></i> {{ $item['discount_reason'] ?? 'Covered by package' }}
+                                    </span>
+                                @elseif (($item['discount_amount'] ?? 0) > 0)
                                     <span class="discount-note">
                                         <i class="bx bx-purchase-tag"></i> −{{ number_format($item['discount_amount'], 2) }} QAR off
                                         @if (!empty($item['discount_reason']))
@@ -249,7 +253,7 @@
                                 @endif
                             </span>
                             <span class="price-col">
-                                @if (($item['discount_amount'] ?? 0) > 0)
+                                @if (empty($item['is_package_redemption']) && ($item['discount_amount'] ?? 0) > 0)
                                     <span class="original-price">{{ number_format($item['original_price'], 2) }} QAR</span>
                                 @endif
                                 {{ number_format($item['price'], 2) }} QAR
@@ -298,9 +302,13 @@
                                     {{ $svc['service_name'] }} <span class="muted">({{ $svc['duration'] }} min)</span>
                                     <div class="redeem-meta">
                                         from {{ $svc['combo_name'] }} ·
-                                        <span class="redeem-expiry {{ $svc['days_left'] <= 2 ? 'soon' : 'ok' }}">
-                                            {{ $svc['days_left'] <= 0 ? 'expires today' : 'expires ' . $svc['expires_at'] . ' (' . $svc['days_left'] . 'd left)' }}
-                                        </span>
+                                        @if ($svc['expires_at'] === null)
+                                            <span class="redeem-expiry ok">starts at Visit 1 checkout</span>
+                                        @else
+                                            <span class="redeem-expiry {{ $svc['days_left'] <= 2 ? 'soon' : 'ok' }}">
+                                                {{ $svc['days_left'] <= 0 ? 'expires today' : 'expires ' . $svc['expires_at'] . ' (' . $svc['days_left'] . 'd left)' }}
+                                            </span>
+                                        @endif
                                     </div>
                                 </label>
                             </div>

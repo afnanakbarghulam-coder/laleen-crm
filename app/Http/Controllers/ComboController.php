@@ -98,6 +98,7 @@ class ComboController extends Controller
         ]);
 
         $data['status'] = $data['status'] ?? 'active';
+        $data['validity_days'] = !empty($data['validity_days']) ? (int) $data['validity_days'] : 7;
 
         // Defaults to "take every service in the pool" (the original
         // behavior) when the admin doesn't set a smaller pick count for a

@@ -385,9 +385,7 @@
                             @else
                                 {{ $poolSize }} service{{ $poolSize === 1 ? '' : 's' }}
                             @endif
-                            @if ($combo->validity_days)
-                                · Valid {{ $combo->validity_days }} days
-                            @endif
+                            · Valid {{ $combo->validity_days ?: 7 }} days from Visit 1 payment
                         </div>
                     </div>
 

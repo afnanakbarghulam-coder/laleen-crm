@@ -34,10 +34,35 @@ class AppointmentService extends Model
     protected static function booted(): void
     {
         static::saving(function (self $line) {
+            if ($line->isPackageRedemptionLine()) {
+                $line->discount_amount = 0;
+
+                return;
+            }
+
             if ($line->original_price !== null) {
                 $line->discount_amount = max(0, round((float) $line->original_price - $line->final_price, 2));
             }
         });
+    }
+
+    public function isPackageRedemptionLine(): bool
+    {
+        $reason = trim((string) $this->discount_reason);
+        if ($reason !== '' && stripos($reason, 'Redeemed from ') === 0) {
+            return true;
+        }
+
+        if ($this->relationLoaded('clientPackageService')) {
+            return $this->clientPackageService !== null;
+        }
+
+        return $this->exists && ClientPackageService::where('appointment_service_id', $this->id)->exists();
+    }
+
+    public function clientPackageService()
+    {
+        return $this->hasOne(ClientPackageService::class, 'appointment_service_id');
     }
 
     public function appointment()

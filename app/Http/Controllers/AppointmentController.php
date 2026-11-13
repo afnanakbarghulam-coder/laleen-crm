@@ -201,6 +201,29 @@ class AppointmentController extends Controller
         $isUnscheduled = $request->boolean('unscheduled')
             || ($request->filled('booking_date') && !$request->filled('start_time') && !$request->filled('appointment_datetime'));
 
+        if (!$isUnscheduled && !$request->filled('staff_id')) {
+            $firstPerServiceStaffId = null;
+            foreach ((array) $request->input('redeem_service_staff', []) as $candidateStaffId) {
+                if (!empty($candidateStaffId)) {
+                    $firstPerServiceStaffId = (int) $candidateStaffId;
+                    break;
+                }
+            }
+            if (!$firstPerServiceStaffId) {
+                foreach ((array) $request->input('packages', []) as $pkgRow) {
+                    foreach ((array) ($pkgRow['service_staff'] ?? []) as $candidateStaffId) {
+                        if (!empty($candidateStaffId)) {
+                            $firstPerServiceStaffId = (int) $candidateStaffId;
+                            break 2;
+                        }
+                    }
+                }
+            }
+            if ($firstPerServiceStaffId) {
+                $request->merge(['staff_id' => $firstPerServiceStaffId]);
+            }
+        }
+
         $rules = [
             'customer_name' => 'required|string|max:255',
             'phone' => ['required', 'string', 'max:20', 'regex:/^\+?[1-9]\d{6,14}$/'],
@@ -209,9 +232,10 @@ class AppointmentController extends Controller
             'start_time' => 'nullable|string',
             'unscheduled' => 'nullable|boolean',
             // "Decide in Salon" bookings defer service selection until the
-            // client arrives, and a combo package can stand on its own too,
-            // so service_name is only mandatory when neither is set.
-            'service_name' => 'required_without_all:decide_in_salon,packages|array',
+            // client arrives, and a combo package or package redemption can
+            // stand on its own too, so service_name is only mandatory when
+            // none of those are set.
+            'service_name' => 'required_without_all:decide_in_salon,packages,redeem_service_ids|array',
             'service_name.*' => 'string|max:255',
             'service_price' => 'nullable|array',
             'service_price.*' => 'nullable|numeric|min:0',
@@ -242,6 +266,7 @@ class AppointmentController extends Controller
             // in buildPackageRedemptionPlans().
             'redeem_service_ids' => 'nullable|array',
             'redeem_service_ids.*' => 'string',
+            'redeem_service_staff' => 'nullable|array',
         ];
 
         $messages = [
@@ -318,7 +343,12 @@ class AppointmentController extends Controller
         }
 
         [$redemptionPlans, $redemptionPlanError] = $customer
-            ? $this->buildPackageRedemptionPlans($request->input('redeem_service_ids', []), $customer)
+            ? $this->buildPackageRedemptionPlans(
+                $request->input('redeem_service_ids', []),
+                $customer,
+                null,
+                is_array($request->input('redeem_service_staff')) ? $request->input('redeem_service_staff') : []
+            )
             : [[], (!empty($request->input('redeem_service_ids', [])) ? 'Client profile is required to redeem a package.' : null)];
         if ($redemptionPlanError) {
             return redirect()->back()->withInput()->with('error', $redemptionPlanError);
@@ -328,16 +358,19 @@ class AppointmentController extends Controller
         $serviceNames = $request->service_name ?? [];
 
         // Every service actually being performed today, each tagged with
-        // whichever staff member will do it - manually-picked services and
-        // redeemed pending ones stay on the appointment's one "Team Member",
-        // but a combo service can be assigned to its own staff independently
-        // (validated - skill included - when the package plan was built).
+        // whichever staff member will do it - manually-picked services default
+        // to the appointment's "Team Member", while both new combo services and
+        // redeemed pending services support independent per-service stylists.
         $scheduleEntries = [];
         foreach ($serviceNames as $name) {
             $scheduleEntries[] = ['name' => $name, 'staff_id' => $staffId ? (int) $staffId : null];
         }
         foreach ($redemptionPlans as $plan) {
-            $scheduleEntries[] = ['name' => $plan['service']->name, 'staff_id' => $staffId ? (int) $staffId : null];
+            $assigned = $plan['staff_id'] ?? $staffId;
+            $scheduleEntries[] = [
+                'name' => $plan['service']->name,
+                'staff_id' => $assigned ? (int) $assigned : null,
+            ];
         }
         foreach ($packagePlans as $plan) {
             foreach ($plan['immediate_ids'] as $sid) {
@@ -484,8 +517,9 @@ class AppointmentController extends Controller
                 foreach ($redemptionPlans as $plan) {
                     $service = $plan['service'];
                     $package = $plan['client_package'];
+                    $assignedStaffId = $plan['staff_id'] ?? ($staffId ? (int) $staffId : null);
 
-                    $appointmentService = $this->addRedeemedServiceLine($appointment, $service, $package->combo_name, $cursor, $staffId ? (int) $staffId : null);
+                    $appointmentService = $this->addRedeemedServiceLine($appointment, $service, $package->combo_name, $cursor, $assignedStaffId);
                     ClientPackageService::create([
                         'client_package_id' => $package->id,
                         'service_id' => $service->id,
@@ -787,6 +821,17 @@ class AppointmentController extends Controller
 
         $submittedNames = array_values(array_filter(array_map('trim', $request->service_name ?? [])));
 
+        if (in_array($effectiveStatus, ['cancelled', 'no_show'], true)) {
+            $conflict = $this->downstreamPackageRedemptionConflict($appointment);
+            if ($conflict !== null) {
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $conflict], 422);
+                }
+
+                return redirect()->back()->with('error', $conflict);
+            }
+        }
+
         DB::transaction(function () use (
             $request,
             $appointment,
@@ -934,8 +979,17 @@ class AppointmentController extends Controller
     }
 
 
-    public function destroy(Appointment $appointment)
+    public function destroy(Request $request, Appointment $appointment)
     {
+        $conflict = $this->downstreamPackageRedemptionConflict($appointment);
+        if ($conflict !== null) {
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $conflict], 422);
+            }
+
+            return redirect()->back()->with('error', $conflict);
+        }
+
         DB::transaction(function () use ($appointment) {
             $customer = $appointment->customer ?: ($appointment->customer_id ? Customer::find($appointment->customer_id) : null);
             $apptDate = $appointment->appointment_date->copy();
@@ -1060,6 +1114,45 @@ class AppointmentController extends Controller
         });
 
         return redirect()->back()->with('success', 'Booking successfully deleted.');
+    }
+
+    /**
+     * Guard against cancelling, marking no-show, or deleting an appointment
+     * whose sold ClientPackage already has downstream redemptions on another
+     * active/completed appointment.
+     */
+    private function downstreamPackageRedemptionConflict(Appointment $appointment): ?string
+    {
+        $sale = $appointment->sale()->first();
+        $packageQuery = ClientPackage::where('appointment_id', $appointment->id);
+        if ($sale) {
+            $packageQuery->orWhere('sale_id', $sale->id);
+        }
+
+        $purchasedPackages = $packageQuery->with('services.appointmentService.appointment')->get();
+        foreach ($purchasedPackages as $pkg) {
+            foreach ($pkg->services as $pkgSvc) {
+                if ($pkgSvc->status !== 'redeemed') {
+                    continue;
+                }
+
+                $linkedLine = $pkgSvc->appointmentService;
+                if (!$linkedLine) {
+                    continue;
+                }
+
+                if ((int) $linkedLine->appointment_id === (int) $appointment->id) {
+                    continue;
+                }
+
+                $downstreamAppt = $linkedLine->appointment;
+                if ($downstreamAppt && !in_array(strtolower((string) $downstreamAppt->status), ['cancelled', 'no_show'], true)) {
+                    return "Cannot cancel or delete this appointment because services from \"{$pkg->combo_name}\" have already been redeemed on a subsequent visit. Cancel the downstream redemption appointment(s) first.";
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -2234,6 +2327,16 @@ class AppointmentController extends Controller
             ]);
         }
 
+        if (in_array($request->status, ['no_show', 'cancelled'], true)) {
+            $conflict = $this->downstreamPackageRedemptionConflict($appointment);
+            if ($conflict !== null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $conflict,
+                ], 422);
+            }
+        }
+
         DB::transaction(function () use ($request, $appointment) {
             if (in_array($request->status, ['no_show', 'cancelled'], true)) {
                 $this->reverseAppointmentSale($appointment);
@@ -2836,6 +2939,7 @@ class AppointmentController extends Controller
      */
     private function appointmentServiceItems(Appointment $appointment): array
     {
+        $appointment->loadMissing('appointmentServices.clientPackageService');
         $lines = $appointment->appointmentServices;
 
         if ($lines->isEmpty()) {
@@ -2844,6 +2948,7 @@ class AppointmentController extends Controller
             $catalog = Service::whereIn('name', $names)->get()->keyBy('name');
 
             return collect($names)->map(fn($name) => [
+                'id' => null,
                 'name' => $name,
                 'price' => $catalog->get($name)->price ?? 0,
                 'original_price' => $catalog->get($name)->price ?? 0,
@@ -2851,18 +2956,27 @@ class AppointmentController extends Controller
                 'discount_reason' => null,
                 'duration' => $catalog->get($name)->duration ?? 0,
                 'staff_id' => $appointment->staff_id,
+                'is_package_redemption' => false,
+                'client_package_service_id' => null,
             ])->values()->all();
         }
 
-        return $lines->map(fn($s) => [
-            'name' => $s->name,
-            'price' => $s->final_price,
-            'original_price' => (float) ($s->original_price ?? $s->price),
-            'discount_amount' => (float) $s->discount_amount,
-            'discount_reason' => $s->discount_reason,
-            'duration' => $s->duration,
-            'staff_id' => $s->staff_id,
-        ])->values()->all();
+        return $lines->map(function ($s) {
+            $isPkg = $s->isPackageRedemptionLine();
+
+            return [
+                'id' => $s->id,
+                'name' => $s->name,
+                'price' => $s->final_price,
+                'original_price' => (float) ($s->original_price ?? $s->price),
+                'discount_amount' => $isPkg ? 0.0 : (float) $s->discount_amount,
+                'discount_reason' => $s->discount_reason,
+                'duration' => $s->duration,
+                'staff_id' => $s->staff_id,
+                'is_package_redemption' => $isPkg,
+                'client_package_service_id' => $s->clientPackageService?->id,
+            ];
+        })->values()->all();
     }
 
     /**
@@ -2916,7 +3030,7 @@ class AppointmentController extends Controller
      */
     private function logPriceOverrideIfDiscounted(AppointmentService $line, ?string $reason = null): void
     {
-        if ($line->discount_amount <= 0) {
+        if ($line->isPackageRedemptionLine() || $line->discount_amount <= 0) {
             return;
         }
 
@@ -3051,9 +3165,37 @@ class AppointmentController extends Controller
             'discount_reason' => $request->discount_reason ?: null,
         ];
 
+        $redemption = ClientPackageService::with(['clientPackage.combo.services', 'clientPackage.redeemedServices'])
+            ->where('appointment_service_id', $appointmentService->id)
+            ->first();
+
         $serviceName = $appointmentService->name;
         if ($request->filled('service_id')) {
             $service = Service::find($request->service_id);
+
+            if ($redemption && (int) $service->id !== (int) $appointmentService->service_id) {
+                $pkg = $redemption->clientPackage;
+                $pool = $pkg?->combo?->services ?? collect();
+
+                if ($pool->isEmpty() || !$pool->contains('id', $service->id)) {
+                    $comboLabel = $pkg?->combo_name ?: 'this package';
+                    return response()->json([
+                        'success' => false,
+                        'message' => "\"{$service->name}\" is not part of {$comboLabel}.",
+                    ], 422);
+                }
+
+                $alreadyRedeemed = $pkg->redeemedServices
+                    ->where('id', '!=', $redemption->id)
+                    ->contains('service_id', $service->id);
+                if ($alreadyRedeemed) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "\"{$service->name}\" has already been redeemed from {$pkg->combo_name}.",
+                    ], 422);
+                }
+            }
+
             $data['service_id'] = $service->id;
             $data['name'] = $service->name;
             $serviceName = $service->name;
@@ -3063,7 +3205,17 @@ class AppointmentController extends Controller
             // original_price it was first booked/added at.
             if ((int) $request->service_id !== (int) $appointmentService->service_id) {
                 $data['original_price'] = $service->price;
+                if ($redemption) {
+                    $data['price'] = $service->price;
+                }
             }
+        }
+
+        if ($redemption) {
+            $comboLabel = $redemption->clientPackage?->combo_name ?: 'Package';
+            $data['discount_type'] = 'percent';
+            $data['discount_value'] = 100;
+            $data['discount_reason'] = "Redeemed from {$comboLabel} package";
         }
 
         $workingHours = $this->branchWorkingHours($appointment->branch, $newStart);
@@ -3110,6 +3262,14 @@ class AppointmentController extends Controller
 
         $previousDate = $appointment->appointment_date->copy();
         $appointmentService->update($data);
+
+        if ($redemption && ((int) $redemption->service_id !== (int) $appointmentService->service_id || $redemption->service_name !== $appointmentService->name)) {
+            $redemption->update([
+                'service_id' => $appointmentService->service_id,
+                'service_name' => $appointmentService->name,
+            ]);
+        }
+
         $appointment->syncFromServices();
         $this->syncAdLeadAttributionForAppointment($appointment, $previousDate);
 
@@ -3160,6 +3320,8 @@ class AppointmentController extends Controller
 
     private function formatServiceLine(AppointmentService $s): array
     {
+        $isPkg = $s->isPackageRedemptionLine();
+
         return [
             'id' => $s->id,
             'service_id' => $s->service_id,
@@ -3170,8 +3332,9 @@ class AppointmentController extends Controller
             'duration' => $s->duration,
             'discount_type' => $s->discount_type,
             'discount_value' => (float) $s->discount_value,
-            'discount_amount' => (float) $s->discount_amount,
+            'discount_amount' => $isPkg ? 0.0 : (float) $s->discount_amount,
             'discount_reason' => $s->discount_reason,
+            'is_package_redemption' => $isPkg,
             'start_time' => $s->start_time ? $s->start_time->format('H:i') : '',
             'start_time_label' => $s->start_time ? $s->start_time->format('g:i A') : 'Pending time',
             'staff_id' => $s->staff_id,
@@ -3377,6 +3540,7 @@ class AppointmentController extends Controller
             // re-validated in buildPackageRedemptionPlans().
             'redeem_service_ids' => 'nullable|array',
             'redeem_service_ids.*' => 'string',
+            'redeem_service_staff' => 'nullable|array',
             'redeem_points' => 'nullable|integer|min:0',
         ]);
 
@@ -3433,8 +3597,11 @@ class AppointmentController extends Controller
                     return;
                 }
 
+                $rawRedeemStaff = is_array($request->input('redeem_service_staff'))
+                    ? $request->input('redeem_service_staff')
+                    : [];
                 [$redemptionPlans, $redemptionPlanError] = $customer
-                    ? $this->buildPackageRedemptionPlans($request->input('redeem_service_ids', []), $customer, $lockedAppointment->id)
+                    ? $this->buildPackageRedemptionPlans($request->input('redeem_service_ids', []), $customer, $lockedAppointment->id, $rawRedeemStaff)
                     : [[], (!empty($request->input('redeem_service_ids', [])) ? 'A client profile with a phone number is required to redeem a package.' : null)];
                 if ($redemptionPlanError) {
                     $validationError = $redemptionPlanError;
@@ -3545,7 +3712,13 @@ class AppointmentController extends Controller
                     $service = $plan['service'];
                     $package = $plan['client_package'];
 
-                    $appointmentService = $this->addRedeemedServiceLine($lockedAppointment, $service, $package->combo_name, $cursor);
+                    $appointmentService = $this->addRedeemedServiceLine(
+                        $lockedAppointment,
+                        $service,
+                        $package->combo_name,
+                        $cursor,
+                        $plan['staff_id'] ?? null
+                    );
                     ClientPackageService::create([
                         'client_package_id' => $package->id,
                         'service_id' => $service->id,
@@ -3566,19 +3739,15 @@ class AppointmentController extends Controller
 
                 // Re-fetch now that the redemption/immediate lines above actually
                 // exist, so the sale's service line items include them (still at
-                // their 0 price - $servicesTotal itself doesn't change). The
-                // relation was already cached by the earlier pre-write call, so
-                // it must be force-reloaded or these new rows won't show up.
+                // their 0 price - $servicesTotal itself doesn't change). Also
+                // reload clientPackageService so SaleItem.client_package_service_id
+                // links every performed package slot to its sale line.
                 if ($redemptionPlans || $packagePlans) {
-                    $serviceItems = $this->appointmentServiceItems($lockedAppointment->load('appointmentServices'));
-
-                    // Fold the newly-performed package services into service_name
-                    // (replacing a "Decide in Salon" placeholder if that's all
-                    // there was) so the Enhanced Calendar block - which derives
-                    // its width from that flat field, not the line items - grows
-                    // or shrinks to match only what's actually being done today.
                     $lockedAppointment->syncFromServices();
                 }
+                $serviceItems = $this->appointmentServiceItems(
+                    $lockedAppointment->load('appointmentServices.clientPackageService')
+                );
 
                 $resolvedBranch = $lockedAppointment->branch ?: ($request->input('branch') ?: 'old_airport');
 
@@ -3603,6 +3772,7 @@ class AppointmentController extends Controller
                         'sale_id' => $sale->id,
                         'type' => 'service',
                         'staff_id' => $item['staff_id'] ?? null,
+                        'client_package_service_id' => $item['client_package_service_id'] ?? null,
                         'name' => $item['name'],
                         'price' => $item['price'],
                         'original_price' => $item['original_price'],
@@ -3653,8 +3823,22 @@ class AppointmentController extends Controller
                     }
                 }
 
+                $paidAt = now('Asia/Qatar');
+
                 foreach ($purchasedPackages as $pkg) {
-                    $pkg->update(['sale_id' => $sale->id]);
+                    $pkg->loadMissing('combo');
+                    $validityDays = (int) ($pkg->validity_days ?: ($pkg->combo?->validity_days ?: 7));
+                    if ($validityDays <= 0) {
+                        $validityDays = 7;
+                    }
+
+                    $pkg->update([
+                        'sale_id' => $sale->id,
+                        'validity_days' => $validityDays,
+                        'purchased_at' => $paidAt,
+                        'expires_at' => $paidAt->copy()->addDays($validityDays)->endOfDay(),
+                    ]);
+                    $pkg->refreshStatus();
 
                     SaleItem::create([
                         'sale_id' => $sale->id,
@@ -3665,6 +3849,12 @@ class AppointmentController extends Controller
                         'quantity' => 1,
                         'total' => $pkg->price_paid,
                     ]);
+                }
+
+                $appointmentServiceIds = $lockedAppointment->appointmentServices->pluck('id')->all();
+                if (!empty($appointmentServiceIds)) {
+                    ClientPackageService::whereIn('appointment_service_id', $appointmentServiceIds)
+                        ->update(['sale_id' => $sale->id]);
                 }
 
                 foreach ($payments as $method => $amount) {
@@ -3815,7 +4005,7 @@ class AppointmentController extends Controller
      * have two different services claimed against it in the same request.
      * Nothing is written to the database yet.
      */
-    private function buildPackageRedemptionPlans(array $tokens, Customer $customer, ?int $forAppointmentId = null): array
+    private function buildPackageRedemptionPlans(array $tokens, Customer $customer, ?int $forAppointmentId = null, array $redeemServiceStaff = []): array
     {
         $plans = [];
         $claimedPerPackage = [];
@@ -3852,7 +4042,25 @@ class AppointmentController extends Controller
                 return [[], "{$package->combo_name} doesn't have enough remaining balance for this selection."];
             }
 
-            $plans[] = ['client_package' => $package, 'service' => $service];
+            $canonicalToken = "{$package->id}:{$service->id}";
+            $rawAssigned = $redeemServiceStaff[(string) $token] ?? ($redeemServiceStaff[$canonicalToken] ?? null);
+            $assignedStaffId = null;
+            if ($rawAssigned !== null && $rawAssigned !== '') {
+                $assignedStaffId = (int) $rawAssigned;
+                $assignedStaff = Staff::find($assignedStaffId);
+                if (!$assignedStaff) {
+                    return [[], "Selected staff member for \"{$service->name}\" no longer exists."];
+                }
+                if (!empty($this->unskilledServices($assignedStaffId, [$service->name]))) {
+                    return [[], "{$assignedStaff->name} is not skilled to do \"{$service->name}\"."];
+                }
+            }
+
+            $plans[] = [
+                'client_package' => $package,
+                'service' => $service,
+                'staff_id' => $assignedStaffId,
+            ];
         }
 
         return [$plans, null];
@@ -3907,6 +4115,10 @@ class AppointmentController extends Controller
 
         foreach ($packagePlans as $plan) {
             $combo = $plan['combo'];
+            $validityDays = (int) ($combo->validity_days ?: 7);
+            if ($validityDays <= 0) {
+                $validityDays = 7;
+            }
 
             $clientPackage = ClientPackage::create([
                 'customer_id' => $customer->id,
@@ -3915,8 +4127,9 @@ class AppointmentController extends Controller
                 'combo_name' => $combo->name,
                 'price_paid' => $combo->price,
                 'quantity_included' => $plan['quantity_included'],
-                'purchased_at' => now(),
-                'expires_at' => now()->addDays($combo->validity_days ?: 7),
+                'validity_days' => $validityDays,
+                'purchased_at' => null,
+                'expires_at' => null,
                 'status' => 'active',
             ]);
 

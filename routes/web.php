@@ -231,6 +231,9 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('/customers/{customer}/allergies', [CustomerController::class, 'updateAllergies'])->name('customers.allergies.update');
         Route::post('/customers/{customer}/redeem', [CustomerController::class, 'redeemPoints'])->name('customers.loyalty.redeem');
     });
+    Route::middleware(['role:admin,owner,super_admin'])
+        ->patch('/customers/{customer}/packages/{clientPackage}', [CustomerController::class, 'updateClientPackage'])
+        ->name('customers.packages.update');
 
     // ---- Staff Access: a single super-admin account only, independent of the module matrix ----
     Route::middleware('super-admin')->group(function () {

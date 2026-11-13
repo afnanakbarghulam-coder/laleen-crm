@@ -12,6 +12,7 @@ class ClientPackageService extends Model
         'service_name',
         'status',
         'appointment_service_id',
+        'sale_id',
         'redeemed_at',
     ];
 
@@ -22,6 +23,11 @@ class ClientPackageService extends Model
     public function clientPackage()
     {
         return $this->belongsTo(ClientPackage::class);
+    }
+
+    public function sale()
+    {
+        return $this->belongsTo(Sale::class);
     }
 
     public function service()

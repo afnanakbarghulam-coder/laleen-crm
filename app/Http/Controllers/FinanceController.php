@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Expense;
 use App\Models\Sale;
+use App\Models\SaleItem;
 use App\Models\SalePayment;
 use App\Models\Staff;
 use Illuminate\Http\Request;
@@ -43,8 +44,13 @@ class FinanceController extends Controller
             ? (int) $request->staff_id
             : null;
 
-        $salesQuery = Sale::with(['customer', 'staff', 'payments', 'items'])
-            ->whereBetween('created_at', [$from, $to]);
+        $salesQuery = Sale::with([
+            'customer',
+            'staff',
+            'payments',
+            'items.clientPackageService.clientPackage.combo.services',
+            'appointment.appointmentServices.clientPackageService.clientPackage.combo.services',
+        ])->whereBetween('created_at', [$from, $to]);
 
         if ($branch === 'general') {
             $salesQuery->whereNull('branch');
@@ -57,6 +63,7 @@ class FinanceController extends Controller
                 $q->whereHas('items', fn ($iq) => $iq->where('staff_id', $staffId))
                     ->orWhere(function ($legacy) use ($staffId) {
                         $legacy->where('staff_id', $staffId)
+                            ->whereDoesntHave('items', fn ($iq) => $iq->where('type', 'package'))
                             ->where(function ($sub) {
                                 $sub->whereDoesntHave('items')
                                     ->orWhereDoesntHave('items', fn ($iq) => $iq->whereNotNull('staff_id'));
@@ -78,12 +85,14 @@ class FinanceController extends Controller
         $sales = $salesQuery->orderByDesc('created_at')->get();
         $expenses = $expensesQuery->orderByDesc('expense_date')->get();
 
-        $saleFigures = $sales->map(fn (Sale $sale) => $this->saleFiguresForStaff($sale, $staffId));
+        $saleFiguresById = $sales->mapWithKeys(fn (Sale $sale) => [$sale->id => $this->saleFiguresForStaff($sale, $staffId)]);
+        $saleFigures = $saleFiguresById->values();
 
         $grossServices = round((float) $saleFigures->sum('services'), 2);
         $grossProducts = round((float) $saleFigures->sum('products'), 2);
         $grossPackages = round((float) $saleFigures->sum('packages'), 2);
         $totalDiscounts = round((float) $saleFigures->sum('discount'), 2);
+        $serviceLevelDiscounts = round((float) $saleFigures->sum('service_discounts'), 2);
         $totalTips = round((float) $saleFigures->sum('tip'), 2);
         $grossSales = round((float) $saleFigures->sum('net'), 2);
         $totalExpenses = (float) $expenses->sum('amount');
@@ -93,7 +102,7 @@ class FinanceController extends Controller
         if ($staffId) {
             $paymentMap = [];
             foreach ($sales as $sale) {
-                $fig = $this->saleFiguresForStaff($sale, $staffId);
+                $fig = $saleFiguresById[$sale->id];
                 $ratio = $fig['ratio'];
                 foreach ($sale->payments as $payment) {
                     $method = (string) $payment->method;
@@ -120,12 +129,14 @@ class FinanceController extends Controller
             'staffList' => Staff::orderBy('name')->get(['id', 'name']),
             'expenseCategories' => Expense::CATEGORIES,
             'sales' => $sales,
+            'staffSaleFigures' => $saleFiguresById,
             'expenses' => $expenses,
             'grossServices' => $grossServices,
             'grossProducts' => $grossProducts,
             'grossPackages' => $grossPackages,
             'grossSales' => $grossSales,
             'totalDiscounts' => $totalDiscounts,
+            'serviceLevelDiscounts' => $serviceLevelDiscounts,
             'totalTips' => $totalTips,
             'totalExpenses' => $totalExpenses,
             'netProfit' => $netProfit,
@@ -213,7 +224,7 @@ class FinanceController extends Controller
     /**
      * Compute apportioned sale line figures for a specific staff member (or full sale when $staffId is null).
      *
-     * @return array{services: float, products: float, packages: float, discount: float, tip: float, net: float, ratio: float}
+     * @return array{services: float, products: float, packages: float, discount: float, service_discounts: float, tip: float, net: float, ratio: float}
      */
     private function saleFiguresForStaff(Sale $sale, ?int $staffId): array
     {
@@ -224,37 +235,49 @@ class FinanceController extends Controller
         $fullTip = (float) $sale->tip_amount;
         $fullNet = max(0.0, $fullServices + $fullProducts + $fullPackages - $fullDiscount);
 
+        $allItems = $sale->relationLoaded('items') ? $sale->items : $sale->items()->get();
+
         if (!$staffId) {
+            $nonPackageServiceDiscounts = round((float) $allItems
+                ->filter(fn (SaleItem $item) => $item->type === 'service' && !$this->isPackageRedemptionSaleItem($sale, $item))
+                ->sum('discount_amount'), 2);
+
             return [
                 'services' => $fullServices,
                 'products' => $fullProducts,
                 'packages' => $fullPackages,
                 'discount' => $fullDiscount,
+                'service_discounts' => $nonPackageServiceDiscounts,
                 'tip' => $fullTip,
                 'net' => $fullNet,
                 'ratio' => 1.0,
             ];
         }
 
-        $allItems = $sale->relationLoaded('items') ? $sale->items : $sale->items()->get();
         $staffItems = $allItems->filter(fn ($item) => (int) ($item->staff_id ?? 0) === $staffId);
 
         if ($staffItems->isNotEmpty()) {
             $services = round((float) $staffItems->where('type', 'service')->sum('total'), 2);
             $products = round((float) $staffItems->where('type', 'product')->sum('total'), 2);
-            $packages = round((float) $staffItems->where('type', 'package')->sum('total'), 2);
-            $staffGross = $services + $products + $packages;
+            $explicitPackages = round((float) $staffItems->where('type', 'package')->sum('total'), 2);
+            $slotPackages = round((float) $staffItems
+                ->where('type', 'service')
+                ->sum(fn (SaleItem $item) => $this->packageSlotShareForSaleItem($sale, $item)), 2);
+            $packages = round($explicitPackages + $slotPackages, 2);
+            $staffGross = round($services + $products + $packages, 2);
 
-            $saleItemsGross = (float) $allItems->sum('total');
-            if ($saleItemsGross <= 0) {
-                $saleItemsGross = $fullServices + $fullProducts + $fullPackages;
-            }
+            $allAttributedGross = (float) $allItems->where('type', '!=', 'package')->sum('total')
+                + (float) $allItems->where('type', 'service')->sum(fn (SaleItem $item) => $this->packageSlotShareForSaleItem($sale, $item));
+            $saleItemsGross = max($allAttributedGross, $fullServices + $fullProducts + $fullPackages);
 
             $ratio = $saleItemsGross > 0
                 ? min(1.0, max(0.0, $staffGross / $saleItemsGross))
                 : 0.0;
 
             $discount = round($fullDiscount * $ratio, 2);
+            $serviceDiscounts = round((float) $staffItems
+                ->filter(fn (SaleItem $item) => $item->type === 'service' && !$this->isPackageRedemptionSaleItem($sale, $item))
+                ->sum('discount_amount'), 2);
             $tip = round($fullTip * $ratio, 2);
             $net = round(max(0.0, $staffGross - $discount), 2);
 
@@ -263,20 +286,23 @@ class FinanceController extends Controller
                 'products' => $products,
                 'packages' => $packages,
                 'discount' => $discount,
+                'service_discounts' => $serviceDiscounts,
                 'tip' => $tip,
                 'net' => $net,
                 'ratio' => $ratio,
             ];
         }
 
-        // Legacy fallback: itemless sale (or items with null staff_id) owned by $sale->staff_id
+        // Legacy fallback: itemless non-package sale (or items with null staff_id) owned by $sale->staff_id
         $hasStaffAttributedItems = $allItems->contains(fn ($item) => $item->staff_id !== null);
-        if (!$hasStaffAttributedItems && (int) ($sale->staff_id ?? 0) === $staffId) {
+        $hasPackageItems = $allItems->contains(fn ($item) => $item->type === 'package');
+        if (!$hasStaffAttributedItems && !$hasPackageItems && (int) ($sale->staff_id ?? 0) === $staffId) {
             return [
                 'services' => $fullServices,
                 'products' => $fullProducts,
                 'packages' => $fullPackages,
                 'discount' => $fullDiscount,
+                'service_discounts' => 0.0,
                 'tip' => $fullTip,
                 'net' => $fullNet,
                 'ratio' => 1.0,
@@ -288,10 +314,52 @@ class FinanceController extends Controller
             'products' => 0.0,
             'packages' => 0.0,
             'discount' => 0.0,
+            'service_discounts' => 0.0,
             'tip' => 0.0,
             'net' => 0.0,
             'ratio' => 0.0,
         ];
+    }
+
+    private function isPackageRedemptionSaleItem(Sale $sale, SaleItem $item): bool
+    {
+        if ($item->client_package_service_id !== null) {
+            return true;
+        }
+
+        if ($sale->relationLoaded('appointment') && $sale->appointment && $sale->appointment->relationLoaded('appointmentServices')) {
+            return $sale->appointment->appointmentServices->contains(function ($line) use ($item) {
+                return strcasecmp(trim((string) $line->name), trim((string) $item->name)) === 0
+                    && (int) ($line->staff_id ?? 0) === (int) ($item->staff_id ?? 0)
+                    && $line->isPackageRedemptionLine();
+            });
+        }
+
+        return false;
+    }
+
+    private function packageSlotShareForSaleItem(Sale $sale, SaleItem $item): float
+    {
+        $cps = $item->relationLoaded('clientPackageService')
+            ? $item->clientPackageService
+            : ($item->client_package_service_id ? $item->clientPackageService()->with('clientPackage.combo.services')->first() : null);
+
+        if ($cps && $cps->clientPackage) {
+            return $cps->clientPackage->per_slot_share;
+        }
+
+        if ($sale->relationLoaded('appointment') && $sale->appointment && $sale->appointment->relationLoaded('appointmentServices')) {
+            $matchedLine = $sale->appointment->appointmentServices->first(function ($line) use ($item) {
+                return strcasecmp(trim((string) $line->name), trim((string) $item->name)) === 0
+                    && (int) ($line->staff_id ?? 0) === (int) ($item->staff_id ?? 0)
+                    && $line->clientPackageService !== null;
+            });
+            if ($matchedLine && $matchedLine->clientPackageService?->clientPackage) {
+                return $matchedLine->clientPackageService->clientPackage->per_slot_share;
+            }
+        }
+
+        return 0.0;
     }
 
     /**

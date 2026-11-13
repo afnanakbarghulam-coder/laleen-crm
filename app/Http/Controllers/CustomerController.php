@@ -300,6 +300,7 @@ class CustomerController extends Controller
         $activePackages = ClientPackage::query()
             ->withCount(['services as redeemed_services_count' => fn ($q) => $q->where('status', 'redeemed')])
             ->where('status', 'active')
+            ->whereNotNull('expires_at')
             ->where('expires_at', '>=', now())
             ->where(function ($q) {
                 $q->whereNotNull('sale_id')->orWhereNull('appointment_id');
@@ -1089,6 +1090,56 @@ class CustomerController extends Controller
         }
 
         return back()->with('success', "Redeemed {$request->points} points for {$request->reward}.");
+    }
+
+    /**
+     * Admin-only override to extend/update a client's package expiry date or
+     * adjust quantity_included, automatically reactivating expired packages
+     * when expires_at is moved into the future with remaining slots.
+     */
+    public function updateClientPackage(Request $request, Customer $customer, ClientPackage $clientPackage)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        if ((int) $clientPackage->customer_id !== (int) $customer->id) {
+            abort(404);
+        }
+
+        $clientPackage->loadMissing('combo.services');
+        $redeemedCount = $clientPackage->redeemedServices()->count();
+        $poolCount = $clientPackage->combo ? $clientPackage->combo->services->count() : 0;
+        $maxQuantity = $poolCount > 0 ? max($poolCount, $redeemedCount) : 50;
+
+        $validated = $request->validate([
+            'expires_at' => ['required', 'date'],
+            'quantity_included' => ['required', 'integer', 'min:' . $redeemedCount, 'max:' . $maxQuantity],
+        ]);
+
+        $newExpiresAt = Carbon::parse($validated['expires_at'], 'Asia/Qatar')->endOfDay();
+
+        $clientPackage->quantity_included = (int) $validated['quantity_included'];
+        $clientPackage->expires_at = $newExpiresAt;
+        if ($clientPackage->purchased_at === null && $clientPackage->sale_id !== null) {
+            $clientPackage->purchased_at = now('Asia/Qatar');
+        }
+        $clientPackage->save();
+        $clientPackage->refreshStatus();
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Client package updated successfully.',
+                'package' => [
+                    'id' => $clientPackage->id,
+                    'status' => $clientPackage->status,
+                    'quantity_included' => $clientPackage->quantity_included,
+                    'remaining_count' => $clientPackage->remaining_count,
+                    'expires_at' => $clientPackage->expires_at?->format('Y-m-d H:i:s'),
+                ],
+            ]);
+        }
+
+        return back()->with('success', "Updated \"{$clientPackage->combo_name}\" package.");
     }
 
     /**

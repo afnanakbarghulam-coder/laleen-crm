@@ -14,6 +14,7 @@ class ClientPackage extends Model
         'combo_name',
         'price_paid',
         'quantity_included',
+        'validity_days',
         'purchased_at',
         'expires_at',
         'status',
@@ -23,6 +24,7 @@ class ClientPackage extends Model
         'purchased_at' => 'datetime',
         'expires_at' => 'datetime',
         'price_paid' => 'float',
+        'validity_days' => 'integer',
     ];
 
     public function customer()
@@ -61,7 +63,30 @@ class ClientPackage extends Model
 
     public function getIsExpiredAttribute(): bool
     {
+        if ($this->expires_at === null) {
+            return false;
+        }
+
         return now()->gt($this->expires_at);
+    }
+
+    public function getEffectiveValidityDaysAttribute(): int
+    {
+        $configured = (int) ($this->validity_days ?: ($this->combo?->validity_days ?: 7));
+
+        return $configured > 0 ? $configured : 7;
+    }
+
+    public function getEffectiveQuantityIncludedAttribute(): int
+    {
+        $qty = (int) ($this->quantity_included ?: ($this->combo?->services?->count() ?: 1));
+
+        return max(1, $qty);
+    }
+
+    public function getPerSlotShareAttribute(): float
+    {
+        return round((float) $this->price_paid / $this->effective_quantity_included, 2);
     }
 
     /**
@@ -113,7 +138,10 @@ class ClientPackage extends Model
      */
     public static function expireDue(?int $customerId = null): int
     {
-        $query = static::where('status', '!=', 'expired')->where('expires_at', '<', now());
+        $query = static::where('status', '!=', 'expired')
+            ->whereNotNull('sale_id')
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<', now());
 
         if ($customerId) {
             $query->where('customer_id', $customerId);
@@ -130,25 +158,26 @@ class ClientPackage extends Model
 
     /**
      * Lazily reconciles this package's stored status against real time and
-     * its remaining balance, rather than trusting a status column that a
-     * scheduled job may not have touched yet. An expired package simply
-     * forfeits whatever balance it had left - there's no specific pending
-     * row to lock, since an unused slot was never tied to one service.
+     * its remaining balance, including reactivating an expired package when an
+     * admin extends expires_at into the future while unused slots remain.
      */
     public function refreshStatus(): void
     {
-        if ($this->is_expired && $this->status !== 'expired') {
-            $this->status = 'expired';
-            $this->save();
+        if ($this->is_expired) {
+            $this->services()->where('status', 'pending')->update(['status' => 'expired']);
+            if ($this->status !== 'expired') {
+                $this->status = 'expired';
+                $this->save();
+            }
 
             return;
         }
 
-        if (!$this->is_expired && $this->status === 'active' && $this->remaining_count <= 0) {
-            $this->status = 'completed';
-            $this->save();
-        } elseif (!$this->is_expired && $this->status === 'completed' && $this->remaining_count > 0) {
-            $this->status = 'active';
+        $this->services()->where('status', 'expired')->update(['status' => 'pending']);
+
+        $targetStatus = $this->remaining_count > 0 ? 'active' : 'completed';
+        if ($this->status !== $targetStatus) {
+            $this->status = $targetStatus;
             $this->save();
         }
     }

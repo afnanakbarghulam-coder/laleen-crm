@@ -25,8 +25,8 @@
                             <input type="number" id="comboQuantityIncluded" class="form-control" step="1" min="1" placeholder="e.g. 6">
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">Validity (days) <span class="text-muted">(optional)</span></label>
-                            <input type="number" id="comboValidityDays" class="form-control" step="1" min="1" max="3650" placeholder="e.g. 90">
+                            <label class="form-label">Validity (days)</label>
+                            <input type="number" id="comboValidityDays" class="form-control" step="1" min="1" max="3650" value="7" placeholder="7">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">Status</label>
@@ -38,7 +38,7 @@
                     </div>
                     <p class="text-muted small mb-3" style="margin-top:-10px">
                         Leave "Choose any" blank to include every service below. Set it lower than the pool size
-                        (e.g. 6 of 10) to let the client pick which ones at checkout.
+                        (e.g. 6 of 10) to let the client pick which ones at checkout. Defaults to 7 days from Visit 1 payment if left blank.
                     </p>
 
                     <label class="form-label">
@@ -110,6 +110,7 @@
             document.getElementById('comboModalTitle').textContent = 'New Combo Package';
             document.getElementById('comboSubmitBtn').textContent = 'Save';
             form.reset();
+            document.getElementById('comboValidityDays').value = 7;
             errorBox.classList.add('d-none');
             modalEl.querySelectorAll('.combo-svc-checkbox').forEach(cb => cb.checked = false);
             if (serviceSearchInput) {
@@ -132,7 +133,7 @@
             document.getElementById('comboName').value = combo.name;
             document.getElementById('comboPrice').value = combo.price;
             document.getElementById('comboQuantityIncluded').value = combo.quantity_included || '';
-            document.getElementById('comboValidityDays').value = combo.validity_days || '';
+            document.getElementById('comboValidityDays').value = combo.validity_days || 7;
             document.getElementById('comboStatus').value = combo.status;
             modalEl.querySelectorAll('.combo-svc-checkbox').forEach(cb => {
                 cb.checked = serviceIds.includes(Number(cb.value));
@@ -145,7 +146,8 @@
 
         function comboCardHtml(combo) {
             const statusClass = combo.status !== 'active' ? 'inactive' : '';
-            const validity = combo.validity_days ? ` · Valid ${combo.validity_days} days` : '';
+            const effectiveValidity = combo.validity_days || 7;
+            const validity = ` · Valid ${effectiveValidity} days from Visit 1 payment`;
             const servicesLabel = combo.services.map(s => s.name).join(', ');
             const regularPriceHtml = combo.regular_price > combo.price
                 ? `<div class="combo-regular-price">${combo.regular_price.toFixed(2)} QAR</div>` : '';

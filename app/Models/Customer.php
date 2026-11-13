@@ -68,7 +68,9 @@ class Customer extends Model
 
     public function clientPackages()
     {
-        return $this->hasMany(ClientPackage::class)->latest('purchased_at');
+        return $this->hasMany(ClientPackage::class)
+            ->orderByRaw('COALESCE(purchased_at, created_at) DESC')
+            ->orderByDesc('id');
     }
 
     /**
@@ -108,7 +110,10 @@ class Customer extends Model
     {
         return $this->clientPackages()
             ->where('status', '!=', 'expired')
-            ->where('expires_at', '>=', now())
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                    ->orWhere('expires_at', '>=', now());
+            })
             ->where(function ($q) use ($forAppointmentId) {
                 $q->whereNotNull('sale_id')
                     ->orWhereNull('appointment_id');
@@ -159,8 +164,12 @@ class Customer extends Model
                         'service_name' => $service->name,
                         'duration' => $service->duration,
                         'combo_name' => $pkg->combo_name,
-                        'expires_at' => $pkg->expires_at->format('d M Y'),
-                        'days_left' => (int) floor(now()->diffInDays($pkg->expires_at, false)),
+                        'remaining_count' => $pkg->remaining_count,
+                        'quantity_included' => $pkg->effective_quantity_included,
+                        'expires_at' => $pkg->expires_at ? $pkg->expires_at->format('d M Y') : null,
+                        'days_left' => $pkg->expires_at
+                            ? (int) floor(now()->diffInDays($pkg->expires_at, false))
+                            : $pkg->effective_validity_days,
                     ]);
             })
             ->values();

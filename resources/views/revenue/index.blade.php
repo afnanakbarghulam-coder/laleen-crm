@@ -666,7 +666,12 @@
                                     </span>
                                 @endforeach
                             </td>
-                            <td class="text-end fw-semibold">{{ number_format($sale->total_amount, 2) }}</td>
+                            @php
+                                $ledgerRowTotal = ($staffId && isset($staffSaleFigures[$sale->id]))
+                                    ? (float) $staffSaleFigures[$sale->id]['net']
+                                    : (float) $sale->total_amount;
+                            @endphp
+                            <td class="text-end fw-semibold">{{ number_format($ledgerRowTotal, 2) }}</td>
                         </tr>
                     @empty
                         <tr>
