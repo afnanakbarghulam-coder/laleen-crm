@@ -10,7 +10,8 @@ class EnsureModulePermission
 {
     /**
      * Restrict a route to a module permission level, e.g. `module:leads` (view,
-     * the default) or `module:leads,edit`. Admins always pass (see
+     * the default), `module:leads,edit`, or pipe-separated OR modules such as
+     * `module:bookings|calendar,edit`. Admins always pass (see
      * User::permissionLevel()). Anyone without the required level gets a 403.
      */
     public function handle(Request $request, Closure $next, string $module, string $level = 'view'): Response
@@ -21,7 +22,17 @@ class EnsureModulePermission
             return EnsureActiveUser::logoutDeactivated($request);
         }
 
-        $allowed = $user && ($level === 'edit' ? $user->canEdit($module) : $user->canView($module));
+        $modules = array_values(array_filter(array_map('trim', explode('|', $module))));
+        $allowed = false;
+
+        if ($user) {
+            foreach ($modules as $mod) {
+                if ($level === 'edit' ? $user->canEdit($mod) : $user->canView($mod)) {
+                    $allowed = true;
+                    break;
+                }
+            }
+        }
 
         if (!$allowed) {
             abort(403, 'You do not have permission to access this section.');

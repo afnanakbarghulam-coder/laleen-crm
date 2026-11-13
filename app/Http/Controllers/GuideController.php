@@ -46,8 +46,13 @@ class GuideController extends Controller
             $requestedPreview = strtolower(trim((string) $request->query('preview_role', '')));
             if ($requestedPreview === 'branch_manager') {
                 $requestedPreview = 'manager';
+            } elseif ($requestedPreview === 'marketing_specialist') {
+                $requestedPreview = 'marketing';
             }
-            if ($requestedPreview !== '' && array_key_exists($requestedPreview, self::PREVIEW_ROLES) && $requestedPreview !== 'all') {
+            if ($requestedPreview === 'social_media_editor') {
+                $previewRole = 'social_media_editor';
+                $effectiveUser = $this->makePreviewPersona('social_media_editor');
+            } elseif ($requestedPreview !== '' && array_key_exists($requestedPreview, self::PREVIEW_ROLES) && $requestedPreview !== 'all') {
                 $previewRole = $requestedPreview;
                 $effectiveUser = $this->makePreviewPersona($requestedPreview);
             }
@@ -125,7 +130,7 @@ class GuideController extends Controller
             'marketing' => [
                 'name' => 'Sana',
                 'email' => 'marketing-preview@laleen.local',
-                'role' => 'user',
+                'role' => 'marketing_specialist',
                 'is_active' => true,
                 'permissions' => [
                     'kpis' => 'edit',
@@ -138,6 +143,13 @@ class GuideController extends Controller
                     'staff_management' => 'none',
                     'ecommerce' => 'none',
                 ],
+            ],
+            'social_media_editor' => [
+                'name' => 'Content Editor',
+                'email' => 'editor-preview@laleen.local',
+                'role' => 'social_media_editor',
+                'is_active' => true,
+                'permissions' => User::defaultPermissionsForRole('social_media_editor'),
             ],
             'frontdesk' => [
                 'name' => 'Reception',
@@ -185,6 +197,13 @@ class GuideController extends Controller
      */
     protected function resolveScopeBadge(User $user, ?string $previewRole): array
     {
+        if ($previewRole === 'social_media_editor') {
+            return [
+                'label' => 'Social Media Editor View',
+                'tone' => 'amber',
+            ];
+        }
+
         if ($previewRole !== null && isset(self::PREVIEW_ROLES[$previewRole])) {
             return [
                 'label' => self::PREVIEW_ROLES[$previewRole] . ' View',
@@ -215,6 +234,14 @@ class GuideController extends Controller
         $role = strtolower(trim((string) $user->role));
         if ($role === 'agent' || preg_match('/\bladen\b/i', (string) $user->name)) {
             return ['label' => 'Customer Service & Booking Desk', 'tone' => 'champagne'];
+        }
+
+        if ($role === 'marketing_specialist') {
+            return ['label' => 'Marketing Specialist', 'tone' => 'champagne'];
+        }
+
+        if ($role === 'social_media_editor') {
+            return ['label' => 'Social Media Editor', 'tone' => 'champagne'];
         }
 
         if (preg_match('/\b(ayan|sana)\b/i', (string) $user->name)) {
@@ -250,7 +277,10 @@ class GuideController extends Controller
             return 'chat_cs';
         }
 
-        if (preg_match('/\b(ayan|sana)\b/i', $name) && isset($playbooks['marketing_content'])) {
+        if (
+            (in_array($role, ['marketing_specialist', 'social_media_editor'], true) || preg_match('/\b(ayan|sana)\b/i', $name))
+            && isset($playbooks['marketing_content'])
+        ) {
             return 'marketing_content';
         }
 
@@ -623,7 +653,7 @@ class GuideController extends Controller
         // =====================================================================
         // PLAYBOOK 4: PAID ADS & ORGANIC CONTENT (marketing_content)
         // =====================================================================
-        if ($isAdmin || ($this->userCanView($user, 'kpis') && $role !== 'agent')) {
+        if ($isAdmin || in_array($role, ['marketing_specialist', 'social_media_editor'], true) || ($this->userCanView($user, 'kpis') && $role !== 'agent')) {
             $replySlaStep3 = $isAdmin
                 ? ['title' => 'Admin Breach Log', 'desc' => 'Log verified >2h incidents on Sana\'s card with screenshot.']
                 : ['title' => 'Keep Zero Late', 'desc' => 'Maintain 0 late replies across Sana and Ayan scorecards.'];

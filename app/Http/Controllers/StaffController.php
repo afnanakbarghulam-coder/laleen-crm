@@ -893,7 +893,7 @@ class StaffController extends Controller
         $existingUserId = $staff->user_id;
 
         $request->validate([
-            'access_role' => ['required', Rule::in(['admin', 'manager', 'agent', 'staff', 'user'])],
+            'access_role' => ['required', Rule::in(User::validRoleSlugs())],
             'access_email' => [
                 $existingUserId ? 'nullable' : 'required',
                 'nullable',
@@ -925,6 +925,7 @@ class StaffController extends Controller
             'email' => $request->access_email,
             'password' => Hash::make($request->access_password ?: str()->random(12)),
             'role' => $request->access_role,
+            'permissions' => User::defaultPermissionsForRole($request->access_role),
             'is_active' => true,
         ]);
 

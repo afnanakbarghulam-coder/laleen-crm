@@ -869,7 +869,7 @@
                                 </td>
                                 <td>
                                     @if ($member->user)
-                                        <span class="access-badge {{ $member->user->role }}">{{ ucfirst($member->user->role) }}</span>
+                                        <span class="access-badge {{ $member->user->role }}">{{ $member->user->roleBadgeLabel() }}</span>
                                     @else
                                         <span class="text-muted small">No system access</span>
                                     @endif

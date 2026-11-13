@@ -9,7 +9,7 @@ class CommandCenterController extends Controller
 {
     public function index(Request $request, LaleenCommandCenterService $service)
     {
-        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+        abort_unless($request->user()?->canView('command_center'), 403, 'You do not have permission to access this section.');
 
         $telemetry = $service->getLiveTelemetrySnapshot();
         $voiceProfiles = LaleenCommandCenterService::VOICE_PROFILES;
@@ -26,7 +26,7 @@ class CommandCenterController extends Controller
 
     public function ask(Request $request, LaleenCommandCenterService $service)
     {
-        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+        abort_unless($request->user()?->canEdit('command_center'), 403, 'You do not have permission to access this section.');
 
         @set_time_limit(120);
 
@@ -68,7 +68,7 @@ class CommandCenterController extends Controller
 
     public function tts(Request $request, LaleenCommandCenterService $service)
     {
-        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+        abort_unless($request->user()?->canEdit('command_center'), 403, 'You do not have permission to access this section.');
 
         $validated = $request->validate([
             'spoken_text' => 'required|string|max:2500',
@@ -92,7 +92,7 @@ class CommandCenterController extends Controller
 
     public function telemetry(Request $request, LaleenCommandCenterService $service)
     {
-        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+        abort_unless($request->user()?->canView('command_center'), 403, 'You do not have permission to access this section.');
 
         return response()->json([
             'status' => 'online',

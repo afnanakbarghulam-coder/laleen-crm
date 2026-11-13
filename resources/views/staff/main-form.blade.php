@@ -251,12 +251,14 @@
                             <div id="stfAccessFields" class="d-none">
                                 <div class="mb-3">
                                     <label class="form-label">Role</label>
-                                    <select name="access_role" id="stfAccessRole" class="form-select">
+                                    <select name="access_role" id="stfAccessRole" class="form-select" style="background-color: #1b1214; color: #f5ebe6; border-color: rgba(229, 184, 168, 0.22);">
                                         @if (auth()->user()?->isAdmin())
                                             <option value="admin">Admin — full access to every module</option>
                                         @endif
                                         <option value="manager">Manager — branch operations &amp; oversight</option>
                                         <option value="agent">Agent — bookings, leads, revenue</option>
+                                        <option value="marketing_specialist">Marketing Specialist — ads, ecommerce &amp; leads</option>
+                                        <option value="social_media_editor">Social Media Editor — reels, stories &amp; content</option>
                                         <option value="staff">Staff — calendar &amp; appointments only</option>
                                         <option value="user">User — limited read-only access</option>
                                     </select>

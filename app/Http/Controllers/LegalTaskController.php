@@ -10,7 +10,7 @@ class LegalTaskController extends Controller
 {
     public function index(Request $request)
     {
-        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+        abort_unless($request->user()?->canView('legal_tasks'), 403, 'You do not have permission to access this section.');
 
         $tasks = LegalTask::with('creator')
             ->orderBy('deadline', 'asc')
@@ -24,7 +24,7 @@ class LegalTaskController extends Controller
 
     public function store(Request $request)
     {
-        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+        abort_unless($request->user()?->canEdit('legal_tasks'), 403, 'You do not have permission to access this section.');
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -48,7 +48,7 @@ class LegalTaskController extends Controller
 
     public function update(Request $request, LegalTask $legalTask)
     {
-        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+        abort_unless($request->user()?->canEdit('legal_tasks'), 403, 'You do not have permission to access this section.');
 
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:255',
@@ -65,7 +65,7 @@ class LegalTaskController extends Controller
 
     public function destroy(Request $request, LegalTask $legalTask)
     {
-        abort_unless($request->user()?->isAdmin(), 403, 'You do not have permission to access this section.');
+        abort_unless($request->user()?->canEdit('legal_tasks'), 403, 'You do not have permission to access this section.');
 
         $legalTask->delete();
 

@@ -258,11 +258,11 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|in:admin,manager,agent,staff,user',
+            'role' => ['required', Rule::in(User::validRoleSlugs())],
             'profile_photo' => 'nullable|image|max:2048',
         ]);
 
-        $permissions = $this->validatedPermissions($request);
+        $permissions = $this->validatedPermissions($request, (string) $request->role);
 
         $profilePath = null;
         if ($request->hasFile('profile_photo')) {
@@ -290,23 +290,36 @@ class UserController extends Controller
 
     /**
      * Validate the submitted module permission levels and normalize them to
-     * exactly the modules defined in config('modules'), defaulting anything
-     * missing or invalid to 'none' (secure by default).
+     * all 14 modules defined in User::MODULES / config('modules').
+     * Accepts both canonical ('none'|'view'|'edit') and verbose
+     * ('no_access'|'view_only'|'full_edit') level tokens, as well as the
+     * 'staff_management' <-> 'staff' module key alias.
      */
-    private function validatedPermissions(Request $request): array
+    private function validatedPermissions(Request $request, ?string $role = null, ?User $existingUser = null): array
     {
         $request->validate([
             'permissions' => 'nullable|array',
-            'permissions.*' => 'in:none,view,edit',
+            'permissions.*' => 'in:none,view,edit,no_access,view_only,full_edit',
         ]);
 
-        $submitted = $request->input('permissions', []);
+        if (!$request->has('permissions')) {
+            if ($existingUser) {
+                return $existingUser->effectivePermissionsMap();
+            }
+
+            return User::defaultPermissionsForRole($role);
+        }
+
+        $submitted = (array) $request->input('permissions', []);
         $permissions = [];
 
-        foreach (array_keys(config('modules')) as $slug) {
-            $permissions[$slug] = in_array($submitted[$slug] ?? 'none', ['none', 'view', 'edit'], true)
-                ? $submitted[$slug] ?? 'none'
-                : 'none';
+        foreach (array_keys(User::MODULES) as $slug) {
+            $rawValue = $submitted[$slug] ?? null;
+            if ($rawValue === null && $slug === 'staff' && array_key_exists('staff_management', $submitted)) {
+                $rawValue = $submitted['staff_management'];
+            }
+
+            $permissions[$slug] = User::normalizePermissionLevel($rawValue !== null ? (string) $rawValue : 'none');
         }
 
         return $permissions;
@@ -323,12 +336,12 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'role' => 'required|in:admin,manager,agent,staff,user',
+            'role' => ['required', Rule::in(User::validRoleSlugs())],
             'profile_photo' => 'nullable|image|max:2048',
             'password' => 'nullable|string|min:8|confirmed',
         ]);
 
-        $permissions = $this->validatedPermissions($request);
+        $permissions = $this->validatedPermissions($request, (string) $request->role, $user);
 
         $user->name = $request->name;
         $user->email = $request->email;

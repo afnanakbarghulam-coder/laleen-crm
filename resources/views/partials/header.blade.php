@@ -53,7 +53,7 @@
             $currentUrl = url()->current();
             $backTarget = ($prevUrl && $prevUrl !== $currentUrl && str_starts_with($prevUrl, url('/')))
                 ? $prevUrl
-                : route('dashboard');
+                : (auth()->user()?->defaultLandingUrl() ?? route('dashboard'));
         }
     @endphp
 
@@ -88,15 +88,17 @@
 
             {{-- If user IS logged in --}}
             @auth
-                <li class="nav-item me-2">
-                    <a href="{{ route('guide.index') }}"
-                        class="btn btn-sm d-inline-flex align-items-center gap-1 px-2.5 py-1 {{ request()->routeIs('guide.*') ? 'active' : '' }}"
-                        style="border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid rgba(217, 143, 131, 0.32); background: {{ request()->routeIs('guide.*') ? 'rgba(217, 143, 131, 0.22)' : 'rgba(36, 30, 28, 0.65)' }}; color: #f3d9d2;"
-                        title="Open CRM Guide &amp; Role SOPs">
-                        <i class="bx bx-help-circle"></i>
-                        <span>Guide</span>
-                    </a>
-                </li>
+                @moduleView('guide')
+                    <li class="nav-item me-2">
+                        <a href="{{ route('guide.index') }}"
+                            class="btn btn-sm d-inline-flex align-items-center gap-1 px-2.5 py-1 {{ request()->routeIs('guide.*') ? 'active' : '' }}"
+                            style="border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid rgba(217, 143, 131, 0.32); background: {{ request()->routeIs('guide.*') ? 'rgba(217, 143, 131, 0.22)' : 'rgba(36, 30, 28, 0.65)' }}; color: #f3d9d2;"
+                            title="Open CRM Guide &amp; Role SOPs">
+                            <i class="bx bx-help-circle"></i>
+                            <span>Guide</span>
+                        </a>
+                    </li>
+                @endmoduleView
                 <li class="nav-item navbar-dropdown dropdown-user dropdown">
                    <a class="nav-link dropdown-toggle hide-arrow d-flex align-items-center" data-bs-toggle="dropdown">
                         {{-- User Name --}}

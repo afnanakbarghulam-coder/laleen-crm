@@ -67,13 +67,15 @@ Route::prefix('my-contract/{token}')->name('contracts.portal.')->group(function 
 });
 
 Route::middleware(['auth'])->group(function () {
-    Route::get('/dashboard', [UserController::class, 'dashboard'])->name('dashboard');
-    Route::get('/guide', [GuideController::class, 'index'])->middleware('active')->name('guide.index');
-    Route::middleware('role:admin,owner,super_admin')->group(function () {
+    Route::middleware('module:dashboard')->get('/dashboard', [UserController::class, 'dashboard'])->name('dashboard');
+    Route::middleware(['active', 'module:guide'])->get('/guide', [GuideController::class, 'index'])->name('guide.index');
+    Route::middleware('module:command_center')->group(function () {
         Route::get('/command-center', [CommandCenterController::class, 'index'])->name('command-center.index');
+        Route::get('/command-center/telemetry', [CommandCenterController::class, 'telemetry'])->name('command-center.telemetry');
+    });
+    Route::middleware('module:command_center,edit')->group(function () {
         Route::post('/command-center/ask', [CommandCenterController::class, 'ask'])->middleware('throttle:20,1')->name('command-center.ask');
         Route::post('/command-center/tts', [CommandCenterController::class, 'tts'])->middleware('throttle:20,1')->name('command-center.tts');
-        Route::get('/command-center/telemetry', [CommandCenterController::class, 'telemetry'])->name('command-center.telemetry');
     });
     Route::post('/ai-script/{leadId?}', [AiScriptController::class, 'generate'])->middleware('throttle:20,1')->name('ai-script.generate');
 
@@ -104,27 +106,33 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/leads/{lead}', [LeadController::class, 'show'])->name('leads.show');
     });
 
-    // ---- Bookings ----
+    // ---- Bookings & Enhanced Calendar ----
     Route::middleware('module:bookings')->group(function () {
         Route::get('/appointments', [AppointmentController::class, 'index'])->name('appointments.index');
+    });
+    Route::middleware('module:calendar')->group(function () {
         Route::get('/appointments-calendar', [AppointmentController::class, 'calendar'])->name('appointments.calendar');
         Route::get('/appointments-calendar-data', [AppointmentController::class, 'calendarData'])->name('appointments.calendar_data');
+    });
+    Route::middleware('module:bookings|calendar')->group(function () {
         Route::get('/appointments/customer-profile/{phone}', [AppointmentController::class, 'customerProfile'])->name('appointments.customerProfile');
         Route::get('/appointments-available-staff', [AppointmentController::class, 'availableStaff'])->name('appointments.availableStaff');
         Route::get('/appointments/{appointment}', [AppointmentController::class, 'show'])->name('appointments.show');
     });
-    Route::middleware('module:bookings,edit')->group(function () {
+    Route::middleware('module:bookings|calendar,edit')->group(function () {
         Route::post('/appointments', [AppointmentController::class, 'store'])->name('appointments.store');
         Route::put('/appointments/{appointment}', [AppointmentController::class, 'update'])->name('appointments.update');
         Route::delete('/appointments/{appointment}', [AppointmentController::class, 'destroy'])->name('appointments.destroy');
         Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus'])->name('appointments.updateStatus');
-        Route::patch('/appointments/{appointment}/reschedule', [AppointmentController::class, 'reschedule'])->name('appointments.reschedule');
         Route::post('/appointments/{appointment}/services', [AppointmentController::class, 'addService'])->name('appointments.services.store');
         Route::patch('/appointments/{appointment}/services/{appointmentService}', [AppointmentController::class, 'updateService'])->name('appointments.services.update');
         Route::delete('/appointments/{appointment}/services/{appointmentService}', [AppointmentController::class, 'destroyService'])->name('appointments.services.destroy');
         Route::post('/appointments/{appointment}/upsells', [AppointmentController::class, 'addUpsell'])->name('appointments.upsells.store');
         Route::patch('/appointments/{appointment}/upsells/{appointmentUpsell}', [AppointmentController::class, 'updateUpsell'])->name('appointments.upsells.update');
         Route::delete('/appointments/{appointment}/upsells/{appointmentUpsell}', [AppointmentController::class, 'destroyUpsell'])->name('appointments.upsells.destroy');
+    });
+    Route::middleware('module:calendar,edit')->group(function () {
+        Route::patch('/appointments/{appointment}/reschedule', [AppointmentController::class, 'reschedule'])->name('appointments.reschedule');
         Route::post('/staff-blocks', [StaffBlockController::class, 'store'])->name('staff-blocks.store');
         Route::delete('/staff-blocks/{staffBlock}', [StaffBlockController::class, 'destroy'])->name('staff-blocks.destroy');
     });
@@ -477,11 +485,15 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // ---- Legal Tasks ----
-    Route::prefix('legal')->name('legal.')->middleware('role:admin,owner,super_admin')->group(function () {
-        Route::get('/', [LegalTaskController::class, 'index'])->name('index');
-        Route::get('/tasks', [LegalTaskController::class, 'index'])->name('tasks.index');
-        Route::post('/tasks', [LegalTaskController::class, 'store'])->name('tasks.store');
-        Route::match(['put', 'patch'], '/tasks/{legalTask}', [LegalTaskController::class, 'update'])->name('tasks.update');
-        Route::delete('/tasks/{legalTask}', [LegalTaskController::class, 'destroy'])->name('tasks.destroy');
+    Route::prefix('legal')->name('legal.')->group(function () {
+        Route::middleware('module:legal_tasks')->group(function () {
+            Route::get('/', [LegalTaskController::class, 'index'])->name('index');
+            Route::get('/tasks', [LegalTaskController::class, 'index'])->name('tasks.index');
+        });
+        Route::middleware('module:legal_tasks,edit')->group(function () {
+            Route::post('/tasks', [LegalTaskController::class, 'store'])->name('tasks.store');
+            Route::match(['put', 'patch'], '/tasks/{legalTask}', [LegalTaskController::class, 'update'])->name('tasks.update');
+            Route::delete('/tasks/{legalTask}', [LegalTaskController::class, 'destroy'])->name('tasks.destroy');
+        });
     });
 });

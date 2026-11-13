@@ -1,84 +1,99 @@
 <!-- Edit User Modal -->
-<div class="modal fade" id="editUserModal{{ $user->id }}" tabindex="-1"
-    aria-labelledby="editUserModalLabel{{ $user->id }}" aria-hidden="true">
+@php
+    $editRoles = \App\Models\User::ROLES;
+    $effectivePerms = $user->effectivePermissionsMap();
+@endphp
+<div class="modal fade sa-modal" id="editUserModal{{ $user->id }}" tabindex="-1"
+    aria-labelledby="editUserModalLabel{{ $user->id }}" aria-hidden="true"
+    x-data="staffAccessUserForm('{{ $user->id }}')">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="editUserModalLabel{{ $user->id }}">Edit User</h5>
+                <h5 class="modal-title fw-bold" id="editUserModalLabel{{ $user->id }}" style="color: #f8efe6;">Edit Staff Member</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="POST" action="{{ route('users.update', $user->id) }}" enctype="multipart/form-data">
                 @csrf
                 @method('PUT')
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="name{{ $user->id }}" class="form-label">Name</label>
-                        <input type="text" id="name{{ $user->id }}" name="name"
-                            class="form-control @error('name') is-invalid @enderror"
-                            value="{{ old('name', $user->name) }}" required>
-                        @error('name')
-                            <small class="text-danger">{{ $message }}</small>
-                        @enderror
-                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="name{{ $user->id }}" class="form-label">Name</label>
+                            <input type="text" id="name{{ $user->id }}" name="name"
+                                class="form-control"
+                                value="{{ $user->name }}" required>
+                        </div>
 
-                    <div class="mb-3">
-                        <label for="email{{ $user->id }}" class="form-label">Email</label>
-                        <input type="email" id="email{{ $user->id }}" name="email"
-                            class="form-control @error('email') is-invalid @enderror"
-                            value="{{ old('email', $user->email) }}" required>
-                        @error('email')
-                            <small class="text-danger">{{ $message }}</small>
-                        @enderror
-                    </div>
+                        <div class="col-md-6">
+                            <label for="email{{ $user->id }}" class="form-label">Email</label>
+                            <input type="email" id="email{{ $user->id }}" name="email"
+                                class="form-control"
+                                value="{{ $user->email }}" required>
+                        </div>
 
-                    <div class="mb-3">
-                        <label for="role{{ $user->id }}" class="form-label">Role</label>
-                        <select id="role{{ $user->id }}" name="role"
-                            class="form-select @error('role') is-invalid @enderror" required>
-                            <option value="admin" {{ $user->role == 'admin' ? 'selected' : '' }}>Admin</option>
-                            <option value="manager" {{ $user->role == 'manager' ? 'selected' : '' }}>Manager</option>
-                            <option value="agent" {{ $user->role == 'agent' ? 'selected' : '' }}>Agent</option>
-                            <option value="staff" {{ $user->role == 'staff' ? 'selected' : '' }}>Staff</option>
-                            <option value="user" {{ $user->role == 'user' ? 'selected' : '' }}>User</option>
-                        </select>
-                        @error('role')
-                            <small class="text-danger">{{ $message }}</small>
-                        @enderror
-                    </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Role</label>
+                            <div class="sa-cselect-wrap" :class="{ 'is-open': roleMenuOpen }" @click.outside="roleMenuOpen = false">
+                                <select id="role{{ $user->id }}" name="role" class="d-none" x-model="role">
+                                    @foreach ($editRoles as $rKey => $rLabel)
+                                        <option value="{{ $rKey }}" {{ $user->role === $rKey ? 'selected' : '' }}>{{ $rLabel }}</option>
+                                    @endforeach
+                                </select>
 
-                    <div class="mb-3">
-                        <label for="profile_photo{{ $user->id }}" class="form-label">Profile Photo</label>
-                        <input type="file" id="profile_photo{{ $user->id }}" name="profile_photo"
-                            class="form-control @error('profile_photo') is-invalid @enderror" accept="image/*">
-                        @if ($user->profile_photo)
-                            <img src="{{ asset($user->profile_photo) }}" alt="Profile" class="rounded-circle mt-2"
-                                width="40" height="40">
-                        @endif
-                        @error('profile_photo')
-                            <small class="text-danger">{{ $message }}</small>
-                        @enderror
-                    </div>
+                                <button type="button"
+                                    class="sa-cselect-trigger"
+                                    id="editUserRoleTrigger{{ $user->id }}"
+                                    @click="roleMenuOpen = !roleMenuOpen"
+                                    :aria-expanded="roleMenuOpen">
+                                    <span class="sa-cselect-label" x-text="roleLabel(role)">{{ $user->roleBadgeLabel() }}</span>
+                                    <span class="sa-cselect-caret">▾</span>
+                                </button>
 
-                    <div class="mb-3">
-                        <label for="password{{ $user->id }}" class="form-label">Password <small
-                                class="text-muted">(Leave blank to keep current)</small></label>
-                        <input type="password" id="password{{ $user->id }}" name="password" class="form-control"
-                            autocomplete="new-password">
-                    </div>
+                                <div class="sa-cselect-menu z-50" x-show="roleMenuOpen" x-cloak>
+                                    @foreach ($editRoles as $rKey => $rLabel)
+                                        <button type="button"
+                                            class="sa-cselect-option"
+                                            :class="{ 'is-selected': role === '{{ $rKey }}' }"
+                                            @click="selectRole('{{ $rKey }}')">
+                                            <span>{{ $rLabel }}</span>
+                                        </button>
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
 
-                    <div class="mb-3">
-                        <label for="password_confirmation{{ $user->id }}" class="form-label">Confirm
-                            Password</label>
-                        <input type="password" id="password_confirmation{{ $user->id }}"
-                            name="password_confirmation" class="form-control" autocomplete="new-password">
-                    </div>
+                        <div class="col-md-6">
+                            <label for="profile_photo{{ $user->id }}" class="form-label">Profile Photo</label>
+                            <div class="d-flex align-items-center gap-2">
+                                <input type="file" id="profile_photo{{ $user->id }}" name="profile_photo"
+                                    class="form-control" accept="image/*">
+                                @if ($user->profile_photo)
+                                    <img src="{{ asset($user->profile_photo) }}" alt="Profile" class="rounded-circle flex-shrink-0"
+                                        width="38" height="38" style="object-fit: cover; border: 1px solid rgba(229, 184, 168, 0.3);">
+                                @endif
+                            </div>
+                        </div>
 
-                    <hr>
-                    @include('users._permissions-panel', ['uid' => $user->id, 'permissions' => $user->permissions ?? []])
+                        <div class="col-md-6">
+                            <label for="password{{ $user->id }}" class="form-label">New Password</label>
+                            <input type="password" id="password{{ $user->id }}" name="password" class="form-control"
+                                placeholder="Leave blank to keep current" autocomplete="new-password">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="password_confirmation{{ $user->id }}" class="form-label">Confirm Password</label>
+                            <input type="password" id="password_confirmation{{ $user->id }}"
+                                name="password_confirmation" class="form-control" placeholder="Confirm new password" autocomplete="new-password">
+                        </div>
+
+                        <div class="col-12 pt-2" style="border-top: 1px solid rgba(255, 255, 255, 0.06);">
+                            @include('users._permissions-panel', ['uid' => $user->id, 'permissions' => $effectivePerms])
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Update User</button>
+                    <button type="button" class="sa-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="sa-btn-rosegold">Update User</button>
                 </div>
             </form>
         </div>

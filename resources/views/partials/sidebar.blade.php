@@ -230,7 +230,7 @@
      </style>
 
      <div class="app-brand d-flex align-items-center">
-         <a href="{{ route('dashboard') }}" class="app-brand-link d-flex align-items-center text-decoration-none">
+         <a href="{{ auth()->user()?->defaultLandingUrl() ?? route('dashboard') }}" class="app-brand-link d-flex align-items-center text-decoration-none">
              <img src="{{ asset('images/laleen logo1.PNG') }}" alt="Logo"
                  style="width: 46px; height: 46px; border-radius: 8px;">
              <span class="app-brand-text ms-2">Laleen Ops</span>
@@ -245,16 +245,18 @@
 
      <ul class="menu-inner py-1">
 
-         <!-- Dashboard -->
-         <li class="menu-item {{ request()->routeIs('dashboard') ? 'active' : '' }}">
-             <a href="{{ route('dashboard') }}" class="menu-link">
-                 <i class="bx bx-home-smile me-2"></i>
-                 <div>Dashboard</div>
-             </a>
-         </li>
+         <!-- 1. Dashboard -->
+         @moduleView('dashboard')
+             <li class="menu-item {{ request()->routeIs('dashboard') ? 'active' : '' }}">
+                 <a href="{{ route('dashboard') }}" class="menu-link">
+                     <i class="bx bx-home-smile me-2"></i>
+                     <div>Dashboard</div>
+                 </a>
+             </li>
+         @endmoduleView
 
-         <!-- Command Center (F.R.I.D.A.Y.) -->
-         @if (auth()->user()?->isAdmin())
+         <!-- 2. Command Center (F.R.I.D.A.Y.) -->
+         @moduleView('command_center')
              <li class="menu-item {{ request()->routeIs('command-center.*') ? 'active' : '' }}">
                  <a href="{{ route('command-center.index') }}" class="menu-link">
                      <i class="bx bx-radar me-2"></i>
@@ -264,15 +266,11 @@
                      </div>
                  </a>
              </li>
-         @endif
+         @endmoduleView
 
-         <!-- Leads -->
-         {{-- <li class="menu-header small text-uppercase mt-3">
-             <span class="menu-header-text">Leads</span>
-         </li> --}}
-
+         <!-- 3. Leads -->
          @moduleView('leads')
-             <li class="menu-item {{ request()->routeIs('leads.index') ? 'active' : '' }}">
+             <li class="menu-item {{ request()->routeIs('leads.*') ? 'active' : '' }}">
                  <a href="{{ route('leads.index') }}" class="menu-link">
                      <i class="bx bx-user-plus me-2"></i>
                      <div>Leads</div>
@@ -280,7 +278,7 @@
              </li>
          @endmoduleView
 
-         <!-- Bookings -->
+         <!-- 4. Bookings -->
          @moduleView('bookings')
              <li class="menu-item {{ request()->routeIs('appointments.index') ? 'active' : '' }}">
                  <a href="{{ route('appointments.index') }}" class="menu-link">
@@ -290,6 +288,17 @@
              </li>
          @endmoduleView
 
+         <!-- 5. Enhanced Calendar -->
+         @moduleView('calendar')
+             <li class="menu-item {{ request()->routeIs('appointments.calendar') ? 'active' : '' }}">
+                 <a href="{{ route('appointments.calendar') }}" class="menu-link">
+                     <i class="bx bx-calendar-check me-2"></i>
+                     <div>Enhanced Calendar</div>
+                 </a>
+             </li>
+         @endmoduleView
+
+         <!-- 6. Finance -->
          @moduleView('finance')
              <li class="menu-item {{ request()->routeIs('appointments.revenue.*') ? 'active' : '' }}">
                  <a href="{{ route('appointments.revenue.index') }}" class="menu-link">
@@ -299,7 +308,7 @@
              </li>
          @endmoduleView
 
-         <!-- Clients -->
+         <!-- 7. Clients -->
          @moduleView('clients')
              <li class="menu-item {{ request()->routeIs('customers.*') ? 'active' : '' }}">
                  <a href="{{ route('customers.index') }}" class="menu-link">
@@ -309,9 +318,9 @@
              </li>
          @endmoduleView
 
-         <!-- Staff -->
-         @moduleView('staff_management')
-             <li class="menu-item {{ request()->routeIs('staffs.index') || request()->routeIs('users.index') ? 'active' : '' }}">
+         <!-- 8. Staff Management -->
+         @moduleView('staff')
+             <li class="menu-item {{ request()->routeIs('staffs.*') || request()->routeIs('shifts.*') || request()->routeIs('staff.ops-tracker.*') || request()->routeIs('users.index') ? 'active' : '' }}">
                  <a href="{{ route('staffs.index') }}" class="menu-link">
                      <i class="bx bx-user me-2"></i>
                      <div>Staff Management</div>
@@ -319,19 +328,9 @@
              </li>
          @endmoduleView
 
-         <!-- Calendar -->
-         @moduleView('bookings')
-             <li class="menu-item {{ request()->routeIs('appointments.calendar') ? 'active' : '' }}">
-                 <a href="{{ route('appointments.calendar') }}" class="menu-link">
-                     <i class="bx bx-calendar-check me-2"></i>
-                     <div>Enhanced Calendar</div>
-                 </a>
-             </li>
-         @endmoduleView
-
-         <!-- Services -->
+         <!-- 9. Services -->
          @moduleView('services')
-             <li class="menu-item {{ request()->routeIs('services.index') ? 'active' : '' }}">
+             <li class="menu-item {{ request()->routeIs('services.*') || request()->routeIs('combos.*') ? 'active' : '' }}">
                  <a href="{{ route('services.index') }}" class="menu-link">
                      <i class="bx bx-briefcase me-2"></i>
                      <div>Services</div>
@@ -339,9 +338,9 @@
              </li>
          @endmoduleView
 
-         <!-- Products -->
+         <!-- 10. Products -->
          @moduleView('products')
-             <li class="menu-item {{ request()->routeIs('products.index') ? 'active' : '' }}">
+             <li class="menu-item {{ request()->routeIs('products.*') ? 'active' : '' }}">
                  <a href="{{ route('products.index') }}" class="menu-link">
                      <i class="bx bx-package me-2"></i>
                      <div>Products</div>
@@ -349,7 +348,7 @@
              </li>
          @endmoduleView
 
-         <!-- KPIs -->
+         <!-- 11. KPIs -->
          @moduleView('kpis')
              <li class="menu-item {{ request()->is('kpis*') || request()->routeIs('kpi.*') || request()->routeIs('kpis.*') ? 'active' : '' }}">
                  <a href="{{ route('kpi.hub') }}" class="menu-link">
@@ -359,7 +358,7 @@
              </li>
          @endmoduleView
 
-         <!-- Ecommerce -->
+         <!-- 12. Ecommerce -->
          @moduleView('ecommerce')
              <li class="menu-item {{ request()->routeIs('ecommerce.*') ? 'active' : '' }}">
                  <a href="{{ route('ecommerce.index') }}" class="menu-link">
@@ -369,23 +368,25 @@
              </li>
          @endmoduleView
 
-         <!-- Legal Tasks -->
-         @if (auth()->user()?->isAdmin())
+         <!-- 13. Legal Tasks -->
+         @moduleView('legal_tasks')
              <li class="menu-item {{ request()->routeIs('legal.*') ? 'active' : '' }}">
                  <a href="{{ route('legal.tasks.index') }}" class="menu-link">
                      <i class="bx bx-check-shield me-2"></i>
                      <div>Legal Tasks</div>
                  </a>
              </li>
-         @endif
+         @endmoduleView
 
-         <!-- CRM Guide & SOPs -->
-         <li class="menu-item {{ request()->routeIs('guide.*') ? 'active' : '' }}">
-             <a href="{{ route('guide.index') }}" class="menu-link">
-                 <i class="bx bx-book-open me-2"></i>
-                 <div>CRM Guide &amp; SOPs</div>
-             </a>
-         </li>
+         <!-- 14. CRM Guide & SOPs -->
+         @moduleView('guide')
+             <li class="menu-item {{ request()->routeIs('guide.*') ? 'active' : '' }}">
+                 <a href="{{ route('guide.index') }}" class="menu-link">
+                     <i class="bx bx-book-open me-2"></i>
+                     <div>CRM Guide &amp; SOPs</div>
+                 </a>
+             </li>
+         @endmoduleView
 
      </ul>
  </aside>

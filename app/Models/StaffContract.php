@@ -397,6 +397,28 @@ EOT;
             ];
         }
 
+        // First-class Marketing Specialist role
+        if ($role === 'marketing_specialist') {
+            return [
+                'tag' => 'Marketing Specialist',
+                'template_key' => 'remote_chat_creative',
+                'role_title' => 'Marketing Specialist',
+                'branch' => 'remote',
+                'currency' => 'PKR',
+            ];
+        }
+
+        // First-class Social Media Editor role
+        if ($role === 'social_media_editor') {
+            return [
+                'tag' => 'Social Media Editor',
+                'template_key' => 'remote_chat_creative',
+                'role_title' => 'Social Media Editor',
+                'branch' => 'remote',
+                'currency' => 'PKR',
+            ];
+        }
+
         // Marketing / Creative / Content / Video / E-commerce
         if (
             preg_match('/\b(marketing|content|creative|video|editor|social|ads|seo)\b/i', $haystack)
