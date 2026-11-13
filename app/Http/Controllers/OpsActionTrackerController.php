@@ -7,6 +7,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class OpsActionTrackerController extends Controller
@@ -359,7 +360,7 @@ class OpsActionTrackerController extends Controller
     }
 
     /**
-     * Toggle Completion (Complete / Move Back to Pending).
+     * Toggle Completion (Complete with mandatory Ops Lead verification remarks / Move Back to Pending).
      */
     public function toggle(Request $request, OpsActionItem $opsActionItem)
     {
@@ -374,40 +375,14 @@ class OpsActionTrackerController extends Controller
             : ! $opsActionItem->is_completed;
 
         if ($markCompleted) {
-            $payload = [
-                'is_completed' => true,
-                'completed_at' => now(),
-                'completed_by' => auth()->user()?->name ?? 'Staff',
-            ];
-            if ($request->filled('proof_note')) {
-                $payload['proof_note'] = trim((string) $request->input('proof_note'));
-            }
-            $opsActionItem->update($payload);
-        } else {
-            $slaHours = (int) ($opsActionItem->sla_hours ?: 48);
-            $opsActionItem->update([
-                'is_completed' => false,
-                'completed_at' => null,
-                'completed_by' => null,
-                'ball_assigned_at' => now(),
-                'due_at' => now()->addHours($slaHours),
-            ]);
+            return $this->markItemCompleted($request, $opsActionItem);
         }
 
-        if ($request->expectsJson()) {
-            return response()->json([
-                'success' => true,
-                'item' => $opsActionItem->fresh(),
-            ]);
-        }
-
-        return redirect()
-            ->back()
-            ->with('success', $markCompleted ? 'Task marked completed.' : 'Task moved back to pending.');
+        return $this->markItemPending($request, $opsActionItem);
     }
 
     /**
-     * 1-Click Complete alias.
+     * Explicit Complete endpoint (strictly requires Admin/Arbab + completion_remarks).
      */
     public function complete(Request $request, OpsActionItem $opsActionItem)
     {
@@ -417,28 +392,7 @@ class OpsActionTrackerController extends Controller
             'Only Admin or Arbab (Operations Lead) can mark tasks completed or reopen them.'
         );
 
-        $payload = [
-            'is_completed' => true,
-            'completed_at' => now(),
-            'completed_by' => auth()->user()?->name ?? 'Staff',
-        ];
-
-        if ($request->filled('proof_note')) {
-            $payload['proof_note'] = trim((string) $request->input('proof_note'));
-        }
-
-        $opsActionItem->update($payload);
-
-        if ($request->expectsJson()) {
-            return response()->json([
-                'success' => true,
-                'item' => $opsActionItem->fresh(),
-            ]);
-        }
-
-        return redirect()
-            ->back()
-            ->with('success', 'Task marked completed.');
+        return $this->markItemCompleted($request, $opsActionItem);
     }
 
     /**
@@ -452,12 +406,71 @@ class OpsActionTrackerController extends Controller
             'Only Admin or Arbab (Operations Lead) can mark tasks completed or reopen them.'
         );
 
+        return $this->markItemPending($request, $opsActionItem);
+    }
+
+    /**
+     * Validate mandatory verification remarks and mark an Ops Action Item completed.
+     */
+    protected function markItemCompleted(Request $request, OpsActionItem $opsActionItem)
+    {
+        $trimmedRemarks = trim((string) $request->input('completion_remarks', ''));
+        $request->merge(['completion_remarks' => $trimmedRemarks]);
+
+        $validated = $request->validate([
+            'completion_remarks' => ['required', 'string', 'min:3', 'max:1000'],
+        ], [
+            'completion_remarks.required' => 'Verification feedback / remarks are required before marking a task completed.',
+            'completion_remarks.min' => 'Verification feedback must be at least 3 characters.',
+        ]);
+
+        $remarks = trim($validated['completion_remarks']);
+        $verifier = $request->user();
+        $verifierName = trim((string) ($verifier?->name ?: 'Ops Lead'));
+
+        $opsActionItem->update([
+            'is_completed' => true,
+            'completed_at' => now(),
+            'completed_by' => $verifierName,
+            'verified_by_user_id' => $verifier?->id,
+            'completion_remarks' => $remarks,
+            'proof_note' => $remarks,
+        ]);
+
+        $notificationMessage = sprintf(
+            'Task "%s" verified & completed by %s — "%s"',
+            Str::limit($opsActionItem->title, 65),
+            $verifierName,
+            Str::limit($remarks, 140)
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $notificationMessage,
+                'item' => $opsActionItem->fresh(),
+            ]);
+        }
+
+        return redirect()
+            ->back()
+            ->with('success', $notificationMessage);
+    }
+
+    /**
+     * Move a completed Ops Action Item back to active pending state.
+     */
+    protected function markItemPending(Request $request, OpsActionItem $opsActionItem)
+    {
         $slaHours = (int) ($opsActionItem->sla_hours ?: 48);
 
         $opsActionItem->update([
             'is_completed' => false,
             'completed_at' => null,
             'completed_by' => null,
+            'verified_by_user_id' => null,
+            'completion_remarks' => null,
+            'proof_note' => null,
             'ball_assigned_at' => now(),
             'due_at' => now()->addHours($slaHours),
         ]);
@@ -465,6 +478,7 @@ class OpsActionTrackerController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
+                'message' => 'Task moved back to pending.',
                 'item' => $opsActionItem->fresh(),
             ]);
         }

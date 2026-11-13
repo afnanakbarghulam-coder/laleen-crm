@@ -95,6 +95,8 @@ class StaffContractTest extends TestCase
         $contractsRes->assertSee('Shifts &amp; Ops Actions', false);
         $contractsRes->assertSee('HR &amp; Disciplinary', false);
         $contractsRes->assertDontSee('👥 Staff Directory &amp; Payroll', false);
+        $contractsRes->assertDontSee('Team members');
+        $contractsRes->assertDontSee('Directory, contracts &amp; payroll, shifts &amp; operations, and HR records.', false);
 
         // Sub-navigation pills & isolated sub-panes
         $contractsRes->assertSee('📄 Staff Contracts');

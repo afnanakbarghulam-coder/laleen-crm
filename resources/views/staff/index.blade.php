@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Team Members')
+@section('title', 'Staff Management')
 
 <style>
     .select2-container--open {
@@ -743,6 +743,10 @@
         font-weight: 800;
         margin-bottom: 8px;
     }
+
+    .laleen-top-pill-wrap .laleen-staff-pill-bar {
+        margin-bottom: 0;
+    }
 </style>
 
 @section('content')
@@ -753,24 +757,14 @@
         $currentHrSub = $hrSubView ?? 'complaints';
     @endphp
 
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <div>
-            <h4 class="fw-bold mb-0">Team members <span class="badge bg-secondary">{{ $staff->count() }}</span></h4>
-            <p class="text-muted small mb-0">Directory, contracts &amp; payroll, shifts &amp; operations, and HR records.</p>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-1 mb-4">
+        <div class="laleen-top-pill-wrap">
+            @include('staff.partials.top-pill-nav', ['inPlaceTabs' => true, 'activePill' => $activeTab])
         </div>
-        <div class="d-flex align-items-center gap-2">
-            @if (auth()->user()->isSuperAdmin())
-                <a href="{{ route('users.index') }}" class="sc-btn-ghost">Staff Access</a>
-            @endif
-            @moduleEdit('staff_management')
-                <button id="globalAddStaffBtn" class="btn btn-dark {{ $activeTab === 'directory' ? '' : 'd-none' }}" data-bs-toggle="modal" data-bs-target="#addStaffModal" onclick="resetStaffForm()">
-                    <i class="bx bx-plus me-1"></i> Add
-                </button>
-            @endmoduleEdit
-        </div>
+        @if (auth()->user()->isSuperAdmin())
+            <a href="{{ route('users.index') }}" class="sc-btn-ghost">Staff Access</a>
+        @endif
     </div>
-
-    @include('staff.partials.top-pill-nav', ['inPlaceTabs' => true, 'activePill' => $activeTab])
 
     {{-- ================= 1. DIRECTORY & PROFILES (COMBINES DIRECTORY + WORKSPACE) ================= --}}
     <div id="staff-pane-directory" class="staff-tab-pane {{ $activeTab === 'directory' ? '' : 'd-none' }}">
@@ -786,10 +780,15 @@
                 @endmoduleEdit
             </div>
 
-            <div id="dirFilterBtnWrap" class="{{ $currentDirSub === 'directory' ? '' : 'd-none' }}">
+            <div id="dirFilterBtnWrap" class="d-flex align-items-center gap-2 {{ $currentDirSub === 'directory' ? '' : 'd-none' }}">
                 <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse">
                     <i class="bx bx-filter-alt me-1"></i> Filters
                 </button>
+                @moduleEdit('staff_management')
+                    <button id="globalAddStaffBtn" type="button" class="sc-btn-rosegold" data-bs-toggle="modal" data-bs-target="#addStaffModal" onclick="resetStaffForm()">
+                        + Add Staff
+                    </button>
+                @endmoduleEdit
             </div>
         </div>
 

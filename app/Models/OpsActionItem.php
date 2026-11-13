@@ -56,6 +56,7 @@ class OpsActionItem extends Model
         'notes',
         'recommended_solution',
         'proof_note',
+        'completion_remarks',
         'scope',
         'impact_lever',
         'priority',
@@ -71,6 +72,7 @@ class OpsActionItem extends Model
         'is_completed',
         'completed_at',
         'completed_by',
+        'verified_by_user_id',
     ];
 
     protected $casts = [
@@ -83,6 +85,7 @@ class OpsActionItem extends Model
         'completed_at' => 'datetime',
         'staff_id' => 'integer',
         'sla_hours' => 'integer',
+        'verified_by_user_id' => 'integer',
     ];
 
     protected $appends = [
@@ -320,6 +323,10 @@ class OpsActionItem extends Model
             return false;
         }
 
+        if (method_exists($user, 'isAdmin') && $user->isAdmin()) {
+            return true;
+        }
+
         $role = strtolower(trim((string) $user->role));
         if (in_array($role, ['admin', 'owner', 'super_admin'], true)) {
             return true;
@@ -372,6 +379,11 @@ class OpsActionItem extends Model
     public function staff(): BelongsTo
     {
         return $this->belongsTo(Staff::class, 'staff_id');
+    }
+
+    public function verifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by_user_id');
     }
 
     /**

@@ -148,12 +148,15 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/staffs', [StaffController::class, 'index'])->name('staffs.index');
         Route::get('/scheduled-shifts', [ShiftController::class, 'index'])->name('shifts.index');
         Route::get('/staff/ops-tracker', [OpsActionTrackerController::class, 'index'])->name('staff.ops-tracker.index');
-    });
-    Route::middleware('module:staff_management,edit')->group(function () {
+
         Route::middleware('throttle:60,1')->group(function () {
             Route::match(['post', 'patch', 'put'], '/staff/ops-tracker/{opsActionItem}/toggle', [OpsActionTrackerController::class, 'toggle'])->name('staff.ops-tracker.toggle');
             Route::match(['post', 'patch', 'put'], '/staff/ops-tracker/{opsActionItem}/complete', [OpsActionTrackerController::class, 'complete'])->name('staff.ops-tracker.complete');
             Route::match(['post', 'patch', 'put'], '/staff/ops-tracker/{opsActionItem}/reopen', [OpsActionTrackerController::class, 'reopen'])->name('staff.ops-tracker.reopen');
+        });
+    });
+    Route::middleware('module:staff_management,edit')->group(function () {
+        Route::middleware('throttle:60,1')->group(function () {
             Route::post('/staff/ops-tracker', [OpsActionTrackerController::class, 'store'])->name('staff.ops-tracker.store');
             Route::match(['put', 'patch', 'post'], '/staff/ops-tracker/{opsActionItem}', [OpsActionTrackerController::class, 'update'])->name('staff.ops-tracker.update');
             Route::match(['post', 'patch', 'put'], '/staff/ops-tracker/{opsActionItem}/approve-owner', [OpsActionTrackerController::class, 'approveOwner'])->name('staff.ops-tracker.approve-owner');

@@ -659,37 +659,79 @@
 
     /* Dark Luxury Confirmation Modal */
     .ops-confirm-modal .modal-content {
-        background: #241c1c;
-        border: 1px solid rgba(217, 143, 131, 0.32);
-        border-radius: 14px;
-        color: #f3e8e4;
-        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.55);
+        background: linear-gradient(180deg, rgba(34, 22, 27, 0.98) 0%, rgba(20, 13, 17, 0.99) 100%);
+        border: 1px solid rgba(229, 184, 168, 0.22);
+        border-radius: 16px;
+        color: #f8efe6;
+        box-shadow: 0 24px 56px rgba(0, 0, 0, 0.62);
     }
 
     .ops-confirm-modal .modal-header {
-        border-bottom: 1px solid rgba(217, 143, 131, 0.14);
-        padding: 16px 20px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 16px 20px;
     }
 
     .ops-confirm-modal .modal-body {
-        padding: 16px 20px;
+        padding: 18px 20px;
         font-size: 13.5px;
         color: #dfd0ca;
     }
 
     .ops-confirm-modal .modal-footer {
-        border-top: 1px solid rgba(217, 143, 131, 0.14);
-        padding: 12px 20px 16px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 14px 20px;
     }
 
-    .ops-confirm-task-box {
-        background: rgba(20, 16, 14, 0.55);
-        border: 1px solid rgba(217, 143, 131, 0.22);
-        border-radius: 8px;
+    .ops-verify-textarea {
+        width: 100%;
+        background: rgba(18, 11, 14, 0.78);
+        border: 1px solid rgba(229, 184, 168, 0.24);
+        border-radius: 10px;
+        color: #f8efe6;
+        font-size: 13px;
         padding: 10px 12px;
+        resize: vertical;
+        outline: none;
+        transition: border-color .15s ease;
+    }
+
+    .ops-verify-textarea:focus {
+        border-color: #d98f83;
+    }
+
+    .ops-verify-textarea::placeholder {
+        color: rgba(184, 162, 154, 0.68);
+    }
+
+    .btn-ops-confirm-complete {
+        background: linear-gradient(135deg, #e09b8f 0%, #c97c70 100%);
+        color: #1c110f;
         font-weight: 700;
-        color: #f3e8e4;
-        margin-bottom: 10px;
+        font-size: 12.5px;
+        padding: 7px 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        transition: opacity .15s ease, filter .15s ease;
+    }
+
+    .btn-ops-confirm-complete:disabled {
+        opacity: 0.42;
+        cursor: not-allowed;
+        filter: grayscale(0.25);
+    }
+
+    .ops-verified-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        background: rgba(110, 231, 183, 0.10);
+        border: 1px solid rgba(110, 231, 183, 0.24);
+        color: #6ee7b7;
+        white-space: nowrap;
     }
 </style>
 
@@ -698,6 +740,9 @@
     $scoreColorClass = $completionRate >= 90
         ? 'ops-score-green'
         : ($completionRate >= 75 ? 'ops-score-amber' : 'ops-score-red');
+    $authOpsViewer = auth()->user();
+    $canVerifyOpsTasks = $authOpsViewer
+        && (\App\Models\OpsActionItem::isAdminOrOwner($authOpsViewer) || \App\Models\OpsActionItem::isArbab($authOpsViewer));
 @endphp
 
 <div class="ops-tracker-wrap">
@@ -850,11 +895,13 @@
                         @php
                             $canCompleteTask = $item->canBeCompletedBy(auth()->user());
                             $isAdminViewer = \App\Models\OpsActionItem::isAdminOrOwner(auth()->user());
+                            $savedVerificationRemark = trim((string) ($item->completion_remarks ?: $item->proof_note ?? ''));
+                            $verifierNameDisplay = trim((string) ($item->completed_by ?: 'Ops Lead'));
                         @endphp
                         <tr class="{{ $item->is_completed ? 'ops-row-completed' : '' }}"
                             data-ops-item-id="{{ $item->id }}"
                             data-sla-hours="{{ $itemSlaHours }}">
-                            {{-- Col 1: Ultra-Minimalistic 2-Line Task & Note --}}
+                            {{-- Col 1: Ultra-Minimalistic Task & Note --}}
                             <td>
                                 <div class="d-flex align-items-start gap-2">
                                     @if ($canCompleteTask)
@@ -863,20 +910,16 @@
                                               id="opsToggleForm-{{ $item->id }}"
                                               class="m-0">
                                             @csrf
+                                            <input type="hidden" name="completion_remarks" id="opsRemarksHidden-{{ $item->id }}" value="">
                                             <button type="button"
                                                     class="ops-status-circle {{ $item->is_completed ? 'is-done' : '' }}"
-                                                    onclick="openOpsConfirmModal({{ $item->id }}, @js($item->title), @js($item->is_completed ? 'reopen' : 'complete'))"
-                                                    title="{{ $item->is_completed ? 'Move Back to Pending' : 'Mark Task as Completed' }}">
+                                                    onclick="openOpsConfirmModal({{ $item->id }}, @js($item->title), @js($item->is_completed ? 'reopen' : 'complete'), @js($item->assignee_list))"
+                                                    title="{{ $item->is_completed ? 'Move Back to Pending' : 'Confirm & Verify Task Completion' }}">
                                                 ✓
                                             </button>
                                         </form>
-                                    @else
-                                        <button type="button"
-                                                class="ops-status-circle is-disabled {{ $item->is_completed ? 'is-done' : '' }}"
-                                                disabled
-                                                title="Only Admin or Arbab can mark this task completed">
-                                            ✓
-                                        </button>
+                                    @elseif ($item->is_completed)
+                                        <span class="ops-status-circle is-done is-disabled" aria-hidden="true">✓</span>
                                     @endif
 
                                     <div class="flex-grow-1">
@@ -914,6 +957,17 @@
                                                 </span>
                                             @endif
                                         </div>
+
+                                        @if ($item->is_completed)
+                                            <div class="d-flex flex-wrap align-items-center gap-2 mt-1" style="font-size: 11.5px;">
+                                                <span class="ui-chip ops-verified-chip">
+                                                    Verified by {{ $verifierNameDisplay }} &middot; {{ $completedAtStamp }}
+                                                </span>
+                                                @if ($savedVerificationRemark !== '')
+                                                    <span style="color: #e5b8a8;">&ldquo;{{ $savedVerificationRemark }}&rdquo;</span>
+                                                @endif
+                                            </div>
+                                        @endif
                                     </div>
                                 </div>
                             </td>
@@ -944,28 +998,30 @@
                                 @endif
                             </td>
 
-                            {{-- Col 4: Explicit Action Button (Mark Done / Back to Pending / Assigned Only Lock) + Admin-Only Delete --}}
+                            {{-- Col 4: Explicit Action Button (Mark Done / Back to Pending / Awaiting Verification) + Admin-Only Delete --}}
                             <td class="text-end align-middle">
                                 <div class="d-inline-flex align-items-center justify-content-end gap-2">
                                     @if ($canCompleteTask)
                                         @if (! $item->is_completed)
                                             <button type="button"
                                                     class="btn btn-sm btn-ops-mark-done"
-                                                    onclick="openOpsConfirmModal({{ $item->id }}, @js($item->title), 'complete')">
+                                                    onclick="openOpsConfirmModal({{ $item->id }}, @js($item->title), 'complete', @js($item->assignee_list))">
                                                 ✓ Mark Done
                                             </button>
                                         @else
                                             <button type="button"
                                                     class="btn btn-sm btn-ops-reopen"
-                                                    onclick="openOpsConfirmModal({{ $item->id }}, @js($item->title), 'reopen')">
+                                                    onclick="openOpsConfirmModal({{ $item->id }}, @js($item->title), 'reopen', @js($item->assignee_list))">
                                                 ↺ Back to Pending
                                             </button>
                                         @endif
-                                    @else
-                                        <span class="ops-assigned-only-pill"
-                                              title="Only Admin or Arbab can mark this task completed">
-                                            🔒 Verified by Ops Lead
+                                    @elseif (! $item->is_completed)
+                                        <span class="ui-chip ops-assigned-only-pill"
+                                              title="Only Admin or Arbab can verify and mark this task completed">
+                                            Awaiting Verification
                                         </span>
+                                    @else
+                                        <span class="ui-chip ops-verified-chip">✓ Verified</span>
                                     @endif
 
                                     @if ($isAdminViewer)
@@ -977,7 +1033,7 @@
                                             @method('DELETE')
                                             <button type="button"
                                                     class="btn btn-sm btn-link text-danger p-1"
-                                                    onclick="openOpsConfirmModal({{ $item->id }}, @js($item->title), 'delete')"
+                                                    onclick="openOpsConfirmModal({{ $item->id }}, @js($item->title), 'delete', @js($item->assignee_list))"
                                                     title="Delete task">
                                                 <i class="bx bx-trash fs-5"></i>
                                             </button>
@@ -1193,35 +1249,58 @@
         </aside>
     @endmoduleEdit
 
-    {{-- Sleek Centered Dark-Luxury Confirmation Modal --}}
-    <div class="modal fade ops-confirm-modal" id="opsActionConfirmModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h6 class="modal-title fw-bold mb-0" id="opsConfirmModalTitle">Mark Task as Completed?</h6>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="ops-confirm-task-box" id="opsConfirmModalTaskTitle">""</div>
-                    <p class="mb-0" id="opsConfirmModalMessage">
-                        Are you sure this operational item is fully resolved?
-                    </p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                        Cancel
-                    </button>
-                    <button type="button" class="btn btn-sm btn-success fw-bold" id="opsConfirmModalSubmitBtn" onclick="executeOpsConfirmedAction()">
-                        ✓ Yes, Complete
-                    </button>
+    {{-- Sleek Centered Dark Espresso & Rose-Gold Verification Modal (Admin & Arbab Only) --}}
+    @if ($canVerifyOpsTasks)
+        <div class="modal fade ops-confirm-modal" id="opsActionConfirmModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered" style="max-width: 480px;">
+                <div class="modal-content">
+                    <div class="modal-header d-flex justify-content-between align-items-center">
+                        <h6 class="modal-title fw-bold mb-0" id="opsConfirmModalTitle">Confirm &amp; Verify Task Completion</h6>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                            <div class="fw-semibold mb-2" id="opsConfirmModalTaskTitle" style="color: #f8efe6; font-size: 14px; line-height: 1.4;"></div>
+                            <div class="d-flex flex-wrap align-items-center gap-1">
+                                <span style="font-size: 11.5px; color: #b8a29a; margin-right: 4px;">Pending With:</span>
+                                <div class="d-inline-flex flex-wrap gap-1" id="opsConfirmModalAssignees"></div>
+                            </div>
+                        </div>
+
+                        <div id="opsConfirmRemarksGroup">
+                            <label class="form-label small fw-semibold mb-1" for="opsConfirmRemarksTextarea" style="color: #e5b8a8;">
+                                Verification Feedback / Remarks *
+                            </label>
+                            <textarea id="opsConfirmRemarksTextarea"
+                                      rows="3"
+                                      maxlength="1000"
+                                      class="ops-verify-textarea"
+                                      placeholder="Add verification notes on how this task was checked and completed..."></textarea>
+                            <div class="small mt-2" id="opsConfirmRemarksHint" style="color: #fda4af; font-size: 11.5px;">
+                                Verification feedback is required (min 3 characters) before marking this task completed.
+                            </div>
+                        </div>
+
+                        <p class="mb-0 d-none" id="opsConfirmModalMessage" style="color: #b8a29a; font-size: 13px;"></p>
+                    </div>
+                    <div class="modal-footer d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">
+                            Cancel
+                        </button>
+                        <button type="button" class="btn-ops-confirm-complete" id="opsConfirmModalSubmitBtn" onclick="executeOpsConfirmedAction()" disabled>
+                            Confirm &amp; Mark Completed
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    @endif
 </div>
 
 <script>
     let pendingOpsConfirmFormId = null;
+    let pendingOpsConfirmItemId = null;
+    let pendingOpsConfirmAction = 'complete';
 
     function openOpsCreateDrawer() {
         const backdropEl = document.getElementById('opsDrawerBackdrop');
@@ -1303,40 +1382,93 @@
         if (editDrawer) editDrawer.classList.remove('open');
     }
 
-    function openOpsConfirmModal(itemId, taskTitle, actionType) {
+    function syncOpsConfirmRemarksState() {
+        const submitBtnEl = document.getElementById('opsConfirmModalSubmitBtn');
+        const remarksTextarea = document.getElementById('opsConfirmRemarksTextarea');
+        const hintEl = document.getElementById('opsConfirmRemarksHint');
+        if (!submitBtnEl) return;
+
+        if (pendingOpsConfirmAction !== 'complete') {
+            submitBtnEl.disabled = false;
+            return;
+        }
+
+        const trimmed = (remarksTextarea ? remarksTextarea.value : '').trim();
+        const isValid = trimmed.length >= 3;
+        submitBtnEl.disabled = !isValid;
+
+        if (hintEl) {
+            if (isValid) {
+                hintEl.style.color = '#6ee7b7';
+                hintEl.textContent = '✓ Verification note ready to record.';
+            } else {
+                hintEl.style.color = '#fda4af';
+                hintEl.textContent = 'Verification feedback is required (min 3 characters) before marking this task completed.';
+            }
+        }
+    }
+
+    function openOpsConfirmModal(itemId, taskTitle, actionType, assigneeList) {
+        pendingOpsConfirmItemId = itemId;
+        pendingOpsConfirmAction = actionType || 'complete';
+
         const titleEl = document.getElementById('opsConfirmModalTitle');
         const taskBoxEl = document.getElementById('opsConfirmModalTaskTitle');
+        const assigneesEl = document.getElementById('opsConfirmModalAssignees');
+        const remarksGroupEl = document.getElementById('opsConfirmRemarksGroup');
+        const remarksTextarea = document.getElementById('opsConfirmRemarksTextarea');
         const messageEl = document.getElementById('opsConfirmModalMessage');
         const submitBtnEl = document.getElementById('opsConfirmModalSubmitBtn');
 
         if (taskBoxEl) {
-            taskBoxEl.textContent = '"' + (taskTitle || '') + '"';
+            taskBoxEl.textContent = taskTitle || '';
+        }
+
+        if (assigneesEl) {
+            assigneesEl.innerHTML = '';
+            const names = Array.isArray(assigneeList) && assigneeList.length ? assigneeList : ['Ops Team'];
+            names.forEach(function (name) {
+                const badge = document.createElement('span');
+                badge.className = 'ui-chip ops-locked-assignee-pill';
+                badge.textContent = '👤 ' + name;
+                assigneesEl.appendChild(badge);
+            });
         }
 
         if (actionType === 'reopen') {
             pendingOpsConfirmFormId = 'opsToggleForm-' + itemId;
             if (titleEl) titleEl.textContent = 'Move Back to Pending?';
+            remarksGroupEl?.classList.add('d-none');
+            messageEl?.classList.remove('d-none');
             if (messageEl) messageEl.textContent = "Reopen '" + (taskTitle || '') + "' and restart its active SLA timer?";
             if (submitBtnEl) {
                 submitBtnEl.textContent = '↺ Yes, Move to Pending';
-                submitBtnEl.className = 'btn btn-sm btn-warning fw-bold text-dark';
+                submitBtnEl.className = 'btn btn-sm btn-warning fw-bold text-dark rounded-pill px-3';
+                submitBtnEl.disabled = false;
             }
         } else if (actionType === 'delete') {
             pendingOpsConfirmFormId = 'opsDeleteForm-' + itemId;
             if (titleEl) titleEl.textContent = 'Delete this task permanently?';
+            remarksGroupEl?.classList.add('d-none');
+            messageEl?.classList.remove('d-none');
             if (messageEl) messageEl.textContent = 'This operational task will be permanently removed from the weekly checklist.';
             if (submitBtnEl) {
                 submitBtnEl.textContent = '🗑️ Yes, Delete';
-                submitBtnEl.className = 'btn btn-sm btn-danger fw-bold';
+                submitBtnEl.className = 'btn btn-sm btn-danger fw-bold rounded-pill px-3';
+                submitBtnEl.disabled = false;
             }
         } else {
             pendingOpsConfirmFormId = 'opsToggleForm-' + itemId;
-            if (titleEl) titleEl.textContent = 'Mark Task as Completed?';
-            if (messageEl) messageEl.textContent = 'Are you sure this operational item is fully resolved?';
+            if (titleEl) titleEl.textContent = 'Confirm & Verify Task Completion';
+            remarksGroupEl?.classList.remove('d-none');
+            messageEl?.classList.add('d-none');
+            if (remarksTextarea) remarksTextarea.value = '';
             if (submitBtnEl) {
-                submitBtnEl.textContent = '✓ Yes, Complete';
-                submitBtnEl.className = 'btn btn-sm btn-success fw-bold';
+                submitBtnEl.textContent = 'Confirm & Mark Completed';
+                submitBtnEl.className = 'btn-ops-confirm-complete';
+                submitBtnEl.disabled = true;
             }
+            syncOpsConfirmRemarksState();
         }
 
         const modalEl = document.getElementById('opsActionConfirmModal');
@@ -1344,20 +1476,35 @@
             const modalInstance = window.bootstrap.Modal.getOrCreateInstance(modalEl);
             modalInstance.show();
             setTimeout(function () {
-                if (submitBtnEl) submitBtnEl.focus();
+                if (actionType === 'complete' && remarksTextarea) {
+                    remarksTextarea.focus();
+                } else if (submitBtnEl) {
+                    submitBtnEl.focus();
+                }
             }, 150);
-        } else if (pendingOpsConfirmFormId) {
-            const formEl = document.getElementById(pendingOpsConfirmFormId);
-            if (formEl) formEl.submit();
         }
     }
 
     function executeOpsConfirmedAction() {
         if (!pendingOpsConfirmFormId) return;
         const formEl = document.getElementById(pendingOpsConfirmFormId);
-        if (formEl) {
-            formEl.submit();
+        if (!formEl) return;
+
+        if (pendingOpsConfirmAction === 'complete') {
+            const remarksTextarea = document.getElementById('opsConfirmRemarksTextarea');
+            const trimmed = (remarksTextarea ? remarksTextarea.value : '').trim();
+            if (trimmed.length < 3) {
+                syncOpsConfirmRemarksState();
+                remarksTextarea?.focus();
+                return;
+            }
+            const hiddenRemarks = document.getElementById('opsRemarksHidden-' + pendingOpsConfirmItemId);
+            if (hiddenRemarks) {
+                hiddenRemarks.value = trimmed;
+            }
         }
+
+        formEl.submit();
     }
 
     function toggleOpsStaffFilterMenu(event) {
@@ -1378,6 +1525,8 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        document.getElementById('opsConfirmRemarksTextarea')?.addEventListener('input', syncOpsConfirmRemarksState);
+
         document.addEventListener('click', function (e) {
             const wrapEl = document.getElementById('opsStaffFilterDropdownWrap');
             if (wrapEl && !wrapEl.contains(e.target)) {
@@ -1391,16 +1540,6 @@
                 closeOpsStaffFilterMenu();
             }
         });
-
-        const modalEl = document.getElementById('opsActionConfirmModal');
-        if (modalEl) {
-            modalEl.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    executeOpsConfirmedAction();
-                }
-            });
-        }
     });
 </script>
 @endsection

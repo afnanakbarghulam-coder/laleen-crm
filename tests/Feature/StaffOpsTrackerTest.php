@@ -273,14 +273,16 @@ class StaffOpsTrackerTest extends TestCase
         $openResponse->assertSee('Assigned: 10 Nov 2026, 03:40 PM');
         $openResponse->assertSee('✓ Mark Done');
 
-        // 2. Complete the item and set exact completed_at timestamp
+        // 2. Complete the item with mandatory verification remarks and set exact completed_at timestamp
         $this->actingAs($this->admin)
-            ->post(route('staff.ops-tracker.toggle', $openItem))
+            ->post(route('staff.ops-tracker.toggle', $openItem), [
+                'completion_remarks' => 'Verified all 10 VIP client call logs in CRM.',
+            ])
             ->assertRedirect();
 
         $openItem->update(['completed_at' => $completedTime]);
 
-        // 3. Default ?status=open hides completed tasks; ?status=completed shows completed tasks cleanly
+        // 3. Default ?status=open hides completed tasks; ?status=completed shows completed tasks + verification details cleanly
         $defaultOpenAfterComplete = $this->actingAs($this->admin)
             ->get(route('staff.ops-tracker.index'))
             ->assertOk();
@@ -293,9 +295,11 @@ class StaffOpsTrackerTest extends TestCase
         $this->assertSame([$openItem->id], $completedResponse->viewData('items')->pluck('id')->all());
         $completedResponse->assertSee('Assigned: 10 Nov 2026, 03:40 PM');
         $completedResponse->assertSee('✓ Completed: 10 Nov 2026, 05:15 PM');
+        $completedResponse->assertSee('Verified by Afnan (Owner)');
+        $completedResponse->assertSee('Verified all 10 VIP client call logs in CRM.');
         $completedResponse->assertSee('↺ Back to Pending');
 
-        // 4. Toggling back to pending resets is_completed = false and clears completed_at
+        // 4. Toggling back to pending resets is_completed = false and clears completed_at & completion_remarks
         $this->actingAs($this->admin)
             ->post(route('staff.ops-tracker.toggle', $openItem))
             ->assertRedirect();
@@ -303,6 +307,8 @@ class StaffOpsTrackerTest extends TestCase
         $openItem->refresh();
         $this->assertFalse($openItem->is_completed);
         $this->assertNull($openItem->completed_at);
+        $this->assertNull($openItem->completion_remarks);
+        $this->assertNull($openItem->verified_by_user_id);
     }
 
     public function test_sla_overdue_detection_and_automatic_weekly_carryover_work_end_to_end(): void
@@ -398,21 +404,33 @@ class StaffOpsTrackerTest extends TestCase
         $this->assertFalse($assignedTask->canBeCompletedBy($this->opsLeadUser));
         $this->assertFalse($assignedTask->canBeCompletedBy($this->sanaUser));
 
-        // 1. Other Assigned Staff (Ayan & Laden Khan, even though explicitly assigned) see locked UI and get 403 Forbidden on toggle
+        // 1. Other Assigned Staff (Ayan & Laden Khan, even though explicitly assigned) see Awaiting Verification and get 403 Forbidden
         $ayanView = $this->actingAs($this->ayanUser)
             ->get(route('staff.ops-tracker.index'))
             ->assertOk();
 
         $ayanView->assertDontSee('✓ Mark Done');
-        $ayanView->assertSee('🔒 Verified by Ops Lead');
-        $ayanView->assertSee('Only Admin or Arbab can mark this task completed');
+        $ayanView->assertDontSee('Confirm &amp; Verify Task Completion', false);
+        $ayanView->assertSee('Awaiting Verification');
+
+        $ayanHubView = $this->actingAs($this->ayanUser)
+            ->get(route('staffs.index', ['tab' => 'ops_tracker']))
+            ->assertOk();
+
+        $ayanHubView->assertDontSee('✓ Mark Done');
+        $ayanHubView->assertDontSee('id="hubOpsVerifyModal"', false);
+        $ayanHubView->assertSee('Awaiting Verification');
 
         $this->actingAs($this->ayanUser)
-            ->post(route('staff.ops-tracker.toggle', $assignedTask))
+            ->post(route('staff.ops-tracker.toggle', $assignedTask), [
+                'completion_remarks' => 'Attempted unauthorized completion by assignee.',
+            ])
             ->assertForbidden();
 
         $this->actingAs($ladenUser)
-            ->post(route('staff.ops-tracker.toggle', $assignedTask))
+            ->post(route('staff.ops-tracker.complete', $assignedTask), [
+                'completion_remarks' => 'Attempted unauthorized completion by manager.',
+            ])
             ->assertForbidden();
 
         $assignedTask->refresh();
@@ -424,21 +442,31 @@ class StaffOpsTrackerTest extends TestCase
             ->assertForbidden();
         $this->assertDatabaseHas('ops_action_items', ['id' => $assignedTask->id]);
 
-        // 2. Arbab (non-admin Operations Lead) sees "✓ Mark Done", CAN mark tasks Completed, and CAN move them back to Pending
+        // 2. Arbab (non-admin Operations Lead) sees "✓ Mark Done" + confirmation modal, CAN mark tasks Completed with remarks, and CAN move them back to Pending
         $arbabView = $this->actingAs($arbabUser)
-            ->get(route('staff.ops-tracker.index'))
+            ->get(route('staffs.index', ['tab' => 'ops_tracker']))
             ->assertOk();
 
         $arbabView->assertSee('✓ Mark Done');
-        $arbabView->assertDontSee('🔒 Verified by Ops Lead');
+        $arbabView->assertSee('Confirm &amp; Verify Task Completion', false);
+        $arbabView->assertDontSee('Awaiting Verification');
 
-        $this->actingAs($arbabUser)
-            ->post(route('staff.ops-tracker.toggle', $assignedTask))
+        $arbabCompleteResponse = $this->actingAs($arbabUser)
+            ->post(route('staff.ops-tracker.toggle', $assignedTask), [
+                'completion_remarks' => 'Checked all 15 WhatsApp threads; follow-ups sent.',
+            ])
             ->assertRedirect();
+
+        $arbabCompleteResponse->assertSessionHas('success', function (string $msg) {
+            return str_contains($msg, 'Arbab')
+                && str_contains($msg, 'Checked all 15 WhatsApp threads; follow-ups sent.');
+        });
 
         $assignedTask->refresh();
         $this->assertTrue($assignedTask->is_completed);
         $this->assertSame('Arbab', $assignedTask->completed_by);
+        $this->assertSame($arbabUser->id, $assignedTask->verified_by_user_id);
+        $this->assertSame('Checked all 15 WhatsApp threads; follow-ups sent.', $assignedTask->completion_remarks);
 
         // Assigned staff (Ayan) ALSO cannot reopen a completed task
         $this->actingAs($this->ayanUser)
@@ -454,14 +482,18 @@ class StaffOpsTrackerTest extends TestCase
         $assignedTask->refresh();
         $this->assertFalse($assignedTask->is_completed);
 
-        // 3. Admin / Owner can mark ANY task Completed and move it back to Pending
+        // 3. Admin / Owner can mark ANY task Completed with remarks and move it back to Pending
         $this->actingAs($this->admin)
-            ->post(route('staff.ops-tracker.toggle', $assignedTask))
+            ->post(route('staff.ops-tracker.toggle', $assignedTask), [
+                'completion_remarks' => 'Audited directly by Owner; campaign closed.',
+            ])
             ->assertRedirect();
 
         $assignedTask->refresh();
         $this->assertTrue($assignedTask->is_completed);
         $this->assertSame('Afnan (Owner)', $assignedTask->completed_by);
+        $this->assertSame($this->admin->id, $assignedTask->verified_by_user_id);
+        $this->assertSame('Audited directly by Owner; campaign closed.', $assignedTask->completion_remarks);
 
         $this->actingAs($this->admin)
             ->post(route('staff.ops-tracker.toggle', $assignedTask))
@@ -556,5 +588,83 @@ class StaffOpsTrackerTest extends TestCase
         $task->refresh();
         $this->assertSame(168, $task->sla_hours);
         $this->assertTrue($task->due_at->equalTo($assignedTime->copy()->addHours(168)));
+    }
+
+    public function test_mandatory_completion_remarks_validation_422_and_completed_tab_verification_display(): void
+    {
+        $arbabUser = User::factory()->create([
+            'name' => 'Arbab',
+            'email' => 'arbab.lead@laleen.qa',
+            'role' => 'manager',
+            'is_active' => true,
+            'permissions' => ['staff_management' => 'view'],
+        ]);
+
+        $task = OpsActionItem::create([
+            'title' => 'Verify Al Wakrah sterilization logbook & towel stock',
+            'notes' => 'Morning floor inspection item.',
+            'scope' => 'Al Wakrah',
+            'pending_with_type' => 'staff',
+            'pending_with_name' => 'Sana',
+            'assigned_user_ids' => [$this->sanaUser->id],
+            'assigned_names' => ['Sana'],
+            'sla_hours' => 48,
+            'week_start_date' => now()->startOfWeek(Carbon::MONDAY)->toDateString(),
+            'is_completed' => false,
+        ]);
+
+        // 1. Missing, empty, whitespace-only, or < 3 char remarks fail with 422 and leave task Open
+        foreach ([
+            [],
+            ['completion_remarks' => ''],
+            ['completion_remarks' => '     '],
+            ['completion_remarks' => 'ok'],
+        ] as $invalidPayload) {
+            $this->actingAs($this->admin)
+                ->postJson(route('staff.ops-tracker.toggle', $task), $invalidPayload)
+                ->assertStatus(422)
+                ->assertJsonValidationErrors(['completion_remarks']);
+
+            $this->actingAs($arbabUser)
+                ->postJson(route('staff.ops-tracker.complete', $task), $invalidPayload)
+                ->assertStatus(422)
+                ->assertJsonValidationErrors(['completion_remarks']);
+        }
+
+        // Standard web POST without remarks also fails validation and leaves task Open
+        $this->actingAs($this->admin)
+            ->post(route('staff.ops-tracker.toggle', $task), ['completion_remarks' => '   '])
+            ->assertSessionHasErrors(['completion_remarks']);
+
+        $task->refresh();
+        $this->assertFalse($task->is_completed);
+        $this->assertNull($task->completed_at);
+        $this->assertNull($task->completion_remarks);
+
+        // 2. Arbab completes with valid trimmed remarks — updates DB and returns verifier + remarks in notification
+        $jsonOk = $this->actingAs($arbabUser)
+            ->postJson(route('staff.ops-tracker.complete', $task), [
+                'completion_remarks' => '  Inspected logbook on video call; all stations signed off.  ',
+            ])
+            ->assertOk();
+
+        $jsonOk->assertJsonPath('success', true);
+        $this->assertStringContainsString('Arbab', (string) $jsonOk->json('message'));
+        $this->assertStringContainsString('Inspected logbook on video call; all stations signed off.', (string) $jsonOk->json('message'));
+
+        $task->refresh();
+        $this->assertTrue($task->is_completed);
+        $this->assertSame('Arbab', $task->completed_by);
+        $this->assertSame($arbabUser->id, $task->verified_by_user_id);
+        $this->assertSame('Inspected logbook on video call; all stations signed off.', $task->completion_remarks);
+
+        // 3. Shifts & Ops Actions -> Ops & Action Tracker (?tab=ops_tracker&ops_status=completed) displays remark + Verified by {Name} · {Timestamp}
+        $hubCompletedView = $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'ops_tracker', 'ops_status' => 'completed']))
+            ->assertOk();
+
+        $hubCompletedView->assertSee('Verify Al Wakrah sterilization logbook');
+        $hubCompletedView->assertSee('Verified by Arbab');
+        $hubCompletedView->assertSee('Inspected logbook on video call; all stations signed off.');
     }
 }

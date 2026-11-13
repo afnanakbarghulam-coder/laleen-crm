@@ -21,6 +21,10 @@
     $hubScoreClass = $hubOpsRate >= 90
         ? 'hub-ops-score-green'
         : ($hubOpsRate >= 75 ? 'hub-ops-score-amber' : 'hub-ops-score-red');
+
+    $authHubUser = auth()->user();
+    $canVerifyHubOps = $authHubUser
+        && (\App\Models\OpsActionItem::isAdminOrOwner($authHubUser) || \App\Models\OpsActionItem::isArbab($authHubUser));
 @endphp
 
 <style>
@@ -137,6 +141,86 @@
         background: rgba(229, 184, 168, 0.09);
         border: 1px solid rgba(229, 184, 168, 0.18);
         color: #f8efe6;
+    }
+
+    .hub-ops-awaiting-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        color: #b8a29a;
+        white-space: nowrap;
+    }
+
+    .hub-ops-verified-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        background: rgba(110, 231, 183, 0.10);
+        border: 1px solid rgba(110, 231, 183, 0.24);
+        color: #6ee7b7;
+        white-space: nowrap;
+    }
+
+    .hub-ops-verify-modal .modal-content {
+        background: linear-gradient(180deg, rgba(34, 22, 27, 0.98) 0%, rgba(20, 13, 17, 0.99) 100%);
+        border: 1px solid rgba(229, 184, 168, 0.22);
+        border-radius: 16px;
+        color: #f8efe6;
+        box-shadow: 0 24px 56px rgba(0, 0, 0, 0.62);
+    }
+    .hub-ops-verify-modal .modal-header {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 16px 20px;
+    }
+    .hub-ops-verify-modal .modal-body {
+        padding: 18px 20px;
+    }
+    .hub-ops-verify-modal .modal-footer {
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 14px 20px;
+    }
+    .hub-ops-verify-textarea {
+        width: 100%;
+        background: rgba(18, 11, 14, 0.78);
+        border: 1px solid rgba(229, 184, 168, 0.24);
+        border-radius: 10px;
+        color: #f8efe6;
+        font-size: 13px;
+        padding: 10px 12px;
+        resize: vertical;
+        outline: none;
+        transition: border-color 0.15s ease;
+    }
+    .hub-ops-verify-textarea:focus {
+        border-color: #d98f83;
+    }
+    .hub-ops-verify-textarea::placeholder {
+        color: rgba(184, 162, 154, 0.68);
+    }
+    .hub-ops-verify-btn {
+        background: linear-gradient(135deg, #e09b8f 0%, #c97c70 100%);
+        color: #1c110f;
+        font-weight: 700;
+        font-size: 12.5px;
+        padding: 7px 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        transition: opacity 0.15s ease, filter 0.15s ease;
+    }
+    .hub-ops-verify-btn:disabled {
+        opacity: 0.42;
+        cursor: not-allowed;
+        filter: grayscale(0.25);
     }
 
     .hub-ops-drawer-backdrop {
@@ -265,6 +349,8 @@
                         $canCompleteItem = $item->canBeCompletedBy(auth()->user());
                         $isOwnerViewer = \App\Models\OpsActionItem::isAdminOrOwner(auth()->user());
                         $itemSlaHrs = (int) ($item->sla_hours ?: 48);
+                        $savedVerifyRemark = trim((string) ($item->completion_remarks ?: $item->proof_note ?? ''));
+                        $verifierDisplay = trim((string) ($item->completed_by ?: 'Ops Lead'));
                         $editTaskPayload = [
                             'id' => $item->id,
                             'title' => $item->title,
@@ -274,21 +360,26 @@
                             'sla_hours' => $itemSlaHrs,
                             'update_url' => route('staff.ops-tracker.update', $item),
                         ];
+                        $verifyModalPayload = [
+                            'id' => $item->id,
+                            'title' => $item->title,
+                            'assignees' => $item->assignee_list,
+                            'toggle_url' => route('staff.ops-tracker.toggle', $item),
+                            'mode' => $item->is_completed ? 'reopen' : 'complete',
+                        ];
                     @endphp
-                    <tr>
+                    <tr data-ops-row-id="{{ $item->id }}">
                         <td>
                             <div class="d-flex align-items-start gap-2">
                                 @if ($canCompleteItem)
-                                    <form method="POST" action="{{ route('staff.ops-tracker.toggle', $item) }}" class="m-0">
-                                        @csrf
-                                        <button type="submit"
-                                                class="hub-ops-circle {{ $item->is_completed ? 'is-done' : '' }}"
-                                                title="{{ $item->is_completed ? 'Move Back to Pending' : 'Mark Task Completed' }}">
-                                            ✓
-                                        </button>
-                                    </form>
-                                @else
-                                    <span class="hub-ops-circle {{ $item->is_completed ? 'is-done' : '' }}" style="opacity: 0.5; cursor: not-allowed;">✓</span>
+                                    <button type="button"
+                                            class="hub-ops-circle {{ $item->is_completed ? 'is-done' : '' }}"
+                                            onclick="openHubOpsVerifyModal(@js($verifyModalPayload))"
+                                            title="{{ $item->is_completed ? 'Move Back to Pending' : 'Confirm & Verify Task Completion' }}">
+                                        ✓
+                                    </button>
+                                @elseif ($item->is_completed)
+                                    <span class="hub-ops-circle is-done" style="cursor: default;" aria-hidden="true">✓</span>
                                 @endif
 
                                 <div class="flex-grow-1">
@@ -319,6 +410,16 @@
                                             &bull; <span style="color: #6ee7b7;">Completed: {{ $completedStamp }}</span>
                                         @endif
                                     </div>
+                                    @if ($item->is_completed)
+                                        <div class="d-flex flex-wrap align-items-center gap-2 mt-1" style="font-size: 11.5px;">
+                                            <span class="ui-chip hub-ops-verified-chip">
+                                                Verified by {{ $verifierDisplay }} &middot; {{ $completedStamp }}
+                                            </span>
+                                            @if ($savedVerifyRemark !== '')
+                                                <span style="color: #e5b8a8;">&ldquo;{{ $savedVerifyRemark }}&rdquo;</span>
+                                            @endif
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                         </td>
@@ -343,14 +444,17 @@
                         <td class="text-end">
                             <div class="d-inline-flex align-items-center gap-1">
                                 @if ($canCompleteItem)
-                                    <form method="POST" action="{{ route('staff.ops-tracker.toggle', $item) }}" class="m-0 d-inline">
-                                        @csrf
-                                        <button type="submit" class="sc-action-pill">
-                                            {{ $item->is_completed ? '↺ Reopen' : '✓ Mark Done' }}
-                                        </button>
-                                    </form>
+                                    <button type="button"
+                                            class="sc-action-pill"
+                                            onclick="openHubOpsVerifyModal(@js($verifyModalPayload))">
+                                        {{ $item->is_completed ? '↺ Reopen' : '✓ Mark Done' }}
+                                    </button>
+                                @elseif (!$item->is_completed)
+                                    <span class="ui-chip hub-ops-awaiting-pill" title="Only Admin or Arbab can verify and mark this task completed">
+                                        Awaiting Verification
+                                    </span>
                                 @else
-                                    <span class="sc-inline-chip">🔒 Ops Lead</span>
+                                    <span class="ui-chip hub-ops-verified-chip">✓ Verified</span>
                                 @endif
 
                                 @if ($isOwnerViewer)
@@ -501,11 +605,179 @@
     </aside>
 @endmoduleEdit
 
+@if ($canVerifyHubOps)
+    <div class="modal fade hub-ops-verify-modal" id="hubOpsVerifyModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 480px;">
+            <form method="POST" action="" id="hubOpsVerifyForm" class="modal-content m-0">
+                @csrf
+                <input type="hidden" name="is_completed" id="hubOpsVerifyIsCompletedInput" value="1">
+
+                <div class="modal-header d-flex justify-content-between align-items-center">
+                    <h6 class="modal-title fw-bold mb-0" id="hubOpsVerifyModalTitle" style="color: #f8efe6; font-size: 15.5px;">
+                        Confirm &amp; Verify Task Completion
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div style="padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                        <div class="fw-semibold mb-2" id="hubOpsVerifyTaskTitle" style="color: #f8efe6; font-size: 14px; line-height: 1.4;"></div>
+                        <div class="d-flex flex-wrap align-items-center gap-1">
+                            <span style="font-size: 11.5px; color: #b8a29a; margin-right: 4px;">Pending With:</span>
+                            <div class="d-inline-flex flex-wrap gap-1" id="hubOpsVerifyAssigneesWrap"></div>
+                        </div>
+                    </div>
+
+                    <div id="hubOpsVerifyRemarksGroup">
+                        <label class="form-label small fw-semibold mb-1" for="hubOpsVerifyRemarksInput" style="color: #e5b8a8;">
+                            Verification Feedback / Remarks *
+                        </label>
+                        <textarea name="completion_remarks"
+                                  id="hubOpsVerifyRemarksInput"
+                                  rows="3"
+                                  maxlength="1000"
+                                  class="hub-ops-verify-textarea"
+                                  placeholder="Add verification notes on how this task was checked and completed..."></textarea>
+                        <div class="small mt-2" id="hubOpsVerifyValidationHint" style="color: #fda4af; font-size: 11.5px;">
+                            Verification feedback is required (min 3 characters) before marking this task completed.
+                        </div>
+                    </div>
+
+                    <div id="hubOpsReopenNoticeGroup" class="d-none" style="font-size: 13px; color: #b8a29a;">
+                        Move this completed task back to active Pending execution and restart its SLA timer?
+                    </div>
+                </div>
+
+                <div class="modal-footer d-flex justify-content-end gap-2">
+                    <button type="button" class="sc-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="hub-ops-verify-btn" id="hubOpsVerifySubmitBtn" disabled>
+                        Confirm &amp; Mark Completed
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+@endif
+
 <script>
     window.toggleHubOpsStaffMenu = function (event) {
         if (event) event.stopPropagation();
         document.getElementById('hubOpsStaffMenu')?.classList.toggle('open');
     };
+
+    window.syncHubOpsVerifyButtonState = function () {
+        const modeInput = document.getElementById('hubOpsVerifyIsCompletedInput');
+        const remarksEl = document.getElementById('hubOpsVerifyRemarksInput');
+        const submitBtn = document.getElementById('hubOpsVerifySubmitBtn');
+        const hintEl = document.getElementById('hubOpsVerifyValidationHint');
+        if (!submitBtn || !modeInput) return;
+
+        if (modeInput.value === '0') {
+            submitBtn.disabled = false;
+            return;
+        }
+
+        const trimmed = (remarksEl ? remarksEl.value : '').trim();
+        const isValid = trimmed.length >= 3;
+        submitBtn.disabled = !isValid;
+
+        if (hintEl) {
+            if (isValid) {
+                hintEl.style.color = '#6ee7b7';
+                hintEl.textContent = '✓ Verification note ready to record.';
+            } else {
+                hintEl.style.color = '#fda4af';
+                hintEl.textContent = 'Verification feedback is required (min 3 characters) before marking this task completed.';
+            }
+        }
+    };
+
+    window.openHubOpsVerifyModal = function (payload) {
+        if (!payload) return;
+        const modalEl = document.getElementById('hubOpsVerifyModal');
+        const formEl = document.getElementById('hubOpsVerifyForm');
+        const modeInput = document.getElementById('hubOpsVerifyIsCompletedInput');
+        const modalTitleEl = document.getElementById('hubOpsVerifyModalTitle');
+        const taskTitleEl = document.getElementById('hubOpsVerifyTaskTitle');
+        const assigneesWrap = document.getElementById('hubOpsVerifyAssigneesWrap');
+        const remarksGroup = document.getElementById('hubOpsVerifyRemarksGroup');
+        const reopenGroup = document.getElementById('hubOpsReopenNoticeGroup');
+        const remarksInput = document.getElementById('hubOpsVerifyRemarksInput');
+        const submitBtn = document.getElementById('hubOpsVerifySubmitBtn');
+
+        if (!modalEl || !formEl) return;
+
+        formEl.action = payload.toggle_url || '';
+        if (taskTitleEl) taskTitleEl.textContent = payload.title || '';
+
+        if (assigneesWrap) {
+            assigneesWrap.innerHTML = '';
+            const names = Array.isArray(payload.assignees) && payload.assignees.length
+                ? payload.assignees
+                : ['Ops Team'];
+            names.forEach(function (name) {
+                const chip = document.createElement('span');
+                chip.className = 'ui-chip hub-ops-assignee-pill';
+                chip.textContent = '👤 ' + name;
+                assigneesWrap.appendChild(chip);
+            });
+        }
+
+        const isReopen = payload.mode === 'reopen';
+        if (modeInput) modeInput.value = isReopen ? '0' : '1';
+
+        if (isReopen) {
+            if (modalTitleEl) modalTitleEl.textContent = 'Move Task Back to Pending?';
+            remarksGroup?.classList.add('d-none');
+            reopenGroup?.classList.remove('d-none');
+            if (remarksInput) {
+                remarksInput.required = false;
+                remarksInput.value = '';
+            }
+            if (submitBtn) {
+                submitBtn.textContent = '↺ Confirm Reopen';
+                submitBtn.disabled = false;
+            }
+        } else {
+            if (modalTitleEl) modalTitleEl.textContent = 'Confirm & Verify Task Completion';
+            remarksGroup?.classList.remove('d-none');
+            reopenGroup?.classList.add('d-none');
+            if (remarksInput) {
+                remarksInput.required = true;
+                remarksInput.value = '';
+            }
+            if (submitBtn) {
+                submitBtn.textContent = 'Confirm & Mark Completed';
+                submitBtn.disabled = true;
+            }
+            window.syncHubOpsVerifyButtonState();
+        }
+
+        if (window.bootstrap && window.bootstrap.Modal) {
+            const inst = window.bootstrap.Modal.getOrCreateInstance(modalEl);
+            inst.show();
+            if (!isReopen) {
+                setTimeout(function () { remarksInput?.focus(); }, 160);
+            }
+        }
+    };
+
+    document.getElementById('hubOpsVerifyRemarksInput')?.addEventListener('input', window.syncHubOpsVerifyButtonState);
+
+    document.getElementById('hubOpsVerifyForm')?.addEventListener('submit', function (e) {
+        const modeInput = document.getElementById('hubOpsVerifyIsCompletedInput');
+        const remarksInput = document.getElementById('hubOpsVerifyRemarksInput');
+        if (modeInput && modeInput.value === '1') {
+            const trimmed = (remarksInput ? remarksInput.value : '').trim();
+            if (trimmed.length < 3) {
+                e.preventDefault();
+                window.syncHubOpsVerifyButtonState();
+                remarksInput?.focus();
+            } else if (remarksInput) {
+                remarksInput.value = trimmed;
+            }
+        }
+    });
 
     window.openHubOpsCreateDrawer = function () {
         document.getElementById('hubOpsEditDrawer')?.classList.remove('open');
