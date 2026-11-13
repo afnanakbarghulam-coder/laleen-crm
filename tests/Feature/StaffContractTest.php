@@ -163,7 +163,7 @@ class StaffContractTest extends TestCase
         $this->assertSame('remote', $c3->branch);
         $this->assertStringContainsString('REMOTE RESPONSE SLA', $c3->clauses_body);
 
-        // Admin Contracts & Payroll tab renders decluttered 6-column table clearly
+        // Admin Contracts & Payroll tab renders privacy-safe 5-column table without outer salary exposure
         $adminTab = $this->actingAs($this->admin)
             ->get(route('staffs.index', ['tab' => 'contracts']))
             ->assertOk();
@@ -171,14 +171,20 @@ class StaffContractTest extends TestCase
         $adminTab->assertSee('Mariam Al-Dosari');
         $adminTab->assertSee('Ahana Kapoor');
         $adminTab->assertSee('Zoya Raza');
-        $adminTab->assertSee('PKR 145,000.00');
+        $adminTab->assertDontSee('PKR 145,000.00');
+        $adminTab->assertDontSee('<th class="text-end">Compensation</th>', false);
         $adminTab->assertSee('Designation');
-        $adminTab->assertSee('Compensation');
         $adminTab->assertDontSee('No extra allowance');
         $adminTab->assertSee('Open ↗');
         $adminTab->assertSee('Copy Link');
         $adminTab->assertSee('Pending Signature');
         $adminTab->assertSee('Draft');
+
+        // Individual Admin Agreement View still renders full compensation figure cleanly
+        $this->actingAs($this->admin)
+            ->get(route('staff-contracts.show', $c3))
+            ->assertOk()
+            ->assertSee('PKR 145,000.00');
 
         // Non-admin manager cannot create contracts AND never receives other staff contracts in HTML
         $this->actingAs($this->manager)->post(route('staff-contracts.store'), [
@@ -511,7 +517,7 @@ class StaffContractTest extends TestCase
         $tabRes->assertSee('+ Add Category');
         $tabRes->assertSee('Nail Technician (QAR/PKR)');
         $tabRes->assertSee('Video Editor (QAR/PKR)');
-        $tabRes->assertSee('QAR 4,200.00');
+        $tabRes->assertDontSee('QAR 4,200.00');
         $tabRes->assertSee('Open ↗');
         $tabRes->assertSee('Copy Link');
         $tabRes->assertSee('Download PDF');
@@ -519,10 +525,12 @@ class StaffContractTest extends TestCase
         $tabRes->assertDontSee('Set / Reset Staff PIN');
         $tabRes->assertDontSee('Housing Allowance');
 
-        // 5. Verify Official Agreement Web View renders formatted 01..05 clauses, single Designation pill, and Draw|Type toggle
+        // 5. Verify Official Agreement Web View renders compensation, formatted 01..05 clauses, single Designation pill, and Draw|Type toggle
         $portalRes = $this->actingAs($this->admin)
             ->get(route('contracts.portal.show', $contract->secure_token))
             ->assertOk();
+
+        $portalRes->assertSee('QAR 4,200.00');
 
         $portalRes->assertSee('laleen-contract-logo.png');
         $portalRes->assertSee('Laleen Beauty Salon &middot; Official Agreement', false);
@@ -618,12 +626,12 @@ class StaffContractTest extends TestCase
         $this->assertTrue($chatAgent->hasCustomContractPin());
         $this->assertNotEmpty($agentContract->fresh()->memberPin());
 
-        // Contracts table displays Areeba Khan and her Set / Reset PIN action
+        // Contracts table displays Areeba Khan and her Set / Reset PIN action without exposing salary on the outer table
         $this->actingAs($this->admin)
             ->get(route('staffs.index', ['tab' => 'contracts']))
             ->assertOk()
             ->assertSee('Areeba Khan')
-            ->assertSee('PKR 135,000.00');
+            ->assertDontSee('PKR 135,000.00');
 
         // 4. Isolation: another logged-in non-admin user cannot view Areeba's link, while Areeba can view her PIN cover
         $this->actingAs($this->colleagueUser)
@@ -941,5 +949,173 @@ class StaffContractTest extends TestCase
 
         // Compensation remains completely untouched
         $this->assertSame(125000.00, $contract->fresh()->monthlyCompensation());
+    }
+
+    public function test_outer_contracts_table_hides_salaries_and_non_admins_cannot_bypass_pin_or_access_admin_pdf_and_payroll_routes(): void
+    {
+        $remoteEditor = User::factory()->create([
+            'name' => 'Zainab Video Editor',
+            'email' => 'zainab.editor@laleen.qa',
+            'role' => 'social_media_editor',
+            'is_active' => true,
+            'permissions' => array_merge(User::defaultPermissionsForRole('social_media_editor'), [
+                'staff' => 'view',
+            ]),
+        ]);
+
+        // Admin creates a PKR 65,000.00 contract for Zainab and a QAR 4,900.00 contract for Mariam
+        $this->actingAs($this->admin)->post(route('staff-contracts.store'), [
+            'team_member' => 'user:' . $remoteEditor->id,
+            'template_key' => 'remote_chat_creative',
+            'role_title' => 'Social Media Video Editor',
+            'currency' => 'PKR',
+            'compensation' => 65000,
+            'start_date' => '2026-12-01',
+            'expiry_date' => '2027-11-30',
+            'status' => 'pending_signature',
+            'pin' => '4829',
+        ])->assertRedirect(route('staffs.index', ['tab' => 'contracts']));
+
+        $zainabContract = StaffContract::where('user_id', $remoteEditor->id)->firstOrFail();
+
+        $mariamContract = StaffContract::create([
+            'staff_id' => $this->beautician->id,
+            'template_key' => 'salon_beautician',
+            'role_title' => 'Senior Beautician',
+            'branch' => 'old_airport',
+            'currency' => 'QAR',
+            'base_salary' => 4900.00,
+            'status' => StaffContract::STATUS_PENDING_SIGNATURE,
+            'created_by' => $this->admin->id,
+        ]);
+
+        // 1. Outer Staff Contracts index response (even for Admin!) NEVER renders contract salaries or Compensation column header
+        $adminOuter = $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'contracts']))
+            ->assertOk();
+
+        $adminOuter->assertSee('Zainab Video Editor');
+        $adminOuter->assertSee('Social Media Video Editor');
+        $adminOuter->assertSee('Mariam Al-Dosari');
+        $adminOuter->assertDontSee('<th class="text-end">Compensation</th>', false);
+        $adminOuter->assertDontSee('PKR 65,000.00');
+        $adminOuter->assertDontSee('65,000.00');
+        $adminOuter->assertDontSee('65000');
+        $adminOuter->assertDontSee('QAR 4,900.00');
+        $adminOuter->assertDontSee('4,900.00');
+
+        // 2. Compensation loads via Admin edit-payload, updates cleanly, and renders inside Admin preview & PDF
+        $this->actingAs($this->admin)
+            ->getJson(route('staff-contracts.edit-payload', $zainabContract))
+            ->assertOk()
+            ->assertJsonPath('contract.compensation', '65000.00')
+            ->assertJsonPath('contract.currency', 'PKR');
+
+        $this->actingAs($this->admin)
+            ->get(route('staff-contracts.show', $zainabContract))
+            ->assertOk()
+            ->assertSee('PKR 65,000.00');
+
+        $this->actingAs($this->admin)
+            ->put(route('staff-contracts.update', $zainabContract), [
+                'compensation' => 72000,
+                'redirect_to' => 'admin_show',
+            ])
+            ->assertRedirect(route('staff-contracts.show', $zainabContract));
+
+        $zainabContract->refresh();
+        $this->assertSame(72000.00, $zainabContract->monthlyCompensation());
+
+        $adminPdf = $this->actingAs($this->admin)
+            ->get(route('staff-contracts.pdf', $zainabContract))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringContainsString('PKR 72,000.00', $adminPdf->getContent());
+
+        // Still hidden on outer table after update
+        $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'contracts']))
+            ->assertOk()
+            ->assertDontSee('PKR 72,000.00')
+            ->assertDontSee('72000');
+
+        // 3. Non-admin contract owner sees ONLY her own contract row on /staff?tab=contracts,
+        //    with Open ↗ pointing strictly to /my-contract/{token} (PIN gate) and zero PDF/Edit/Payroll controls
+        $zainabOuter = $this->actingAs($remoteEditor)
+            ->get(route('staffs.index', ['tab' => 'contracts']))
+            ->assertOk();
+
+        $zainabOuter->assertSee('Zainab Video Editor');
+        $zainabOuter->assertSee($zainabContract->contract_number);
+        $zainabOuter->assertSee(route('contracts.portal.show', $zainabContract->secure_token), false);
+        $zainabOuter->assertDontSee($mariamContract->contract_number);
+        $zainabOuter->assertDontSee('data-contract-id="' . $mariamContract->id . '"', false);
+        $zainabOuter->assertDontSee($mariamContract->secure_token);
+        $zainabOuter->assertDontSee('PKR 72,000.00');
+        $zainabOuter->assertDontSee('QAR 4,900.00');
+        $zainabOuter->assertDontSee('Download PDF');
+        $zainabOuter->assertDontSee('Set / Reset PIN');
+        $zainabOuter->assertDontSee('+ Create Contract');
+        $zainabOuter->assertDontSee('Payroll &amp; Wage Settings', false);
+        $zainabOuter->assertDontSee('id="cp-subpane-payroll"', false);
+
+        // Following Open ↗ hits the 4-digit PIN gate (hides PKR 72,000.00 until PIN 4829 is entered)
+        $this->actingAs($remoteEditor)
+            ->get(route('contracts.portal.show', $zainabContract->secure_token))
+            ->assertOk()
+            ->assertSee('Unlock Agreement')
+            ->assertDontSee('72,000.00');
+
+        $this->actingAs($remoteEditor)
+            ->get(route('contracts.portal.pdf', $zainabContract->secure_token))
+            ->assertForbidden();
+
+        // Unlocking with private PIN 4829 reveals her own compensation and allows her own PDF download
+        $this->actingAs($remoteEditor)
+            ->post(route('contracts.portal.unlock', $zainabContract->secure_token), ['pin' => '4829'])
+            ->assertRedirect(route('contracts.portal.show', $zainabContract->secure_token));
+
+        $this->actingAs($remoteEditor)
+            ->get(route('contracts.portal.show', $zainabContract->secure_token))
+            ->assertOk()
+            ->assertSee('PKR 72,000.00');
+
+        $zainabPdf = $this->actingAs($remoteEditor)
+            ->get(route('contracts.portal.pdf', $zainabContract->secure_token))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringContainsString('PKR 72,000.00', $zainabPdf->getContent());
+
+        // 4. Non-admin Manager (even with Full Edit on Staff Management!) gets 403 on all Admin contract & Payroll endpoints
+        foreach ([$this->manager, $remoteEditor, $this->colleagueUser] as $nonAdmin) {
+            $this->actingAs($nonAdmin)->get(route('staff-contracts.show', $zainabContract))->assertForbidden();
+            $this->actingAs($nonAdmin)->get(route('staff-contracts.pdf', $zainabContract))->assertForbidden();
+            $this->actingAs($nonAdmin)->getJson(route('staff-contracts.edit-payload', $zainabContract))->assertForbidden();
+            $this->actingAs($nonAdmin)->get(route('staff-contracts.show', $mariamContract))->assertForbidden();
+            $this->actingAs($nonAdmin)->get(route('staff-contracts.pdf', $mariamContract))->assertForbidden();
+            $this->actingAs($nonAdmin)->patch(route('staff-contracts.update-member-pin'), [
+                'team_member' => 'staff:' . $this->beautician->id,
+                'pin' => '9999',
+            ])->assertForbidden();
+            $this->actingAs($nonAdmin)->get(route('staffs.index', ['tab' => 'payroll']))->assertForbidden();
+            $this->actingAs($nonAdmin)->put(route('staffs.wages.update', $this->beautician), [
+                'base_salary' => 9999,
+                'commission_rate' => 15,
+            ])->assertForbidden();
+            $this->actingAs($nonAdmin)->post(route('staff.payroll.post-to-finance'))->assertForbidden();
+            $this->actingAs($nonAdmin)->postJson(route('staff-overtime.store'), [
+                'staff_id' => $this->beautician->id,
+                'entry_date' => now()->toDateString(),
+                'hours' => 2,
+                'minutes' => 0,
+                'customer_name' => 'Test Client',
+            ])->assertForbidden();
+        }
+
+        // Manager also cannot open or download Mariam's or Zainab's /my-contract/{token} portal or PDF
+        $this->actingAs($this->manager)->get(route('contracts.portal.show', $zainabContract->secure_token))->assertForbidden();
+        $this->actingAs($this->manager)->get(route('contracts.portal.pdf', $zainabContract->secure_token))->assertForbidden();
+        $this->actingAs($this->manager)->get(route('contracts.portal.show', $mariamContract->secure_token))->assertForbidden();
+        $this->actingAs($this->manager)->get(route('contracts.portal.pdf', $mariamContract->secure_token))->assertForbidden();
     }
 }

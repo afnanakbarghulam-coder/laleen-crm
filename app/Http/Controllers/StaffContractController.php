@@ -277,6 +277,82 @@ class StaffContractController extends Controller
     }
 
     /**
+     * Admin: Direct contract document preview (strictly 403 for non-admins).
+     */
+    public function showAdmin(Request $request, StaffContract $contract)
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can preview staff contracts directly.');
+
+        $contract->loadMissing(['staff', 'user']);
+
+        return response()
+            ->view('contracts.portal-unlocked', array_merge([
+                'contract' => $contract,
+                'staffName' => $contract->memberName(),
+                'isAdminViewer' => true,
+                'remainingSeconds' => self::UNLOCK_TTL_SECONDS,
+                'signUrl' => route('contracts.portal.sign', $contract->secure_token),
+                'pdfUrl' => route('staff-contracts.pdf', $contract),
+                'logoUrl' => StaffContract::logoPublicUrl(),
+                'adminReturnContext' => 'admin_show',
+            ], $this->buildAdminPortalEditData($contract)))
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    }
+
+    /**
+     * Admin: Direct PDF download (strictly 403 for non-admins).
+     */
+    public function downloadAdminPdf(Request $request, StaffContract $contract, StaffContractPdfGenerator $pdfGenerator)
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can download staff contract PDFs directly.');
+
+        $contract->loadMissing(['staff', 'user']);
+
+        $pdfBinary = $pdfGenerator->render($contract);
+        $slugName = Str::slug($contract->memberName() ?: 'staff');
+        $filename = "Laleen-Contract-{$contract->contract_number}-{$slugName}.pdf";
+
+        return response($pdfBinary, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Content-Length' => (string) strlen($pdfBinary),
+            'Cache-Control' => 'no-store, private',
+        ]);
+    }
+
+    /**
+     * Admin: Fetch pre-fill payload for the Edit Contract modal without exposing salaries in outer table HTML.
+     */
+    public function editPayload(Request $request, StaffContract $contract)
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can edit staff contracts.');
+
+        $contract->loadMissing(['staff', 'user']);
+
+        return response()->json([
+            'success' => true,
+            'contract' => [
+                'id' => $contract->id,
+                'contract_number' => $contract->contract_number,
+                'update_url' => route('staff-contracts.update', $contract),
+                'member_key' => $contract->memberKey(),
+                'member_name' => $contract->memberName(),
+                'member_tag' => $contract->memberRole(),
+                'member_type' => $contract->staff_id ? 'staff' : 'user',
+                'template_key' => $contract->template_key,
+                'role_title' => $contract->designationLabel(),
+                'branch' => $contract->branch ?: 'old_airport',
+                'currency' => $contract->currency ?: 'QAR',
+                'compensation' => number_format($contract->monthlyCompensation(), 2, '.', ''),
+                'start_date' => $contract->start_date ? $contract->start_date->format('Y-m-d') : now('Asia/Qatar')->toDateString(),
+                'expiry_date' => $contract->expiry_date ? $contract->expiry_date->format('Y-m-d') : '',
+                'status' => $contract->status,
+                'clauses_body' => (string) $contract->clauses_body,
+            ],
+        ]);
+    }
+
+    /**
      * Admin: Update an existing staff contract while preserving its unguessable secure_token.
      */
     public function update(Request $request, StaffContract $contract)
@@ -340,7 +416,7 @@ class StaffContractController extends Controller
             'status' => ['nullable', 'string', Rule::in(array_keys(StaffContract::STATUSES))],
             'pin' => ['nullable', 'string', 'regex:/^\d{4}$/'],
             'require_resignature' => ['nullable', 'boolean'],
-            'redirect_to' => ['nullable', 'string', Rule::in(['index', 'portal'])],
+            'redirect_to' => ['nullable', 'string', Rule::in(['index', 'portal', 'admin_show'])],
         ]);
 
         $templateKey = $validated['template_key'];
@@ -555,6 +631,12 @@ class StaffContractController extends Controller
                 'status_label' => $contract->statusLabel(),
                 'portal_url' => route('contracts.portal.show', $contract->secure_token),
             ]);
+        }
+
+        if (($validated['redirect_to'] ?? null) === 'admin_show') {
+            return redirect()
+                ->route('staff-contracts.show', $contract)
+                ->with('success', "Contract {$contract->contract_number} updated.");
         }
 
         if (($validated['redirect_to'] ?? null) === 'portal') {
@@ -1032,10 +1114,7 @@ class StaffContractController extends Controller
 
     private function ensureAdmin(Request $request): void
     {
-        $user = $request->user();
-        if (!$user || !$user->isAdmin()) {
-            abort(403, 'Only administrators can manage staff contracts.');
-        }
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can manage staff contracts.');
     }
 
     private function findContractByToken(string $token): StaffContract

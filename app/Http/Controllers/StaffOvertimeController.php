@@ -12,6 +12,8 @@ class StaffOvertimeController extends Controller
 {
     public function store(Request $request)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can manage payroll overtime entries.');
+
         $validated = $this->validated($request);
 
         $entry = StaffOvertimeEntry::create($validated + ['created_by' => auth()->id()]);
@@ -29,6 +31,8 @@ class StaffOvertimeController extends Controller
 
     public function update(Request $request, StaffOvertimeEntry $staffOvertimeEntry)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can manage payroll overtime entries.');
+
         $staffOvertimeEntry->update($this->validated($request));
 
         if ($request->wantsJson()) {
@@ -44,6 +48,8 @@ class StaffOvertimeController extends Controller
 
     public function destroy(Request $request, StaffOvertimeEntry $staffOvertimeEntry)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can manage payroll overtime entries.');
+
         $staffOvertimeEntry->delete();
 
         if ($request->wantsJson()) {

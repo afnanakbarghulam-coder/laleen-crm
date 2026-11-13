@@ -13,7 +13,7 @@
             'role_title' => 'Salon Beautician',
             'branch' => array_key_exists((string) $s->branch, \App\Models\StaffContract::BRANCHES) ? (string) $s->branch : 'old_airport',
             'currency' => 'QAR',
-            'base_salary' => (float) ($s->base_salary ?? 0),
+            'base_salary' => 0.0,
             'has_custom_pin' => method_exists($s, 'hasCustomContractPin') ? $s->hasCustomContractPin() : false,
         ])->values();
         $accessMembers = $contractAccessMembers ?? collect();
@@ -26,26 +26,6 @@
             'clauses' => '',
         ];
         $defaultStartDate = now('Asia/Qatar')->toDateString();
-        $contractsEditMap = $contractsCollection->mapWithKeys(fn (\App\Models\StaffContract $c) => [
-            $c->id => [
-                'id' => $c->id,
-                'contract_number' => $c->contract_number,
-                'update_url' => route('staff-contracts.update', $c),
-                'member_key' => $c->memberKey(),
-                'member_name' => $c->memberName(),
-                'member_tag' => $c->memberRole(),
-                'member_type' => $c->staff_id ? 'staff' : 'user',
-                'template_key' => $c->template_key,
-                'role_title' => $c->designationLabel(),
-                'branch' => $c->branch ?: 'old_airport',
-                'currency' => $c->currency ?: 'QAR',
-                'compensation' => number_format($c->monthlyCompensation(), 2, '.', ''),
-                'start_date' => $c->start_date ? $c->start_date->format('Y-m-d') : $defaultStartDate,
-                'expiry_date' => $c->expiry_date ? $c->expiry_date->format('Y-m-d') : '',
-                'status' => $c->status,
-                'clauses_body' => (string) $c->clauses_body,
-            ],
-        ]);
     @endphp
 
     <style>
@@ -315,7 +295,6 @@
                     <tr>
                         <th>Name</th>
                         <th>Designation</th>
-                        <th class="text-end">Compensation</th>
                         <th>Status</th>
                         <th>Expiry</th>
                         <th class="text-end">Actions</th>
@@ -326,8 +305,10 @@
                         @php
                             $cMemberKey = $contract->memberKey();
                             $cStaffName = $contract->memberName();
+                            $cAdminShowUrl = route('staff-contracts.show', $contract);
                             $cPortalUrl = route('contracts.portal.show', $contract->secure_token);
-                            $cPdfUrl = route('contracts.portal.pdf', $contract->secure_token);
+                            $cAdminPdfUrl = route('staff-contracts.pdf', $contract);
+                            $cEditPayloadUrl = route('staff-contracts.edit-payload', $contract);
                             $hasCustomPin = $contract->hasCustomMemberPin();
                         @endphp
                         <tr data-contract-id="{{ $contract->id }}">
@@ -337,11 +318,6 @@
                             </td>
                             <td>
                                 <span class="fw-semibold" style="color: #f8efe6;">{{ $contract->designationLabel() }}</span>
-                            </td>
-                            <td class="text-end text-nowrap">
-                                <span class="fw-semibold" style="color: #f8efe6;">
-                                    {{ $contract->currency }} {{ number_format($contract->monthlyCompensation(), 2) }}
-                                </span>
                             </td>
                             <td>
                                 <span class="sc-status-badge sc-status-{{ $contract->status }}">
@@ -358,12 +334,13 @@
                             </td>
                             <td class="text-end text-nowrap">
                                 <div class="d-inline-flex align-items-center gap-1 justify-content-end flex-nowrap text-nowrap" style="white-space: nowrap;">
-                                    <a href="{{ $cPortalUrl }}" target="_blank" rel="noopener" class="sc-action-pill" title="Open official agreement">
+                                    <a href="{{ $cAdminShowUrl }}" target="_blank" rel="noopener" class="sc-action-pill" title="Open official agreement">
                                         Open ↗
                                     </a>
                                     <button type="button"
                                         class="sc-action-pill"
                                         data-edit-contract-id="{{ $contract->id }}"
+                                        data-edit-payload-url="{{ $cEditPayloadUrl }}"
                                         onclick="openEditContractModal({{ $contract->id }})"
                                         title="Edit contract">
                                         Edit
@@ -385,7 +362,7 @@
                                             &#8943;
                                         </button>
                                         <div class="sc-more-menu">
-                                            <a href="{{ $cPdfUrl }}" class="sc-more-item">
+                                            <a href="{{ $cAdminPdfUrl }}" class="sc-more-item">
                                                 <span>Download PDF</span>
                                                 <span class="text-muted small">PDF</span>
                                             </a>
@@ -432,7 +409,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-4">
+                            <td colspan="5" class="text-center text-muted py-4">
                                 No staff contracts issued yet — click <strong>+ Create Contract</strong> to generate an agreement.
                             </td>
                         </tr>
@@ -863,7 +840,6 @@
                 },
                 storeUrl: {{ \Illuminate\Support\Js::from(route('staff-contracts.store')) }},
                 defaultStartDate: {{ \Illuminate\Support\Js::from($defaultStartDate) }},
-                contractsById: {{ \Illuminate\Support\Js::from($contractsEditMap) }},
                 saveCategoryUrl: {{ \Illuminate\Support\Js::from(route('staff-contracts.categories.store')) }},
                 csrfToken: {{ \Illuminate\Support\Js::from(csrf_token()) }}
             };
@@ -1321,15 +1297,36 @@
 
             window.openEditContractModal = function (contractId) {
                 closeAllContractMenus();
-                const contract = (LALEEN_CONTRACT_BOOT.contractsById || {})[String(contractId)]
-                    || (LALEEN_CONTRACT_BOOT.contractsById || {})[contractId];
-                if (!contract) return;
                 const modalEl = document.getElementById('createContractModal');
                 if (!modalEl) return;
-                window.dispatchEvent(new CustomEvent('open-contract-edit', {
-                    detail: { contract }
-                }));
-                bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                const triggerBtn = document.querySelector('[data-edit-contract-id="' + contractId + '"]');
+                const payloadUrl = triggerBtn?.dataset?.editPayloadUrl || ('/staff-contracts/' + contractId + '/edit-payload');
+
+                fetch(payloadUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                    .then(({ ok, data }) => {
+                        if (!ok || !data?.contract) {
+                            if (typeof showStaffToast === 'function') {
+                                showStaffToast(data?.message || 'Could not load contract details.', 'error');
+                            }
+                            return;
+                        }
+                        window.dispatchEvent(new CustomEvent('open-contract-edit', {
+                            detail: { contract: data.contract }
+                        }));
+                        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                    })
+                    .catch(() => {
+                        if (typeof showStaffToast === 'function') {
+                            showStaffToast('Could not load contract details.', 'error');
+                        }
+                    });
             };
 
             window.openContractPinModal = function (memberKey = null, staffName = '', hasCustomPin = false) {
@@ -1359,15 +1356,75 @@
         })();
     </script>
 @else
+    @php
+        $personalContracts = $staffContracts ?? collect();
+    @endphp
     <div class="laleen-contract-card mb-4">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div>
-                <h6 class="fw-bold mb-1" style="color: #f8efe6; font-size: 15px;">Staff Contracts &amp; Secure PIN Portal</h6>
-                <p class="small mb-0" style="color: #b8a29a;">
-                    Contract templates and PIN controls are restricted to Admin accounts. Team members view and sign their own agreement via their private contract link.
-                </p>
+        <div class="laleen-contract-header">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <h6 class="fw-bold mb-0" style="color: #f8efe6; font-size: 15.5px;">Staff Contracts &amp; Secure PIN Portal</h6>
+                <span class="sc-inline-chip">PIN Protected</span>
             </div>
-            <span class="sc-inline-chip">Admin Protected</span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table team-table align-middle mb-0" id="staffContractsTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Designation</th>
+                        <th>Status</th>
+                        <th>Expiry</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($personalContracts as $contract)
+                        <tr data-contract-id="{{ $contract->id }}">
+                            <td>
+                                <div class="team-name">{{ $contract->memberName() }}</div>
+                                <div class="text-muted small">{{ $contract->contract_number }} &middot; {{ $contract->branchLabel() }}</div>
+                            </td>
+                            <td>
+                                <span class="fw-semibold" style="color: #f8efe6;">{{ $contract->designationLabel() }}</span>
+                            </td>
+                            <td>
+                                <span class="sc-status-badge sc-status-{{ $contract->status }}">
+                                    {{ $contract->statusLabel() }}
+                                </span>
+                                @if ($contract->signed_at)
+                                    <div class="text-muted" style="font-size: 11px;">
+                                        Signed {{ $contract->signed_at->copy()->timezone('Asia/Qatar')->format('d M Y') }}
+                                    </div>
+                                @endif
+                            </td>
+                            <td class="text-nowrap">
+                                {{ $contract->expiry_date ? $contract->expiry_date->format('d M Y') : 'Open-Ended' }}
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <a href="{{ route('contracts.portal.show', $contract->secure_token) }}"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="sc-action-pill"
+                                    title="Unlock with your 4-digit PIN">
+                                    Open ↗
+                                </a>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                No personal contract issued yet. Team members view and sign their own agreement via their private 4-digit PIN gate.
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        <div class="laleen-contract-guardrail">
+            <span style="color: #6ee7b7;">✓ Personal agreements require your private 4-digit PIN to unlock and download</span>
+            <span style="color: #fda4af;">✕ Colleague contracts, salaries, and payroll settings are restricted to Admin</span>
         </div>
     </div>
 @endif

@@ -770,7 +770,7 @@
                 <form method="POST" action="{{ route('staff-contracts.update', $contract) }}">
                     @csrf
                     @method('PUT')
-                    <input type="hidden" name="redirect_to" value="portal">
+                    <input type="hidden" name="redirect_to" value="{{ ($adminReturnContext ?? 'portal') === 'admin_show' ? 'admin_show' : 'portal' }}">
 
                     <div class="lc-edit-header">
                         <h3 id="portalEditModalTitle" style="margin: 0; font-size: 17px; font-weight: 700;">

@@ -25,9 +25,15 @@ class StaffController extends Controller
 {
     public function index(Request $request)
     {
+        $isAdminViewer = (bool) ($request->user() && $request->user()->isAdmin());
         $rawTab = strtolower(trim((string) $request->query('tab', 'directory')));
+
+        if ($rawTab === 'payroll') {
+            abort_unless($isAdminViewer, 403, 'Only administrators can access Payroll & Wage Settings.');
+        }
+
         $directorySubView = $rawTab === 'workspace' ? 'workspace' : 'directory';
-        $payrollSubView = $rawTab === 'payroll' ? 'payroll' : 'contracts';
+        $payrollSubView = ($rawTab === 'payroll' && $isAdminViewer) ? 'payroll' : 'contracts';
         $shiftsOpsSubView = $rawTab === 'ops_tracker' ? 'ops_tracker' : 'shifts';
         $hrSubView = ($rawTab === 'deductions' || $request->query('hr_sub') === 'deductions') ? 'deductions' : 'complaints';
 
@@ -89,8 +95,8 @@ class StaffController extends Controller
             'id' => $s->id,
             'name' => $s->name,
             'branch' => $s->branch,
-            'base_salary' => (float) ($s->base_salary ?? 0),
-            'hourly_wage' => (float) ($s->hourly_wage ?? 0),
+            'base_salary' => $isAdminViewer ? (float) ($s->base_salary ?? 0) : 0.0,
+            'hourly_wage' => $isAdminViewer ? (float) ($s->hourly_wage ?? 0) : 0.0,
         ])->values();
 
         // For the Complaints & Feedback "Service Received" dropdown.
@@ -121,12 +127,16 @@ class StaffController extends Controller
         $payrollFrom = $request->date('payroll_from') ?? now()->startOfMonth();
         $payrollTo = $request->date('payroll_to') ?? now()->endOfMonth();
 
-        $payrollCalculator = new StaffPayrollCalculator($payrollFrom, $payrollTo);
-        $payrollStaffQuery = Staff::active()->orderBy('name');
-        if ($payrollBranch) {
-            $payrollStaffQuery->where(fn ($q) => $q->where('branch', $payrollBranch)->orWhere('branch', 'both'));
+        if ($isAdminViewer) {
+            $payrollCalculator = new StaffPayrollCalculator($payrollFrom, $payrollTo);
+            $payrollStaffQuery = Staff::active()->orderBy('name');
+            if ($payrollBranch) {
+                $payrollStaffQuery->where(fn ($q) => $q->where('branch', $payrollBranch)->orWhere('branch', 'both'));
+            }
+            $payrollRows = $payrollCalculator->payrollFor($payrollStaffQuery->get());
+        } else {
+            $payrollRows = collect();
         }
-        $payrollRows = $payrollCalculator->payrollFor($payrollStaffQuery->get());
 
         // ---- Scheduled Shifts Sub-Tab (In-Memory Roster from Eager-Loaded $allStaff) ----
         $shiftWeekParam = $request->input('shift_week');
@@ -416,7 +426,7 @@ class StaffController extends Controller
                         'role_title' => 'Salon Beautician',
                         'branch' => $branchKey,
                         'currency' => 'QAR',
-                        'base_salary' => (float) ($s->base_salary ?? 0),
+                        'base_salary' => 0.0,
                         'has_custom_pin' => $s->hasCustomContractPin(),
                     ];
                 })->values();
@@ -467,6 +477,27 @@ class StaffController extends Controller
 
                 $allStaffById = $allStaff->keyBy('id');
                 $staffContracts = StaffContract::with(['staff', 'user'])
+                    ->orderByDesc('id')
+                    ->get()
+                    ->each(function (StaffContract $c) use ($allStaffById) {
+                        if ($c->staff_id && $allStaffById->has($c->staff_id)) {
+                            $c->setRelation('staff', $allStaffById->get($c->staff_id));
+                        }
+                    });
+            } catch (\Throwable) {
+                $staffContracts = collect();
+            }
+        } elseif ($actor = $request->user()) {
+            try {
+                $actorStaffIds = Staff::where('user_id', $actor->id)->pluck('id')->all();
+                $allStaffById = $allStaff->keyBy('id');
+                $staffContracts = StaffContract::with(['staff', 'user'])
+                    ->where(function ($q) use ($actor, $actorStaffIds) {
+                        $q->where('user_id', $actor->id);
+                        if (!empty($actorStaffIds)) {
+                            $q->orWhereIn('staff_id', $actorStaffIds);
+                        }
+                    })
                     ->orderByDesc('id')
                     ->get()
                     ->each(function (StaffContract $c) use ($allStaffById) {
@@ -581,6 +612,8 @@ class StaffController extends Controller
      */
     public function updateWages(Request $request, Staff $staff)
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can edit staff wages.');
+
         $validated = $request->validate([
             'base_salary' => 'nullable|numeric|min:0',
             'commission_rate' => 'nullable|numeric|min:0|max:100',
@@ -659,10 +692,7 @@ class StaffController extends Controller
      */
     public function postPayrollToFinance(Request $request)
     {
-        $actor = $request->user();
-        if (!$actor || (!$actor->isAdmin() && !$actor->canEdit('finance'))) {
-            abort(403, 'You do not have permission to post payroll to Finance.');
-        }
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can post payroll to Finance.');
 
         $from = $request->date('payroll_from') ?? $request->date('from') ?? now()->startOfMonth();
         $to = $request->date('payroll_to') ?? $request->date('to') ?? now()->endOfMonth();
@@ -812,9 +842,13 @@ class StaffController extends Controller
 
         unset($data['profile_picture']);
 
-        foreach (['hourly_wage', 'commission_rate', 'base_salary'] as $wageField) {
-            if (!$request->has($wageField)) {
-                unset($data[$wageField]);
+        if (!$request->user()?->isAdmin()) {
+            unset($data['hourly_wage'], $data['commission_rate'], $data['base_salary']);
+        } else {
+            foreach (['hourly_wage', 'commission_rate', 'base_salary'] as $wageField) {
+                if (!$request->has($wageField)) {
+                    unset($data[$wageField]);
+                }
             }
         }
 

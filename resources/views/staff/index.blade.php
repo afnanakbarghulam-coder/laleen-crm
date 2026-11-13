@@ -896,7 +896,7 @@
                                             </button>
                                             <div class="dropdown-menu dropdown-menu-end">
                                                 <button type="button" class="dropdown-item edit-btn"
-                                                    data-staff='@json($member)'
+                                                    data-staff='@json($member->makeHidden(["base_salary", "hourly_wage", "commission_rate"]))'
                                                     data-has-access="{{ $member->user ? 1 : 0 }}"
                                                     data-access-role="{{ $member->user->role ?? '' }}"
                                                     data-access-email="{{ $member->user->email ?? '' }}">
@@ -1066,25 +1066,28 @@
 
     {{-- ================= 2. CONTRACTS & PAYROLL ================= --}}
     <div id="staff-pane-payroll" class="staff-tab-pane {{ $activeTab === 'payroll' ? '' : 'd-none' }}">
-        <div class="cp-subnav-bar" role="tablist" aria-label="Contracts and Payroll Sub-Navigation">
-            <button type="button"
-                class="ui-chip cp-sub-pill {{ $currentPayrollSub === 'contracts' ? 'active' : '' }}"
-                data-cp-sub="contracts">
-                📄 Staff Contracts
-            </button>
-            <button type="button"
-                class="ui-chip cp-sub-pill {{ $currentPayrollSub === 'payroll' ? 'active' : '' }}"
-                data-cp-sub="payroll">
-                💰 Payroll &amp; Wage Settings
-            </button>
-        </div>
+        @if (auth()->user()?->isAdmin())
+            <div class="cp-subnav-bar" role="tablist" aria-label="Contracts and Payroll Sub-Navigation">
+                <button type="button"
+                    class="ui-chip cp-sub-pill {{ $currentPayrollSub === 'contracts' ? 'active' : '' }}"
+                    data-cp-sub="contracts">
+                    📄 Staff Contracts
+                </button>
+                <button type="button"
+                    class="ui-chip cp-sub-pill {{ $currentPayrollSub === 'payroll' ? 'active' : '' }}"
+                    data-cp-sub="payroll">
+                    💰 Payroll &amp; Wage Settings
+                </button>
+            </div>
+        @endif
 
         {{-- Isolated Sub-Tab 1: Staff Contracts (Default Active) --}}
         <div id="cp-subpane-contracts" class="cp-sub-pane {{ $currentPayrollSub === 'contracts' ? '' : 'd-none' }}">
             @include('staff.partials.contracts-section')
         </div>
 
-        {{-- Isolated Sub-Tab 2: Payroll & Wage Settings --}}
+        @if (auth()->user()?->isAdmin())
+        {{-- Isolated Sub-Tab 2: Payroll & Wage Settings (Admin Only) --}}
         <div id="cp-subpane-payroll" class="cp-sub-pane {{ $currentPayrollSub === 'payroll' ? '' : 'd-none' }}">
         <div class="mb-3">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
@@ -1295,6 +1298,7 @@
             </div>
         </div>
         </div>
+        @endif
     </div>
 
     {{-- ================= 3. SHIFTS & OPS ACTIONS ================= --}}
@@ -1834,6 +1838,7 @@
     </div>
 
     @moduleEdit('staff_management')
+        @if (auth()->user()?->isAdmin())
         <!-- Quick-Edit Wage Settings Modal -->
         <div class="modal fade" id="editWagesModal" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered">
@@ -1919,6 +1924,7 @@
                 </div>
             </div>
         </div>
+        @endif
 
         <!-- Log Complaint Modal -->
         <div class="modal fade" id="logComplaintModal" tabindex="-1">
