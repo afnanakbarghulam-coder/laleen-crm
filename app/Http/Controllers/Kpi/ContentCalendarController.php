@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Kpi;
 
 use App\Http\Controllers\Controller;
 use App\Models\SocialContentPlan;
+use App\Models\SocialLateReplyLog;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class ContentCalendarController extends Controller
@@ -44,16 +46,42 @@ class ContentCalendarController extends Controller
         $days = collect(SocialContentPlan::DAYS_OF_WEEK)->map(fn ($dayName) => $plansByDay->get($dayName));
 
         $staff = User::orderBy('name')->get(['id', 'name']);
+        $weekEnd = $weekStart->copy()->addDays(6);
+
+        $referenceMonthDate = $weekEnd->month !== $weekStart->month && now('Asia/Qatar')->format('Y-m') === $weekEnd->format('Y-m')
+            ? $weekEnd->copy()
+            : $weekStart->copy();
+        $monthStart = $referenceMonthDate->copy()->startOfMonth()->startOfDay();
+        $monthEnd = $referenceMonthDate->copy()->endOfMonth()->endOfDay();
+
+        $weekLateReplyLogs = collect();
+        $monthLateReplyLogs = collect();
+        if (Schema::hasTable('social_late_reply_logs')) {
+            $weekLateReplyLogs = SocialLateReplyLog::with('logger:id,name')
+                ->whereBetween('incident_at', [$weekStart->copy()->startOfDay(), $weekEnd->copy()->endOfDay()])
+                ->orderByDesc('incident_at')
+                ->orderByDesc('id')
+                ->get();
+
+            $monthLateReplyLogs = SocialLateReplyLog::with('logger:id,name')
+                ->whereBetween('incident_at', [$monthStart, $monthEnd])
+                ->orderByDesc('incident_at')
+                ->orderByDesc('id')
+                ->get();
+        }
 
         return view('kpi.content-calendar.index', [
             'weekStart' => $weekStart,
-            'weekEnd' => $weekStart->copy()->addDays(6),
+            'weekEnd' => $weekEnd,
             'days' => $days,
             'previousWeek' => $weekStart->copy()->subWeek()->toDateString(),
             'nextWeek' => $weekStart->copy()->addWeek()->toDateString(),
             'currentWeek' => $weekStart->toDateString(),
             'staff' => $staff,
             'weeklyStats' => $this->weeklyStats($weekStart->toDateString()),
+            'weekLateReplyLogs' => $weekLateReplyLogs,
+            'monthLateReplyLogs' => $monthLateReplyLogs,
+            'lateRepliesMonthLabel' => $monthStart->format('F Y'),
         ]);
     }
 

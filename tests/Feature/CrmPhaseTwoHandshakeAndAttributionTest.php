@@ -228,32 +228,39 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
             ->assertRedirect(route('kpi.ads.index'));
 
         $manualEntry = AdLeadEntry::where('phone', '77445566')->firstOrFail();
-        $syncedLead = Lead::findOrFail($manualEntry->lead_id);
-        $this->assertNull($syncedLead->needful_done);
-        $this->assertNull($syncedLead->appointment_id);
+        $this->assertNull($manualEntry->lead_id);
+        $this->assertSame(0, Lead::where('phone', '77445566')->count(), 'AdLeadEntry store must never create a row in leads');
 
         // 2. Legacy phantom-booked lead (needful_done = 'booked', appointment_id = null, no active booking/sale) can be manually unlocked
-        $syncedLead->update(['needful_done' => 'booked', 'next_followup_date' => null]);
+        $standaloneLead = Lead::create([
+            'phone' => '77445566',
+            'customer_id' => $manualEntry->customer_id,
+            'category' => 'inquiry',
+            'categories' => ['inquiry'],
+            'service_interest' => [$this->facialService->name],
+            'needful_done' => 'booked',
+            'next_followup_date' => null,
+        ]);
 
         $this->actingAs($this->admin)
-            ->patchJson(route('leads.needful-done', $syncedLead), ['needful_done' => 'yes'])
+            ->patchJson(route('leads.needful-done', $standaloneLead), ['needful_done' => 'yes'])
             ->assertOk()
             ->assertJson(['success' => true]);
 
-        $syncedLead->refresh();
-        $this->assertSame('yes', $syncedLead->needful_done);
-        $this->assertSame(now()->toDateString(), $syncedLead->next_followup_date?->toDateString());
+        $standaloneLead->refresh();
+        $this->assertSame('yes', $standaloneLead->needful_done);
+        $this->assertSame(now()->toDateString(), $standaloneLead->next_followup_date?->toDateString());
 
-        // 3. Deleting an AdLeadEntry pointing to a phantom-booked lead reverts needful_done = null & next_followup_date = today
-        $syncedLead->update(['needful_done' => 'booked', 'next_followup_date' => null]);
+        // 3. Deleting an AdLeadEntry NEVER mutates or reopens rows in the separate `leads` table
+        $standaloneLead->update(['needful_done' => 'booked', 'next_followup_date' => null]);
 
         $this->actingAs($this->admin)
             ->delete(route('kpi.ad-leads.destroy', $manualEntry))
             ->assertRedirect(route('kpi.ads.index'));
 
-        $syncedLead->refresh();
-        $this->assertNull($syncedLead->needful_done);
-        $this->assertSame(now()->toDateString(), $syncedLead->next_followup_date?->toDateString());
+        $standaloneLead->refresh();
+        $this->assertSame('booked', $standaloneLead->needful_done);
+        $this->assertNull($standaloneLead->next_followup_date);
 
         // 4. Command Center marketing pulse ignores 0 QAR row with only a branch set
         AdLeadEntry::create([
@@ -367,7 +374,16 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
 
         $adEntry = AdLeadEntry::where('phone', '55667788')->firstOrFail();
 
-        // Book paid/completed standalone appointment on 2026-11-05 -> attributes 300 QAR to adEntry
+        $explicitLead = Lead::create([
+            'phone' => '55667788',
+            'customer_id' => $adEntry->customer_id,
+            'category' => 'inquiry',
+            'categories' => ['inquiry'],
+            'service_interest' => [$this->facialService->name],
+            'next_followup_date' => '2026-11-03',
+        ]);
+
+        // Book paid/completed standalone appointment on 2026-11-05 -> attributes 300 QAR to adEntry and marks Lead booked
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
                 'customer_name' => 'Aisha Service Shift',
@@ -440,7 +456,7 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
         $this->assertNull(Appointment::find($appointment->id));
         $this->assertSame(20, $this->retailSerum->fresh()->stock_quantity);
 
-        $lead = Lead::findOrFail($adEntry->lead_id);
+        $lead = Lead::where('customer_id', $adEntry->customer_id)->firstOrFail();
         $this->assertNull($lead->appointment_id);
         $this->assertNull($lead->needful_done);
         $this->assertSame(now()->toDateString(), $lead->next_followup_date?->toDateString());

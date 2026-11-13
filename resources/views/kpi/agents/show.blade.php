@@ -18,7 +18,7 @@
         <div class="kpi-header">
             <div>
                 <h4>Agents Target Report</h4>
-                <p>{{ $report->date_from->format('d M Y') }} – {{ $report->date_to->format('d M Y') }} &middot; Target: 13 bookings/day/shift (403/month)</p>
+                <p>{{ $report->date_from->format('d M Y') }} – {{ $report->date_to->format('d M Y') }} &middot; Target: 13 bookings/day/shift ({{ $recovery['monthly_target_per_shift'] }}/month)</p>
             </div>
             <span class="kpi-badge kpi-badge-{{ $overallBorder }}">Combined: {{ $combined['pct'] }}%</span>
         </div>
@@ -105,7 +105,7 @@
         </div>
 
         <div class="kpi-panel">
-            <h6>Recovery Math <span class="text-muted small fw-normal">— to reach 88% of the 403/shift monthly target</span></h6>
+            <h6>Recovery Math <span class="text-muted small fw-normal">— to reach 88% of the {{ $recovery['monthly_target_per_shift'] }}/shift monthly target</span></h6>
             <div class="table-responsive">
                 <table class="table kpi-table">
                     <thead><tr><th>Shift</th><th class="text-end">88% Target</th><th class="text-end">Remaining Needed</th><th class="text-end">Bookings/Day Needed</th></tr></thead>

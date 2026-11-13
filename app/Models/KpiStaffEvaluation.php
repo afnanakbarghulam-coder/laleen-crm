@@ -122,14 +122,32 @@ class KpiStaffEvaluation extends Model
             return null;
         }
 
-        $name = strtolower($user->name);
+        $name = trim($user->name);
 
         foreach (self::EVALUATOR_BRANCH_DEFAULTS as $needle => $branch) {
-            if (str_contains($name, $needle)) {
+            if (preg_match('/\b' . preg_quote($needle, '/') . '\b/i', $name)) {
                 return $branch;
             }
         }
 
         return null;
+    }
+
+    /**
+     * Resolve the fixed branch managed by a non-admin Branch Manager (Ahana -> 'old_airport', Rhea -> 'wakrah').
+     * Returns null for Admins (who may access both branches) and for Chat Agents / other roles.
+     */
+    public static function managedBranchFor(?User $user): ?string
+    {
+        if (!$user || $user->isAdmin()) {
+            return null;
+        }
+
+        $cleanRole = strtolower(trim((string) $user->role));
+        if ($cleanRole === 'agent' || !$user->canEdit('kpis')) {
+            return null;
+        }
+
+        return self::defaultBranchFor($user);
     }
 }

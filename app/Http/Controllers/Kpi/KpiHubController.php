@@ -14,6 +14,7 @@ use App\Models\KpiMonthlyAd;
 use App\Models\KpiStaffEvaluation;
 use App\Models\Lead;
 use App\Models\SocialContentPlan;
+use App\Models\SocialLateReplyLog;
 use App\Models\Staff;
 use App\Models\StaffComplaint;
 use App\Models\User;
@@ -22,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 
 class KpiHubController extends Controller
 {
@@ -43,20 +45,22 @@ class KpiHubController extends Controller
 
     public function index(Request $request)
     {
-        $rawMonth = trim((string) $request->query('month', now()->format('Y-m')));
+        $nowQatar = now('Asia/Qatar');
+        $rawMonth = trim((string) $request->query('month', $nowQatar->format('Y-m')));
         if (!preg_match('/^\d{4}-\d{2}$/', $rawMonth)) {
-            $rawMonth = now()->format('Y-m');
+            $rawMonth = $nowQatar->format('Y-m');
         }
 
-        $monthStart = Carbon::createFromFormat('Y-m-d', $rawMonth . '-01')->startOfMonth()->startOfDay();
+        $monthStart = Carbon::createFromFormat('Y-m-d', $rawMonth . '-01', 'Asia/Qatar')->startOfMonth()->startOfDay();
         $monthEnd = $monthStart->copy()->endOfMonth()->endOfDay();
-        $isCurrentMonth = ($rawMonth === now()->format('Y-m'));
+        $isCurrentMonth = ($rawMonth === $nowQatar->format('Y-m'));
 
         $scorecard = $this->buildExecutiveScorecard($rawMonth, $monthStart, $monthEnd, $isCurrentMonth);
 
         return view('kpi.hub', [
             'selectedMonth' => $rawMonth,
             'selectedMonthLabel' => $monthStart->format('F Y'),
+            'isCurrentMonth' => $isCurrentMonth,
             'periodRangeLabel' => $scorecard['period_range_label'],
             'shortPeriodBadge' => $scorecard['short_period_badge'],
             'daysElapsed' => $scorecard['days_elapsed'],
@@ -65,74 +69,158 @@ class KpiHubController extends Controller
         ]);
     }
 
+    public function storeLateReply(Request $request)
+    {
+        return $this->updateLateReplies($request);
+    }
+
     public function updateLateReplies(Request $request)
     {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $isLegacyActionCall = $request->filled('action') && !$request->filled('incident_at');
+
         $validated = $request->validate([
+            'incident_at' => $isLegacyActionCall ? 'nullable|date' : 'required|date',
+            'screenshot' => 'nullable|image|max:5120',
+            'notes' => 'nullable|string|max:500',
             'action' => 'nullable|in:increment,decrement,set',
             'count' => 'nullable|integer|min:0|max:999',
             'week_start_date' => 'nullable|date_format:Y-m-d',
             'month' => 'nullable|string|max:7',
         ]);
 
-        $weekStart = $validated['week_start_date']
-            ?? now()->startOfWeek(Carbon::MONDAY)->toDateString();
+        $nowQatar = now('Asia/Qatar');
+        $incidentAt = !empty($validated['incident_at'])
+            ? Carbon::parse($validated['incident_at'], 'Asia/Qatar')->setTimezone('Asia/Qatar')
+            : null;
 
-        $mondayPlan = SocialContentPlan::firstOrCreate(
-            [
-                'week_start_date' => $weekStart,
-                'day_of_week' => 'Monday',
-            ],
-            [
-                'target_branch' => 'All Branches',
-                'is_reel_posted' => false,
-                'are_stories_posted' => false,
-                'is_reel_skipped' => false,
-                'late_replies_count' => 0,
-            ]
-        );
+        $targetMonth = !empty($validated['month']) && preg_match('/^\d{4}-\d{2}$/', $validated['month'])
+            ? $validated['month']
+            : ($incidentAt?->format('Y-m') ?? $nowQatar->format('Y-m'));
+
+        if (!$incidentAt) {
+            $incidentAt = ($targetMonth === $nowQatar->format('Y-m'))
+                ? $nowQatar->copy()
+                : Carbon::createFromFormat('Y-m-d H:i:s', $targetMonth . '-01 12:00:00', 'Asia/Qatar');
+        }
+
+        $monthStart = Carbon::createFromFormat('Y-m-d', $targetMonth . '-01', 'Asia/Qatar')->startOfMonth()->startOfDay();
+        $monthEnd = $monthStart->copy()->endOfMonth()->endOfDay();
 
         $action = $validated['action'] ?? 'increment';
 
-        if ($action === 'set' && isset($validated['count'])) {
-            // Reset other days of the same week to 0 and set Monday's counter cleanly
-            SocialContentPlan::where('week_start_date', $weekStart)
-                ->where('id', '!=', $mondayPlan->id)
-                ->update(['late_replies_count' => 0]);
-            $mondayPlan->update(['late_replies_count' => max(0, (int) $validated['count'])]);
-        } elseif ($action === 'decrement') {
-            $weekRows = SocialContentPlan::where('week_start_date', $weekStart)
-                ->where('late_replies_count', '>', 0)
-                ->orderByDesc('late_replies_count')
+        if ($action === 'decrement') {
+            $latestLog = SocialLateReplyLog::query()
+                ->whereBetween('incident_at', [$monthStart, $monthEnd])
+                ->orderByDesc('incident_at')
+                ->orderByDesc('id')
                 ->first();
-            if ($weekRows) {
-                $weekRows->update([
-                    'late_replies_count' => max(0, (int) $weekRows->late_replies_count - 1),
+
+            if ($latestLog) {
+                if (filled($latestLog->screenshot_path) && Storage::disk('public')->exists($latestLog->screenshot_path)) {
+                    Storage::disk('public')->delete($latestLog->screenshot_path);
+                }
+                $latestLog->delete();
+            } else {
+                $inMonthLegacyRow = $this->inMonthContentPlans($monthStart, $monthEnd)
+                    ->first(fn (SocialContentPlan $p) => (int) $p->late_replies_count > 0);
+                if ($inMonthLegacyRow) {
+                    $inMonthLegacyRow->update([
+                        'late_replies_count' => max(0, (int) $inMonthLegacyRow->late_replies_count - 1),
+                    ]);
+                }
+            }
+        } elseif ($action === 'set' && isset($validated['count'])) {
+            $existingLogs = SocialLateReplyLog::query()
+                ->whereBetween('incident_at', [$monthStart, $monthEnd])
+                ->get();
+            foreach ($existingLogs as $existingLog) {
+                if (filled($existingLog->screenshot_path) && Storage::disk('public')->exists($existingLog->screenshot_path)) {
+                    Storage::disk('public')->delete($existingLog->screenshot_path);
+                }
+                $existingLog->delete();
+            }
+
+            foreach ($this->inMonthContentPlans($monthStart, $monthEnd) as $planRow) {
+                if ((int) $planRow->late_replies_count > 0) {
+                    $planRow->update(['late_replies_count' => 0]);
+                }
+            }
+
+            $desiredCount = max(0, (int) $validated['count']);
+            for ($i = 0; $i < $desiredCount; $i++) {
+                SocialLateReplyLog::create([
+                    'incident_at' => $incidentAt,
+                    'notes' => isset($validated['notes']) ? (trim((string) $validated['notes']) ?: null) : null,
+                    'logged_by' => $request->user()->id,
                 ]);
             }
         } else {
-            $mondayPlan->update([
-                'late_replies_count' => (int) $mondayPlan->late_replies_count + 1,
+            $screenshotPath = $request->hasFile('screenshot')
+                ? $request->file('screenshot')->store('uploads/late-replies', 'public')
+                : null;
+
+            SocialLateReplyLog::create([
+                'incident_at' => $incidentAt,
+                'screenshot_path' => $screenshotPath,
+                'notes' => isset($validated['notes']) ? (trim((string) $validated['notes']) ?: null) : null,
+                'logged_by' => $request->user()->id,
             ]);
         }
 
-        $totalWeekLateReplies = (int) SocialContentPlan::where('week_start_date', $weekStart)->sum('late_replies_count');
+        $totalMonthLateReplies = SocialLateReplyLog::query()
+            ->whereBetween('incident_at', [$monthStart, $monthEnd])
+            ->count()
+            + (int) $this->inMonthContentPlans($monthStart, $monthEnd)->sum('late_replies_count');
 
         if ($request->wantsJson()) {
             return response()->json([
                 'success' => true,
-                'week_start_date' => $weekStart,
-                'late_replies_count' => $totalWeekLateReplies,
+                'month' => $targetMonth,
+                'late_replies_count' => $totalMonthLateReplies,
             ]);
         }
 
-        $redirectParams = [];
-        if (!empty($validated['month'])) {
-            $redirectParams['month'] = $validated['month'];
+        return redirect()
+            ->route('kpi.hub', ['month' => $targetMonth])
+            ->with('success', "Social media late reply log updated ({$totalMonthLateReplies} recorded for {$monthStart->format('M Y')}).");
+    }
+
+    public function destroyLateReply(Request $request, SocialLateReplyLog $lateReplyLog)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $rawMonth = trim((string) $request->input('month', ''));
+        $targetMonth = preg_match('/^\d{4}-\d{2}$/', $rawMonth)
+            ? $rawMonth
+            : ($lateReplyLog->incident_at?->format('Y-m') ?? now('Asia/Qatar')->format('Y-m'));
+
+        if (filled($lateReplyLog->screenshot_path) && Storage::disk('public')->exists($lateReplyLog->screenshot_path)) {
+            Storage::disk('public')->delete($lateReplyLog->screenshot_path);
+        }
+
+        $lateReplyLog->delete();
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'month' => $targetMonth,
+            ]);
         }
 
         return redirect()
-            ->route('kpi.hub', $redirectParams)
-            ->with('success', "Social media late replies counter updated ({$totalWeekLateReplies} reported).");
+            ->route('kpi.hub', ['month' => $targetMonth])
+            ->with('success', 'Late reply breach record removed.');
+    }
+
+    public function lateReplyScreenshot(SocialLateReplyLog $lateReplyLog)
+    {
+        if (blank($lateReplyLog->screenshot_path) || !Storage::disk('public')->exists($lateReplyLog->screenshot_path)) {
+            abort(404);
+        }
+
+        return Storage::disk('public')->response($lateReplyLog->screenshot_path);
     }
 
     public function buildExecutiveScorecard(string $selectedMonth, Carbon $monthStart, Carbon $monthEnd, bool $isCurrentMonth): array
@@ -140,10 +228,11 @@ class KpiHubController extends Controller
         // =========================================================================
         // DYNAMIC MONTH-TO-DATE WINDOW (01 – CURRENT DAY)
         // =========================================================================
+        $nowQatar = now('Asia/Qatar');
         $periodStart = $monthStart->copy()->startOfDay();
-        $periodEnd = $isCurrentMonth ? now()->copy()->endOfDay() : $monthEnd->copy()->endOfDay();
+        $periodEnd = $isCurrentMonth ? $nowQatar->copy()->endOfDay() : $monthEnd->copy()->endOfDay();
         $daysInMonth = max(1, (int) $monthStart->daysInMonth);
-        $daysElapsed = $isCurrentMonth ? max(1, (int) now()->day) : $daysInMonth;
+        $daysElapsed = $isCurrentMonth ? max(1, (int) $nowQatar->day) : $daysInMonth;
 
         $periodRangeLabel = $isCurrentMonth
             ? sprintf('%s – %s (MTD • Day %d/%d)', $periodStart->format('M j'), $periodEnd->format('M j, Y'), $daysElapsed, $daysInMonth)
@@ -269,7 +358,7 @@ class KpiHubController extends Controller
         // =========================================================================
         // B. LADEN — Customer Service, Bookings, Chat Eval & Complaint SLA (01 – Current Day)
         // =========================================================================
-        $referenceDate = $isCurrentMonth ? now()->copy() : $monthEnd->copy();
+        $referenceDate = $isCurrentMonth ? $nowQatar->copy() : $monthEnd->copy();
 
         $ladenData = $this->buildLadenSection(
             periodStart: $periodStart,
@@ -296,7 +385,7 @@ class KpiHubController extends Controller
             branch: 'old_airport',
             periodStart: $periodStart,
             periodEnd: $periodEnd,
-            mondaysElapsedCount: $mondaysElapsedCount
+            isCurrentMonth: $isCurrentMonth
         );
 
         $rheaData = $this->buildBranchManagerScorecard(
@@ -305,7 +394,7 @@ class KpiHubController extends Controller
             branch: 'wakrah',
             periodStart: $periodStart,
             periodEnd: $periodEnd,
-            mondaysElapsedCount: $mondaysElapsedCount
+            isCurrentMonth: $isCurrentMonth
         );
 
         // =========================================================================
@@ -333,6 +422,7 @@ class KpiHubController extends Controller
 
         return [
             'month' => $selectedMonth,
+            'is_current_month' => $isCurrentMonth,
             'period_start' => $periodStart->toDateString(),
             'period_end' => $periodEnd->toDateString(),
             'period_range_label' => $periodRangeLabel,
@@ -350,6 +440,30 @@ class KpiHubController extends Controller
         ];
     }
 
+    /**
+     * Load all SocialContentPlan day rows whose exact calendar date (week_start_date + day offset)
+     * falls strictly within [$rangeStart->toDateString(), $rangeEnd->toDateString()].
+     * Uses plain 'Y-m-d' strings in SQL so SQLite and MySQL behave 100% identically.
+     */
+    private function inMonthContentPlans(Carbon $rangeStart, Carbon $rangeEnd): Collection
+    {
+        $minDateStr = $rangeStart->toDateString();
+        $maxDateStr = $rangeEnd->toDateString();
+        $firstOverlapMondayStr = $rangeStart->copy()->startOfWeek(Carbon::MONDAY)->toDateString();
+        $lastOverlapMondayStr = $rangeEnd->copy()->startOfWeek(Carbon::MONDAY)->toDateString();
+
+        return SocialContentPlan::query()
+            ->where('week_start_date', '>=', $firstOverlapMondayStr)
+            ->where('week_start_date', '<=', $lastOverlapMondayStr)
+            ->get()
+            ->filter(function (SocialContentPlan $plan) use ($minDateStr, $maxDateStr): bool {
+                $exactDateStr = $plan->exactDate()->toDateString();
+
+                return $exactDateStr >= $minDateStr && $exactDateStr <= $maxDateStr;
+            })
+            ->values();
+    }
+
     private function buildSanaSection(
         Carbon $periodStart,
         Carbon $periodEnd,
@@ -358,76 +472,108 @@ class KpiHubController extends Controller
         int $daysElapsed,
         string $shortPeriodBadge
     ): array {
-        $currentWeekMonday = $isCurrentMonth
-            ? now()->startOfWeek(Carbon::MONDAY)->toDateString()
-            : $monthStart->copy()->startOfWeek(Carbon::MONDAY)->toDateString();
+        $monthEnd = $monthStart->copy()->endOfMonth()->endOfDay();
+        $effectiveEnd = $periodEnd->gt($monthEnd) ? $monthEnd : $periodEnd;
 
-        $weekPlans = SocialContentPlan::query()
-            ->whereDate('week_start_date', $currentWeekMonday)
-            ->get();
+        $firstInMonthMondayStr = ($monthStart->isMonday()
+            ? $monthStart->copy()
+            : $monthStart->copy()->next(Carbon::MONDAY)
+        )->toDateString();
 
-        if (!$isCurrentMonth && $weekPlans->isEmpty()) {
-            $latestWeekInMonth = SocialContentPlan::query()
-                ->whereBetween('week_start_date', [$periodStart, $periodEnd])
+        // Strict same-month isolation via exactDate() (excludes Oct 26-31 and Dec 1-6 bleed)
+        $inMonthPlans = $this->inMonthContentPlans($monthStart->copy()->startOfDay(), $effectiveEnd);
+
+        if ($isCurrentMonth) {
+            $inMonthWeekStart = now('Asia/Qatar')->startOfWeek(Carbon::MONDAY)->toDateString();
+        } else {
+            $inMonthWeekStart = $firstInMonthMondayStr;
+            $latestActiveWeek = $inMonthPlans
+                ->filter(
+                    fn (SocialContentPlan $p) => substr((string) $p->week_start_date, 0, 10) >= $firstInMonthMondayStr
+                        && (
+                            $p->is_reel_posted
+                            || $p->are_stories_posted
+                            || filled($p->reel_content)
+                            || filled($p->stories_content)
+                            || filled($p->reel_link)
+                        )
+                )
                 ->max('week_start_date');
-            if ($latestWeekInMonth) {
-                $currentWeekMonday = Carbon::parse($latestWeekInMonth)->toDateString();
-                $weekPlans = SocialContentPlan::whereDate('week_start_date', $currentWeekMonday)->get();
+
+            if ($latestActiveWeek) {
+                $inMonthWeekStart = substr((string) $latestActiveWeek, 0, 10);
             }
         }
 
-        $publishedReels = $weekPlans->where('is_reel_posted', true)->count();
-        $publishedStories = $weekPlans->where('are_stories_posted', true)->count();
-        $weeklyItemsTarget = self::SANA_WEEKLY_REELS_TARGET + self::SANA_WEEKLY_STORIES_TARGET; // 11
-        $monthlyItemsTarget = $weeklyItemsTarget * 4; // 44
-        $elapsedWeeks = max(1, min(4, (int) ceil($daysElapsed / 7)));
-
-        $monthContentPlans = SocialContentPlan::query()
-            ->whereBetween('week_start_date', [
-                $periodStart->copy()->startOfWeek(Carbon::MONDAY)->startOfDay(),
-                $periodEnd,
-            ])
+        $weekPlans = SocialContentPlan::query()
+            ->where('week_start_date', $inMonthWeekStart)
             ->get();
 
-        $mtdPublishedReels = $monthContentPlans->where('is_reel_posted', true)->count();
-        $mtdPublishedStories = $monthContentPlans->where('are_stories_posted', true)->count();
+        $publishedReels = $weekPlans->filter(fn (SocialContentPlan $p) => $p->is_reel_posted && !$p->is_reel_skipped)->count();
+        $publishedStories = $weekPlans->where('are_stories_posted', true)->count();
+
+        $mtdPublishedReels = $inMonthPlans
+            ->filter(fn (SocialContentPlan $p) => $p->is_reel_posted && !$p->is_reel_skipped)
+            ->count();
+        $mtdPublishedStories = $inMonthPlans->where('are_stories_posted', true)->count();
         $mtdItemsCompleted = $mtdPublishedReels + $mtdPublishedStories;
 
-        $cumulativeMtdTarget = min($monthlyItemsTarget, $weeklyItemsTarget * $elapsedWeeks);
-        $cumulativeMtdReelsTarget = min(self::SANA_WEEKLY_REELS_TARGET * 4, self::SANA_WEEKLY_REELS_TARGET * $elapsedWeeks);
-        $cumulativeMtdStoriesTarget = min(self::SANA_WEEKLY_STORIES_TARGET * 4, self::SANA_WEEKLY_STORIES_TARGET * $elapsedWeeks);
+        $lateReplyLogs = Schema::hasTable('social_late_reply_logs')
+            ? SocialLateReplyLog::with('logger:id,name')
+                ->whereBetween('incident_at', [$monthStart->copy()->startOfDay(), $effectiveEnd])
+                ->orderByDesc('incident_at')
+                ->orderByDesc('id')
+                ->get()
+            : collect();
 
-        $dayOfWeekIso = $isCurrentMonth ? (int) now()->dayOfWeekIso : 7;
-        $proratedReelsTarget = $isCurrentMonth
-            ? (int) floor((self::SANA_WEEKLY_REELS_TARGET * $dayOfWeekIso) / 7)
-            : self::SANA_WEEKLY_REELS_TARGET;
-        $proratedStoriesTarget = $isCurrentMonth
-            ? (int) floor((self::SANA_WEEKLY_STORIES_TARGET * $dayOfWeekIso) / 7)
-            : self::SANA_WEEKLY_STORIES_TARGET;
-        $proratedWeeklyItemsTarget = $isCurrentMonth
-            ? max(1, $proratedReelsTarget + $proratedStoriesTarget)
-            : $weeklyItemsTarget;
+        $legacyInMonthLateReplies = (int) $inMonthPlans->sum('late_replies_count');
+        $effectiveLateReplies = $lateReplyLogs->count() + $legacyInMonthLateReplies;
 
-        // Compare cumulative MTD completed posts against cumulative MTD target (never dividing a month's posts by 1 week's target)
-        $weeklyContentExecutionPct = round(min(100.0, ($mtdItemsCompleted / max(1, $cumulativeMtdTarget)) * 100), 1);
-
-        $weekLateReplies = (int) $weekPlans->sum('late_replies_count');
-        $monthLateReplies = (int) $monthContentPlans->sum('late_replies_count');
-        $effectiveLateReplies = max($weekLateReplies, $monthLateReplies);
-
-        $sanaContentPassing = (
-            $mtdPublishedReels >= $cumulativeMtdReelsTarget
-            && $mtdPublishedStories >= $cumulativeMtdStoriesTarget
-            && $mtdItemsCompleted >= $cumulativeMtdTarget
-        );
-
-        $hasMtdSocialActivity = $monthContentPlans->isNotEmpty() && (
-            $mtdItemsCompleted > 0
-            || $effectiveLateReplies > 0
-            || $monthContentPlans->contains(
-                fn (SocialContentPlan $p) => filled($p->reel_content) || filled($p->stories_content) || filled($p->reel_link)
+        $hasMtdSocialActivity = $lateReplyLogs->isNotEmpty() || (
+            $inMonthPlans->isNotEmpty() && (
+                $mtdItemsCompleted > 0
+                || $legacyInMonthLateReplies > 0
+                || $inMonthPlans->contains(
+                    fn (SocialContentPlan $p) => filled($p->reel_content) || filled($p->stories_content) || filled($p->reel_link)
+                )
             )
         );
+
+        // Option A Smooth Daily-Prorated MTD Targets (with current Doha day grace until midnight)
+        $daysInMonth = max(1, (int) $monthStart->daysInMonth);
+        $completedDays = $isCurrentMonth ? max(0, $daysElapsed - 1) : $daysInMonth;
+        $fullMonthStoriesTarget = $daysInMonth;
+        $fullMonthReelsTarget = (int) floor(($daysInMonth * self::SANA_WEEKLY_REELS_TARGET) / 7);
+        $monthlyItemsTarget = $fullMonthReelsTarget + $fullMonthStoriesTarget;
+        $elapsedWeeks = max(1, min(5, (int) ceil($daysElapsed / 7)));
+
+        if ($completedDays === 0) {
+            // Day 1 grace: if calendar has Day 1 plan/post activity, treat prior-day required target as 0 (100% PASS);
+            // if calendar is completely empty, score 0% FAIL.
+            $mtdStoriesTarget = 0;
+            $mtdReelsTarget = 0;
+            $mtdItemsTarget = 0;
+            $sanaContentPassing = $hasMtdSocialActivity;
+            $weeklyContentExecutionPct = $hasMtdSocialActivity ? 100.0 : 0.0;
+        } else {
+            $mtdStoriesTarget = $completedDays;
+            $mtdReelsTarget = (int) floor(($completedDays * self::SANA_WEEKLY_REELS_TARGET) / 7);
+            $mtdItemsTarget = $mtdReelsTarget + $mtdStoriesTarget;
+
+            // Cap category excess so extra Reels cannot mask missing Stories as 100% FAIL
+            $creditedReels = min($mtdPublishedReels, $mtdReelsTarget);
+            $creditedStories = min($mtdPublishedStories, $mtdStoriesTarget);
+
+            $weeklyContentExecutionPct = !$hasMtdSocialActivity
+                ? 0.0
+                : ($mtdItemsTarget > 0
+                    ? round(min(100.0, (($creditedReels + $creditedStories) / $mtdItemsTarget) * 100), 1)
+                    : 100.0);
+
+            $sanaContentPassing = $hasMtdSocialActivity
+                && ($mtdPublishedReels >= $mtdReelsTarget)
+                && ($mtdPublishedStories >= $mtdStoriesTarget);
+        }
 
         $sanaRepliesPassing = $hasMtdSocialActivity && ($effectiveLateReplies === 0);
         $sanaRepliesScorePct = $sanaRepliesPassing ? 100.0 : 0.0;
@@ -439,24 +585,27 @@ class KpiHubController extends Controller
         return [
             'owner' => 'Sana',
             'role' => 'Organic Content & Social Media Replies',
-            'week_start_date' => $currentWeekMonday,
+            'week_start_date' => $inMonthWeekStart,
+            'in_month_week_start' => $inMonthWeekStart,
             'period_badge' => $shortPeriodBadge,
+            'completed_days' => $completedDays,
             'published_reels' => $publishedReels,
             'reels_target' => self::SANA_WEEKLY_REELS_TARGET,
-            'prorated_reels_target' => $proratedReelsTarget,
             'published_stories' => $publishedStories,
             'stories_target' => self::SANA_WEEKLY_STORIES_TARGET,
-            'prorated_stories_target' => $proratedStoriesTarget,
-            'prorated_weekly_target' => $proratedWeeklyItemsTarget,
             'elapsed_weeks' => $elapsedWeeks,
             'monthly_items_target' => $monthlyItemsTarget,
-            'cumulative_mtd_target' => $cumulativeMtdTarget,
+            'mtd_reels_target' => $mtdReelsTarget,
+            'mtd_stories_target' => $mtdStoriesTarget,
+            'mtd_items_target' => $mtdItemsTarget,
+            'cumulative_mtd_target' => $mtdItemsTarget,
             'mtd_items_completed' => $mtdItemsCompleted,
             'weekly_execution_pct' => $weeklyContentExecutionPct,
             'content_passing' => $sanaContentPassing,
             'mtd_published_reels' => $mtdPublishedReels,
             'mtd_published_stories' => $mtdPublishedStories,
             'late_replies_count' => $effectiveLateReplies,
+            'late_reply_logs' => $lateReplyLogs,
             'replies_sla_passing' => $sanaRepliesPassing,
             'replies_sla_status_label' => !$hasMtdSocialActivity
                 ? 'NO ACTIVITY LOGGED (0% SLA)'
@@ -584,6 +733,7 @@ class KpiHubController extends Controller
         int $daysInMonth
     ): array {
         $agentUserIds = User::query()
+            ->where('role', 'agent')
             ->where('name', 'like', '%' . $owner . '%')
             ->pluck('id');
 
@@ -591,38 +741,44 @@ class KpiHubController extends Controller
         $agentMtdTarget = $dailyTarget * $daysElapsed;
         $agentFullMonthTarget = $dailyTarget * $daysInMonth;
 
+        $qatarTz = 'Asia/Qatar';
+        $appTz = config('app.timezone', $qatarTz);
+        $refDateStr = $referenceDate->copy()->timezone($qatarTz)->format('Y-m-d');
+        $todayStart = Carbon::createFromFormat('Y-m-d', $refDateStr, $qatarTz)->startOfDay()->timezone($appTz);
+        $todayEnd = Carbon::createFromFormat('Y-m-d', $refDateStr, $qatarTz)->endOfDay()->timezone($appTz);
+        $mtdStart = Carbon::createFromFormat('Y-m-d', $periodStart->copy()->timezone($qatarTz)->format('Y-m-d'), $qatarTz)->startOfDay()->timezone($appTz);
+        $mtdEnd = Carbon::createFromFormat('Y-m-d', $periodEnd->copy()->timezone($qatarTz)->format('Y-m-d'), $qatarTz)->endOfDay()->timezone($appTz);
+
         $todayBookings = 0;
         $mtdBookings = 0;
 
         if ($agentUserIds->isNotEmpty()) {
-            $todayBookings = Appointment::query()
-                ->whereNotIn('status', ['cancelled', 'no_show'])
-                ->where(function ($q) use ($agentUserIds) {
-                    $q->whereIn('booking_agent_id', $agentUserIds)
-                        ->orWhere(function ($sub) use ($agentUserIds) {
-                            $sub->whereNull('booking_agent_id')
-                                ->whereIn('created_by', $agentUserIds);
-                        });
-                })
-                ->whereDate('created_at', $referenceDate->toDateString())
-                ->count();
+            $mtdRawAppointments = Appointment::query()
+                ->scheduledForAgentQuota($agentUserIds)
+                ->whereBetween('created_at', [$mtdStart, $mtdEnd])
+                ->get([
+                    'id',
+                    'booking_agent_id',
+                    'customer_id',
+                    'phone',
+                    'customer_name',
+                    'booking_date',
+                    'appointment_datetime',
+                    'created_at',
+                ]);
 
-            $mtdBookings = Appointment::query()
-                ->whereNotIn('status', ['cancelled', 'no_show'])
-                ->where(function ($q) use ($agentUserIds) {
-                    $q->whereIn('booking_agent_id', $agentUserIds)
-                        ->orWhere(function ($sub) use ($agentUserIds) {
-                            $sub->whereNull('booking_agent_id')
-                                ->whereIn('created_by', $agentUserIds);
-                        });
-                })
-                ->whereBetween('created_at', [$periodStart, $periodEnd])
+            $dedupedMtdAppointments = Appointment::deduplicateForAgentQuota($mtdRawAppointments);
+            $mtdBookings = $dedupedMtdAppointments->count();
+            $todayBookings = $dedupedMtdAppointments
+                ->filter(fn (Appointment $appt) => $appt->created_at && $appt->created_at->between($todayStart, $todayEnd))
                 ->count();
         }
 
         $todayAttainmentPct = min(100.0, round(($todayBookings / $dailyTarget) * 100, 1));
         $mtdAttainmentPct = min(100.0, round(($mtdBookings / max(1, $agentMtdTarget)) * 100, 1));
-        $isPassing = ($mtdBookings >= $agentMtdTarget || $mtdAttainmentPct >= 85.0 || $todayBookings >= $dailyTarget);
+        $dailyAvgPace = round($mtdBookings / max(1, $daysInMonth), 1);
+        $dailyAvgPct = min(100.0, round(($dailyAvgPace / $dailyTarget) * 100, 1));
+        $isPassing = ($mtdBookings >= $agentMtdTarget);
 
         return [
             'owner' => $owner,
@@ -631,6 +787,8 @@ class KpiHubController extends Controller
             'today_bookings' => $todayBookings,
             'today_attainment_pct' => $todayAttainmentPct,
             'today_remaining_needed' => max(0, $dailyTarget - $todayBookings),
+            'daily_avg_pace' => $dailyAvgPace,
+            'daily_avg_pct' => $dailyAvgPct,
             'mtd_bookings' => $mtdBookings,
             'mtd_target' => $agentMtdTarget,
             'full_month_target' => $agentFullMonthTarget,
@@ -650,34 +808,108 @@ class KpiHubController extends Controller
         string $branch,
         Carbon $periodStart,
         Carbon $periodEnd,
-        int $mondaysElapsedCount
+        bool $isCurrentMonth
     ): array {
-        // KPI 1: Monday Staff Evaluation Compliance (Target: 100%)
-        $activeBranchStaffCount = Staff::active()
-            ->whereIn('branch', [$branch, 'both'])
-            ->count();
+        $nowQatar = now('Asia/Qatar');
 
-        $expectedEvaluationsMtd = $activeBranchStaffCount * $mondaysElapsedCount;
+        // KPI 1: Monday Staff Evaluation Compliance (Target: 100%)
+        $activeBranchStaffCount = Staff::salonEvaluatable($branch, $periodEnd->toDateString())->count();
+
+        $allMondays = [];
+        foreach (CarbonPeriod::create($periodStart->copy()->startOfDay(), $periodEnd->copy()->startOfDay()) as $day) {
+            if ($day->isMonday()) {
+                $allMondays[] = $day->toDateString();
+            }
+        }
 
         $evalRows = KpiStaffEvaluation::query()
             ->where('branch', $branch)
-            ->whereBetween('evaluation_date', [$periodStart, $periodEnd])
+            ->whereDate('evaluation_date', '>=', $periodStart->toDateString())
+            ->whereDate('evaluation_date', '<=', $periodEnd->toDateString())
             ->get(['staff_id', 'evaluation_date']);
 
-        $completedEvaluationsMtd = $evalRows
-            ->unique(fn (KpiStaffEvaluation $e) => $e->staff_id . '|' . Carbon::parse($e->evaluation_date)->startOfWeek(Carbon::MONDAY)->toDateString())
-            ->count();
+        $perMondayStats = [];
+        foreach ($allMondays as $mondayStr) {
+            $eligibleIds = Staff::salonEvaluatable($branch, $mondayStr)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
 
-        $evalCompliancePct = $expectedEvaluationsMtd > 0
-            ? min(100.0, round(($completedEvaluationsMtd / $expectedEvaluationsMtd) * 100, 1))
-            : 100.0;
+            $expectedCount = count($eligibleIds);
+            $completedCount = $expectedCount > 0
+                ? $evalRows
+                    ->filter(function (KpiStaffEvaluation $e) use ($mondayStr, $eligibleIds): bool {
+                        $evalMondayStr = Carbon::parse($e->evaluation_date, 'Asia/Qatar')
+                            ->startOfWeek(Carbon::MONDAY)
+                            ->toDateString();
 
-        $evalCompliancePassing = ($evalCompliancePct >= 100.0 || $completedEvaluationsMtd >= $expectedEvaluationsMtd);
+                        return $evalMondayStr === $mondayStr
+                            && in_array((int) $e->staff_id, $eligibleIds, true);
+                    })
+                    ->pluck('staff_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->unique()
+                    ->count()
+                : 0;
+
+            $perMondayStats[$mondayStr] = [
+                'expected' => $expectedCount,
+                'completed' => $completedCount,
+                'is_complete' => $expectedCount > 0 && $completedCount >= $expectedCount,
+            ];
+        }
+
+        $currentWeekMondayStr = $nowQatar->copy()->startOfWeek(Carbon::MONDAY)->toDateString();
+        $inMonTueGrace = $isCurrentMonth
+            && ($nowQatar->isMonday() || $nowQatar->isTuesday())
+            && isset($perMondayStats[$currentWeekMondayStr]);
+
+        if (empty($allMondays)) {
+            $countedMondays = 0;
+            $expectedEvaluationsMtd = 0;
+            $completedEvaluationsMtd = 0;
+            $evalCompliancePct = 0.0;
+            $evalCompliancePassing = false;
+        } elseif ($inMonTueGrace && !$perMondayStats[$currentWeekMondayStr]['is_complete']) {
+            $priorStats = array_filter(
+                $perMondayStats,
+                fn (array $stat, string $mondayKey) => $mondayKey !== $currentWeekMondayStr,
+                ARRAY_FILTER_USE_BOTH
+            );
+
+            if (!empty($priorStats)) {
+                $countedMondays = count($priorStats);
+                $expectedEvaluationsMtd = array_sum(array_column($priorStats, 'expected'));
+                $completedEvaluationsMtd = array_sum(array_column($priorStats, 'completed'));
+                $evalCompliancePct = $expectedEvaluationsMtd > 0
+                    ? min(100.0, round(($completedEvaluationsMtd / $expectedEvaluationsMtd) * 100, 1))
+                    : 0.0;
+                $evalCompliancePassing = ($expectedEvaluationsMtd > 0 && $completedEvaluationsMtd >= $expectedEvaluationsMtd);
+            } else {
+                $currentStat = $perMondayStats[$currentWeekMondayStr];
+                $countedMondays = 1;
+                $expectedEvaluationsMtd = $currentStat['expected'];
+                $completedEvaluationsMtd = $currentStat['completed'];
+                $evalCompliancePct = $expectedEvaluationsMtd > 0
+                    ? min(100.0, round(($completedEvaluationsMtd / $expectedEvaluationsMtd) * 100, 1))
+                    : 0.0;
+                $evalCompliancePassing = ($expectedEvaluationsMtd > 0);
+            }
+        } else {
+            $countedMondays = count($perMondayStats);
+            $expectedEvaluationsMtd = array_sum(array_column($perMondayStats, 'expected'));
+            $completedEvaluationsMtd = array_sum(array_column($perMondayStats, 'completed'));
+            $evalCompliancePct = $expectedEvaluationsMtd > 0
+                ? min(100.0, round(($completedEvaluationsMtd / $expectedEvaluationsMtd) * 100, 1))
+                : 0.0;
+            $evalCompliancePassing = ($expectedEvaluationsMtd > 0 && $completedEvaluationsMtd >= $expectedEvaluationsMtd);
+        }
 
         // KPI 2: Branch Mystery Shopper Average (Target: >= 85.0%)
         $audits = BranchEvaluation::query()
             ->where('branch', $branch)
-            ->whereBetween('evaluation_date', [$periodStart, $periodEnd])
+            ->whereDate('evaluation_date', '>=', $periodStart->toDateString())
+            ->whereDate('evaluation_date', '<=', $periodEnd->toDateString())
             ->get(['id', 'percentage', 'total_score', 'grade', 'evaluation_date']);
 
         $auditsCountMtd = $audits->count();
@@ -701,7 +933,7 @@ class KpiHubController extends Controller
             'role' => $role,
             'branch' => $branch,
             'active_staff_count' => $activeBranchStaffCount,
-            'mondays_elapsed_count' => $mondaysElapsedCount,
+            'mondays_elapsed_count' => $countedMondays,
             'expected_evaluations_mtd' => $expectedEvaluationsMtd,
             'completed_evaluations_mtd' => $completedEvaluationsMtd,
             'eval_compliance_pct' => $evalCompliancePct,
@@ -732,27 +964,50 @@ class KpiHubController extends Controller
         int $daysInMonth,
         int $daysElapsed
     ): array {
-        $referenceDate = $isCurrentMonth ? now()->copy() : $monthEnd->copy();
+        $qatarTz = 'Asia/Qatar';
+        $appTz = config('app.timezone', $qatarTz);
+        $referenceDate = $isCurrentMonth ? now($qatarTz) : $monthEnd->copy()->timezone($qatarTz);
+        $refDateStr = $referenceDate->format('Y-m-d');
+        $todayStart = Carbon::createFromFormat('Y-m-d', $refDateStr, $qatarTz)->startOfDay()->timezone($appTz);
+        $todayEnd = Carbon::createFromFormat('Y-m-d', $refDateStr, $qatarTz)->endOfDay()->timezone($appTz);
+        $mtdStart = Carbon::createFromFormat('Y-m-d', $periodStart->copy()->timezone($qatarTz)->format('Y-m-d'), $qatarTz)->startOfDay()->timezone($appTz);
+        $mtdEnd = Carbon::createFromFormat('Y-m-d', $periodEnd->copy()->timezone($qatarTz)->format('Y-m-d'), $qatarTz)->endOfDay()->timezone($appTz);
 
-        $todayBookingsCount = Appointment::query()
-            ->whereNotIn('status', ['cancelled', 'no_show'])
-            ->whereDate('created_at', $referenceDate->toDateString())
-            ->count();
+        $chatAgentIds = User::where('role', 'agent')->pluck('id');
+        $todayBookingsCount = 0;
+        $mtdBookingsCount = 0;
 
-        $mtdBookingsCount = Appointment::query()
-            ->whereNotIn('status', ['cancelled', 'no_show'])
-            ->whereBetween('created_at', [$periodStart, $periodEnd])
-            ->count();
+        if ($chatAgentIds->isNotEmpty()) {
+            $mtdRawAppointments = Appointment::query()
+                ->scheduledForAgentQuota($chatAgentIds)
+                ->whereBetween('created_at', [$mtdStart, $mtdEnd])
+                ->get([
+                    'id',
+                    'booking_agent_id',
+                    'customer_id',
+                    'phone',
+                    'customer_name',
+                    'booking_date',
+                    'appointment_datetime',
+                    'created_at',
+                ]);
+
+            $dedupedMtdAppointments = Appointment::deduplicateForAgentQuota($mtdRawAppointments);
+            $mtdBookingsCount = $dedupedMtdAppointments->count();
+            $todayBookingsCount = $dedupedMtdAppointments
+                ->filter(fn (Appointment $appt) => $appt->created_at && $appt->created_at->between($todayStart, $todayEnd))
+                ->count();
+        }
 
         $dailyTarget = self::LADEN_DAILY_BOOKING_QUOTA; // 26 (13/day x 2 Chat Agents)
         $fullMonthTargetBookings = $dailyTarget * $daysInMonth;
         $mtdTargetBookings = $dailyTarget * $daysElapsed;
         $todayBookingQuotaPct = round(min(100.0, ($todayBookingsCount / $dailyTarget) * 100), 1);
         $mtdBookingQuotaPct = min(100.0, round(($mtdBookingsCount / max(1, $mtdTargetBookings)) * 100, 1));
-        $ladenBookingPassing = ($mtdBookingsCount >= $mtdTargetBookings || $todayBookingsCount >= $dailyTarget);
-        $bookingStatusLabel = ($mtdBookingQuotaPct >= 100.0 || $todayBookingQuotaPct >= 100.0)
+        $ladenBookingPassing = ($mtdBookingsCount >= $mtdTargetBookings);
+        $bookingStatusLabel = $mtdBookingQuotaPct >= 100.0
             ? 'ON TARGET'
-            : (($mtdBookingQuotaPct >= 85.0 || $todayBookingQuotaPct >= 85.0) ? 'NEAR TARGET' : 'BELOW QUOTA');
+            : ($mtdBookingQuotaPct >= 85.0 ? 'NEAR TARGET' : 'BELOW QUOTA');
 
         // KPI 2: Agent Chat Evaluation Score (Target: >= 85%)
         $monthChatEvals = KpiChatEvaluation::query()
@@ -802,49 +1057,69 @@ class KpiHubController extends Controller
             })
             ->count();
 
-        // KPI 4: Complaint Resolution SLA (<= 48 Hours)
+        // KPI 4: Complaint Resolution SLA (<= 48 Hours from incident date/time)
         $monthComplaints = StaffComplaint::with('notices')
-            ->where(function ($q) use ($periodStart, $periodEnd) {
-                $q->whereBetween('complaint_date', [$periodStart->toDateString(), $periodEnd->toDateString()])
-                  ->orWhereBetween('created_at', [$periodStart, $periodEnd]);
-            })
+            ->whereDate('complaint_date', '>=', $periodStart->toDateString())
+            ->whereDate('complaint_date', '<=', $periodEnd->toDateString())
             ->get();
 
         $totalComplaintsCount = $monthComplaints->count();
         $resolvedWithin48hCount = 0;
+        $breachingResolvedCount = 0;
+        $openWithin48hCount = 0;
         $openComplaintsCount = 0;
         $breachingOpenCount = 0;
         $oldestOpenAgeHours = 0;
 
         foreach ($monthComplaints as $complaint) {
-            $createdAt = $complaint->created_at ? Carbon::parse($complaint->created_at) : Carbon::parse($complaint->complaint_date);
+            $complaintDateStr = $complaint->complaint_date
+                ? Carbon::parse($complaint->complaint_date)->toDateString()
+                : ($complaint->created_at ? Carbon::parse($complaint->created_at)->toDateString() : $periodStart->toDateString());
+
+            if (filled($complaint->complaint_time)) {
+                $slaStartAt = Carbon::parse($complaintDateStr . ' ' . trim((string) $complaint->complaint_time));
+            } elseif ($complaint->created_at && Carbon::parse($complaint->created_at)->toDateString() === $complaintDateStr) {
+                $slaStartAt = Carbon::parse($complaint->created_at);
+            } else {
+                $slaStartAt = Carbon::parse($complaintDateStr)->startOfDay();
+                if ($complaint->created_at && Carbon::parse($complaint->created_at)->lt($slaStartAt)) {
+                    $slaStartAt = Carbon::parse($complaint->created_at);
+                }
+            }
+
             $isResolved = ($complaint->is_staff_mistake !== null || $complaint->notices->isNotEmpty());
 
             if ($isResolved) {
                 $resolvedAt = $complaint->resolved_at
                     ? Carbon::parse($complaint->resolved_at)
-                    : ($complaint->updated_at ? Carbon::parse($complaint->updated_at) : $createdAt);
-                $resolutionHours = max(0.0, $createdAt->diffInMinutes($resolvedAt, false) / 60.0);
+                    : ($complaint->updated_at ? Carbon::parse($complaint->updated_at) : $slaStartAt);
+                $resolutionHours = max(0.0, $slaStartAt->diffInMinutes($resolvedAt, false) / 60.0);
                 if ($resolutionHours <= self::LADEN_COMPLAINT_SLA_HOURS) {
                     $resolvedWithin48hCount++;
+                } else {
+                    $breachingResolvedCount++;
                 }
             } else {
                 $openComplaintsCount++;
-                $ageHours = (int) max(0, floor($createdAt->diffInMinutes(now(), false) / 60));
+                $openElapsedHours = max(0.0, $slaStartAt->diffInMinutes(now(), false) / 60.0);
+                $ageHours = (int) floor($openElapsedHours);
                 if ($ageHours > $oldestOpenAgeHours) {
                     $oldestOpenAgeHours = $ageHours;
                 }
-                if ($ageHours > self::LADEN_COMPLAINT_SLA_HOURS) {
+                if ($openElapsedHours > self::LADEN_COMPLAINT_SLA_HOURS) {
                     $breachingOpenCount++;
+                } else {
+                    $openWithin48hCount++;
                 }
             }
         }
 
+        $compliantComplaintsCount = $resolvedWithin48hCount + $openWithin48hCount;
         $complaintSlaPct = $totalComplaintsCount > 0
-            ? round(($resolvedWithin48hCount / $totalComplaintsCount) * 100, 1)
+            ? round(($compliantComplaintsCount / $totalComplaintsCount) * 100, 1)
             : 100.0;
 
-        $ladenComplaintPassing = ($totalComplaintsCount === 0 || ($resolvedWithin48hCount === $totalComplaintsCount && $breachingOpenCount === 0));
+        $ladenComplaintPassing = ($breachingResolvedCount === 0 && $breachingOpenCount === 0);
 
         $ladenPassingCount = ($ladenBookingPassing ? 1 : 0)
             + ($ladenChatPassing ? 1 : 0)
@@ -892,13 +1167,15 @@ class KpiHubController extends Controller
             'complaint_sla_hours' => self::LADEN_COMPLAINT_SLA_HOURS,
             'total_complaints_count' => $totalComplaintsCount,
             'resolved_within_48h_count' => $resolvedWithin48hCount,
+            'breaching_resolved_count' => $breachingResolvedCount,
+            'open_within_48h_count' => $openWithin48hCount,
             'open_complaints_count' => $openComplaintsCount,
             'breaching_open_count' => $breachingOpenCount,
             'oldest_open_age_hours' => $oldestOpenAgeHours,
             'complaint_sla_pct' => $complaintSlaPct,
             'complaint_sla_label' => $totalComplaintsCount === 0
                 ? '100% — 0 Complaints'
-                : "{$resolvedWithin48hCount} / {$totalComplaintsCount} Resolved <= 48h ({$complaintSlaPct}%)",
+                : "{$compliantComplaintsCount} / {$totalComplaintsCount} Within 48h SLA ({$complaintSlaPct}%)",
             'complaint_passing' => $ladenComplaintPassing,
             'overall_score_pct' => $ladenOverallScorePct,
             'passing_kpis_count' => $ladenPassingCount,

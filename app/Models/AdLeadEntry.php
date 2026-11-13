@@ -574,43 +574,18 @@ class AdLeadEntry extends Model
             }
         }
 
-        $leadIds = array_values(array_unique(array_filter([
-            $targetEntry?->lead_id,
-        ])));
-
-        if (Schema::hasTable('leads') && (!empty($customerIds) || !empty($phoneCandidates) || !empty($strippedDigits) || $appointmentId)) {
-            $matchedLeadIds = Lead::query()
-                ->where(function ($q) use ($customerIds, $phoneCandidates, $strippedDigits, $appointmentId) {
-                    if (!empty($customerIds)) {
-                        $q->orWhereIn('customer_id', $customerIds);
-                    }
-                    self::applyPhoneCohortClause($q, $phoneCandidates, $strippedDigits, 'or', 'phone');
-                    if ($appointmentId) {
-                        $q->orWhere('appointment_id', $appointmentId);
-                    }
-                })
-                ->pluck('id')
-                ->all();
-
-            $leadIds = array_values(array_unique(array_merge($leadIds, $matchedLeadIds)));
-        }
-
-        if (empty($customerIds) && empty($phoneCandidates) && empty($strippedDigits) && empty($leadIds) && !$targetEntry) {
+        if (empty($customerIds) && empty($phoneCandidates) && empty($strippedDigits) && !$targetEntry) {
             return null;
         }
 
-        $hasLeadIdColumn = Schema::hasColumn('ad_lead_entries', 'lead_id');
         $hasCustomerIdColumn = Schema::hasColumn('ad_lead_entries', 'customer_id');
         $hasSplitColumns = Schema::hasColumn('ad_lead_entries', 'old_airport_amount')
             && Schema::hasColumn('ad_lead_entries', 'wakrah_amount');
 
         $clientEntries = self::query()
-            ->where(function ($q) use ($customerIds, $leadIds, $phoneCandidates, $strippedDigits, $hasCustomerIdColumn, $hasLeadIdColumn, $targetEntry) {
+            ->where(function ($q) use ($customerIds, $phoneCandidates, $strippedDigits, $hasCustomerIdColumn, $targetEntry) {
                 if ($hasCustomerIdColumn && !empty($customerIds)) {
                     $q->orWhereIn('customer_id', $customerIds);
-                }
-                if ($hasLeadIdColumn && !empty($leadIds)) {
-                    $q->orWhereIn('lead_id', $leadIds);
                 }
                 self::applyPhoneCohortClause($q, $phoneCandidates, $strippedDigits, 'or', 'phone');
                 if ($targetEntry?->id) {
@@ -635,52 +610,6 @@ class AdLeadEntry extends Model
                 ['id', 'desc'],
             ])
             ->first();
-
-        if (!$coveringEntry && !$targetEntry && !empty($leadIds) && Schema::hasTable('leads')) {
-            $windowLeads = Lead::whereIn('id', $leadIds)
-                ->whereDate('created_at', '>=', $activityMonthStartStr)
-                ->whereDate('created_at', '<=', $activityDateStr)
-                ->orderByDesc('created_at')
-                ->orderByDesc('id')
-                ->get();
-
-            $paidAdLead = $windowLeads->first(fn (Lead $l) => $l->isPaidAdLead());
-            if ($paidAdLead) {
-                $leadDate = $paidAdLead->created_at ? Carbon::parse($paidAdLead->created_at)->toDateString() : $activityDateStr;
-                $resolvedCustomer = $canonicalCustomer ?: self::resolveOrCreateCanonicalCustomer(
-                    rawPhone: $paidAdLead->phone ?: ($canonicalPhones[0] ?? ($phoneCandidates[0] ?? null)),
-                    customerName: $customer?->name,
-                    hintCustomer: $paidAdLead->customer_id ? Customer::find($paidAdLead->customer_id) : null
-                );
-                if ($resolvedCustomer && !in_array($resolvedCustomer->id, $customerIds, true)) {
-                    $customerIds[] = $resolvedCustomer->id;
-                }
-                $canonicalLeadPhone = Customer::normalizePhone($paidAdLead->phone ?: ($phoneCandidates[0] ?? ''));
-                $resolvedCategory = self::resolveCategoryFromLead($paidAdLead);
-                $entryPayload = [
-                    'date' => $leadDate,
-                    'phone' => $canonicalLeadPhone !== '' ? $canonicalLeadPhone : ($paidAdLead->phone ?: ($phoneCandidates[0] ?? '')),
-                    'category' => $resolvedCategory,
-                    'ticket_amount' => 0,
-                    'branch' => null,
-                    'remarks' => $paidAdLead->customer_remarks ?: ($paidAdLead->source ? "Source: {$paidAdLead->source}" : null),
-                    'created_by' => $paidAdLead->assigned_agent_id ?? auth()->id(),
-                ];
-                if ($hasCustomerIdColumn) {
-                    $entryPayload['customer_id'] = $resolvedCustomer?->id;
-                }
-                if (Schema::hasColumn('ad_lead_entries', 'customer_name')) {
-                    $entryPayload['customer_name'] = $resolvedCustomer?->name ?: 'Ad Lead Client';
-                }
-                if ($hasLeadIdColumn) {
-                    $entryPayload['lead_id'] = $paidAdLead->id;
-                }
-                $createdEntry = self::create($entryPayload);
-                $clientEntries->push($createdEntry);
-                $coveringEntry = $createdEntry;
-                $canonicalCustomer = $canonicalCustomer ?: $resolvedCustomer;
-            }
-        }
 
         if ($clientEntries->isEmpty()) {
             return null;
@@ -819,14 +748,9 @@ class AdLeadEntry extends Model
             }
         }
 
-        $allLeadsCollection = (!empty($leadIds) && Schema::hasTable('leads'))
-            ? Lead::whereIn('id', $leadIds)->orderByDesc('id')->get()
-            : collect();
-
         foreach ($entriesDesc as $entry) {
             $entryStart = Carbon::parse($entry->date)->startOfDay();
             $entryStartStr = $entryStart->toDateString();
-            $entryMonthStartStr = $entryStart->copy()->startOfMonth()->toDateString();
             $entryEndStr = $entryStart->copy()->endOfMonth()->toDateString();
 
             $myConversions = $attributedByEntryId[$entry->id] ?? [];
@@ -923,28 +847,6 @@ class AdLeadEntry extends Model
             $normalizedEntryPhone = Customer::normalizePhone($entry->phone);
             if ($normalizedEntryPhone !== '' && $entry->phone !== $normalizedEntryPhone) {
                 $updates['phone'] = $normalizedEntryPhone;
-            }
-            if ($hasLeadIdColumn && !$entry->lead_id && $allLeadsCollection->isNotEmpty()) {
-                $preferredLead = null;
-                if (!empty($myConversions)) {
-                    $attributedApptIds = array_values(array_filter(array_column($myConversions, 'appointment_id')));
-                    if (!empty($attributedApptIds)) {
-                        $preferredLead = $allLeadsCollection->first(
-                            fn (Lead $l) => $l->appointment_id && in_array((int) $l->appointment_id, $attributedApptIds, true)
-                        );
-                    }
-                }
-                if (!$preferredLead) {
-                    $preferredLead = $allLeadsCollection->first(function (Lead $l) use ($entryMonthStartStr, $entryEndStr) {
-                        if (!$l->created_at) {
-                            return false;
-                        }
-                        $ld = Carbon::parse($l->created_at)->toDateString();
-
-                        return $ld >= $entryMonthStartStr && $ld <= $entryEndStr;
-                    });
-                }
-                $updates['lead_id'] = ($preferredLead ?: $allLeadsCollection->first())->id;
             }
 
             if (!empty($updates)) {

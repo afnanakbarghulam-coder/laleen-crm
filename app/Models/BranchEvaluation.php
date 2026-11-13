@@ -77,6 +77,8 @@ class BranchEvaluation extends Model
         'percentage',
         'grade',
         'action_plan',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [
@@ -84,6 +86,16 @@ class BranchEvaluation extends Model
         'answers' => 'array',
         'percentage' => 'decimal:2',
     ];
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
 
     /** Flat list of every question field key, e.g. ['q1', 'q2', ..., 'q27']. */
     public static function questionFields(): array

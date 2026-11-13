@@ -6,22 +6,75 @@ use App\Http\Controllers\Controller;
 use App\Models\KpiChatEvaluation;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 class ChatEvaluationController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $reports = KpiChatEvaluation::with(['agent', 'evaluator'])
+        $showAll = $request->boolean('all');
+        $rawMonth = $request->query('month');
+        $selectedMonth = (is_string($rawMonth) && preg_match('/^\d{4}-\d{2}$/', $rawMonth))
+            ? $rawMonth
+            : null;
+
+        $dateFromInput = $request->date('date_from');
+        $dateToInput = $request->date('date_to');
+
+        $dateFrom = null;
+        $dateTo = null;
+
+        if (!$showAll) {
+            if ($dateFromInput || $dateToInput) {
+                $dateFrom = $dateFromInput?->copy()->startOfDay();
+                $dateTo = $dateToInput?->copy()->endOfDay();
+            } else {
+                $effectiveMonth = $selectedMonth ?: now()->format('Y-m');
+                $selectedMonth = $effectiveMonth;
+                $monthStart = Carbon::createFromFormat('Y-m-d', $effectiveMonth . '-01')->startOfMonth()->startOfDay();
+                $monthEnd = $monthStart->copy()->endOfMonth()->endOfDay();
+                $dateFrom = $monthStart;
+                $dateTo = ($effectiveMonth === now()->format('Y-m'))
+                    ? now()->copy()->endOfDay()
+                    : $monthEnd;
+            }
+        }
+
+        $baseQuery = KpiChatEvaluation::query()
+            ->when($dateFrom, fn ($q) => $q->whereDate('evaluation_date', '>=', $dateFrom->toDateString()))
+            ->when($dateTo, fn ($q) => $q->whereDate('evaluation_date', '<=', $dateTo->toDateString()));
+
+        $gradedCount = (clone $baseQuery)->count();
+        $avgPct = $gradedCount > 0 ? round((float) (clone $baseQuery)->avg('percentage'), 1) : 0.0;
+
+        $reports = (clone $baseQuery)
+            ->with(['agent', 'evaluator'])
             ->orderByDesc('evaluation_date')
             ->orderByDesc('id')
-            ->paginate(15);
+            ->paginate(15)
+            ->appends(array_filter([
+                'month' => $selectedMonth,
+                'date_from' => $dateFromInput?->format('Y-m-d'),
+                'date_to' => $dateToInput?->format('Y-m-d'),
+                'all' => $showAll ? '1' : null,
+            ]));
 
-        return view('kpi.chat-eval.index', compact('reports'));
+        return view('kpi.chat-eval.index', [
+            'reports' => $reports,
+            'selectedMonth' => $selectedMonth,
+            'dateFrom' => $dateFrom?->format('Y-m-d'),
+            'dateTo' => $dateTo?->format('Y-m-d'),
+            'showAll' => $showAll,
+            'gradedCount' => $gradedCount,
+            'avgPct' => $avgPct,
+        ]);
     }
 
-    public function create()
+    public function create(Request $request)
     {
+        abort_unless($request->user()?->isAdmin(), 403);
+
         return view('kpi.chat-eval.create', [
             'agents' => $this->agentOptions(),
             'questions' => KpiChatEvaluation::QUESTIONS,
@@ -30,6 +83,8 @@ class ChatEvaluationController extends Controller
 
     public function store(Request $request)
     {
+        abort_unless($request->user()?->isAdmin(), 403);
+
         $validated = $request->validate($this->validationRules());
 
         $report = KpiChatEvaluation::create($this->scoredAttributes($validated) + [
@@ -44,8 +99,10 @@ class ChatEvaluationController extends Controller
         return view('kpi.chat-eval.show', compact('report'));
     }
 
-    public function edit(KpiChatEvaluation $report)
+    public function edit(Request $request, KpiChatEvaluation $report)
     {
+        abort_unless($request->user()?->isAdmin(), 403);
+
         return view('kpi.chat-eval.edit', [
             'report' => $report,
             'agents' => $this->agentOptions(),
@@ -55,6 +112,8 @@ class ChatEvaluationController extends Controller
 
     public function update(Request $request, KpiChatEvaluation $report)
     {
+        abort_unless($request->user()?->isAdmin(), 403);
+
         $validated = $request->validate($this->validationRules());
 
         $report->update($this->scoredAttributes($validated));
@@ -62,8 +121,10 @@ class ChatEvaluationController extends Controller
         return redirect()->route('kpi.chat-eval.show', $report)->with('success', 'Chat evaluation updated.');
     }
 
-    public function destroy(KpiChatEvaluation $report)
+    public function destroy(Request $request, KpiChatEvaluation $report)
     {
+        abort_unless($request->user()?->isAdmin(), 403);
+
         $report->delete();
 
         return redirect()->route('kpi.chat-eval.index')->with('success', 'Report deleted.');

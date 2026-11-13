@@ -246,7 +246,9 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('kpis')->name('kpi.')->group(function () {
         Route::middleware('module:kpis')->get('/', [KpiHubController::class, 'index'])->name('hub');
         Route::middleware('module:kpis')->get('/operations', [KpiHubController::class, 'operations'])->name('operations');
-        Route::middleware('module:kpis,edit')->post('/late-replies', [KpiHubController::class, 'updateLateReplies'])->name('late-replies.update');
+        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->post('/late-replies', [KpiHubController::class, 'updateLateReplies'])->name('late-replies.update');
+        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->delete('/late-replies/{lateReplyLog}', [KpiHubController::class, 'destroyLateReply'])->name('late-replies.destroy');
+        Route::middleware('module:kpis')->get('/late-replies/{lateReplyLog}/screenshot', [KpiHubController::class, 'lateReplyScreenshot'])->name('late-replies.screenshot');
         Route::middleware('module:kpis')->get('/marketing', [KpiHubController::class, 'marketing'])->name('marketing.index');
         Route::middleware('module:kpis')->get('/customer-service', [KpiHubController::class, 'customerService'])->name('customer-service.index');
         Route::middleware('module:kpis')->get('/salon-staff', [KpiHubController::class, 'salonStaff'])->name('salon-staff.index');
@@ -272,23 +274,23 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->delete('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'destroy'])->name('ad-leads.destroy');
 
         Route::middleware('module:kpis')->get('/agents', [AgentTargetController::class, 'index'])->name('agents.index');
-        Route::middleware('module:kpis,edit')->post('/agents', [AgentTargetController::class, 'store'])->name('agents.store');
+        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->post('/agents', [AgentTargetController::class, 'store'])->name('agents.store');
         Route::middleware('module:kpis')->get('/agents/{report}', [AgentTargetController::class, 'show'])->name('agents.show');
-        Route::middleware('module:kpis,edit')->delete('/agents/{report}', [AgentTargetController::class, 'destroy'])->name('agents.destroy');
+        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->delete('/agents/{report}', [AgentTargetController::class, 'destroy'])->name('agents.destroy');
 
-        Route::middleware('module:kpis,edit')->post('/agent-shift-logs', [AgentShiftLogController::class, 'store'])->name('agent-shift-logs.store');
-        Route::middleware('module:kpis,edit')->put('/agent-shift-logs/{agentShiftLog}', [AgentShiftLogController::class, 'update'])->name('agent-shift-logs.update');
-        Route::middleware('module:kpis,edit')->delete('/agent-shift-logs/{agentShiftLog}', [AgentShiftLogController::class, 'destroy'])->name('agent-shift-logs.destroy');
+        Route::middleware(['module:kpis', 'role:admin,owner,super_admin,agent'])->post('/agent-shift-logs', [AgentShiftLogController::class, 'store'])->name('agent-shift-logs.store');
+        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->put('/agent-shift-logs/{agentShiftLog}', [AgentShiftLogController::class, 'update'])->name('agent-shift-logs.update');
+        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->delete('/agent-shift-logs/{agentShiftLog}', [AgentShiftLogController::class, 'destroy'])->name('agent-shift-logs.destroy');
 
         Route::middleware('module:kpis')->get('/staff-sales', [StaffSalesController::class, 'index'])->name('staff-sales.index');
 
         Route::middleware('module:kpis')->get('/chat-eval', [ChatEvaluationController::class, 'index'])->name('chat-eval.index');
-        Route::middleware('module:kpis,edit')->get('/chat-eval/create', [ChatEvaluationController::class, 'create'])->name('chat-eval.create');
-        Route::middleware('module:kpis,edit')->post('/chat-eval', [ChatEvaluationController::class, 'store'])->name('chat-eval.store');
+        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->get('/chat-eval/create', [ChatEvaluationController::class, 'create'])->name('chat-eval.create');
+        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->post('/chat-eval', [ChatEvaluationController::class, 'store'])->name('chat-eval.store');
         Route::middleware('module:kpis')->get('/chat-eval/{report}', [ChatEvaluationController::class, 'show'])->name('chat-eval.show');
-        Route::middleware('module:kpis,edit')->get('/chat-eval/{report}/edit', [ChatEvaluationController::class, 'edit'])->name('chat-eval.edit');
-        Route::middleware('module:kpis,edit')->put('/chat-eval/{report}', [ChatEvaluationController::class, 'update'])->name('chat-eval.update');
-        Route::middleware('module:kpis,edit')->delete('/chat-eval/{report}', [ChatEvaluationController::class, 'destroy'])->name('chat-eval.destroy');
+        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->get('/chat-eval/{report}/edit', [ChatEvaluationController::class, 'edit'])->name('chat-eval.edit');
+        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->put('/chat-eval/{report}', [ChatEvaluationController::class, 'update'])->name('chat-eval.update');
+        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->delete('/chat-eval/{report}', [ChatEvaluationController::class, 'destroy'])->name('chat-eval.destroy');
 
         Route::middleware('module:kpis')->get('/content', [ContentKpiController::class, 'index'])->name('content.index');
         Route::middleware('module:kpis,edit')->post('/content', [ContentKpiController::class, 'store'])->name('content.store');
@@ -307,11 +309,13 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->post('/evaluations', [StaffEvaluationController::class, 'store'])->name('evaluations.store');
 
         Route::middleware('module:kpis')->get('/salon-staff/branch-evaluation', [BranchEvaluationController::class, 'index'])->name('branch-evaluation.index');
-        Route::middleware('module:kpis,edit')->get('/salon-staff/branch-evaluation/create', [BranchEvaluationController::class, 'create'])->name('branch-evaluation.create');
-        Route::middleware('module:kpis,edit')->post('/salon-staff/branch-evaluation', [BranchEvaluationController::class, 'store'])->name('branch-evaluation.store');
+        Route::middleware(['role:admin,owner,super_admin', 'module:kpis,edit'])->group(function () {
+            Route::get('/salon-staff/branch-evaluation/create', [BranchEvaluationController::class, 'create'])->name('branch-evaluation.create');
+            Route::post('/salon-staff/branch-evaluation', [BranchEvaluationController::class, 'store'])->name('branch-evaluation.store');
+            Route::get('/salon-staff/branch-evaluation/{branchEvaluation}/edit', [BranchEvaluationController::class, 'edit'])->name('branch-evaluation.edit');
+            Route::put('/salon-staff/branch-evaluation/{branchEvaluation}', [BranchEvaluationController::class, 'update'])->name('branch-evaluation.update');
+        });
         Route::middleware('module:kpis')->get('/salon-staff/branch-evaluation/{branchEvaluation}', [BranchEvaluationController::class, 'show'])->name('branch-evaluation.show');
-        Route::middleware('module:kpis,edit')->get('/salon-staff/branch-evaluation/{branchEvaluation}/edit', [BranchEvaluationController::class, 'edit'])->name('branch-evaluation.edit');
-        Route::middleware('module:kpis,edit')->put('/salon-staff/branch-evaluation/{branchEvaluation}', [BranchEvaluationController::class, 'update'])->name('branch-evaluation.update');
     });
 
     // ---- Ecommerce ----

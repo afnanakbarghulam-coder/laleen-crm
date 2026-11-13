@@ -20,8 +20,16 @@ class AgentTargetController extends Controller
             ->paginate(15)
             ->appends(['tab' => 'reports']);
 
+        $selectedMonth = $request->query('month');
         $logsFrom = $request->date('logs_from');
         $logsTo = $request->date('logs_to');
+
+        if (!$logsFrom && !$logsTo && is_string($selectedMonth) && preg_match('/^\d{4}-\d{2}$/', $selectedMonth)) {
+            $qatarNow = now(AgentShiftLog::SHIFT_TIMEZONE);
+            $monthStart = \Illuminate\Support\Carbon::createFromFormat('Y-m-d', $selectedMonth . '-01', AgentShiftLog::SHIFT_TIMEZONE)->startOfMonth();
+            $logsFrom = $monthStart->copy();
+            $logsTo = ($selectedMonth === $qatarNow->format('Y-m')) ? $qatarNow->copy() : $monthStart->copy()->endOfMonth();
+        }
 
         $shiftLogs = AgentShiftLog::with('agent')
             ->when($logsFrom, fn ($q) => $q->whereDate('date', '>=', $logsFrom))
@@ -30,13 +38,14 @@ class AgentTargetController extends Controller
             ->orderByDesc('id')
             ->paginate(20, ['*'], 'logs_page')
             ->appends(array_filter([
+                'month' => is_string($selectedMonth) ? $selectedMonth : null,
                 'logs_from' => $logsFrom?->format('Y-m-d'),
                 'logs_to' => $logsTo?->format('Y-m-d'),
                 'tab' => 'shifts',
             ]));
 
         $agents = User::where('role', 'agent')->orderBy('name')->get();
-        $agentScorecards = KpiAgentTargetReport::liveAgentScorecards();
+        $agentScorecards = KpiAgentTargetReport::liveAgentScorecards(is_string($selectedMonth) ? $selectedMonth : null);
 
         return view('kpi.agents.index', compact(
             'reports', 'shiftLogs', 'logsFrom', 'logsTo', 'agents', 'agentScorecards', 'activeTab'
@@ -45,6 +54,8 @@ class AgentTargetController extends Controller
 
     public function store(Request $request)
     {
+        abort_unless($request->user()?->isAdmin(), 403);
+
         $validated = $request->validate([
             'date_from' => 'required|date',
             'date_to' => 'required|date|after_or_equal:date_from',
@@ -64,8 +75,10 @@ class AgentTargetController extends Controller
         return view('kpi.agents.show', compact('report'));
     }
 
-    public function destroy(KpiAgentTargetReport $report)
+    public function destroy(Request $request, KpiAgentTargetReport $report)
     {
+        abort_unless($request->user()?->isAdmin(), 403);
+
         $report->delete();
 
         return redirect()->route('kpi.agents.index', ['tab' => 'reports'])->with('success', 'Report deleted.');

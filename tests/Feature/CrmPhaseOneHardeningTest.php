@@ -547,6 +547,8 @@ class CrmPhaseOneHardeningTest extends TestCase
         $this->assertSame('2026-11-11 09:00:00', $morningLog->windowStart()->format('Y-m-d H:i:s'));
         $this->assertSame('2026-11-11 17:00:00', $morningLog->windowEnd()->format('Y-m-d H:i:s'));
 
+        $stylist = Staff::create(['name' => 'Doha Stylist', 'branch' => 'old_airport', 'bookable' => true]);
+
         // Booking 1: Created at 09:30 Asia/Qatar (previously 06:30 UTC which failed < 09:00 UTC!)
         $morningAppt = Appointment::create([
             'customer_name' => 'Doha Morning Client',
@@ -554,6 +556,8 @@ class CrmPhaseOneHardeningTest extends TestCase
             'service_name' => 'Manicure',
             'appointment_datetime' => Carbon::parse('2026-11-12 11:00:00', 'Asia/Qatar'),
             'booking_date' => '2026-11-12',
+            'start_time' => '11:00:00',
+            'staff_id' => $stylist->id,
             'branch' => 'old_airport',
             'price' => 120,
             'status' => 'confirmed',
@@ -571,6 +575,8 @@ class CrmPhaseOneHardeningTest extends TestCase
             'service_name' => 'Pedicure',
             'appointment_datetime' => Carbon::parse('2026-11-12 13:00:00', 'Asia/Qatar'),
             'booking_date' => '2026-11-12',
+            'start_time' => '13:00:00',
+            'staff_id' => $stylist->id,
             'branch' => 'wakrah',
             'price' => 140,
             'status' => 'confirmed',
@@ -588,6 +594,8 @@ class CrmPhaseOneHardeningTest extends TestCase
             'service_name' => 'HydraFacial',
             'appointment_datetime' => Carbon::parse('2026-11-12 19:00:00', 'Asia/Qatar'),
             'booking_date' => '2026-11-12',
+            'start_time' => '19:00:00',
+            'staff_id' => $stylist->id,
             'branch' => 'old_airport',
             'price' => 350,
             'status' => 'confirmed',

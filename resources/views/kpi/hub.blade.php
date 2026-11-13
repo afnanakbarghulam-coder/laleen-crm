@@ -10,9 +10,15 @@
         $rhea = $scorecard['rhea'] ?? [];
         $areeba = $scorecard['areeba'] ?? [];
         $zoya = $scorecard['zoya'] ?? [];
-        $daysElapsedVal = (int) ($daysElapsed ?? ($scorecard['days_elapsed'] ?? max(1, now()->day)));
+        $daysElapsedVal = (int) ($daysElapsed ?? ($scorecard['days_elapsed'] ?? max(1, now('Asia/Qatar')->day)));
+        $daysInMonthVal = (int) ($daysInMonth ?? ($scorecard['days_in_month'] ?? 30));
+        $effectiveMonthStr = $selectedMonth ?? ($scorecard['month'] ?? now('Asia/Qatar')->format('Y-m'));
+        $isCurrentMonthView = isset($isCurrentMonth)
+            ? (bool) $isCurrentMonth
+            : (bool) ($scorecard['is_current_month'] ?? ($effectiveMonthStr === now('Asia/Qatar')->format('Y-m')));
 
-        $monthCarbon = \Illuminate\Support\Carbon::createFromFormat('Y-m-d', ($selectedMonth ?? now()->format('Y-m')) . '-01');
+        $monthCarbon = \Illuminate\Support\Carbon::createFromFormat('Y-m-d', $effectiveMonthStr . '-01');
+        $monthLabel = $selectedMonthLabel ?? $monthCarbon->format('F Y');
         $dateRangeLabel = $periodRangeLabel ?? ($scorecard['period_range_label'] ?? ($monthCarbon->copy()->startOfMonth()->format('M j') . ' – ' . now()->format('M j, Y')));
         $shortPeriodBadge = $shortPeriodBadge ?? ($scorecard['short_period_badge'] ?? ($monthCarbon->copy()->startOfMonth()->format('M j') . ' – ' . now()->format('M j')));
 
@@ -50,9 +56,13 @@
         $bkPass = !empty($laden['booking_passing']);
 
         $chatAvg = (float) ($laden['chat_eval_avg_pct'] ?? 0);
+        $chatBarPct = (float) ($laden['chat_eval_achievement_pct'] ?? min(100.0, ($chatAvg / 85.0) * 100));
         $chatPass = !empty($laden['chat_passing']);
 
         $leadConv = (float) ($laden['lead_conversion_pct'] ?? 0);
+        $leadConvBarPct = (float) ($laden['lead_conv_achievement_pct'] ?? min(100.0, ($leadConv / 30.0) * 100));
+        $bookedLeadsCnt = (int) ($laden['booked_leads_count'] ?? 0);
+        $totalLeadsCnt = (int) ($laden['total_leads_count'] ?? 0);
         $leadPass = !empty($laden['lead_conv_passing']);
         $unassignedCnt = (int) ($laden['unassigned_leads_count'] ?? 0);
         $overdueCnt = (int) ($laden['overdue_followups_count'] ?? 0);
@@ -61,20 +71,29 @@
         $cmpPass = !empty($laden['complaint_passing']);
         $openCmp = (int) ($laden['open_complaints_count'] ?? 0);
 
+        $ladenSelectedMonth = $selectedMonth ?? ($scorecard['month'] ?? now()->format('Y-m'));
+        $ladenPeriodStart = $scorecard['period_start'] ?? $monthCarbon->copy()->startOfMonth()->toDateString();
+        $ladenPeriodEnd = $scorecard['period_end'] ?? now()->toDateString();
+
         $ladenOverallPct = (float) ($laden['overall_score_pct'] ?? 0);
         $ladenPassingCount = (int) ($laden['passing_kpis_count'] ?? 0);
         $ladenTotalKpis = (int) ($laden['total_kpis_count'] ?? 4);
 
-        // Sana metrics
-        $sanaReels = (int) ($sana['published_reels'] ?? 0);
-        $sanaStories = (int) ($sana['published_stories'] ?? 0);
+        // Sana metrics (strict same-month MTD)
+        $sanaReels = (int) ($sana['mtd_published_reels'] ?? 0);
+        $sanaReelsTarget = (int) ($sana['mtd_reels_target'] ?? 0);
+        $sanaStories = (int) ($sana['mtd_published_stories'] ?? 0);
+        $sanaStoriesTarget = (int) ($sana['mtd_stories_target'] ?? 0);
         $sanaPostedTotal = (int) ($sana['mtd_items_completed'] ?? ($sanaReels + $sanaStories));
-        $sanaCumulativeTarget = (int) ($sana['cumulative_mtd_target'] ?? 11);
+        $sanaCumulativeTarget = (int) ($sana['mtd_items_target'] ?? ($sana['cumulative_mtd_target'] ?? 0));
+        $sanaInMonthWeek = $sana['in_month_week_start'] ?? ($sana['week_start_date'] ?? now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->toDateString());
         $execPct = (float) ($sana['weekly_execution_pct'] ?? 0);
-        $contentPass = isset($sana['content_passing']) ? (bool) $sana['content_passing'] : ($sanaReels >= 4 && $sanaStories >= 7);
+        $contentPass = !empty($sana['content_passing']);
 
         $lateCount = (int) ($sana['late_replies_count'] ?? 0);
-        $repliesPass = isset($sana['replies_sla_passing']) ? (bool) $sana['replies_sla_passing'] : false;
+        $lateReplyLogs = collect($sana['late_reply_logs'] ?? []);
+        $repliesPass = !empty($sana['replies_sla_passing']);
+        $isAdminUser = (bool) (auth()->user()?->isAdmin());
 
         $sanaOverallPct = (float) ($sana['overall_score_pct'] ?? 0);
         $sanaPassingCount = (int) ($sana['passing_kpis_count'] ?? 0);
@@ -84,11 +103,12 @@
         $ahanaExpectedEvals = (int) ($ahana['expected_evaluations_mtd'] ?? 0);
         $ahanaCompletedEvals = (int) ($ahana['completed_evaluations_mtd'] ?? 0);
         $ahanaMondaysElapsed = (int) ($ahana['mondays_elapsed_count'] ?? ($scorecard['mondays_elapsed_count'] ?? 0));
-        $ahanaEvalCompliancePct = (float) ($ahana['eval_compliance_pct'] ?? 100);
+        $ahanaEvalCompliancePct = (float) ($ahana['eval_compliance_pct'] ?? 0);
         $ahanaEvalPass = !empty($ahana['eval_compliance_passing']);
 
         $ahanaAuditsCount = (int) ($ahana['audits_count_mtd'] ?? 0);
         $ahanaMysteryAvgPct = (float) ($ahana['mystery_shopper_avg_pct'] ?? 0);
+        $ahanaMysteryAttainmentPct = (float) ($ahana['mystery_shopper_attainment_pct'] ?? 0);
         $ahanaMysteryPass = !empty($ahana['mystery_shopper_passing']);
 
         $ahanaOverallPct = (float) ($ahana['overall_score_pct'] ?? 0);
@@ -99,11 +119,12 @@
         $rheaExpectedEvals = (int) ($rhea['expected_evaluations_mtd'] ?? 0);
         $rheaCompletedEvals = (int) ($rhea['completed_evaluations_mtd'] ?? 0);
         $rheaMondaysElapsed = (int) ($rhea['mondays_elapsed_count'] ?? ($scorecard['mondays_elapsed_count'] ?? 0));
-        $rheaEvalCompliancePct = (float) ($rhea['eval_compliance_pct'] ?? 100);
+        $rheaEvalCompliancePct = (float) ($rhea['eval_compliance_pct'] ?? 0);
         $rheaEvalPass = !empty($rhea['eval_compliance_passing']);
 
         $rheaAuditsCount = (int) ($rhea['audits_count_mtd'] ?? 0);
         $rheaMysteryAvgPct = (float) ($rhea['mystery_shopper_avg_pct'] ?? 0);
+        $rheaMysteryAttainmentPct = (float) ($rhea['mystery_shopper_attainment_pct'] ?? 0);
         $rheaMysteryPass = !empty($rhea['mystery_shopper_passing']);
 
         $rheaOverallPct = (float) ($rhea['overall_score_pct'] ?? 0);
@@ -115,9 +136,13 @@
         $areebaTodayPct = (float) ($areeba['today_attainment_pct'] ?? 0);
         $areebaMtdBk = (int) ($areeba['mtd_bookings'] ?? 0);
         $areebaMtdTarget = (int) ($areeba['mtd_target'] ?? (13 * $daysElapsedVal));
-        $areebaFullMoTarget = (int) ($areeba['full_month_target'] ?? 390);
+        $areebaFullMoTarget = (int) ($areeba['full_month_target'] ?? (13 * $daysInMonthVal));
         $areebaMtdPct = (float) ($areeba['mtd_attainment_pct'] ?? 0);
+        $areebaDailyAvg = (float) ($areeba['daily_avg_pace'] ?? round($areebaMtdBk / max(1, $daysInMonthVal), 1));
+        $areebaDailyAvgPct = (float) ($areeba['daily_avg_pct'] ?? min(100.0, round(($areebaDailyAvg / 13) * 100, 1)));
         $areebaBkPass = !empty($areeba['booking_passing']);
+        $areebaCard2Pass = $isCurrentMonthView ? ($areebaTodayBk >= 13) : ($areebaDailyAvg >= 13.0);
+        $areebaCard2BarPct = $isCurrentMonthView ? $areebaTodayPct : $areebaDailyAvgPct;
         $areebaOverallPct = (float) ($areeba['overall_score_pct'] ?? $areebaMtdPct);
         $areebaPassingCount = (int) ($areeba['passing_kpis_count'] ?? ($areebaBkPass ? 1 : 0));
         $areebaTotalKpis = (int) ($areeba['total_kpis_count'] ?? 1);
@@ -127,9 +152,13 @@
         $zoyaTodayPct = (float) ($zoya['today_attainment_pct'] ?? 0);
         $zoyaMtdBk = (int) ($zoya['mtd_bookings'] ?? 0);
         $zoyaMtdTarget = (int) ($zoya['mtd_target'] ?? (13 * $daysElapsedVal));
-        $zoyaFullMoTarget = (int) ($zoya['full_month_target'] ?? 390);
+        $zoyaFullMoTarget = (int) ($zoya['full_month_target'] ?? (13 * $daysInMonthVal));
         $zoyaMtdPct = (float) ($zoya['mtd_attainment_pct'] ?? 0);
+        $zoyaDailyAvg = (float) ($zoya['daily_avg_pace'] ?? round($zoyaMtdBk / max(1, $daysInMonthVal), 1));
+        $zoyaDailyAvgPct = (float) ($zoya['daily_avg_pct'] ?? min(100.0, round(($zoyaDailyAvg / 13) * 100, 1)));
         $zoyaBkPass = !empty($zoya['booking_passing']);
+        $zoyaCard2Pass = $isCurrentMonthView ? ($zoyaTodayBk >= 13) : ($zoyaDailyAvg >= 13.0);
+        $zoyaCard2BarPct = $isCurrentMonthView ? $zoyaTodayPct : $zoyaDailyAvgPct;
         $zoyaOverallPct = (float) ($zoya['overall_score_pct'] ?? $zoyaMtdPct);
         $zoyaPassingCount = (int) ($zoya['passing_kpis_count'] ?? ($zoyaBkPass ? 1 : 0));
         $zoyaTotalKpis = (int) ($zoya['total_kpis_count'] ?? 1);
@@ -161,6 +190,14 @@
                 <linearGradient id="gradEmerald" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stop-color="#34d399" stop-opacity="0.38"/>
                     <stop offset="100%" stop-color="#34d399" stop-opacity="0.0"/>
+                </linearGradient>
+                <linearGradient id="gradRose" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#e5b8a8" stop-opacity="0.38"/>
+                    <stop offset="100%" stop-color="#e5b8a8" stop-opacity="0.0"/>
+                </linearGradient>
+                <linearGradient id="gradChampagne" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#d4a373" stop-opacity="0.36"/>
+                    <stop offset="100%" stop-color="#d4a373" stop-opacity="0.0"/>
                 </linearGradient>
             </defs>
         </svg>
@@ -296,6 +333,7 @@
                 <div class="luxe-card-delta">
                     <span class="{{ $bkPass ? 'hl-emerald' : 'hl-champagne' }}">{{ $mtdBk }}/{{ $mtdBkTarget }} Bookings MTD ({{ $todayBk }}/{{ $ladenDailyBkTarget }} Today)</span> &bull;
                     <span class="{{ $chatPass ? 'hl-emerald' : 'hl-rose' }}">{{ number_format($chatAvg, 1) }}% Chat QA</span> &bull;
+                    <span class="{{ $leadPass ? 'hl-emerald' : 'hl-champagne' }}">{{ number_format($leadConv, 1) }}% Lead Conv</span> &bull;
                     <span class="{{ $cmpPass ? 'hl-emerald' : 'hl-ruby' }}">{{ number_format($cmpPct, 0) }}% SLA</span>
                 </div>
 
@@ -332,8 +370,8 @@
                 </div>
 
                 <div class="luxe-card-delta">
-                    <span class="{{ $sanaReels >= 4 ? 'hl-emerald' : 'hl-rose' }}">{{ $sanaReels }}/4 Reels</span> &bull;
-                    <span class="{{ $sanaStories >= 7 ? 'hl-emerald' : 'hl-champagne' }}">{{ $sanaStories }}/7 Stories</span> &bull;
+                    <span class="{{ ($contentPass || ($sanaReelsTarget > 0 && $sanaReels >= $sanaReelsTarget)) ? 'hl-emerald' : 'hl-rose' }}">{{ $sanaReels }}/{{ $sanaReelsTarget }} Reels</span> &bull;
+                    <span class="{{ ($contentPass || ($sanaStoriesTarget > 0 && $sanaStories >= $sanaStoriesTarget)) ? 'hl-emerald' : 'hl-champagne' }}">{{ $sanaStories }}/{{ $sanaStoriesTarget }} Stories</span> &bull;
                     <span class="{{ $repliesPass ? 'hl-emerald' : 'hl-ruby' }}">{{ $lateCount }} {{ $lateCount === 1 ? 'Late Reply' : 'Late Replies' }}</span>
                 </div>
 
@@ -444,12 +482,12 @@
                 </div>
 
                 <div class="luxe-card-delta">
-                    <span class="{{ $areebaBkPass ? 'hl-emerald' : 'hl-rose' }}">{{ $areebaMtdBk }} / {{ $areebaMtdTarget }} Bookings MTD</span> ({{ $areebaTodayBk }}/13 Today &bull; {{ $areebaFullMoTarget }} Mo Target)
+                    <span class="{{ $areebaBkPass ? 'hl-emerald' : 'hl-rose' }}">{{ $areebaMtdBk }} / {{ $areebaMtdTarget }} Bookings MTD</span> ({{ $isCurrentMonthView ? ($areebaTodayBk . '/13 Today') : ($areebaDailyAvg . '/13 Daily Avg') }} &bull; {{ $areebaFullMoTarget }} Mo Target)
                 </div>
 
                 <div class="luxe-card-viz viz-bar">
                     <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $healthBarClass($areebaOverallPct) }}" style="width: {{ min(100, max(4, $areebaOverallPct)) }}%"></div>
+                        <div class="luxe-bar-fill {{ $healthBarClass($areebaOverallPct) }}" style="width: {{ min(100, max(0, $areebaOverallPct)) }}%"></div>
                     </div>
                     <div class="luxe-bar-scale">
                         <span>0%</span>
@@ -480,12 +518,12 @@
                 </div>
 
                 <div class="luxe-card-delta">
-                    <span class="{{ $zoyaBkPass ? 'hl-emerald' : 'hl-champagne' }}">{{ $zoyaMtdBk }} / {{ $zoyaMtdTarget }} Bookings MTD</span> ({{ $zoyaTodayBk }}/13 Today &bull; {{ $zoyaFullMoTarget }} Mo Target)
+                    <span class="{{ $zoyaBkPass ? 'hl-emerald' : 'hl-rose' }}">{{ $zoyaMtdBk }} / {{ $zoyaMtdTarget }} Bookings MTD</span> ({{ $isCurrentMonthView ? ($zoyaTodayBk . '/13 Today') : ($zoyaDailyAvg . '/13 Daily Avg') }} &bull; {{ $zoyaFullMoTarget }} Mo Target)
                 </div>
 
                 <div class="luxe-card-viz viz-bar">
                     <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $healthBarClass($zoyaOverallPct) }}" style="width: {{ min(100, max(4, $zoyaOverallPct)) }}%"></div>
+                        <div class="luxe-bar-fill {{ $healthBarClass($zoyaOverallPct) }}" style="width: {{ min(100, max(0, $zoyaOverallPct)) }}%"></div>
                     </div>
                     <div class="luxe-bar-scale">
                         <span>0%</span>
@@ -626,7 +664,7 @@
                             <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.content-calendar.index', ['week' => $sana['week_start_date'] ?? now()->startOfWeek()->toDateString()]) }}" class="luxe-owner-tag tag-ayan" title="Open Content Plan">AYAN &nearr;</a>
+                    <a href="{{ route('kpi.content-calendar.index', ['week' => $sanaInMonthWeek]) }}" class="luxe-owner-tag tag-ayan" title="Open Content Plan">AYAN &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Content &amp; Social SLA Oversight</div>
@@ -662,7 +700,7 @@
                             <path d="M9 14l2 2 4-4"></path>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.agents.index') }}" class="luxe-owner-tag tag-laden" title="Open Agent Targets">LADEN &nearr;</a>
+                    <a href="{{ route('kpi.agents.index', ['month' => $ladenSelectedMonth, 'logs_from' => $ladenPeriodStart, 'logs_to' => $ladenPeriodEnd]) }}" class="luxe-owner-tag tag-laden" title="Open Agent Targets">LADEN &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Daily Booking Quota</div>
@@ -695,7 +733,7 @@
                             <path d="M9 10h6M9 14h4"></path>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.chat-eval.index') }}" class="luxe-owner-tag tag-laden" title="Grade Agent Chats">LADEN &nearr;</a>
+                    <a href="{{ route('kpi.chat-eval.index', ['month' => $ladenSelectedMonth]) }}" class="luxe-owner-tag tag-laden" title="Grade Agent Chats">LADEN &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Agent Chat Quality</div>
@@ -708,20 +746,14 @@
                     Target: <span class="{{ $chatPass ? 'hl-emerald' : 'hl-ruby' }}">&ge; 85.0%</span> avg quality ({{ $laden['total_evaluations_count'] ?? 0 }} graded)
                 </div>
 
-                <div class="luxe-card-viz viz-spark">
-                    <svg viewBox="0 0 200 52" preserveAspectRatio="none" class="luxe-sparkline">
-                        <defs>
-                            <linearGradient id="gradRose" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="#e5b8a8" stop-opacity="0.38"/>
-                                <stop offset="100%" stop-color="#e5b8a8" stop-opacity="0.0"/>
-                            </linearGradient>
-                        </defs>
-                        <path d="M4,38 C40,42 68,22 104,24 C140,26 162,12 196,16 L196,50 L4,50 Z" fill="url(#gradRose)"/>
-                        <path d="M4,38 C40,42 68,22 104,24 C140,26 162,12 196,16" fill="none" stroke="#e5b8a8" stroke-width="2.2" stroke-linecap="round"/>
-                        <circle cx="68" cy="27" r="3" fill="#140c0f" stroke="#e5b8a8" stroke-width="2"/>
-                        <circle cx="136" cy="21" r="3" fill="#140c0f" stroke="#e5b8a8" stroke-width="2"/>
-                        <circle cx="196" cy="16" r="3.5" fill="#e5b8a8"/>
-                    </svg>
+                <div class="luxe-card-viz viz-bar">
+                    <div class="luxe-bar-track">
+                        <div class="luxe-bar-fill {{ $chatPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $chatBarPct)) }}%"></div>
+                    </div>
+                    <div class="luxe-bar-scale">
+                        <span>0%</span>
+                        <span>85% Target</span>
+                    </div>
                 </div>
             </article>
 
@@ -735,7 +767,7 @@
                             <polyline points="16 11 18 13 22 9"></polyline>
                         </svg>
                     </div>
-                    <a href="{{ route('leads.index') }}" class="luxe-owner-tag tag-laden" title="Open CRM Leads">LADEN &nearr;</a>
+                    <a href="{{ route('leads.index', ['start_date' => $ladenPeriodStart, 'end_date' => $ladenPeriodEnd]) }}" class="luxe-owner-tag tag-laden" title="Open CRM Leads">LADEN &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Lead Conversion Rate</div>
@@ -745,37 +777,32 @@
                 </div>
 
                 <div class="luxe-card-delta">
+                    Target: <span class="{{ $leadPass ? 'hl-emerald' : 'hl-champagne' }}">&ge; 30.0% ({{ $bookedLeadsCnt }}/{{ $totalLeadsCnt }})</span> &bull;
                     <span class="{{ $unassignedCnt > 0 ? 'hl-ruby' : 'hl-emerald' }}">{{ $unassignedCnt }} Unassigned</span> &bull;
                     <span class="{{ $overdueCnt > 0 ? 'hl-champagne' : 'hl-emerald' }}">{{ $overdueCnt }} Overdue</span>
                 </div>
 
-                <div class="luxe-card-viz viz-spark">
-                    <svg viewBox="0 0 200 52" preserveAspectRatio="none" class="luxe-sparkline">
-                        <defs>
-                            <linearGradient id="gradChampagne" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="#d4a373" stop-opacity="0.36"/>
-                                <stop offset="100%" stop-color="#d4a373" stop-opacity="0.0"/>
-                            </linearGradient>
-                        </defs>
-                        <path d="M4,40 C38,30 74,34 110,20 C142,10 168,24 196,12 L196,50 L4,50 Z" fill="url(#gradChampagne)"/>
-                        <path d="M4,40 C38,30 74,34 110,20 C142,10 168,24 196,12" fill="none" stroke="#d4a373" stroke-width="2.2" stroke-linecap="round"/>
-                        <circle cx="52" cy="33" r="3" fill="#140c0f" stroke="#d4a373" stroke-width="2"/>
-                        <circle cx="110" cy="20" r="3" fill="#140c0f" stroke="#d4a373" stroke-width="2"/>
-                        <circle cx="196" cy="12" r="3.5" fill="#d4a373"/>
-                    </svg>
+                <div class="luxe-card-viz viz-bar">
+                    <div class="luxe-bar-track">
+                        <div class="luxe-bar-fill {{ $leadPass ? 'fill-emerald' : 'fill-champagne' }}" style="width: {{ min(100, max(4, $leadConvBarPct)) }}%"></div>
+                    </div>
+                    <div class="luxe-bar-scale">
+                        <span>0%</span>
+                        <span>30% Target</span>
+                    </div>
                 </div>
             </article>
 
             {{-- LADEN CARD 4: Complaint Resolution SLA --}}
             <article class="luxe-kpi-card is-hidden" data-owner="laden">
                 <div class="luxe-card-top">
-                    <div class="luxe-icon-orb orb-emerald">
+                    <div class="luxe-icon-orb {{ $cmpPass ? 'orb-emerald' : 'orb-ruby' }}">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                             <path d="M9 12l2 2 4-4"></path>
                         </svg>
                     </div>
-                    <a href="{{ route('staffs.index', ['tab' => 'complaints']) }}" class="luxe-owner-tag tag-laden" title="Resolve Complaints">LADEN &nearr;</a>
+                    <a href="{{ route('staffs.index', ['tab' => 'complaints', 'complaints_from' => $ladenPeriodStart, 'complaints_to' => $ladenPeriodEnd]) }}" class="luxe-owner-tag tag-laden" title="Resolve Complaints">LADEN &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Complaint Resolution SLA</div>
@@ -785,21 +812,21 @@
                 </div>
 
                 <div class="luxe-card-delta">
-                    <span class="{{ $openCmp === 0 ? 'hl-emerald' : 'hl-ruby' }}">{{ $openCmp }} Open</span> &bull; &le; 48h resolution
+                    <span class="{{ $openCmp === 0 ? 'hl-emerald' : ($cmpPass ? 'hl-champagne' : 'hl-ruby') }}">{{ $openCmp }} Open</span> &bull; &le; 48h resolution
                 </div>
 
-                <div class="luxe-card-viz viz-spark">
-                    <svg viewBox="0 0 200 52" preserveAspectRatio="none" class="luxe-sparkline">
-                        <path d="M4,34 C44,28 84,16 124,18 C156,19 174,10 196,10 L196,50 L4,50 Z" fill="url(#gradEmerald)"/>
-                        <path d="M4,34 C44,28 84,16 124,18 C156,19 174,10 196,10" fill="none" stroke="#34d399" stroke-width="2.2" stroke-linecap="round"/>
-                        <circle cx="84" cy="18" r="3" fill="#140c0f" stroke="#34d399" stroke-width="2"/>
-                        <circle cx="152" cy="16" r="3" fill="#140c0f" stroke="#34d399" stroke-width="2"/>
-                        <circle cx="196" cy="10" r="3.5" fill="#34d399"/>
-                    </svg>
+                <div class="luxe-card-viz viz-bar">
+                    <div class="luxe-bar-track">
+                        <div class="luxe-bar-fill {{ $cmpPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $cmpPct)) }}%"></div>
+                    </div>
+                    <div class="luxe-bar-scale">
+                        <span>0%</span>
+                        <span>100% SLA</span>
+                    </div>
                 </div>
             </article>
 
-            {{-- SANA CARD 1: Weekly Content Plan --}}
+            {{-- SANA CARD 1: Organic Content Plan (MTD) --}}
             <article class="luxe-kpi-card is-hidden" data-owner="sana">
                 <div class="luxe-card-top">
                     <div class="luxe-icon-orb orb-champagne">
@@ -809,18 +836,18 @@
                             <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.content-calendar.index', ['week' => $sana['week_start_date'] ?? now()->startOfWeek()->toDateString()]) }}" class="luxe-owner-tag tag-sana" title="Open Weekly Content Schedule">SANA &nearr;</a>
+                    <a href="{{ route('kpi.content-calendar.index', ['week' => $sanaInMonthWeek]) }}" class="luxe-owner-tag tag-sana" title="Open Weekly Content Schedule">SANA &nearr;</a>
                 </div>
 
-                <div class="luxe-card-label">Weekly Content Plan</div>
+                <div class="luxe-card-label">Organic Content Plan (MTD)</div>
 
                 <div class="luxe-card-hero">
                     {{ $sanaPostedTotal }} <span class="luxe-unit">/ {{ $sanaCumulativeTarget }}</span>
                 </div>
 
                 <div class="luxe-card-delta">
-                    <span class="{{ $sanaReels >= 4 ? 'hl-emerald' : 'hl-rose' }}">{{ $sanaReels }}/4 Reels</span> &bull;
-                    <span class="{{ $sanaStories >= 7 ? 'hl-emerald' : 'hl-champagne' }}">{{ $sanaStories }}/7 Stories</span> &bull; {{ $shortPeriodBadge }}
+                    <span class="{{ ($contentPass || ($sanaReelsTarget > 0 && $sanaReels >= $sanaReelsTarget)) ? 'hl-emerald' : 'hl-rose' }}">{{ $sanaReels }}/{{ $sanaReelsTarget }} Reels</span> &bull;
+                    <span class="{{ ($contentPass || ($sanaStoriesTarget > 0 && $sanaStories >= $sanaStoriesTarget)) ? 'hl-emerald' : 'hl-champagne' }}">{{ $sanaStories }}/{{ $sanaStoriesTarget }} Stories</span> &bull; {{ $shortPeriodBadge }}
                 </div>
 
                 <div class="luxe-card-viz viz-bar">
@@ -843,24 +870,16 @@
                         </svg>
                     </div>
 
-                    <div class="d-flex align-items-center gap-1">
-                        <form method="POST" action="{{ route('kpi.late-replies.update') }}" class="d-inline">
-                            @csrf
-                            <input type="hidden" name="action" value="increment">
-                            <input type="hidden" name="week_start_date" value="{{ $sana['week_start_date'] ?? now()->startOfWeek()->toDateString() }}">
-                            <input type="hidden" name="month" value="{{ $selectedMonth ?? now()->format('Y-m') }}">
-                            <button type="submit" class="luxe-micro-btn" title="Log +1 Late Reply">+</button>
-                        </form>
-                        @if($lateCount > 0)
-                            <form method="POST" action="{{ route('kpi.late-replies.update') }}" class="d-inline">
-                                @csrf
-                                <input type="hidden" name="action" value="decrement">
-                                <input type="hidden" name="week_start_date" value="{{ $sana['week_start_date'] ?? now()->startOfWeek()->toDateString() }}">
-                                <input type="hidden" name="month" value="{{ $selectedMonth ?? now()->format('Y-m') }}">
-                                <button type="submit" class="luxe-micro-btn" title="Clear 1 Late Reply">&minus;</button>
-                            </form>
+                    <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
+                        @if($isAdminUser)
+                            <button type="button" class="luxe-micro-btn" data-bs-toggle="modal" data-bs-target="#logLateReplyModal" title="Log Late Reply Breach">+</button>
                         @endif
-                        <a href="{{ route('kpi.content-calendar.index') }}" class="luxe-owner-tag tag-sana" title="Open Weekly Content Schedule">SANA &nearr;</a>
+                        @if($lateCount > 0)
+                            <button type="button" class="luxe-proof-btn" data-bs-toggle="modal" data-bs-target="#viewLateRepliesModal" title="View Late Reply Proof">
+                                View Proof ({{ $lateCount }})
+                            </button>
+                        @endif
+                        <a href="{{ route('kpi.content-calendar.index', ['week' => $sanaInMonthWeek]) }}" class="luxe-owner-tag tag-sana" title="Open Weekly Content Schedule">SANA &nearr;</a>
                     </div>
                 </div>
 
@@ -874,28 +893,14 @@
                     Target: <span class="{{ $repliesPass ? 'hl-emerald' : 'hl-ruby' }}">0 late replies</span> &bull; Syncs to Ayan
                 </div>
 
-                <div class="luxe-card-viz viz-spark">
-                    <svg viewBox="0 0 200 52" preserveAspectRatio="none" class="luxe-sparkline">
-                        <defs>
-                            <linearGradient id="gradRuby" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="#fb7185" stop-opacity="0.38"/>
-                                <stop offset="100%" stop-color="#fb7185" stop-opacity="0.0"/>
-                            </linearGradient>
-                        </defs>
-                        @if($repliesPass)
-                            <path d="M4,36 C42,30 82,22 122,20 C158,18 176,12 196,12 L196,50 L4,50 Z" fill="url(#gradEmerald)"/>
-                            <path d="M4,36 C42,30 82,22 122,20 C158,18 176,12 196,12" fill="none" stroke="#34d399" stroke-width="2.2" stroke-linecap="round"/>
-                            <circle cx="82" cy="23" r="3" fill="#140c0f" stroke="#34d399" stroke-width="2"/>
-                            <circle cx="148" cy="18" r="3" fill="#140c0f" stroke="#34d399" stroke-width="2"/>
-                            <circle cx="196" cy="12" r="3.5" fill="#34d399"/>
-                        @else
-                            <path d="M4,20 C42,22 82,30 122,36 C158,40 176,42 196,44 L196,50 L4,50 Z" fill="url(#gradRuby)"/>
-                            <path d="M4,20 C42,22 82,30 122,36 C158,40 176,42 196,44" fill="none" stroke="#fb7185" stroke-width="2.2" stroke-linecap="round"/>
-                            <circle cx="82" cy="29" r="3" fill="#140c0f" stroke="#fb7185" stroke-width="2"/>
-                            <circle cx="148" cy="39" r="3" fill="#140c0f" stroke="#fb7185" stroke-width="2"/>
-                            <circle cx="196" cy="44" r="3.5" fill="#fb7185"/>
-                        @endif
-                    </svg>
+                <div class="luxe-card-viz viz-bar">
+                    <div class="luxe-bar-track">
+                        <div class="luxe-bar-fill {{ $repliesPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ $repliesPass ? 100 : 4 }}%"></div>
+                    </div>
+                    <div class="luxe-bar-scale">
+                        <span>0%</span>
+                        <span>100% SLA</span>
+                    </div>
                 </div>
             </article>
 
@@ -907,7 +912,7 @@
                             <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.evaluations.index', ['branch' => 'old_airport']) }}" class="luxe-owner-tag tag-ahana" title="Open Salon Staff Evaluations">AHANA &nearr;</a>
+                    <a href="{{ route('kpi.evaluations.index', ['branch' => 'old_airport', 'month' => $selectedMonth]) }}" class="luxe-owner-tag tag-ahana" title="Open Salon Staff Evaluations">AHANA &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Monday Staff Evaluation Compliance</div>
@@ -917,7 +922,7 @@
                 </div>
 
                 <div class="luxe-card-delta">
-                    <span class="{{ $ahanaEvalPass ? 'hl-emerald' : 'hl-rose' }}">{{ $ahanaCompletedEvals }}/{{ $ahanaExpectedEvals }} Stylists Evaluated</span> ({{ $ahanaMondaysElapsed }} Mondays MTD &bull; Target: 100%)
+                    <span class="{{ $ahanaEvalPass ? 'hl-emerald' : 'hl-rose' }}">{{ $ahanaCompletedEvals }}/{{ $ahanaExpectedEvals }} Evaluated</span> &bull; {{ $ahanaMondaysElapsed }} {{ \Illuminate\Support\Str::plural('Mon', $ahanaMondaysElapsed) }} MTD (100% Target)
                 </div>
 
                 <div class="luxe-card-viz viz-bar">
@@ -934,14 +939,14 @@
             {{-- AHANA CARD 2: Branch Mystery Shopper Score --}}
             <article class="luxe-kpi-card is-hidden" data-owner="ahana">
                 <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $ahanaMysteryPass ? 'orb-emerald' : 'orb-champagne' }}">
+                    <div class="luxe-icon-orb {{ $ahanaMysteryPass ? 'orb-emerald' : 'orb-rose' }}">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
                             <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
                             <path d="M9 14l2 2 4-4"></path>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.branch-evaluation.index', ['branch' => 'old_airport']) }}" class="luxe-owner-tag tag-ahana" title="Open Old Airport Branch Evaluations">AHANA &nearr;</a>
+                    <a href="{{ route('kpi.branch-evaluation.index', ['branch' => 'old_airport', 'month' => $selectedMonth]) }}" class="luxe-owner-tag tag-ahana" title="Open Old Airport Branch Evaluations">AHANA &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Branch Mystery Shopper Score</div>
@@ -954,22 +959,14 @@
                     Target: <span class="{{ $ahanaMysteryPass ? 'hl-emerald' : 'hl-ruby' }}">&ge; 85.0% avg</span> ({{ $ahanaAuditsCount }} Evaluations MTD)
                 </div>
 
-                <div class="luxe-card-viz viz-spark">
-                    <svg viewBox="0 0 200 52" preserveAspectRatio="none" class="luxe-sparkline">
-                        @if($ahanaMysteryPass)
-                            <path d="M4,36 C42,30 82,22 122,20 C158,18 176,12 196,12 L196,50 L4,50 Z" fill="url(#gradEmerald)"/>
-                            <path d="M4,36 C42,30 82,22 122,20 C158,18 176,12 196,12" fill="none" stroke="#34d399" stroke-width="2.2" stroke-linecap="round"/>
-                            <circle cx="82" cy="23" r="3" fill="#140c0f" stroke="#34d399" stroke-width="2"/>
-                            <circle cx="148" cy="18" r="3" fill="#140c0f" stroke="#34d399" stroke-width="2"/>
-                            <circle cx="196" cy="12" r="3.5" fill="#34d399"/>
-                        @else
-                            <path d="M4,38 C40,42 68,22 104,24 C140,26 162,16 196,20 L196,50 L4,50 Z" fill="url(#gradRose)"/>
-                            <path d="M4,38 C40,42 68,22 104,24 C140,26 162,16 196,20" fill="none" stroke="#e5b8a8" stroke-width="2.2" stroke-linecap="round"/>
-                            <circle cx="68" cy="27" r="3" fill="#140c0f" stroke="#e5b8a8" stroke-width="2"/>
-                            <circle cx="136" cy="21" r="3" fill="#140c0f" stroke="#e5b8a8" stroke-width="2"/>
-                            <circle cx="196" cy="20" r="3.5" fill="#e5b8a8"/>
-                        @endif
-                    </svg>
+                <div class="luxe-card-viz viz-bar">
+                    <div class="luxe-bar-track">
+                        <div class="luxe-bar-fill {{ $ahanaMysteryPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $ahanaMysteryAttainmentPct)) }}%"></div>
+                    </div>
+                    <div class="luxe-bar-scale">
+                        <span>0%</span>
+                        <span>85% Target</span>
+                    </div>
                 </div>
             </article>
 
@@ -981,7 +978,7 @@
                             <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.evaluations.index', ['branch' => 'wakrah']) }}" class="luxe-owner-tag tag-rhea" title="Open Salon Staff Evaluations">RHEA &nearr;</a>
+                    <a href="{{ route('kpi.evaluations.index', ['branch' => 'wakrah', 'month' => $selectedMonth]) }}" class="luxe-owner-tag tag-rhea" title="Open Salon Staff Evaluations">RHEA &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Monday Staff Evaluation Compliance</div>
@@ -991,7 +988,7 @@
                 </div>
 
                 <div class="luxe-card-delta">
-                    <span class="{{ $rheaEvalPass ? 'hl-emerald' : 'hl-rose' }}">{{ $rheaCompletedEvals }}/{{ $rheaExpectedEvals }} Stylists Evaluated</span> ({{ $rheaMondaysElapsed }} Mondays MTD &bull; Target: 100%)
+                    <span class="{{ $rheaEvalPass ? 'hl-emerald' : 'hl-rose' }}">{{ $rheaCompletedEvals }}/{{ $rheaExpectedEvals }} Evaluated</span> &bull; {{ $rheaMondaysElapsed }} {{ \Illuminate\Support\Str::plural('Mon', $rheaMondaysElapsed) }} MTD (100% Target)
                 </div>
 
                 <div class="luxe-card-viz viz-bar">
@@ -1008,14 +1005,14 @@
             {{-- RHEA CARD 2: Branch Mystery Shopper Score --}}
             <article class="luxe-kpi-card is-hidden" data-owner="rhea">
                 <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $rheaMysteryPass ? 'orb-emerald' : 'orb-champagne' }}">
+                    <div class="luxe-icon-orb {{ $rheaMysteryPass ? 'orb-emerald' : 'orb-rose' }}">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
                             <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
                             <path d="M9 14l2 2 4-4"></path>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.branch-evaluation.index', ['branch' => 'wakrah']) }}" class="luxe-owner-tag tag-rhea" title="Open Wakrah Branch Evaluations">RHEA &nearr;</a>
+                    <a href="{{ route('kpi.branch-evaluation.index', ['branch' => 'wakrah', 'month' => $selectedMonth]) }}" class="luxe-owner-tag tag-rhea" title="Open Wakrah Branch Evaluations">RHEA &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">Branch Mystery Shopper Score</div>
@@ -1028,22 +1025,14 @@
                     Target: <span class="{{ $rheaMysteryPass ? 'hl-emerald' : 'hl-ruby' }}">&ge; 85.0% avg</span> ({{ $rheaAuditsCount }} Evaluations MTD)
                 </div>
 
-                <div class="luxe-card-viz viz-spark">
-                    <svg viewBox="0 0 200 52" preserveAspectRatio="none" class="luxe-sparkline">
-                        @if($rheaMysteryPass)
-                            <path d="M4,36 C42,30 82,22 122,20 C158,18 176,12 196,12 L196,50 L4,50 Z" fill="url(#gradEmerald)"/>
-                            <path d="M4,36 C42,30 82,22 122,20 C158,18 176,12 196,12" fill="none" stroke="#34d399" stroke-width="2.2" stroke-linecap="round"/>
-                            <circle cx="82" cy="23" r="3" fill="#140c0f" stroke="#34d399" stroke-width="2"/>
-                            <circle cx="148" cy="18" r="3" fill="#140c0f" stroke="#34d399" stroke-width="2"/>
-                            <circle cx="196" cy="12" r="3.5" fill="#34d399"/>
-                        @else
-                            <path d="M4,40 C38,30 74,34 110,20 C142,10 168,24 196,16 L196,50 L4,50 Z" fill="url(#gradChampagne)"/>
-                            <path d="M4,40 C38,30 74,34 110,20 C142,10 168,24 196,16" fill="none" stroke="#d4a373" stroke-width="2.2" stroke-linecap="round"/>
-                            <circle cx="52" cy="33" r="3" fill="#140c0f" stroke="#d4a373" stroke-width="2"/>
-                            <circle cx="110" cy="20" r="3" fill="#140c0f" stroke="#d4a373" stroke-width="2"/>
-                            <circle cx="196" cy="16" r="3.5" fill="#d4a373"/>
-                        @endif
-                    </svg>
+                <div class="luxe-card-viz viz-bar">
+                    <div class="luxe-bar-track">
+                        <div class="luxe-bar-fill {{ $rheaMysteryPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $rheaMysteryAttainmentPct)) }}%"></div>
+                    </div>
+                    <div class="luxe-bar-scale">
+                        <span>0%</span>
+                        <span>85% Target</span>
+                    </div>
                 </div>
             </article>
 
@@ -1058,7 +1047,7 @@
                             <path d="M9 14l2 2 4-4"></path>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.agents.index') }}" class="luxe-owner-tag tag-areeba" title="Open Agent Booking Targets">AREEBA &nearr;</a>
+                    <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-areeba" title="Open Agent Booking Targets">AREEBA &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">MTD Booking Quota</div>
@@ -1073,7 +1062,7 @@
 
                 <div class="luxe-card-viz viz-bar">
                     <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $areebaBkPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $areebaMtdPct)) }}%"></div>
+                        <div class="luxe-bar-fill {{ $areebaBkPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(0, $areebaMtdPct)) }}%"></div>
                     </div>
                     <div class="luxe-bar-scale">
                         <span>0%</span>
@@ -1082,31 +1071,41 @@
                 </div>
             </article>
 
-            {{-- AREEBA CARD 2: Today's Daily Booking Target (13 / Day) --}}
+            {{-- AREEBA CARD 2: Today's Daily Booking Target / Historical Daily Avg Pace --}}
             <article class="luxe-kpi-card is-hidden" data-owner="areeba">
                 <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $areebaTodayBk >= 13 ? 'orb-emerald' : 'orb-champagne' }}">
+                    <div class="luxe-icon-orb {{ $areebaCard2Pass ? 'orb-emerald' : 'orb-rose' }}">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
                             <polyline points="12 6 12 12 16 14"></polyline>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.agents.index') }}" class="luxe-owner-tag tag-areeba" title="Open Agent Shift Logs">AREEBA &nearr;</a>
+                    <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-areeba" title="Open Agent Shift Logs">AREEBA &nearr;</a>
                 </div>
 
-                <div class="luxe-card-label">Today's Daily Booking Target</div>
+                <div class="luxe-card-label">
+                    @if($isCurrentMonthView)
+                        Today's Daily Booking Target
+                    @else
+                        Daily Avg Pace
+                    @endif
+                </div>
 
                 <div class="luxe-card-hero">
-                    {{ $areebaTodayBk }} <span class="luxe-unit">/ 13</span>
+                    {{ $isCurrentMonthView ? $areebaTodayBk : $areebaDailyAvg }} <span class="luxe-unit">/ 13</span>
                 </div>
 
                 <div class="luxe-card-delta">
-                    <span class="{{ $areebaTodayBk >= 13 ? 'hl-emerald' : 'hl-champagne' }}">{{ number_format($areebaTodayPct, 1) }}%</span> Today's Target Conversion ({{ max(0, 13 - $areebaTodayBk) }} more needed today)
+                    @if($isCurrentMonthView)
+                        <span class="{{ $areebaCard2Pass ? 'hl-emerald' : 'hl-rose' }}">{{ number_format($areebaTodayPct, 1) }}%</span> of Daily Quota ({{ $areebaTodayBk >= 13 ? 'Daily Quota Met!' : (max(0, 13 - $areebaTodayBk) . ' left today') }})
+                    @else
+                        <span class="{{ $areebaCard2Pass ? 'hl-emerald' : 'hl-rose' }}">{{ $areebaDailyAvg }} / 13 per day</span> across {{ $monthLabel }}
+                    @endif
                 </div>
 
                 <div class="luxe-card-viz viz-bar">
                     <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $areebaTodayBk >= 13 ? 'fill-emerald' : 'fill-champagne' }}" style="width: {{ min(100, max(4, $areebaTodayPct)) }}%"></div>
+                        <div class="luxe-bar-fill {{ $areebaCard2Pass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(0, $areebaCard2BarPct)) }}%"></div>
                     </div>
                     <div class="luxe-bar-scale">
                         <span>0%</span>
@@ -1118,7 +1117,7 @@
             {{-- ZOYA CARD 1: MTD Booking Quota (01 – Current Day) --}}
             <article class="luxe-kpi-card is-hidden" data-owner="zoya">
                 <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $zoyaBkPass ? 'orb-emerald' : 'orb-champagne' }}">
+                    <div class="luxe-icon-orb {{ $zoyaBkPass ? 'orb-emerald' : 'orb-rose' }}">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                             <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -1126,7 +1125,7 @@
                             <path d="M9 14l2 2 4-4"></path>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.agents.index') }}" class="luxe-owner-tag tag-zoya" title="Open Agent Booking Targets">ZOYA &nearr;</a>
+                    <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-zoya" title="Open Agent Booking Targets">ZOYA &nearr;</a>
                 </div>
 
                 <div class="luxe-card-label">MTD Booking Quota</div>
@@ -1136,12 +1135,12 @@
                 </div>
 
                 <div class="luxe-card-delta">
-                    <span class="{{ $zoyaBkPass ? 'hl-emerald' : 'hl-champagne' }}">{{ number_format($zoyaMtdPct, 1) }}%</span> of MTD Target (13/day &times; {{ $daysElapsedVal }} days &bull; {{ $zoyaFullMoTarget }} Full Mo)
+                    <span class="{{ $zoyaBkPass ? 'hl-emerald' : 'hl-rose' }}">{{ number_format($zoyaMtdPct, 1) }}%</span> of MTD Target (13/day &times; {{ $daysElapsedVal }} days &bull; {{ $zoyaFullMoTarget }} Full Mo)
                 </div>
 
                 <div class="luxe-card-viz viz-bar">
                     <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $zoyaBkPass ? 'fill-emerald' : 'fill-champagne' }}" style="width: {{ min(100, max(4, $zoyaMtdPct)) }}%"></div>
+                        <div class="luxe-bar-fill {{ $zoyaBkPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(0, $zoyaMtdPct)) }}%"></div>
                     </div>
                     <div class="luxe-bar-scale">
                         <span>0%</span>
@@ -1150,31 +1149,41 @@
                 </div>
             </article>
 
-            {{-- ZOYA CARD 2: Today's Daily Booking Target (13 / Day) --}}
+            {{-- ZOYA CARD 2: Today's Daily Booking Target / Historical Daily Avg Pace --}}
             <article class="luxe-kpi-card is-hidden" data-owner="zoya">
                 <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $zoyaTodayBk >= 13 ? 'orb-emerald' : 'orb-rose' }}">
+                    <div class="luxe-icon-orb {{ $zoyaCard2Pass ? 'orb-emerald' : 'orb-rose' }}">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
                             <polyline points="12 6 12 12 16 14"></polyline>
                         </svg>
                     </div>
-                    <a href="{{ route('kpi.agents.index') }}" class="luxe-owner-tag tag-zoya" title="Open Agent Shift Logs">ZOYA &nearr;</a>
+                    <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-zoya" title="Open Agent Shift Logs">ZOYA &nearr;</a>
                 </div>
 
-                <div class="luxe-card-label">Today's Daily Booking Target</div>
+                <div class="luxe-card-label">
+                    @if($isCurrentMonthView)
+                        Today's Daily Booking Target
+                    @else
+                        Daily Avg Pace
+                    @endif
+                </div>
 
                 <div class="luxe-card-hero">
-                    {{ $zoyaTodayBk }} <span class="luxe-unit">/ 13</span>
+                    {{ $isCurrentMonthView ? $zoyaTodayBk : $zoyaDailyAvg }} <span class="luxe-unit">/ 13</span>
                 </div>
 
                 <div class="luxe-card-delta">
-                    <span class="{{ $zoyaTodayBk >= 13 ? 'hl-emerald' : 'hl-rose' }}">{{ number_format($zoyaTodayPct, 1) }}%</span> Today's Target Conversion ({{ max(0, 13 - $zoyaTodayBk) }} more needed today)
+                    @if($isCurrentMonthView)
+                        <span class="{{ $zoyaCard2Pass ? 'hl-emerald' : 'hl-rose' }}">{{ number_format($zoyaTodayPct, 1) }}%</span> of Daily Quota ({{ $zoyaTodayBk >= 13 ? 'Daily Quota Met!' : (max(0, 13 - $zoyaTodayBk) . ' left today') }})
+                    @else
+                        <span class="{{ $zoyaCard2Pass ? 'hl-emerald' : 'hl-rose' }}">{{ $zoyaDailyAvg }} / 13 per day</span> across {{ $monthLabel }}
+                    @endif
                 </div>
 
                 <div class="luxe-card-viz viz-bar">
                     <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $zoyaTodayBk >= 13 ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $zoyaTodayPct)) }}%"></div>
+                        <div class="luxe-bar-fill {{ $zoyaCard2Pass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(0, $zoyaCard2BarPct)) }}%"></div>
                     </div>
                     <div class="luxe-bar-scale">
                         <span>0%</span>
@@ -1184,6 +1193,146 @@
             </article>
         </div>
     </div>
+
+    {{-- ADMIN-ONLY MODAL: Log Late Reply Breach --}}
+    @if($isAdminUser)
+        <div class="modal fade" id="logLateReplyModal" tabindex="-1" aria-labelledby="logLateReplyModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content luxe-modal-content">
+                    <form method="POST" action="{{ route('kpi.late-replies.update') }}" enctype="multipart/form-data">
+                        @csrf
+                        <input type="hidden" name="month" value="{{ $selectedMonth ?? now('Asia/Qatar')->format('Y-m') }}">
+
+                        <div class="modal-header luxe-modal-header">
+                            <h5 class="modal-title luxe-modal-title" id="logLateReplyModalLabel">Log Late Reply Breach</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+
+                        <div class="modal-body luxe-modal-body">
+                            <p class="luxe-modal-sub mb-3">
+                                Attach timestamped screenshot proof of the delayed social media reply. Logging a breach sets Sana's Social Reply SLA and Ayan's SLA Oversight to 0% for that month until cleared.
+                            </p>
+
+                            <div class="mb-3">
+                                <label for="lateReplyIncidentAt" class="form-label luxe-form-label">Incident Date &amp; Time (Doha) <span class="text-danger">*</span></label>
+                                <input
+                                    type="datetime-local"
+                                    id="lateReplyIncidentAt"
+                                    name="incident_at"
+                                    class="form-control luxe-form-input"
+                                    value="{{ old('incident_at', now('Asia/Qatar')->format('Y-m-d\TH:i')) }}"
+                                    required
+                                >
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="lateReplyScreenshot" class="form-label luxe-form-label">Screenshot Upload <span class="text-danger">*</span></label>
+                                <input
+                                    type="file"
+                                    id="lateReplyScreenshot"
+                                    name="screenshot"
+                                    class="form-control luxe-form-input"
+                                    accept="image/*"
+                                    required
+                                >
+                                <div class="luxe-form-hint mt-1">Accepted: JPG, PNG, WEBP up to 5 MB.</div>
+                            </div>
+
+                            <div class="mb-0">
+                                <label for="lateReplyNotes" class="form-label luxe-form-label">Short Note (Optional)</label>
+                                <textarea
+                                    id="lateReplyNotes"
+                                    name="notes"
+                                    rows="2"
+                                    maxlength="500"
+                                    class="form-control luxe-form-input"
+                                    placeholder="e.g. Instagram DM @client — 2h 40m reply delay"
+                                >{{ old('notes') }}</textarea>
+                            </div>
+                        </div>
+
+                        <div class="modal-footer luxe-modal-footer">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-sm luxe-submit-btn">Save Breach Proof</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- READ-ONLY PROOF MODAL (Visible to all KPI viewers; Admin-only Delete per row) --}}
+    @if($lateCount > 0)
+        <div class="modal fade" id="viewLateRepliesModal" tabindex="-1" aria-labelledby="viewLateRepliesModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content luxe-modal-content">
+                    <div class="modal-header luxe-modal-header">
+                        <h5 class="modal-title luxe-modal-title" id="viewLateRepliesModalLabel">
+                            Late Reply SLA Breaches ({{ $lateCount }}) &mdash; {{ $selectedMonthLabel ?? ($selectedMonth ?? '') }}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+
+                    <div class="modal-body luxe-modal-body">
+                        @if($lateReplyLogs->isEmpty())
+                            <div class="luxe-proof-card">
+                                <div class="luxe-proof-meta">
+                                    {{ $lateCount }} legacy late {{ $lateCount === 1 ? 'reply' : 'replies' }} recorded on weekly plan rows for this period.
+                                </div>
+                            </div>
+                        @else
+                            <div class="d-flex flex-column gap-3">
+                                @foreach($lateReplyLogs as $breachLog)
+                                    @php
+                                        $proofUrl = $breachLog->screenshotUrl();
+                                        $incidentFormatted = $breachLog->incident_at
+                                            ? $breachLog->incident_at->copy()->setTimezone('Asia/Qatar')->format('d M Y, g:i A')
+                                            : '—';
+                                    @endphp
+                                    <div class="luxe-proof-card">
+                                        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                                            <div>
+                                                <div class="luxe-proof-time">{{ $incidentFormatted }} <span class="luxe-proof-tz">Asia/Qatar</span></div>
+                                                <div class="luxe-proof-meta">
+                                                    Logged by {{ $breachLog->logger?->name ?? 'Admin' }}
+                                                </div>
+                                                @if(filled($breachLog->notes))
+                                                    <div class="luxe-proof-note mt-1">{{ $breachLog->notes }}</div>
+                                                @endif
+                                            </div>
+
+                                            @if($isAdminUser)
+                                                <form method="POST" action="{{ route('kpi.late-replies.destroy', $breachLog) }}" onsubmit="return confirm('Delete this late reply breach record and its screenshot?')">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <input type="hidden" name="month" value="{{ $selectedMonth ?? now('Asia/Qatar')->format('Y-m') }}">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger luxe-trash-btn" title="Delete Breach">
+                                                        <i class="bx bx-trash"></i> Delete
+                                                    </button>
+                                                </form>
+                                            @endif
+                                        </div>
+
+                                        @if($proofUrl)
+                                            <div class="luxe-proof-img-wrap mt-2">
+                                                <a href="{{ $proofUrl }}" target="_blank" rel="noopener">
+                                                    <img src="{{ $proofUrl }}" alt="Late reply proof screenshot" class="luxe-proof-img">
+                                                </a>
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+
+                    <div class="modal-footer luxe-modal-footer">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     <style>
         /* =====================================================================
@@ -1610,7 +1759,8 @@
             box-shadow: 0 0 18px rgba(245, 158, 11, 0.18);
         }
 
-        .orb-berry {
+        .orb-berry,
+        .orb-ruby {
             background: radial-gradient(circle, rgba(251, 113, 133, 0.24) 0%, rgba(251, 113, 133, 0.05) 100%);
             border: 1px solid rgba(251, 113, 133, 0.4);
             color: var(--lx-ruby);
@@ -1752,6 +1902,142 @@
             height: 48px;
             display: block;
             overflow: visible;
+        }
+
+        .luxe-proof-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            color: #fecdd3;
+            background: rgba(251, 113, 133, 0.16);
+            border: 1px solid rgba(251, 113, 133, 0.42);
+            cursor: pointer;
+            transition: all 0.18s ease;
+        }
+
+        .luxe-proof-btn:hover {
+            background: rgba(251, 113, 133, 0.28);
+            color: #fff;
+        }
+
+        .luxe-modal-content {
+            background: #1a1014;
+            color: #f8efe6;
+            border: 1px solid rgba(229, 184, 168, 0.28);
+            border-radius: 18px;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+        }
+
+        .luxe-modal-header,
+        .luxe-modal-footer {
+            border-color: rgba(229, 184, 168, 0.14);
+            padding: 16px 20px;
+        }
+
+        .luxe-modal-title {
+            font-family: 'Playfair Display', serif;
+            font-weight: 700;
+            color: #f8efe6;
+            font-size: 18px;
+        }
+
+        .luxe-modal-body {
+            padding: 18px 20px;
+        }
+
+        .luxe-modal-sub {
+            font-size: 12.5px;
+            color: #bfa59d;
+        }
+
+        .luxe-form-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #e5b8a8;
+        }
+
+        .luxe-form-input {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(229, 184, 168, 0.25);
+            color: #f8efe6;
+            border-radius: 10px;
+            font-size: 13px;
+        }
+
+        .luxe-form-input:focus {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: #e5b8a8;
+            color: #fff;
+            box-shadow: 0 0 0 2px rgba(229, 184, 168, 0.18);
+        }
+
+        .luxe-form-hint {
+            font-size: 11px;
+            color: #9f857d;
+        }
+
+        .luxe-submit-btn {
+            background: linear-gradient(135deg, #d98f83, #c19a8c);
+            color: #1f1412;
+            font-weight: 700;
+            border: none;
+            border-radius: 10px;
+            padding: 6px 16px;
+        }
+
+        .luxe-submit-btn:hover {
+            opacity: 0.92;
+            color: #140c0f;
+        }
+
+        .luxe-proof-card {
+            background: rgba(255, 255, 255, 0.035);
+            border: 1px solid rgba(251, 113, 133, 0.25);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .luxe-proof-time {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #fda4af;
+        }
+
+        .luxe-proof-tz {
+            font-size: 10.5px;
+            font-weight: 600;
+            color: #bfa59d;
+            margin-left: 4px;
+        }
+
+        .luxe-proof-meta {
+            font-size: 11.5px;
+            color: #bfa59d;
+        }
+
+        .luxe-proof-note {
+            font-size: 12.5px;
+            color: #f8efe6;
+        }
+
+        .luxe-proof-img-wrap {
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(229, 184, 168, 0.18);
+            max-height: 360px;
+            background: #10090c;
+        }
+
+        .luxe-proof-img {
+            display: block;
+            width: 100%;
+            max-height: 360px;
+            object-fit: contain;
         }
     </style>
 

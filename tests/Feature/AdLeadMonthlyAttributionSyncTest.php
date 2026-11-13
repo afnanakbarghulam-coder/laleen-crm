@@ -81,7 +81,7 @@ class AdLeadMonthlyAttributionSyncTest extends TestCase
         $novEntry = AdLeadEntry::first();
         $this->assertNotNull($novEntry);
         $this->assertNotNull($novEntry->customer_id);
-        $this->assertNotNull($novEntry->lead_id);
+        $this->assertNull($novEntry->lead_id);
         $this->assertNull($novEntry->branch);
         $this->assertSame(0.0, (float) $novEntry->ticket_amount);
 
@@ -104,10 +104,7 @@ class AdLeadMonthlyAttributionSyncTest extends TestCase
         $this->assertNull($novEntry->branch);
         $this->assertSame(0.0, (float) $novEntry->ticket_amount);
         $this->assertFalse($novEntry->isBooked());
-
-        $novLead = Lead::find($novEntry->lead_id);
-        $this->assertNotNull($novLead);
-        $this->assertSame('booked', $novLead->needful_done);
+        $this->assertSame(0, Lead::count());
 
         $novAppointment = Appointment::where('customer_id', $novEntry->customer_id)->first();
         $this->assertNotNull($novAppointment);

@@ -9,11 +9,11 @@
         </div>
         <div class="d-flex align-items-center gap-2">
             <a href="{{ route('kpi.salon-staff.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Salon Staff</a>
-            @moduleEdit('kpis')
+            @if (!empty($canCreateEvaluation))
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newEvaluationModal">
                     <i class="bx bx-plus me-1"></i> New Evaluation
                 </button>
-            @endmoduleEdit
+            @endif
         </div>
     </div>
 
@@ -63,6 +63,12 @@
                 <option value="{{ $key }}" @selected($branchFilter === $key)>{{ $label }}</option>
             @endforeach
         </select>
+
+        @if (!empty($monthFilter))
+            <span class="kpi-badge kpi-badge-gray ms-1">
+                Month: {{ \Illuminate\Support\Carbon::createFromFormat('Y-m-d', $monthFilter . '-01')->format('F Y') }}
+            </span>
+        @endif
     </div>
 
     <div class="kpi-panel p-0" style="overflow:hidden;">
@@ -134,8 +140,10 @@
                             <div class="col-md-4">
                                 <label class="form-label">Branch</label>
                                 <select name="branch" id="evalBranchSelect" class="form-select" required>
-                                    <option value="">Select branch&hellip;</option>
-                                    @foreach ($branches as $key => $label)
+                                    @if (!empty($isAdminUser))
+                                        <option value="">Select branch&hellip;</option>
+                                    @endif
+                                    @foreach (($modalBranches ?? $branches) as $key => $label)
                                         <option value="{{ $key }}" @selected(old('branch', $defaultBranch) === $key)>{{ $label }}</option>
                                     @endforeach
                                 </select>
@@ -148,7 +156,17 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Evaluation Date</label>
-                                <input type="date" name="evaluation_date" class="form-control" value="{{ old('evaluation_date', now()->format('Y-m-d')) }}" required>
+                                <input
+                                    type="date"
+                                    name="evaluation_date"
+                                    class="form-control"
+                                    value="{{ old('evaluation_date', $todayQatarStr ?? now('Asia/Qatar')->format('Y-m-d')) }}"
+                                    @if (empty($isAdminUser) && !empty($currentMondayStr) && !empty($currentTuesdayStr))
+                                        min="{{ $currentMondayStr }}"
+                                        max="{{ $currentTuesdayStr }}"
+                                    @endif
+                                    required
+                                >
                             </div>
                         </div>
 

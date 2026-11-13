@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 class SocialContentPlan extends Model
 {
@@ -63,4 +64,24 @@ class SocialContentPlan extends Model
     // when writing (via the model's generic $dateFormat), which stops it
     // matching the bare date strings used in firstOrCreate/where lookups
     // elsewhere.
+
+    public function dayOffset(): int
+    {
+        $idx = array_search($this->day_of_week, self::DAYS_OF_WEEK, true);
+
+        return $idx === false ? 0 : (int) $idx;
+    }
+
+    /**
+     * Resolve the exact 'Y-m-d' calendar date represented by week_start_date (Monday)
+     * plus day_of_week offset (Monday = +0 ... Sunday = +6).
+     */
+    public function exactDate(): Carbon
+    {
+        $rawWeekStart = substr(trim((string) $this->week_start_date), 0, 10);
+
+        return Carbon::createFromFormat('Y-m-d', $rawWeekStart)
+            ->startOfDay()
+            ->addDays($this->dayOffset());
+    }
 }

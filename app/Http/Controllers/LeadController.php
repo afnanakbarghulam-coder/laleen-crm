@@ -217,8 +217,6 @@ class LeadController extends Controller
         }
         $existingLead->update($existingUpdatePayload);
 
-            $this->linkSameMonthAdLeadEntries($existingLead, $customer, $normalizedPhone);
-
             return redirect()->route('leads.index')
                 ->with('existing_lead_id', $existingLead->id)
                 ->with('warning', 'This client already has an open lead. Their services and details have been merged into the existing lead.');
@@ -240,9 +238,7 @@ class LeadController extends Controller
             $createPayload['source'] = trim((string) $request->source);
         }
 
-        $newLead = Lead::create($createPayload);
-
-        $this->linkSameMonthAdLeadEntries($newLead, $customer, $normalizedPhone);
+        Lead::create($createPayload);
 
         return redirect()->back()->with('success', 'Lead added successfully.');
     }
@@ -332,10 +328,7 @@ class LeadController extends Controller
             $data['category'] = Lead::resolvePrimaryCategory($mergedCats);
 
             $existingLead->update($data);
-            $mergedFromLeadId = $lead->id;
             $lead->delete();
-
-            $this->linkSameMonthAdLeadEntries($existingLead, $customer, $normalizedPhone, $mergedFromLeadId);
 
             return redirect()->route('leads.index')
                 ->with('existing_lead_id', $existingLead->id)
@@ -343,7 +336,6 @@ class LeadController extends Controller
         }
 
         $lead->update($data);
-        $this->linkSameMonthAdLeadEntries($lead, $customer, $normalizedPhone);
 
         return redirect()->route('leads.index')
             ->with('success', 'Lead updated successfully.');
@@ -997,47 +989,5 @@ class LeadController extends Controller
         }
 
         return $customer;
-    }
-
-    /**
-     * Link any AdLeadEntry rows within the 30-day attribution window for this customer/phone
-     * that do not yet have a lead_id (or were pointing at a merged duplicate lead).
-     */
-    private function linkSameMonthAdLeadEntries(Lead $lead, Customer $customer, string $normalizedPhone, ?int $mergedFromLeadId = null): void
-    {
-        $refDate = $lead->created_at ? Carbon::parse($lead->created_at) : now();
-        $windowStart = $refDate->copy()->startOfMonth()->startOfDay();
-        $windowEnd = $refDate->copy()->endOfMonth()->endOfDay();
-
-        [, $phoneVariants, $strippedDigits] = AdLeadEntry::buildPhoneLookupSets([$normalizedPhone]);
-
-        AdLeadEntry::query()
-            ->whereBetween('date', [$windowStart, $windowEnd])
-            ->where(function ($q) use ($customer, $phoneVariants, $strippedDigits, $mergedFromLeadId) {
-                $q->where('customer_id', $customer->id);
-                AdLeadEntry::applyPhoneCohortClause($q, $phoneVariants, $strippedDigits, 'or', 'phone');
-                if ($mergedFromLeadId) {
-                    $q->orWhere('lead_id', $mergedFromLeadId);
-                }
-            })
-            ->where(function ($q) use ($mergedFromLeadId) {
-                $q->whereNull('lead_id');
-                if ($mergedFromLeadId) {
-                    $q->orWhere('lead_id', $mergedFromLeadId);
-                }
-            })
-            ->update([
-                'lead_id' => $lead->id,
-                'customer_id' => $customer->id,
-            ]);
-
-        if ($lead->isPaidAdLead()) {
-            AdLeadEntry::syncFromCustomerActivity(
-                customer: $customer,
-                activityDate: $refDate,
-                phone: $normalizedPhone,
-                resetIfNoActivity: false
-            );
-        }
     }
 }

@@ -919,6 +919,10 @@
 
             document.getElementById('bookStaffSelect').innerHTML = '<option value="">-- Select Staff --</option>';
             document.getElementById('bookStaffHelp').classList.add('d-none');
+            const bookAgentEl = document.getElementById('bookAgent');
+            if (bookAgentEl) {
+                bookAgentEl.value = prefill.bookingAgentId ? String(prefill.bookingAgentId) : '';
+            }
             document.getElementById('bookNotes').value = '';
             document.getElementById('bookThen').value = '';
             document.getElementById('fbAddClientForm').classList.add('d-none');

@@ -15,6 +15,50 @@
         <a href="{{ route('kpi.marketing.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Marketing</a>
     </div>
 
+    @php
+        $ccMonthBreaches = collect($monthLateReplyLogs ?? []);
+        $ccWeekBreaches = collect($weekLateReplyLogs ?? []);
+    @endphp
+    @if ($ccMonthBreaches->isNotEmpty())
+        <div class="kpi-panel mb-3" style="border-left: 4px solid #fb7185; background: rgba(251, 113, 133, 0.06);">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="fw-bold" style="color: #be123c;">
+                    <i class="bx bx-error-circle me-1"></i>
+                    Social Reply SLA Breaches ({{ $ccMonthBreaches->count() }} in {{ $lateRepliesMonthLabel ?? $weekStart->format('F Y') }}
+                    @if($ccWeekBreaches->isNotEmpty())
+                        &bull; {{ $ccWeekBreaches->count() }} this week
+                    @endif
+                    )
+                </div>
+                <span class="badge bg-danger">Read-Only Feedback</span>
+            </div>
+            <div class="d-flex flex-column gap-2">
+                @foreach ($ccMonthBreaches as $breachLog)
+                    @php
+                        $ccProofUrl = $breachLog->screenshotUrl();
+                        $ccIncidentStr = $breachLog->incident_at
+                            ? $breachLog->incident_at->copy()->setTimezone('Asia/Qatar')->format('d M Y, g:i A')
+                            : '—';
+                    @endphp
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 py-1 px-2 rounded" style="background: rgba(255,255,255,0.55); border: 1px solid rgba(251, 113, 133, 0.22);">
+                        <div class="small">
+                            <strong>{{ $ccIncidentStr }} (Doha)</strong>
+                            @if (filled($breachLog->notes))
+                                &mdash; {{ $breachLog->notes }}
+                            @endif
+                            <span class="text-muted ms-1">(Logged by {{ $breachLog->logger?->name ?? 'Admin' }})</span>
+                        </div>
+                        @if ($ccProofUrl)
+                            <a href="{{ $ccProofUrl }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-danger py-0 px-2">
+                                <i class="bx bx-image me-1"></i>View Screenshot
+                            </a>
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     <div class="kpi-panel mb-3">
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
             <a href="{{ route('kpi.content-calendar.index', ['week' => $previousWeek]) }}" class="btn btn-sm btn-outline-secondary">

@@ -505,16 +505,16 @@ class AyanCustomerProfileAttributionTest extends TestCase
         $response->assertDontSee('booked (1/3)');
         $response->assertSee(route('kpi.ads.index', ['month' => '2026-11']), false);
 
-        // Card 4 & Sana assertions: Week 2 cumulative target = 22 -> '0/22 Content' & '0.0%' (NOT '50.0%'!)
+        // Card 4 & Sana assertions: Day 12 (completedDays = 11 -> 11 Stories + floor(44/7)=6 Reels = 17 MTD target) -> '0/17 Content' & '0.0%'
         $this->assertSame(2, $sana['elapsed_weeks']);
-        $this->assertSame(22, $sana['cumulative_mtd_target']);
+        $this->assertSame(17, $sana['cumulative_mtd_target']);
         $this->assertSame(0, $sana['mtd_items_completed']);
         $this->assertFalse($sana['replies_sla_passing']);
         $this->assertSame(0.0, (float) $sana['overall_score_pct']);
         $this->assertSame(0.0, (float) $ayan['social_oversight_pct']);
         $this->assertFalse($ayan['social_oversight_passing']);
 
-        $response->assertSee('0/22 Content');
+        $response->assertSee('0/17 Content');
         $response->assertDontSee('0/11 Content');
         $response->assertSee(route('kpi.content-calendar.index'), false);
         $response->assertDontSee('href="' . route('kpi.content.index') . '"', false);

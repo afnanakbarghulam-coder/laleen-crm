@@ -510,6 +510,8 @@ class CrmPhaseThreeFinanceAndIsolationTest extends TestCase
             'check_in_time' => $now->copy()->setTime(9, 0),
         ]);
 
+        $stylist = Staff::create(['name' => 'Phase3 Stylist', 'branch' => 'old_airport', 'bookable' => true]);
+
         // Booking #1: created_by = Areeba, booking_agent_id = Zoya -> must credit ONLY Zoya (1 total, not 2!)
         $sharedAppt = Appointment::create([
             'customer_name' => 'Shared Credit Client',
@@ -517,6 +519,8 @@ class CrmPhaseThreeFinanceAndIsolationTest extends TestCase
             'service_name' => 'Facial',
             'appointment_datetime' => $now->copy()->setTime(15, 0),
             'booking_date' => $now->toDateString(),
+            'start_time' => '15:00:00',
+            'staff_id' => $stylist->id,
             'branch' => 'old_airport',
             'booking_agent_id' => $zoya->id,
             'created_by' => $areeba->id,
@@ -525,22 +529,24 @@ class CrmPhaseThreeFinanceAndIsolationTest extends TestCase
         ]);
         $sharedAppt->forceFill(['created_at' => $now])->saveQuietly();
 
-        // Booking #2: booking_agent_id = null, created_by = Areeba -> credits Areeba
+        // Booking #2: explicit booking_agent_id = Areeba -> credits Areeba
         $fallbackAppt = Appointment::create([
-            'customer_name' => 'Fallback Creator Client',
+            'customer_name' => 'Explicit Areeba Client',
             'phone' => '55330002',
             'service_name' => 'Blowdry',
             'appointment_datetime' => $now->copy()->setTime(16, 0),
             'booking_date' => $now->toDateString(),
+            'start_time' => '16:00:00',
+            'staff_id' => $stylist->id,
             'branch' => 'old_airport',
-            'booking_agent_id' => null,
+            'booking_agent_id' => $areeba->id,
             'created_by' => $areeba->id,
             'status' => 'confirmed',
             'price' => 150,
         ]);
         $fallbackAppt->forceFill(['created_at' => $now])->saveQuietly();
 
-        // Booking #3 & #4: cancelled and no_show -> must count as 0 everywhere
+        // Booking #3 & #4: cancelled and no_show -> Chat Agent keeps +1 booking credit on booking_agent_id ($zoya)
         foreach (['cancelled', 'no_show'] as $idx => $badStatus) {
             $inactive = Appointment::create([
                 'customer_name' => "Inactive {$badStatus}",
@@ -548,6 +554,8 @@ class CrmPhaseThreeFinanceAndIsolationTest extends TestCase
                 'service_name' => 'Manicure',
                 'appointment_datetime' => $now->copy()->setTime(17 + $idx, 0),
                 'booking_date' => $now->toDateString(),
+                'start_time' => (17 + $idx) . ':00:00',
+                'staff_id' => $stylist->id,
                 'branch' => 'wakrah',
                 'booking_agent_id' => $zoya->id,
                 'created_by' => $areeba->id,
@@ -558,17 +566,17 @@ class CrmPhaseThreeFinanceAndIsolationTest extends TestCase
         }
 
         $liveCards = collect(KpiAgentTargetReport::liveAgentScorecards())->keyBy('id');
-        $this->assertSame(1, $liveCards[$zoya->id]['today_bookings'], 'Zoya must get 1 credit for booking_agent_id');
-        $this->assertSame(1, $liveCards[$areeba->id]['today_bookings'], 'Areeba must get 1 credit only for null booking_agent_id row');
+        $this->assertSame(3, $liveCards[$zoya->id]['today_bookings'], 'Zoya must keep +1 credit for all 3 booking_agent_id rows including cancelled & no_show');
+        $this->assertSame(1, $liveCards[$areeba->id]['today_bookings'], 'Areeba must get 1 credit strictly for explicit booking_agent_id row');
 
         $report = new KpiAgentTargetReport([
             'date_from' => $now->copy()->startOfDay(),
             'date_to' => $now->copy()->endOfDay(),
         ]);
-        $this->assertSame(2, $report->combined()['bookings'], 'Combined shift report must count 2 active bookings total');
+        $this->assertSame(4, $report->combined()['bookings'], 'Combined shift report must count all 4 Chat Agent bookings including cancelled & no_show');
 
-        // Sana Content Plan in Week 2 (2026-11-11 -> Day 11 -> elapsedWeeks = 2 -> cumulative target = 22):
-        // Seed 11 items in Week 1 (2026-11-02) and 0 items in Week 2 (2026-11-09) -> must be 50.0% (NOT 100%!)
+        // Sana Content Plan on Day 11 (2026-11-11 -> completedDays = 10 -> Option A target = 10 Stories + floor(40/7)=5 Reels = 15):
+        // Seed 11 items in Week 1 (2026-11-02) and 0 items in Week 2 (2026-11-09) -> 11/15 = 73.3% FAIL (NOT 100%!)
         foreach (SocialContentPlan::DAYS_OF_WEEK as $idx => $dayName) {
             SocialContentPlan::create([
                 'week_start_date' => '2026-11-02',
@@ -586,17 +594,28 @@ class CrmPhaseThreeFinanceAndIsolationTest extends TestCase
             ->get(route('kpi.hub', ['month' => '2026-11']))
             ->viewData('scorecard');
 
-        $this->assertSame(1, $scorecardHalf['zoya']['today_bookings']);
+        $this->assertSame(3, $scorecardHalf['zoya']['today_bookings']);
         $this->assertSame(1, $scorecardHalf['areeba']['today_bookings']);
-        $this->assertSame(2, $scorecardHalf['laden']['today_bookings_count']);
+        $this->assertSame(4, $scorecardHalf['laden']['today_bookings_count']);
 
         $this->assertSame(2, $scorecardHalf['sana']['elapsed_weeks']);
-        $this->assertSame(22, $scorecardHalf['sana']['cumulative_mtd_target']);
+        $this->assertSame(15, $scorecardHalf['sana']['cumulative_mtd_target']);
         $this->assertSame(11, $scorecardHalf['sana']['mtd_items_completed']);
-        $this->assertSame(50.0, (float) $scorecardHalf['sana']['weekly_execution_pct']);
+        $this->assertSame(73.3, (float) $scorecardHalf['sana']['weekly_execution_pct']);
         $this->assertFalse($scorecardHalf['sana']['content_passing']);
 
-        // Now complete Week 2 (2026-11-09: +11 items = 22/22) -> reaches 100.0% PASS
+        // Now complete Nov 1 (Sunday of 2026-10-26) + Week 2 (2026-11-09 through Nov 11) -> reaches 100.0% PASS
+        SocialContentPlan::create([
+            'week_start_date' => '2026-10-26',
+            'day_of_week' => 'Sunday',
+            'reel_content' => null,
+            'is_reel_posted' => false,
+            'is_reel_skipped' => true,
+            'stories_content' => 'Nov 1 Sunday Story',
+            'are_stories_posted' => true,
+            'late_replies_count' => 0,
+        ]);
+
         foreach (SocialContentPlan::DAYS_OF_WEEK as $idx => $dayName) {
             SocialContentPlan::create([
                 'week_start_date' => '2026-11-09',
@@ -614,7 +633,8 @@ class CrmPhaseThreeFinanceAndIsolationTest extends TestCase
             ->get(route('kpi.hub', ['month' => '2026-11']))
             ->viewData('scorecard');
 
-        $this->assertSame(22, $scorecardFull['sana']['mtd_items_completed']);
+        // In-month days <= Nov 11: Nov 1 (1 story) + Nov 2..8 (4 reels + 7 stories) + Nov 9..11 (3 reels + 3 stories) = 18 items
+        $this->assertSame(18, $scorecardFull['sana']['mtd_items_completed']);
         $this->assertSame(100.0, (float) $scorecardFull['sana']['weekly_execution_pct']);
         $this->assertTrue($scorecardFull['sana']['content_passing']);
     }

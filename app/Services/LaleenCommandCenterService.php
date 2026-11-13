@@ -853,28 +853,47 @@ class LaleenCommandCenterService
         $weekStart = $now->copy()->startOfWeek(Carbon::MONDAY)->toDateString();
         $weekPlans = SocialContentPlan::query()
             ->where('week_start_date', $weekStart)
-            ->get(['is_reel_posted', 'are_stories_posted']);
+            ->get(['week_start_date', 'day_of_week', 'is_reel_posted', 'is_reel_skipped', 'are_stories_posted']);
 
-        $reelsPosted = $weekPlans->where('is_reel_posted', true)->count();
+        $reelsPosted = $weekPlans->filter(fn (SocialContentPlan $p) => $p->is_reel_posted && !$p->is_reel_skipped)->count();
         $storiesPosted = $weekPlans->where('are_stories_posted', true)->count();
         $reelTarget = SocialContentPlan::WEEKLY_REEL_TARGET;
         $storiesTarget = SocialContentPlan::WEEKLY_STORIES_TARGET;
 
         $daysElapsed = max(1, (int) $now->day);
-        $elapsedWeeks = max(1, min(4, (int) ceil($daysElapsed / 7)));
-        $weeklyItemsTarget = $reelTarget + $storiesTarget;
-        $cumulativeMtdTarget = min($weeklyItemsTarget * 4, $weeklyItemsTarget * $elapsedWeeks);
+        $completedDays = max(0, $daysElapsed - 1);
+        $mtdStoriesTarget = $completedDays;
+        $mtdReelsTarget = (int) floor(($completedDays * $reelTarget) / 7);
+        $cumulativeMtdTarget = $mtdReelsTarget + $mtdStoriesTarget;
 
+        $minDateStr = $periodStart->toDateString();
+        $maxDateStr = $periodEnd->toDateString();
         $mtdPlans = SocialContentPlan::query()
-            ->whereBetween('week_start_date', [
-                $periodStart->copy()->startOfWeek(Carbon::MONDAY)->startOfDay(),
-                $periodEnd,
-            ])
-            ->get(['is_reel_posted', 'are_stories_posted']);
+            ->where('week_start_date', '>=', $periodStart->copy()->startOfWeek(Carbon::MONDAY)->toDateString())
+            ->where('week_start_date', '<=', $periodEnd->copy()->startOfWeek(Carbon::MONDAY)->toDateString())
+            ->get(['week_start_date', 'day_of_week', 'is_reel_posted', 'is_reel_skipped', 'are_stories_posted', 'reel_content', 'stories_content', 'reel_link'])
+            ->filter(function (SocialContentPlan $p) use ($minDateStr, $maxDateStr): bool {
+                $exactStr = $p->exactDate()->toDateString();
 
-        $mtdItemsCompleted = $mtdPlans->where('is_reel_posted', true)->count()
-            + $mtdPlans->where('are_stories_posted', true)->count();
-        $contentCompliancePct = round(min(100.0, ($mtdItemsCompleted / max(1, $cumulativeMtdTarget)) * 100), 1);
+                return $exactStr >= $minDateStr && $exactStr <= $maxDateStr;
+            })
+            ->values();
+
+        $mtdPublishedReels = $mtdPlans->filter(fn (SocialContentPlan $p) => $p->is_reel_posted && !$p->is_reel_skipped)->count();
+        $mtdPublishedStories = $mtdPlans->where('are_stories_posted', true)->count();
+        $mtdItemsCompleted = $mtdPublishedReels + $mtdPublishedStories;
+        $hasMtdActivity = $mtdItemsCompleted > 0 || $mtdPlans->contains(
+            fn (SocialContentPlan $p) => filled($p->reel_content) || filled($p->stories_content) || filled($p->reel_link)
+        );
+
+        if ($completedDays === 0) {
+            $contentCompliancePct = $hasMtdActivity ? 100.0 : 0.0;
+        } else {
+            $credited = min($mtdPublishedReels, $mtdReelsTarget) + min($mtdPublishedStories, $mtdStoriesTarget);
+            $contentCompliancePct = !$hasMtdActivity
+                ? 0.0
+                : ($cumulativeMtdTarget > 0 ? round(min(100.0, ($credited / $cumulativeMtdTarget) * 100), 1) : 100.0);
+        }
 
         return [
             'current_month' => $now->format('F Y'),

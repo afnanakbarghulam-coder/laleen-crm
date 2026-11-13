@@ -25,19 +25,15 @@ class AdLeadEntryController extends Controller
         }
 
         $entry = AdLeadEntry::create($validated + ['created_by' => auth()->id()]);
-        $this->syncLeadFromAdEntry($entry);
 
         $entry = $entry->fresh();
-        $synced = AdLeadEntry::syncFromCustomerActivity(
+        AdLeadEntry::syncFromCustomerActivity(
             customer: $entry->customer,
             activityDate: Carbon::parse($entry->date),
             phone: $entry->phone,
             targetEntry: $entry,
             resetIfNoActivity: !$hasManualBranch
         );
-        if ($synced) {
-            $this->syncLeadFromAdEntry($synced);
-        }
 
         return redirect()->route('kpi.ads.index')->with('success', 'Ad lead logged.');
     }
@@ -54,19 +50,14 @@ class AdLeadEntryController extends Controller
 
         $adLeadEntry->update($validated);
         $entry = $adLeadEntry->fresh();
-        $this->syncLeadFromAdEntry($entry);
 
-        $entry = $entry->fresh();
-        $synced = AdLeadEntry::syncFromCustomerActivity(
+        AdLeadEntry::syncFromCustomerActivity(
             customer: $entry->customer,
             activityDate: Carbon::parse($entry->date),
             phone: $entry->phone,
             targetEntry: $entry,
             resetIfNoActivity: !$hasManualBranch
         );
-        if ($synced) {
-            $this->syncLeadFromAdEntry($synced);
-        }
 
         return redirect()->route('kpi.ads.index')->with('success', 'Ad lead updated.');
     }
@@ -76,21 +67,6 @@ class AdLeadEntryController extends Controller
         $customer = $adLeadEntry->customer;
         $phone = $adLeadEntry->phone;
         $entryDate = $adLeadEntry->date ? Carbon::parse($adLeadEntry->date) : now();
-
-        if ($adLeadEntry->lead_id && Schema::hasTable('leads')) {
-            $linkedLead = Lead::find($adLeadEntry->lead_id);
-            if (
-                $linkedLead
-                && $linkedLead->needful_done === 'booked'
-                && $linkedLead->appointment_id === null
-                && !$adLeadEntry->hasVerifiedCustomerConversion()
-            ) {
-                $linkedLead->update([
-                    'needful_done' => null,
-                    'next_followup_date' => now()->toDateString(),
-                ]);
-            }
-        }
 
         $adLeadEntry->delete();
 
@@ -174,104 +150,5 @@ class AdLeadEntryController extends Controller
         $validated['ticket_amount'] = $validated['ticket_amount'] ?? 0;
 
         return $validated;
-    }
-
-    private function syncLeadFromAdEntry(AdLeadEntry $entry): void
-    {
-        if (empty($entry->phone) || !Schema::hasTable('leads')) {
-            return;
-        }
-
-        [, $candidates, $strippedDigits] = AdLeadEntry::buildPhoneLookupSets([$entry->phone]);
-        $hasLeadIdColumn = Schema::hasColumn('ad_lead_entries', 'lead_id');
-        $entryDate = $entry->date ? Carbon::parse($entry->date) : now();
-
-        $existingLead = null;
-        if ($hasLeadIdColumn && $entry->lead_id) {
-            $existingLead = Lead::find($entry->lead_id);
-        }
-
-        if (!$existingLead) {
-            $existingLead = Lead::open()
-                ->where(function ($q) use ($entry, $candidates, $strippedDigits) {
-                    if ($entry->customer_id) {
-                        $q->where('customer_id', $entry->customer_id);
-                    }
-                    AdLeadEntry::applyPhoneCohortClause($q, $candidates, $strippedDigits, 'or', 'phone');
-                })
-                ->latest('id')
-                ->first();
-        }
-
-        if (!$existingLead) {
-            $existingLead = Lead::query()
-                ->where(function ($q) use ($entry, $candidates, $strippedDigits) {
-                    if ($entry->customer_id) {
-                        $q->where('customer_id', $entry->customer_id);
-                    }
-                    AdLeadEntry::applyPhoneCohortClause($q, $candidates, $strippedDigits, 'or', 'phone');
-                })
-                ->whereBetween('created_at', [
-                    $entryDate->copy()->startOfMonth()->startOfDay(),
-                    $entryDate->copy()->endOfMonth()->endOfDay(),
-                ])
-                ->latest('id')
-                ->first();
-        }
-
-        $interestList = $entry->category ? [$entry->category] : [];
-        $hasVerifiedConversion = $entry->hasVerifiedCustomerConversion();
-        $verifiedAppointment = $hasVerifiedConversion ? $entry->resolveVerifiedAppointment() : null;
-
-        if (!$existingLead) {
-            $newLead = Lead::create([
-                'phone' => $entry->phone,
-                'customer_id' => $entry->customer_id,
-                'appointment_id' => $verifiedAppointment?->id,
-                'category' => 'inquiry',
-                'categories' => ['inquiry'],
-                'service_interest' => $interestList,
-                'customer_remarks' => $entry->remarks,
-                'needful_done' => $hasVerifiedConversion ? 'booked' : null,
-                'assigned_agent_id' => $entry->created_by ?? auth()->id(),
-            ]);
-
-            if ($hasLeadIdColumn && (int) $entry->lead_id !== (int) $newLead->id) {
-                $entry->update(['lead_id' => $newLead->id]);
-            }
-            return;
-        }
-
-        $updates = [];
-        if ($entry->customer_id && !$existingLead->customer_id) {
-            $updates['customer_id'] = $entry->customer_id;
-        }
-        if ($hasVerifiedConversion) {
-            if ($verifiedAppointment && !$existingLead->appointment_id) {
-                $updates['appointment_id'] = $verifiedAppointment->id;
-            }
-            if ($existingLead->needful_done !== 'booked') {
-                $updates['needful_done'] = 'booked';
-                $updates['next_followup_date'] = null;
-            }
-        } elseif ($existingLead->needful_done === 'booked' && $existingLead->appointment_id === null) {
-            $updates['needful_done'] = null;
-            $updates['next_followup_date'] = now()->toDateString();
-        }
-        if (!empty($interestList)) {
-            $currentInterests = is_array($existingLead->service_interest) ? $existingLead->service_interest : [];
-            $mergedInterests = array_values(array_unique(array_merge($currentInterests, $interestList)));
-            if ($mergedInterests !== $currentInterests) {
-                $updates['service_interest'] = $mergedInterests;
-            }
-        }
-
-        if (!empty($updates)) {
-            $existingLead->update($updates);
-        }
-
-        if ($hasLeadIdColumn && (int) $entry->lead_id !== (int) $existingLead->id) {
-            $entry->update(['lead_id' => $existingLead->id]);
-        }
     }
 }

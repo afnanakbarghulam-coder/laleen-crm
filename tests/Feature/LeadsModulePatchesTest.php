@@ -389,6 +389,7 @@ class LeadsModulePatchesTest extends TestCase
             'service_name' => ['Facial'],
             'branch' => 'old_airport',
             'staff_id' => $staff->id,
+            'booking_agent_id' => $agent->id,
             'price' => 250,
         ])->assertRedirect();
 

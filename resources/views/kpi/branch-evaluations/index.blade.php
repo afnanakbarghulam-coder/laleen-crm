@@ -9,9 +9,9 @@
         </div>
         <div class="d-flex align-items-center gap-2">
             <a href="{{ route('kpi.salon-staff.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Salon Staff</a>
-            @moduleEdit('kpis')
+            @if (auth()->user()?->isAdmin())
                 <a href="{{ route('kpi.branch-evaluation.create') }}" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New Branch Evaluation</a>
-            @endmoduleEdit
+            @endif
         </div>
     </div>
 
@@ -27,6 +27,13 @@
                 <option value="{{ $key }}" @selected($branchFilter === $key)>{{ $label }}</option>
             @endforeach
         </select>
+
+        @if (!empty($monthFilter))
+            <span class="kpi-badge kpi-badge-gray ms-1">
+                Month: {{ \Illuminate\Support\Carbon::createFromFormat('Y-m-d', $monthFilter . '-01')->format('F Y') }}
+            </span>
+            <a href="{{ route('kpi.branch-evaluation.index', array_filter(['branch' => $branchFilter])) }}" class="btn btn-sm btn-outline-secondary">All Months</a>
+        @endif
     </div>
 
     <div class="kpi-panel p-0" style="overflow:hidden;">
@@ -62,9 +69,9 @@
                             <td class="text-end">
                                 <div class="d-flex gap-1 justify-content-end">
                                     <a href="{{ route('kpi.branch-evaluation.show', $evaluation) }}" class="btn btn-sm btn-outline-secondary">View Report</a>
-                                    @moduleEdit('kpis')
+                                    @if (auth()->user()?->isAdmin())
                                         <a href="{{ route('kpi.branch-evaluation.edit', $evaluation) }}" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="bx bx-pencil"></i></a>
-                                    @endmoduleEdit
+                                    @endif
                                 </div>
                             </td>
                         </tr>

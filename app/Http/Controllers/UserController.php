@@ -180,10 +180,8 @@ class UserController extends Controller
     }
 
     /**
-     * Computes Content KPI compliance from the active Weekly Content Calendar
-     * (SocialContentPlan / social_content_plans) overlapping [$from, $to],
-     * falling back to legacy KpiContentReport::overallMetrics() only when no
-     * SocialContentPlan rows exist for the period.
+     * Computes Content KPI compliance strictly from the active Weekly Content Calendar
+     * (SocialContentPlan / social_content_plans) overlapping [$from, $to].
      */
     private function resolveDashboardContentMetrics(\Illuminate\Support\Carbon|Carbon $from, \Illuminate\Support\Carbon|Carbon $to): array
     {
@@ -191,10 +189,19 @@ class UserController extends Controller
         $endWeek = Carbon::instance($to)->startOfWeek(Carbon::MONDAY)->toDateString();
 
         $socialPlans = SocialContentPlan::query()
-            ->whereBetween('week_start_date', [$startWeek, $endWeek])
+            ->where('week_start_date', '>=', $startWeek)
+            ->where('week_start_date', '<=', $endWeek)
             ->get();
 
-        if ($socialPlans->isNotEmpty()) {
+        $hasPlanActivity = $socialPlans->contains(
+            fn (SocialContentPlan $p) => $p->is_reel_posted
+                || $p->are_stories_posted
+                || filled($p->reel_content)
+                || filled($p->stories_content)
+                || filled($p->reel_link)
+        );
+
+        if ($socialPlans->isNotEmpty() && $hasPlanActivity) {
             $weeksCount = max(1, $socialPlans->pluck('week_start_date')->unique()->count());
             $reelsPosted = $socialPlans->where('is_reel_posted', true)->where('is_reel_skipped', false)->count();
             $storiesPosted = $socialPlans->where('are_stories_posted', true)->count();
@@ -215,7 +222,13 @@ class UserController extends Controller
             ];
         }
 
-        return KpiContentReport::overallMetrics(Carbon::instance($from), Carbon::instance($to));
+        return [
+            'overall' => 0.0,
+            'grade' => KpiContentReport::gradeFor(0.0),
+            'entry_count' => 0,
+            'reels_posted' => 0,
+            'stories_posted' => 0,
+        ];
     }
 
     public function index(Request $request)

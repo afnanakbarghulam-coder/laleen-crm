@@ -365,9 +365,13 @@ class ServicesProductsKpisDashboardWave5Test extends TestCase
             'phone' => '+97455110011',
             'service_name' => 'Manicure',
             'appointment_datetime' => now()->addDay(),
+            'booking_date' => now()->addDay()->toDateString(),
+            'start_time' => '11:00:00',
+            'staff_id' => $staff->id,
             'branch' => 'old_airport',
             'price' => 100,
             'status' => 'completed',
+            'booking_agent_id' => $agent->id,
             'created_by' => $agent->id,
         ]);
         $morningBooking->forceFill(['created_at' => today()->setTime(10, 30)])->saveQuietly();
@@ -377,9 +381,13 @@ class ServicesProductsKpisDashboardWave5Test extends TestCase
             'phone' => '+97455110022',
             'service_name' => 'Pedicure',
             'appointment_datetime' => now()->addDay(),
+            'booking_date' => now()->addDay()->toDateString(),
+            'start_time' => '17:00:00',
+            'staff_id' => $staff->id,
             'branch' => 'old_airport',
             'price' => 120,
             'status' => 'completed',
+            'booking_agent_id' => $agent->id,
             'created_by' => $agent->id,
         ]);
         $eveningBooking->forceFill(['created_at' => today()->setTime(17, 15)])->saveQuietly();
@@ -415,8 +423,7 @@ class ServicesProductsKpisDashboardWave5Test extends TestCase
         $this->assertNotNull($syncedCustomer);
 
         $syncedLead = Lead::where('phone', $expectedPhone)->first();
-        $this->assertNotNull($syncedLead);
-        $this->assertNull($syncedLead->needful_done);
+        $this->assertNull($syncedLead, 'AdLeadEntryController must not auto-create rows in the separate leads table');
     }
 
     public function test_dashboard_reads_social_content_plan_and_renders_live_operational_pulse(): void

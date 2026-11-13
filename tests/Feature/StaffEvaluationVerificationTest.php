@@ -108,9 +108,13 @@ class StaffEvaluationVerificationTest extends TestCase
     {
         Carbon::setTestNow(self::A_WEDNESDAY);
 
-        $user = User::factory()->create(['role' => 'admin']);
+        $manager = User::factory()->create([
+            'name' => 'Rhea Jacob',
+            'role' => 'manager',
+            'permissions' => ['kpis' => 'edit'],
+        ]);
 
-        $response = $this->actingAs($user)->get(route('kpi.evaluations.index'));
+        $response = $this->actingAs($manager)->get(route('kpi.evaluations.index'));
         $response->assertOk();
         $response->assertSee('Evaluations can be submitted on Mondays and Tuesdays (2-day window).');
 
@@ -125,9 +129,13 @@ class StaffEvaluationVerificationTest extends TestCase
         foreach ([self::A_MONDAY, self::A_TUESDAY] as $allowedDay) {
             Carbon::setTestNow($allowedDay);
 
-            $user = User::factory()->create(['role' => 'admin']);
+            $manager = User::factory()->create([
+                'name' => 'Rhea Jacob',
+                'role' => 'manager',
+                'permissions' => ['kpis' => 'edit'],
+            ]);
 
-            $response = $this->actingAs($user)->get(route('kpi.evaluations.index'));
+            $response = $this->actingAs($manager)->get(route('kpi.evaluations.index'));
             $response->assertOk();
             $response->assertDontSee('Evaluations can be submitted on Mondays and Tuesdays (2-day window).');
 
@@ -142,13 +150,17 @@ class StaffEvaluationVerificationTest extends TestCase
     {
         Carbon::setTestNow(self::A_WEDNESDAY);
 
-        $user = User::factory()->create(['role' => 'admin']);
-        $staff = Staff::create(['name' => 'Wednesday Stylist']);
+        $manager = User::factory()->create([
+            'name' => 'Rhea Jacob',
+            'role' => 'manager',
+            'permissions' => ['kpis' => 'edit'],
+        ]);
+        $staff = Staff::create(['name' => 'Wednesday Stylist', 'branch' => 'wakrah']);
 
         $payload = [
             'staff_id' => $staff->id,
             'branch' => 'wakrah',
-            'evaluation_date' => now()->format('Y-m-d'),
+            'evaluation_date' => now('Asia/Qatar')->format('Y-m-d'),
             'score_cleanliness' => 5,
             'score_dress_code' => 1,
             'score_attitude' => 5,
@@ -157,7 +169,7 @@ class StaffEvaluationVerificationTest extends TestCase
             'score_communication' => 1,
         ];
 
-        $this->actingAs($user)
+        $this->actingAs($manager)
             ->post(route('kpi.evaluations.store'), $payload)
             ->assertForbidden();
 
@@ -165,7 +177,8 @@ class StaffEvaluationVerificationTest extends TestCase
 
         // Submitting on Tuesday (2nd day of the 2-day window) succeeds cleanly
         Carbon::setTestNow(self::A_TUESDAY);
-        $this->actingAs($user)
+        $payload['evaluation_date'] = now('Asia/Qatar')->format('Y-m-d');
+        $this->actingAs($manager)
             ->post(route('kpi.evaluations.store'), $payload)
             ->assertRedirect(route('kpi.evaluations.index'));
 

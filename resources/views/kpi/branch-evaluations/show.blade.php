@@ -56,9 +56,9 @@
         </div>
         <div class="d-flex align-items-center gap-2">
             <a href="{{ route('kpi.branch-evaluation.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Branch Evaluations</a>
-            @moduleEdit('kpis')
+            @if (auth()->user()?->isAdmin())
                 <a href="{{ route('kpi.branch-evaluation.edit', $evaluation) }}" class="btn btn-sm btn-primary"><i class="bx bx-pencil me-1"></i>Edit Report</a>
-            @endmoduleEdit
+            @endif
         </div>
     </div>
 

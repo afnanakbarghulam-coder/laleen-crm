@@ -2,6 +2,10 @@
 @section('title', 'Agents Target Reports')
 
 @section('content')
+    @php
+        $isAdminShiftUser = (bool) (auth()->user()?->isAdmin());
+        $canCheckInShift = $isAdminShiftUser || (auth()->user()?->role === 'agent');
+    @endphp
     <div class="d-flex gap-2 mb-4">
         <button type="button" class="agents-tab-btn btn btn-sm {{ $activeTab === 'shifts' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="shifts">Agent Shift Log</button>
         <button type="button" class="agents-tab-btn btn btn-sm {{ $activeTab === 'reports' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="reports">Agent Target Reports</button>
@@ -41,13 +45,13 @@
         <div class="kpi-header">
             <div>
                 <h4>Agent Shift Log</h4>
-                <p>Log each agent's exact check-in and check-out time for their Morning or Evening shift — only bookings that agent's own account creates strictly inside that window count toward their target.</p>
+                <p>Log each agent's check-in and check-out time for their Morning or Evening shift — scheduled calendar bookings where the agent selects her name as <strong>Booking Agent</strong> count toward her 13/day quota.</p>
             </div>
-            @moduleEdit('kpis')
+            @if ($canCheckInShift)
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#shiftLogModal" onclick="resetShiftLogForm()">
                     <i class="bx bx-plus me-1"></i> Log Sign-In
                 </button>
-            @endmoduleEdit
+            @endif
         </div>
 
         <div class="kpi-panel mb-3">
@@ -102,7 +106,7 @@
                                     @endif
                                 </td>
                                 <td class="text-end">
-                                    @moduleEdit('kpis')
+                                    @if ($isAdminShiftUser)
                                         <div class="d-flex gap-1 justify-content-end">
                                             <button type="button" class="btn btn-sm btn-outline-warning shift-log-edit-btn"
                                                 data-log='@json($log->toEditPayload())'
@@ -114,7 +118,7 @@
                                                 <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
                                             </form>
                                         </div>
-                                    @endmoduleEdit
+                                    @endif
                                 </td>
                             </tr>
                         @empty
@@ -127,9 +131,9 @@
 
         <div class="mb-4">{{ $shiftLogs->links() }}</div>
 
-        @moduleEdit('kpis')
+        @if ($canCheckInShift)
             @include('kpi.agents._shift-log-modal')
-        @endmoduleEdit
+        @endif
     </div>
 
     {{-- ================= AGENT TARGET REPORTS ================= --}}
@@ -137,11 +141,11 @@
         <div class="kpi-header">
             <div>
                 <h4>Agent Target Reports</h4>
-                <p>Pick a date range and generate a saved snapshot — Morning/Evening bookings, targets, and achievement % are calculated automatically from the Agent Shift Log and bookings.</p>
+                <p>Pick a date range and generate a saved snapshot — Morning/Evening bookings, targets, and achievement % are calculated automatically from the Agent Shift Log and explicit Booking Agent calendar bookings.</p>
             </div>
         </div>
 
-        @moduleEdit('kpis')
+        @if ($isAdminShiftUser)
             <div class="kpi-panel mb-3">
                 <form method="POST" action="{{ route('kpi.agents.store') }}" class="row g-3 align-items-end">
                     @csrf
@@ -158,7 +162,7 @@
                     </div>
                 </form>
             </div>
-        @endmoduleEdit
+        @endif
 
         <div class="kpi-panel p-0" style="overflow:hidden;">
             <div class="table-responsive">
@@ -187,12 +191,12 @@
                                     <span class="kpi-badge {{ $combined['pct'] >= 85 ? 'kpi-badge-green' : ($combined['pct'] >= 70 ? 'kpi-badge-amber' : 'kpi-badge-red') }}">{{ $combined['pct'] }}%</span>
                                 </td>
                                 <td class="text-end">
-                                    @moduleEdit('kpis')
+                                    @if ($isAdminShiftUser)
                                         <form action="{{ route('kpi.agents.destroy', $report) }}" method="POST" onsubmit="return confirm('Delete this report?')">
                                             @csrf @method('DELETE')
                                             <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bx bx-trash"></i></button>
                                         </form>
-                                    @endmoduleEdit
+                                    @endif
                                 </td>
                             </tr>
                         @empty

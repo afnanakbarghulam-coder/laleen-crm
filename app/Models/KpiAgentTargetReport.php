@@ -8,7 +8,6 @@ use Illuminate\Support\Carbon;
 class KpiAgentTargetReport extends Model
 {
     const DAILY_TARGET_PER_SHIFT = 13; // bookings/day/shift
-    const MONTHLY_TARGET_PER_SHIFT = 403; // 13 bookings/day/shift x 31 days
     const RECOVERY_TARGET_PCT = 88.0;
 
     protected $fillable = [
@@ -68,7 +67,6 @@ class KpiAgentTargetReport extends Model
 
         $agentIds = User::where('role', 'agent')
             ->pluck('id')
-            ->merge($logs->pluck('user_id'))
             ->unique()
             ->values();
 
@@ -76,22 +74,26 @@ class KpiAgentTargetReport extends Model
             return ['morning' => 0, 'evening' => 0];
         }
 
-        $appointments = Appointment::query()
-            ->whereNotIn('status', ['cancelled', 'no_show'])
-            ->where(function ($q) use ($agentIds) {
-                $q->whereIn('booking_agent_id', $agentIds)
-                    ->orWhere(function ($sub) use ($agentIds) {
-                        $sub->whereNull('booking_agent_id')
-                            ->whereIn('created_by', $agentIds);
-                    });
-            })
+        $rawAppointments = Appointment::query()
+            ->scheduledForAgentQuota($agentIds)
             ->whereBetween('created_at', $bounds)
-            ->get(['id', 'booking_agent_id', 'created_by', 'created_at']);
+            ->get([
+                'id',
+                'booking_agent_id',
+                'customer_id',
+                'phone',
+                'customer_name',
+                'booking_date',
+                'appointment_datetime',
+                'created_at',
+            ]);
+
+        $appointments = Appointment::deduplicateForAgentQuota($rawAppointments);
 
         $counts = ['morning' => 0, 'evening' => 0];
 
         foreach ($appointments as $appointment) {
-            $attributedAgentId = $appointment->booking_agent_id ?: $appointment->created_by;
+            $attributedAgentId = (int) $appointment->booking_agent_id;
             if (!$attributedAgentId || !$agentIds->contains($attributedAgentId)) {
                 continue;
             }
@@ -129,17 +131,27 @@ class KpiAgentTargetReport extends Model
      * Live per-agent daily & Month-to-Date booking breakdown (13 bookings/day per agent),
      * matching the /kpis Executive Scorecard 1-to-1.
      */
-    public static function liveAgentScorecards(): array
+    public static function liveAgentScorecards(?string $month = null): array
     {
         $shiftTz = AgentShiftLog::SHIFT_TIMEZONE;
         $appTz = config('app.timezone', $shiftTz);
         $now = now($shiftTz);
-        $todayStart = $now->copy()->startOfDay()->timezone($appTz);
-        $todayEnd = $now->copy()->endOfDay()->timezone($appTz);
-        $periodStart = $now->copy()->startOfMonth()->startOfDay()->timezone($appTz);
-        $periodEnd = $now->copy()->endOfDay()->timezone($appTz);
-        $daysElapsed = max(1, (int) $now->day);
-        $daysInMonth = max(1, (int) $now->daysInMonth);
+
+        $selectedMonth = (is_string($month) && preg_match('/^\d{4}-\d{2}$/', $month))
+            ? $month
+            : $now->format('Y-m');
+        $isCurrentMonth = ($selectedMonth === $now->format('Y-m'));
+
+        $monthStart = Carbon::createFromFormat('Y-m-d', $selectedMonth . '-01', $shiftTz)->startOfMonth()->startOfDay();
+        $monthEnd = $monthStart->copy()->endOfMonth()->endOfDay();
+        $referenceDay = $isCurrentMonth ? $now->copy() : $monthEnd->copy();
+
+        $todayStart = $referenceDay->copy()->startOfDay()->timezone($appTz);
+        $todayEnd = $referenceDay->copy()->endOfDay()->timezone($appTz);
+        $periodStart = $monthStart->copy()->timezone($appTz);
+        $periodEnd = ($isCurrentMonth ? $now->copy()->endOfDay() : $monthEnd->copy())->timezone($appTz);
+        $daysElapsed = $isCurrentMonth ? max(1, (int) $now->day) : max(1, (int) $monthStart->daysInMonth);
+        $daysInMonth = max(1, (int) $monthStart->daysInMonth);
         $dailyTarget = self::DAILY_TARGET_PER_SHIFT; // 13
 
         $agents = User::where('role', 'agent')->orderBy('name')->get();
@@ -148,23 +160,26 @@ class KpiAgentTargetReport extends Model
         }
 
         $agentIds = $agents->pluck('id')->values();
-        $todayShiftLogs = AgentShiftLog::whereDate('date', $now->toDateString())
+        $todayShiftLogs = AgentShiftLog::whereDate('date', $referenceDay->toDateString())
             ->get()
             ->groupBy('user_id');
 
-        $mtdAppointments = Appointment::query()
-            ->whereNotIn('status', ['cancelled', 'no_show'])
-            ->where(function ($q) use ($agentIds) {
-                $q->whereIn('booking_agent_id', $agentIds)
-                    ->orWhere(function ($sub) use ($agentIds) {
-                        $sub->whereNull('booking_agent_id')
-                            ->whereIn('created_by', $agentIds);
-                    });
-            })
+        $mtdRawAppointments = Appointment::query()
+            ->scheduledForAgentQuota($agentIds)
             ->whereBetween('created_at', [$periodStart, $periodEnd])
-            ->get(['id', 'booking_agent_id', 'created_by', 'created_at']);
+            ->get([
+                'id',
+                'booking_agent_id',
+                'customer_id',
+                'phone',
+                'customer_name',
+                'booking_date',
+                'appointment_datetime',
+                'created_at',
+            ]);
 
-        $mtdByAgent = $mtdAppointments->groupBy(fn (Appointment $appt) => (int) ($appt->booking_agent_id ?: $appt->created_by));
+        $mtdAppointments = Appointment::deduplicateForAgentQuota($mtdRawAppointments);
+        $mtdByAgent = $mtdAppointments->groupBy(fn (Appointment $appt) => (int) $appt->booking_agent_id);
 
         return $agents->map(function (User $agent) use ($todayStart, $todayEnd, $daysElapsed, $daysInMonth, $dailyTarget, $todayShiftLogs, $mtdByAgent) {
             $agentAppointments = $mtdByAgent->get($agent->id, collect());
@@ -294,13 +309,14 @@ class KpiAgentTargetReport extends Model
 
     /**
      * Daily bookings needed per shift, for the remaining days of the month,
-     * to reach 88% of the fixed 403/shift monthly target.
+     * to reach 88% of the month's 13/day/shift target (13 * $daysInMonth).
      */
     public function recoveryMath(): array
     {
         $bookings = $this->rawShiftBookings();
-        $target88 = self::MONTHLY_TARGET_PER_SHIFT * self::RECOVERY_TARGET_PCT / 100;
-        $daysInMonth = $this->date_to->daysInMonth;
+        $daysInMonth = max(1, (int) $this->date_to->daysInMonth);
+        $monthlyTargetPerShift = self::DAILY_TARGET_PER_SHIFT * $daysInMonth;
+        $target88 = $monthlyTargetPerShift * self::RECOVERY_TARGET_PCT / 100;
         $daysRemaining = max($daysInMonth - $this->date_to->day, 0);
 
         $build = function (int $bookings) use ($target88, $daysRemaining) {
@@ -316,6 +332,7 @@ class KpiAgentTargetReport extends Model
         };
 
         return [
+            'monthly_target_per_shift' => $monthlyTargetPerShift,
             'days_remaining' => $daysRemaining,
             'morning' => $build($bookings['morning']),
             'evening' => $build($bookings['evening']),

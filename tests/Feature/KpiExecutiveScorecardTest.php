@@ -96,16 +96,26 @@ class KpiExecutiveScorecardTest extends TestCase
             'is_active' => true,
         ]);
 
+        // 3B. Seed Ahana (Old Airport) & Rhea (Wakrah) Branch Manager stylists first so scheduled appointments link to real staff
+        $oaStylist1 = Staff::create(['name' => 'OA Stylist 1', 'branch' => 'old_airport', 'bookable' => true]);
+        $oaStylist2 = Staff::create(['name' => 'OA Stylist 2', 'branch' => 'old_airport', 'bookable' => true]);
+        $wkStylist1 = Staff::create(['name' => 'WK Stylist 1', 'branch' => 'wakrah', 'bookable' => true]);
+        $wkStylist2 = Staff::create(['name' => 'WK Stylist 2', 'branch' => 'wakrah', 'bookable' => true]);
+
         // Areeba books 13 paid/completed appointments today (100% of today's 13/day target)
         $firstCompletedAppt = null;
         for ($i = 1; $i <= 13; $i++) {
+            $apptDt = $now->copy()->setTime(10 + ($i % 8), 0);
+            $branchName = $i % 2 === 0 ? 'old_airport' : 'wakrah';
             $appt = Appointment::create([
                 'customer_name' => "Areeba Client {$i}",
                 'phone' => '+9746600' . str_pad((string) $i, 4, '0', STR_PAD_LEFT),
                 'service_name' => 'Manicure',
-                'appointment_datetime' => $now->copy()->setTime(10 + ($i % 8), 0),
+                'appointment_datetime' => $apptDt,
                 'booking_date' => $now->toDateString(),
-                'branch' => $i % 2 === 0 ? 'old_airport' : 'wakrah',
+                'start_time' => $apptDt->format('H:i:s'),
+                'staff_id' => $branchName === 'old_airport' ? $oaStylist1->id : $wkStylist1->id,
+                'branch' => $branchName,
                 'booking_agent_id' => $areebaUser->id,
                 'created_by' => $areebaUser->id,
                 'status' => 'completed',
@@ -119,13 +129,17 @@ class KpiExecutiveScorecardTest extends TestCase
 
         // Zoya books 6 paid/completed appointments today
         for ($j = 1; $j <= 6; $j++) {
+            $zoyaDt = $now->copy()->setTime(11 + ($j % 6), 0);
+            $zoyaBranch = $j % 2 === 0 ? 'old_airport' : 'wakrah';
             Appointment::create([
                 'customer_name' => "Zoya Client {$j}",
                 'phone' => '+9746699' . str_pad((string) $j, 4, '0', STR_PAD_LEFT),
                 'service_name' => 'Pedicure',
-                'appointment_datetime' => $now->copy()->setTime(11 + ($j % 6), 0),
+                'appointment_datetime' => $zoyaDt,
                 'booking_date' => $now->toDateString(),
-                'branch' => $j % 2 === 0 ? 'old_airport' : 'wakrah',
+                'start_time' => $zoyaDt->format('H:i:s'),
+                'staff_id' => $zoyaBranch === 'old_airport' ? $oaStylist2->id : $wkStylist2->id,
+                'branch' => $zoyaBranch,
                 'booking_agent_id' => $zoyaUser->id,
                 'created_by' => $zoyaUser->id,
                 'status' => 'completed',
@@ -198,10 +212,11 @@ class KpiExecutiveScorecardTest extends TestCase
             'updated_at' => $now->copy()->subHours(60),
         ])->saveQuietly();
 
-        // 3. Seed Sana's Weekly Content Plan across all elapsed MTD weeks (4 Reels + 7 Stories per week = 100% Execution, 0 Late Replies)
-        $elapsedWeeks = max(1, min(4, (int) ceil(max(1, (int) $now->day) / 7)));
-        for ($w = 0; $w < $elapsedWeeks; $w++) {
-            $seedWeekMonday = Carbon::parse($weekMonday)->subWeeks($w)->toDateString();
+        // 3. Seed Sana's Weekly Content Plan across all overlapping MTD weeks (4 Reels + 7 Stories per week = 100% Execution, 0 Late Replies)
+        $cursorMonday = $now->copy()->startOfMonth()->startOfWeek(Carbon::MONDAY)->startOfDay();
+        $endMonday = Carbon::parse($weekMonday)->startOfDay();
+        while ($cursorMonday->lte($endMonday)) {
+            $seedWeekMonday = $cursorMonday->toDateString();
             foreach (SocialContentPlan::DAYS_OF_WEEK as $idx => $dayName) {
                 SocialContentPlan::create([
                     'week_start_date' => $seedWeekMonday,
@@ -214,15 +229,10 @@ class KpiExecutiveScorecardTest extends TestCase
                     'late_replies_count' => 0,
                 ]);
             }
+            $cursorMonday->addWeek();
         }
 
         // 3B. Seed Ahana (Old Airport) & Rhea (Wakrah) Branch Manager KPIs
-        // Active stylists: 2 in old_airport, 2 in wakrah
-        $oaStylist1 = Staff::create(['name' => 'OA Stylist 1', 'branch' => 'old_airport', 'bookable' => true]);
-        $oaStylist2 = Staff::create(['name' => 'OA Stylist 2', 'branch' => 'old_airport', 'bookable' => true]);
-        $wkStylist1 = Staff::create(['name' => 'WK Stylist 1', 'branch' => 'wakrah', 'bookable' => true]);
-        $wkStylist2 = Staff::create(['name' => 'WK Stylist 2', 'branch' => 'wakrah', 'bookable' => true]);
-
         $mondaysInMtd = [];
         foreach (CarbonPeriod::create($now->copy()->startOfMonth()->startOfDay(), $now->copy()->startOfDay()) as $day) {
             if ($day->isMonday()) {
@@ -334,7 +344,7 @@ class KpiExecutiveScorecardTest extends TestCase
         $response->assertSee('Agent Chat Quality');
         $response->assertSee('Lead Conversion Rate');
         $response->assertSee('Complaint Resolution SLA');
-        $response->assertSee('Weekly Content Plan');
+        $response->assertSee('Organic Content Plan (MTD)');
         $response->assertSee('Social Reply SLA');
         $response->assertSee('Select Staff Scorecard');
         $response->assertDontSee('>Ads Kanban<', false);
@@ -413,32 +423,37 @@ class KpiExecutiveScorecardTest extends TestCase
         $this->assertSame(2, $scorecard['sana']['passing_kpis_count']);
         $this->assertSame(100.0, (float) $scorecard['sana']['overall_score_pct']);
 
-        // Assert Ahana's metrics (Old Airport Branch Manager: 100% Monday Staff Eval Compliance + 90.0% Mystery Shopper Avg)
+        // Assert Ahana's metrics (Old Airport Branch Manager: 100% Monday Staff Eval Compliance when >=1 Monday + 90.0% Mystery Shopper Avg)
+        $nowQatar = now('Asia/Qatar');
         $expectedMondaysCount = count($mondaysInMtd);
+        $expectedAhanaEvalPct = $expectedMondaysCount > 0 ? 100.0 : 0.0;
         $this->assertSame('Ahana', $scorecard['ahana']['owner']);
         $this->assertSame('old_airport', $scorecard['ahana']['branch']);
         $this->assertSame(2, $scorecard['ahana']['active_staff_count']);
         $this->assertSame($expectedMondaysCount, $scorecard['ahana']['mondays_elapsed_count']);
         $this->assertSame(2 * $expectedMondaysCount, $scorecard['ahana']['expected_evaluations_mtd']);
         $this->assertSame(2 * $expectedMondaysCount, $scorecard['ahana']['completed_evaluations_mtd']);
-        $this->assertSame(100.0, (float) $scorecard['ahana']['eval_compliance_pct']);
-        $this->assertTrue($scorecard['ahana']['eval_compliance_passing']);
+        $this->assertSame($expectedAhanaEvalPct, (float) $scorecard['ahana']['eval_compliance_pct']);
+        $this->assertSame($expectedMondaysCount > 0, $scorecard['ahana']['eval_compliance_passing']);
         $this->assertSame(2, $scorecard['ahana']['audits_count_mtd']);
         $this->assertSame(90.0, (float) $scorecard['ahana']['mystery_shopper_avg_pct']);
         $this->assertSame(100.0, (float) $scorecard['ahana']['mystery_shopper_attainment_pct']);
         $this->assertTrue($scorecard['ahana']['mystery_shopper_passing']);
-        $this->assertSame(2, $scorecard['ahana']['passing_kpis_count']);
+        $this->assertSame($expectedMondaysCount > 0 ? 2 : 1, $scorecard['ahana']['passing_kpis_count']);
         $this->assertSame(2, $scorecard['ahana']['total_kpis_count']);
-        $this->assertSame(100.0, (float) $scorecard['ahana']['overall_score_pct']);
+        $this->assertSame(round(($expectedAhanaEvalPct + 100.0) / 2, 1), (float) $scorecard['ahana']['overall_score_pct']);
 
         // Assert Rhea's metrics (Wakrah Branch Manager: 50% Monday Staff Eval Compliance when Mondays > 0 + 80.0% Mystery Shopper Avg)
+        $expectedRheaMondays = (($nowQatar->isMonday() || $nowQatar->isTuesday()) && $expectedMondaysCount > 1)
+            ? ($expectedMondaysCount - 1)
+            : $expectedMondaysCount;
         $this->assertSame('Rhea', $scorecard['rhea']['owner']);
         $this->assertSame('wakrah', $scorecard['rhea']['branch']);
         $this->assertSame(2, $scorecard['rhea']['active_staff_count']);
-        $this->assertSame($expectedMondaysCount, $scorecard['rhea']['mondays_elapsed_count']);
-        $this->assertSame(2 * $expectedMondaysCount, $scorecard['rhea']['expected_evaluations_mtd']);
-        $this->assertSame(1 * $expectedMondaysCount, $scorecard['rhea']['completed_evaluations_mtd']);
-        $expectedRheaEvalPct = $expectedMondaysCount > 0 ? 50.0 : 100.0;
+        $this->assertSame($expectedRheaMondays, $scorecard['rhea']['mondays_elapsed_count']);
+        $this->assertSame(2 * $expectedRheaMondays, $scorecard['rhea']['expected_evaluations_mtd']);
+        $this->assertSame(1 * $expectedRheaMondays, $scorecard['rhea']['completed_evaluations_mtd']);
+        $expectedRheaEvalPct = $expectedRheaMondays > 0 ? 50.0 : 0.0;
         $this->assertSame($expectedRheaEvalPct, (float) $scorecard['rhea']['eval_compliance_pct']);
         $this->assertSame(2, $scorecard['rhea']['audits_count_mtd']);
         $this->assertSame(80.0, (float) $scorecard['rhea']['mystery_shopper_avg_pct']);
@@ -548,12 +563,16 @@ class KpiExecutiveScorecardTest extends TestCase
             'is_active' => true,
         ]);
 
+        $fixStylist = Staff::create(['name' => 'Fix Stylist', 'branch' => 'old_airport', 'bookable' => true]);
+
         $futureAppt = Appointment::create([
             'customer_name' => 'Future Visit Client',
             'phone' => '+97455770001',
             'service_name' => 'Facial',
             'appointment_datetime' => $now->copy()->addMonth()->setTime(14, 0),
             'booking_date' => $now->copy()->addMonth()->toDateString(),
+            'start_time' => '14:00:00',
+            'staff_id' => $fixStylist->id,
             'branch' => 'old_airport',
             'booking_agent_id' => $areeba->id,
             'created_by' => $areeba->id,
@@ -562,8 +581,8 @@ class KpiExecutiveScorecardTest extends TestCase
         ]);
         $futureAppt->forceFill(['created_at' => $now])->saveQuietly();
 
-        // Agent & Supervisor Booking Rule: Active/completed bookings count as 1; cancelled & no_show bookings are excluded (0)
-        foreach (['confirmed' => 1, 'completed' => 1, 'cancelled' => 0, 'no_show' => 0] as $statusToTest => $expectedCount) {
+        // Agent & Supervisor Booking Rule: Once a Chat Agent books an appointment, all statuses (including cancelled & no_show) count as +1
+        foreach (['confirmed' => 1, 'completed' => 1, 'cancelled' => 1, 'no_show' => 1] as $statusToTest => $expectedCount) {
             $futureAppt->update(['status' => $statusToTest]);
 
             $report = new \App\Models\KpiAgentTargetReport([
@@ -610,7 +629,7 @@ class KpiExecutiveScorecardTest extends TestCase
         $this->assertSame('55901001', Lead::normalizePhone('+974', '55901001'));
         $this->assertSame('55901001', Lead::normalizePhone('00974', '55901001'));
 
-        // Fix #4: Paid Ad Lead created in Core CRM (/leads with source = Instagram) + standalone POS Sale auto-creates & updates AdLeadEntry
+        // Fix #4: /leads and /kpis/ads are 100% separate modules (sharing only canonical Customer); standalone POS Sale attributes to logged AdLeadEntry via Customer
         $product = \App\Models\Product::create([
             'name' => 'Luxury Hair Mask',
             'price' => 250,
@@ -631,8 +650,18 @@ class KpiExecutiveScorecardTest extends TestCase
             ])
             ->assertRedirect();
 
-        $autoEntry = AdLeadEntry::where('phone', '55881122')->first();
-        $this->assertNotNull($autoEntry, 'Paid Ad Lead in Core CRM must auto-create AdLeadEntry');
+        $this->assertNull(AdLeadEntry::where('phone', '55881122')->first(), 'Creating a Lead in /leads must NEVER auto-create an AdLeadEntry');
+
+        $sharedCust = Customer::where('phone', '55881122')->firstOrFail();
+        $autoEntry = AdLeadEntry::create([
+            'date' => $now->toDateString(),
+            'customer_id' => $sharedCust->id,
+            'customer_name' => $sharedCust->name,
+            'phone' => '55881122',
+            'category' => 'Hair Treatment',
+            'branch' => null,
+            'ticket_amount' => 0,
+        ]);
         $this->assertFalse($autoEntry->isBooked(), 'Unbooked AdLeadEntry with 0 ticket_amount must not count as booked');
 
         // Even if branch is set with ticket_amount = 0 and not booked, isBooked() must be false

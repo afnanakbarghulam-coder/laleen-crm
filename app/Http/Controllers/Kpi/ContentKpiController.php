@@ -10,7 +10,7 @@ class ContentKpiController extends Controller
 {
     public function index()
     {
-        return view('kpi.content.index');
+        return redirect()->route('kpi.content-calendar.index');
     }
 
     /**

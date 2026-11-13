@@ -1,6 +1,10 @@
 {{-- Shared Add/Edit modal for Agent Shift Log rows. JS toggles it between
      "create" (form posts to agent-shift-logs.store) and "edit" (posts to
-     agent-shift-logs.update for the clicked row). --}}
+     agent-shift-logs.update for the clicked row — Admin only). --}}
+@php
+    $dohaToday = now(\App\Models\AgentShiftLog::SHIFT_TIMEZONE)->toDateString();
+    $isAdminShiftModal = (bool) (auth()->user()?->isAdmin());
+@endphp
 <div class="modal fade" id="shiftLogModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -16,16 +20,25 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">Date</label>
-                            <input type="date" name="date" id="shiftLogDate" class="form-control" required>
+                            @if ($isAdminShiftModal)
+                                <input type="date" name="date" id="shiftLogDate" class="form-control" value="{{ $dohaToday }}" required>
+                            @else
+                                <input type="date" name="date" id="shiftLogDate" class="form-control" value="{{ $dohaToday }}" min="{{ $dohaToday }}" max="{{ $dohaToday }}" readonly required>
+                            @endif
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Agent</label>
-                            <select name="user_id" id="shiftLogAgent" class="form-select" required>
-                                <option value="">— Select agent —</option>
-                                @foreach ($agents as $agent)
-                                    <option value="{{ $agent->id }}">{{ $agent->name }}</option>
-                                @endforeach
-                            </select>
+                            @if ($isAdminShiftModal)
+                                <select name="user_id" id="shiftLogAgent" class="form-select" required>
+                                    <option value="">— Select agent —</option>
+                                    @foreach ($agents as $agent)
+                                        <option value="{{ $agent->id }}">{{ $agent->name }}</option>
+                                    @endforeach
+                                </select>
+                            @else
+                                <input type="hidden" name="user_id" id="shiftLogAgent" value="{{ auth()->id() }}">
+                                <input type="text" class="form-control" value="{{ auth()->user()?->name }}" readonly disabled>
+                            @endif
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Shift</label>
@@ -60,28 +73,33 @@
         document.getElementById('shiftLogForm').action = '{{ route('kpi.agent-shift-logs.store') }}';
         document.getElementById('shiftLogFormMethod').value = '';
         document.getElementById('shiftLogForm').reset();
-        document.getElementById('shiftLogDate').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('shiftLogDate').value = @json($dohaToday);
+        @if (!$isAdminShiftModal)
+            document.getElementById('shiftLogAgent').value = @json((string) auth()->id());
+        @endif
     };
 
-    window.editShiftLog = function (log) {
-        resetShiftLogForm();
+    @if ($isAdminShiftModal)
+        window.editShiftLog = function (log) {
+            resetShiftLogForm();
 
-        document.getElementById('shiftLogModalTitle').innerText = 'Edit Shift Sign-In';
-        document.getElementById('shiftLogForm').action = `/kpis/agent-shift-logs/${log.id}`;
-        document.getElementById('shiftLogFormMethod').value = 'PUT';
+            document.getElementById('shiftLogModalTitle').innerText = 'Edit Shift Sign-In';
+            document.getElementById('shiftLogForm').action = `/kpis/agent-shift-logs/${log.id}`;
+            document.getElementById('shiftLogFormMethod').value = 'PUT';
 
-        document.getElementById('shiftLogDate').value = log.date ? log.date.slice(0, 10) : '';
-        document.getElementById('shiftLogAgent').value = log.user_id || '';
-        document.getElementById('shiftLogShift').value = log.shift || '';
-        document.getElementById('shiftLogCheckIn').value = log.check_in_time ? log.check_in_time.slice(0, 5) : '';
-        document.getElementById('shiftLogCheckOut').value = log.check_out_time ? log.check_out_time.slice(0, 5) : '';
+            document.getElementById('shiftLogDate').value = log.date ? log.date.slice(0, 10) : '';
+            document.getElementById('shiftLogAgent').value = log.user_id || '';
+            document.getElementById('shiftLogShift').value = log.shift || '';
+            document.getElementById('shiftLogCheckIn').value = log.check_in_time ? log.check_in_time.slice(0, 5) : '';
+            document.getElementById('shiftLogCheckOut').value = log.check_out_time ? log.check_out_time.slice(0, 5) : '';
 
-        new bootstrap.Modal(document.getElementById('shiftLogModal')).show();
-    };
+            new bootstrap.Modal(document.getElementById('shiftLogModal')).show();
+        };
 
-    document.querySelectorAll('.shift-log-edit-btn').forEach(btn => {
-        btn.addEventListener('click', function () {
-            editShiftLog(JSON.parse(this.dataset.log));
+        document.querySelectorAll('.shift-log-edit-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                editShiftLog(JSON.parse(this.dataset.log));
+            });
         });
-    });
+    @endif
 </script>

@@ -5,28 +5,61 @@ namespace App\Http\Controllers\Kpi;
 use App\Http\Controllers\Controller;
 use App\Models\AgentShiftLog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 class AgentShiftLogController extends Controller
 {
     public function store(Request $request)
     {
+        $user = $request->user();
+        abort_unless($user && ($user->isAdmin() || $user->role === 'agent'), 403);
+
+        if (!$user->isAdmin()) {
+            $todayQatar = now(AgentShiftLog::SHIFT_TIMEZONE)->toDateString();
+
+            if ($request->filled('user_id') && (int) $request->input('user_id') !== (int) $user->id) {
+                abort(403, 'Chat agents may only check in for their own account.');
+            }
+
+            if ($request->filled('date')) {
+                try {
+                    $submittedDate = Carbon::parse($request->input('date'))->toDateString();
+                } catch (\Throwable) {
+                    $submittedDate = (string) $request->input('date');
+                }
+
+                if ($submittedDate !== $todayQatar) {
+                    abort(403, 'Chat agents may only check in for today (Asia/Qatar).');
+                }
+            }
+
+            $request->merge([
+                'user_id' => $user->id,
+                'date' => $todayQatar,
+            ]);
+        }
+
         $validated = $this->validated($request);
 
-        AgentShiftLog::create($validated + ['created_by' => auth()->id()]);
+        AgentShiftLog::create($validated + ['created_by' => $user->id]);
 
         return redirect()->route('kpi.agents.index')->with('success', 'Shift sign-in logged.');
     }
 
     public function update(Request $request, AgentShiftLog $agentShiftLog)
     {
+        abort_unless($request->user()?->isAdmin(), 403);
+
         $agentShiftLog->update($this->validated($request, $agentShiftLog));
 
         return redirect()->route('kpi.agents.index')->with('success', 'Shift sign-in updated.');
     }
 
-    public function destroy(AgentShiftLog $agentShiftLog)
+    public function destroy(Request $request, AgentShiftLog $agentShiftLog)
     {
+        abort_unless($request->user()?->isAdmin(), 403);
+
         $agentShiftLog->delete();
 
         return redirect()->route('kpi.agents.index')->with('success', 'Shift sign-in deleted.');

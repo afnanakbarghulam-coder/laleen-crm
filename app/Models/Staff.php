@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class Staff extends Model
 {
@@ -86,7 +88,7 @@ class Staff extends Model
      */
     public function scopeActive($query)
     {
-        $today = now()->toDateString();
+        $today = now('Asia/Qatar')->toDateString();
 
         return $query->where('bookable', true)
             ->where(function ($q) use ($today) {
@@ -95,6 +97,53 @@ class Staff extends Model
             ->where(function ($q) use ($today) {
                 $q->whereNull('end_date')->orWhereDate('end_date', '>=', $today);
             });
+    }
+
+    /**
+     * Salon staff eligible for weekly Monday Branch Manager evaluations as of $asOfDate.
+     * Includes absent / sick / on-leave stylists, while excluding non-stylist CRM roles
+     * (chat agents, admins, owners, super_admins, managers) and Branch Managers (Ahana, Rhea).
+     */
+    public function scopeSalonEvaluatable($query, ?string $branch = null, $asOfDate = null)
+    {
+        $dateStr = $asOfDate
+            ? Carbon::parse($asOfDate)->toDateString()
+            : now('Asia/Qatar')->toDateString();
+
+        return $query
+            ->where('bookable', true)
+            ->when($branch, fn ($q) => $q->whereIn('branch', [$branch, 'both']))
+            ->where(function ($q) use ($dateStr) {
+                $q->whereNull('start_date')->orWhereDate('start_date', '<=', $dateStr);
+            })
+            ->where(function ($q) use ($dateStr) {
+                $q->whereNull('end_date')->orWhereDate('end_date', '>=', $dateStr);
+            })
+            ->whereDoesntHave('user', function ($uq) {
+                $uq->whereIn(DB::raw("LOWER(TRIM(COALESCE(role, '')))"), [
+                    'agent',
+                    'admin',
+                    'owner',
+                    'super_admin',
+                    'manager',
+                ])
+                ->orWhereRaw("LOWER(TRIM(COALESCE(name, ''))) = 'ahana'")
+                ->orWhereRaw("LOWER(TRIM(COALESCE(name, ''))) LIKE 'ahana %'")
+                ->orWhereRaw("LOWER(TRIM(COALESCE(name, ''))) LIKE '% ahana'")
+                ->orWhereRaw("LOWER(TRIM(COALESCE(name, ''))) LIKE '% ahana %'")
+                ->orWhereRaw("LOWER(TRIM(COALESCE(name, ''))) = 'rhea'")
+                ->orWhereRaw("LOWER(TRIM(COALESCE(name, ''))) LIKE 'rhea %'")
+                ->orWhereRaw("LOWER(TRIM(COALESCE(name, ''))) LIKE '% rhea'")
+                ->orWhereRaw("LOWER(TRIM(COALESCE(name, ''))) LIKE '% rhea %'");
+            })
+            ->whereRaw("LOWER(TRIM(COALESCE(name, ''))) != 'ahana'")
+            ->whereRaw("LOWER(TRIM(COALESCE(name, ''))) NOT LIKE 'ahana %'")
+            ->whereRaw("LOWER(TRIM(COALESCE(name, ''))) NOT LIKE '% ahana'")
+            ->whereRaw("LOWER(TRIM(COALESCE(name, ''))) NOT LIKE '% ahana %'")
+            ->whereRaw("LOWER(TRIM(COALESCE(name, ''))) != 'rhea'")
+            ->whereRaw("LOWER(TRIM(COALESCE(name, ''))) NOT LIKE 'rhea %'")
+            ->whereRaw("LOWER(TRIM(COALESCE(name, ''))) NOT LIKE '% rhea'")
+            ->whereRaw("LOWER(TRIM(COALESCE(name, ''))) NOT LIKE '% rhea %'");
     }
 
     public function blocks()

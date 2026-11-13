@@ -426,7 +426,7 @@ class BookingsCalendarFinanceWave1Test extends TestCase
 
         // 1. Store a booking that includes a combo package at booking time (unpaid pre-checkout)
         // Frontend sends price = 500 (service) + 1200 (combo) = 1700, but appointments.price must only store 500!
-        $slot1 = Carbon::today()->setHour(11)->setMinute(0);
+        $slot1 = Carbon::today()->setHour(14)->setMinute(0);
         $this->actingAs($user)->post(route('appointments.store'), [
             'customer_name' => 'Huda Client',
             'phone' => '+97455440001',

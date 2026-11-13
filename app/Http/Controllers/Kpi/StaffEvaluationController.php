@@ -5,24 +5,20 @@ namespace App\Http\Controllers\Kpi;
 use App\Http\Controllers\Controller;
 use App\Models\KpiStaffEvaluation;
 use App\Models\Staff;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 class StaffEvaluationController extends Controller
 {
     public function index(Request $request)
     {
-        // Carbon's startOfWeek()/endOfWeek() carry real times (00:00:00 /
-        // 23:59:59), which matters below: Eloquent's 'date' cast still
-        // stores a full "Y-m-d H:i:s" string, so comparing against a bare
-        // toDateString() bound silently drops same-day rows on SQLite
-        // (string comparison, not date-aware). Always compare with
-        // toDateTimeString() here, not toDateString().
-        $weekStart = now()->startOfWeek(Carbon::MONDAY);
-        $weekEnd = now()->endOfWeek(Carbon::SUNDAY);
+        $nowQatar = now('Asia/Qatar');
+        $weekStart = $nowQatar->copy()->startOfWeek(Carbon::MONDAY)->startOfDay();
+        $weekEnd = $nowQatar->copy()->endOfWeek(Carbon::SUNDAY)->endOfDay();
 
-        $period = $request->query('period') === 'previous' ? 'previous' : 'current';
+        $rawMonth = trim((string) $request->query('month', ''));
+        $monthFilter = preg_match('/^\d{4}-\d{2}$/', $rawMonth) ? $rawMonth : null;
 
         $branchFilter = $request->filled('branch') && array_key_exists($request->query('branch'), KpiStaffEvaluation::BRANCHES)
             ? $request->query('branch')
@@ -30,10 +26,24 @@ class StaffEvaluationController extends Controller
 
         $evaluationsQuery = KpiStaffEvaluation::with(['staff', 'evaluator']);
 
-        if ($period === 'current') {
-            $evaluationsQuery->whereBetween('evaluation_date', [$weekStart->toDateTimeString(), $weekEnd->toDateTimeString()]);
+        if ($monthFilter) {
+            $period = 'month';
+            $monthStart = Carbon::createFromFormat('Y-m-d', $monthFilter . '-01', 'Asia/Qatar')->startOfMonth();
+            $monthEnd = $monthStart->copy()->endOfMonth();
+
+            $evaluationsQuery
+                ->whereDate('evaluation_date', '>=', $monthStart->toDateString())
+                ->whereDate('evaluation_date', '<=', $monthEnd->toDateString());
         } else {
-            $evaluationsQuery->where('evaluation_date', '<', $weekStart->toDateTimeString());
+            $period = $request->query('period') === 'previous' ? 'previous' : 'current';
+
+            if ($period === 'current') {
+                $evaluationsQuery
+                    ->whereDate('evaluation_date', '>=', $weekStart->toDateString())
+                    ->whereDate('evaluation_date', '<=', $weekEnd->toDateString());
+            } else {
+                $evaluationsQuery->whereDate('evaluation_date', '<', $weekStart->toDateString());
+            }
         }
 
         if ($branchFilter) {
@@ -46,11 +56,10 @@ class StaffEvaluationController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        $staffList = Staff::active()->orderBy('name')->get(['id', 'name', 'branch']);
+        $staffList = Staff::salonEvaluatable(null, $nowQatar->toDateString())
+            ->orderBy('name')
+            ->get(['id', 'name', 'branch']);
 
-        // Staff assigned to "both" branches belong in each branch's list —
-        // the New Evaluation modal's Staff dropdown filters from this per
-        // the selected Branch, so a "both" stylist must appear either way.
         $staffByBranch = collect(KpiStaffEvaluation::BRANCHES)->keys()->mapWithKeys(
             fn ($branchKey) => [
                 $branchKey => $staffList
@@ -60,7 +69,17 @@ class StaffEvaluationController extends Controller
             ]
         );
 
-        $canSubmitWindow = now()->isMonday() || now()->isTuesday();
+        $user = $request->user();
+        $isAdminUser = (bool) ($user?->isAdmin());
+        $managedBranch = KpiStaffEvaluation::managedBranchFor($user);
+        $canCreateEvaluation = $isAdminUser || $managedBranch !== null;
+        $modalBranches = $isAdminUser
+            ? KpiStaffEvaluation::BRANCHES
+            : ($managedBranch ? [$managedBranch => KpiStaffEvaluation::BRANCHES[$managedBranch]] : []);
+
+        $canSubmitWindow = $isAdminUser || $nowQatar->isMonday() || $nowQatar->isTuesday();
+        $currentMondayStr = $weekStart->toDateString();
+        $currentTuesdayStr = $weekStart->copy()->addDay()->toDateString();
 
         return view('kpi.evaluations.index', [
             'evaluations' => $evaluations,
@@ -68,13 +87,21 @@ class StaffEvaluationController extends Controller
             'staffByBranch' => $staffByBranch,
             'rubric' => KpiStaffEvaluation::RUBRIC,
             'branches' => KpiStaffEvaluation::BRANCHES,
-            'defaultBranch' => KpiStaffEvaluation::defaultBranchFor($request->user()),
+            'modalBranches' => $modalBranches,
+            'managedBranch' => $managedBranch,
+            'canCreateEvaluation' => $canCreateEvaluation,
+            'isAdminUser' => $isAdminUser,
+            'defaultBranch' => $managedBranch ?? KpiStaffEvaluation::defaultBranchFor($user),
             'weeklyStatus' => $this->weeklyStatus($weekStart, $weekEnd),
             'weakestMetric' => $this->weakestMetricThisWeek($weekStart, $weekEnd),
             'period' => $period,
+            'monthFilter' => $monthFilter,
             'branchFilter' => $branchFilter,
             'weekStart' => $weekStart,
             'weekEnd' => $weekEnd,
+            'currentMondayStr' => $currentMondayStr,
+            'currentTuesdayStr' => $currentTuesdayStr,
+            'todayQatarStr' => $nowQatar->toDateString(),
             'isMonday' => $canSubmitWindow,
             'canSubmitWindow' => $canSubmitWindow,
         ]);
@@ -82,14 +109,65 @@ class StaffEvaluationController extends Controller
 
     public function store(Request $request)
     {
-        if (!now()->isMonday() && !now()->isTuesday()) {
+        $user = $request->user();
+        $isAdmin = (bool) ($user?->isAdmin());
+        $managedBranch = KpiStaffEvaluation::managedBranchFor($user);
+
+        if (!$isAdmin && $managedBranch === null) {
+            abort(403, 'Only Admins or assigned Branch Managers may submit salon staff evaluations.');
+        }
+
+        $nowQatar = now('Asia/Qatar');
+        if (!$isAdmin && !$nowQatar->isMonday() && !$nowQatar->isTuesday()) {
             abort(403, 'Evaluations can be submitted on Mondays and Tuesdays (2-day window).');
         }
 
+        $submittedBranch = (string) $request->input('branch', '');
+        if (
+            !$isAdmin
+            && array_key_exists($submittedBranch, KpiStaffEvaluation::BRANCHES)
+            && $submittedBranch !== $managedBranch
+        ) {
+            abort(403, 'You may only submit evaluations for your assigned branch.');
+        }
+
+        $currentMondayStr = $nowQatar->copy()->startOfWeek(Carbon::MONDAY)->toDateString();
+        $currentTuesdayStr = $nowQatar->copy()->startOfWeek(Carbon::MONDAY)->addDay()->toDateString();
+
+        $dateRules = $isAdmin
+            ? ['required', 'date']
+            : ['required', 'date', "after_or_equal:{$currentMondayStr}", "before_or_equal:{$currentTuesdayStr}"];
+
         $validated = $request->validate([
-            'staff_id' => 'required|exists:staff,id',
             'branch' => 'required|in:old_airport,wakrah',
-            'evaluation_date' => 'required|date',
+            'staff_id' => [
+                'required',
+                'exists:staff,id',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request, $nowQatar) {
+                    $branch = (string) $request->input('branch', '');
+                    if (!array_key_exists($branch, KpiStaffEvaluation::BRANCHES)) {
+                        return;
+                    }
+
+                    $rawEvalDate = $request->input('evaluation_date');
+                    try {
+                        $asOfDate = $rawEvalDate
+                            ? Carbon::parse($rawEvalDate, 'Asia/Qatar')->toDateString()
+                            : $nowQatar->toDateString();
+                    } catch (\Throwable) {
+                        $asOfDate = $nowQatar->toDateString();
+                    }
+
+                    $isEligible = Staff::salonEvaluatable($branch, $asOfDate)
+                        ->whereKey($value)
+                        ->exists();
+
+                    if (!$isEligible) {
+                        $fail('The selected staff member is not an eligible salon stylist for this branch.');
+                    }
+                },
+            ],
+            'evaluation_date' => $dateRules,
             'score_cleanliness' => 'required|in:1,5',
             'score_dress_code' => 'required|in:1,5',
             'score_attitude' => 'required|in:1,5',
@@ -102,7 +180,7 @@ class StaffEvaluationController extends Controller
         $scores = array_intersect_key($validated, array_flip(KpiStaffEvaluation::SCORE_FIELDS));
 
         KpiStaffEvaluation::create($validated + [
-            'evaluator_id' => auth()->id(),
+            'evaluator_id' => $user->id,
             'overall_average' => KpiStaffEvaluation::averageOf($scores),
         ]);
 
@@ -110,21 +188,26 @@ class StaffEvaluationController extends Controller
     }
 
     /**
-     * Per-branch compliance for the two top cards: how many distinct staff
-     * have at least one evaluation logged this week, against how many
-     * active staff that branch (or "both"-branch staff) actually has.
+     * Per-branch compliance for the two top cards: how many distinct eligible
+     * salon staff have at least one evaluation logged this week, against how
+     * many eligible salon staff that branch (or "both"-branch staff) has.
      */
     private function weeklyStatus(Carbon $weekStart, Carbon $weekEnd): Collection
     {
         return collect(KpiStaffEvaluation::BRANCHES)->map(function ($label, $branchKey) use ($weekStart, $weekEnd) {
-            $total = Staff::active()
-                ->where(fn ($q) => $q->where('branch', $branchKey)->orWhere('branch', 'both'))
-                ->count();
+            $eligibleIds = Staff::salonEvaluatable($branchKey, $weekStart->toDateString())
+                ->pluck('id');
 
-            $evaluated = KpiStaffEvaluation::where('branch', $branchKey)
-                ->whereBetween('evaluation_date', [$weekStart->toDateTimeString(), $weekEnd->toDateTimeString()])
-                ->distinct('staff_id')
-                ->count('staff_id');
+            $total = $eligibleIds->count();
+
+            $evaluated = $total > 0
+                ? KpiStaffEvaluation::where('branch', $branchKey)
+                    ->whereIn('staff_id', $eligibleIds)
+                    ->whereDate('evaluation_date', '>=', $weekStart->toDateString())
+                    ->whereDate('evaluation_date', '<=', $weekEnd->toDateString())
+                    ->distinct('staff_id')
+                    ->count('staff_id')
+                : 0;
 
             return [
                 'branch' => $branchKey,
@@ -143,7 +226,10 @@ class StaffEvaluationController extends Controller
      */
     private function weakestMetricThisWeek(Carbon $weekStart, Carbon $weekEnd): ?array
     {
-        $evaluations = KpiStaffEvaluation::whereBetween('evaluation_date', [$weekStart->toDateTimeString(), $weekEnd->toDateTimeString()])->get();
+        $evaluations = KpiStaffEvaluation::query()
+            ->whereDate('evaluation_date', '>=', $weekStart->toDateString())
+            ->whereDate('evaluation_date', '<=', $weekEnd->toDateString())
+            ->get();
 
         if ($evaluations->isEmpty()) {
             return null;

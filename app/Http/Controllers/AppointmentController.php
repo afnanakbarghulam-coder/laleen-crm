@@ -24,6 +24,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class AppointmentController extends Controller
 {
@@ -218,7 +219,7 @@ class AppointmentController extends Controller
             'service_discount_reason.*' => 'nullable|string|max:255',
             'branch' => 'required|in:old_airport,wakrah',
             'price' => 'nullable|numeric',
-            'booking_agent_id' => 'nullable|exists:users,id',
+            'booking_agent_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'agent')],
             'staff_id' => $isUnscheduled ? 'nullable|exists:staff,id' : 'required|exists:staff,id',
             'decide_in_salon' => 'nullable|boolean',
             // A combo package picked at booking time - sold now, paid for
@@ -675,10 +676,6 @@ class AppointmentController extends Controller
             ? (str_contains($existingRemarks, $autoCloseNote) ? $existingRemarks : $existingRemarks . ' ' . $autoCloseNote)
             : $autoCloseNote;
 
-        if (!$appointment->booking_agent_id && $resolvedAgentId) {
-            $appointment->update(['booking_agent_id' => $resolvedAgentId]);
-        }
-
         $primaryLead->update([
             'needful_done' => 'booked',
             'category' => $primaryCategory,
@@ -710,7 +707,7 @@ class AppointmentController extends Controller
             'service_name.*' => 'string|max:255',
             'branch' => 'required|in:old_airport,wakrah',
             'price' => 'nullable|numeric',
-            'booking_agent_id' => 'nullable|exists:users,id',
+            'booking_agent_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'agent')],
             'staff_id' => 'nullable|exists:staff,id',
             'status' => 'nullable|in:pending,arrived,in_progress,completed,no_show,cancelled',
         ], [
@@ -807,13 +804,29 @@ class AppointmentController extends Controller
                 $this->reverseAppointmentSale($appointment);
             }
 
+            $resolvedBookingAgentId = $appointment->booking_agent_id;
+            if ($request->exists('booking_agent_id')) {
+                $actor = $request->user();
+                $submittedAgentId = $request->filled('booking_agent_id') ? (int) $request->input('booking_agent_id') : null;
+                $canAdminOrManagerEdit = $actor && ($actor->isAdmin() || $actor->role === 'manager');
+                $canSelfAgentEdit = $actor && $actor->role === 'agent'
+                    && ($appointment->booking_agent_id === null || (int) $appointment->booking_agent_id === (int) $actor->id)
+                    && ($submittedAgentId === null || $submittedAgentId === (int) $actor->id);
+
+                if ($canAdminOrManagerEdit || $canSelfAgentEdit) {
+                    $resolvedBookingAgentId = $submittedAgentId;
+                }
+            }
+
             $payload = $request->all();
+            unset($payload['booking_agent_id']);
             $payload['status'] = $effectiveStatus;
             $payload['staff_id'] = $staffId ? (int) $staffId : null;
 
             $appointment->update(array_merge(
                 $payload,
                 [
+                    'booking_agent_id' => $resolvedBookingAgentId,
                     'booking_date' => $startTime->toDateString(),
                     'start_time' => $startTime->format('H:i:s'),
                     'service_name' => $services,
@@ -2330,10 +2343,6 @@ class AppointmentController extends Controller
             ? (str_contains($existingRemarks, $autoCloseNote) ? $existingRemarks : $existingRemarks . ' ' . $autoCloseNote)
             : $autoCloseNote;
 
-        if (!$appointment->booking_agent_id && $resolvedAgentId) {
-            $appointment->update(['booking_agent_id' => $resolvedAgentId]);
-        }
-
         $primaryLead->update([
             'needful_done' => 'booked',
             'category' => $primaryCategory,
@@ -2439,10 +2448,6 @@ class AppointmentController extends Controller
                 ->whereNotNull('assigned_agent_id')
                 ->orderByDesc('id')
                 ->value('assigned_agent_id');
-        }
-
-        if (!$appointment->booking_agent_id && $inheritedAgentId) {
-            $appointment->update(['booking_agent_id' => $inheritedAgentId]);
         }
 
         if ($lead) {
