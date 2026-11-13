@@ -22,6 +22,7 @@ use App\Http\Controllers\Ecommerce\EcommerceSalesController;
 use App\Http\Controllers\Ecommerce\EcommerceSeoAgentController;
 use App\Http\Controllers\Ecommerce\EcommerceStockController;
 use App\Http\Controllers\FinanceController;
+use App\Http\Controllers\GuideController;
 use App\Http\Controllers\Kpi\AdLeadEntryController;
 use App\Http\Controllers\Kpi\AdsConversionController;
 use App\Http\Controllers\Kpi\AgentShiftLogController;
@@ -58,6 +59,7 @@ Route::get('/', function () {
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [UserController::class, 'dashboard'])->name('dashboard');
+    Route::get('/guide', [GuideController::class, 'index'])->middleware('active')->name('guide.index');
     Route::middleware('role:admin,owner,super_admin')->group(function () {
         Route::get('/command-center', [CommandCenterController::class, 'index'])->name('command-center.index');
         Route::post('/command-center/ask', [CommandCenterController::class, 'ask'])->middleware('throttle:20,1')->name('command-center.ask');

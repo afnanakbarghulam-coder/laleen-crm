@@ -379,6 +379,14 @@
              </li>
          @endif
 
+         <!-- CRM Guide & SOPs -->
+         <li class="menu-item {{ request()->routeIs('guide.*') ? 'active' : '' }}">
+             <a href="{{ route('guide.index') }}" class="menu-link">
+                 <i class="bx bx-book-open me-2"></i>
+                 <div>CRM Guide &amp; SOPs</div>
+             </a>
+         </li>
+
      </ul>
  </aside>
 
