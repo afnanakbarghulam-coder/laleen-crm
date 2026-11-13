@@ -44,6 +44,9 @@ class GuideController extends Controller
 
         if ($isRealAdmin) {
             $requestedPreview = strtolower(trim((string) $request->query('preview_role', '')));
+            if ($requestedPreview === 'branch_manager') {
+                $requestedPreview = 'manager';
+            }
             if ($requestedPreview !== '' && array_key_exists($requestedPreview, self::PREVIEW_ROLES) && $requestedPreview !== 'all') {
                 $previewRole = $requestedPreview;
                 $effectiveUser = $this->makePreviewPersona($requestedPreview);
@@ -453,21 +456,43 @@ class GuideController extends Controller
                 ];
             }
 
+            $comboVisit1DoRule = 'Build distinct-service packages in [[Services]] → [[Combos]]';
+            if ($user->isAdmin()) {
+                $comboVisit1DoRule .= ' · Admin: [[Manage / Extend]] on profile';
+            }
+
             $frontdeskCards[] = [
-                'id' => 'fd-combos-lifecycle',
+                'id' => 'fd-combos-visit1',
                 'icon' => 'bx-package',
                 'target' => '7-Day Validity',
-                'title' => 'Combos & Pending Services',
+                'title' => 'Combos · Visit 1 & Pending Slots',
                 'flow' => [
-                    ['title' => 'Book (+ Add Combo)', 'desc' => 'Click [[+ Add Combo]] and tick today\'s services; locked until paid.'],
-                    ['title' => 'Visit 1 Pay (7-Day Clock)', 'desc' => 'Pay 100% at [[💳 Checkout]] to start 7-day clock and unlock slots.'],
-                    ['title' => 'Visit 2 Redeem (0 QAR)', 'desc' => 'Click [[Redeem Package]] and assign stylists per service at 0.00 QAR.'],
+                    ['title' => 'Add Combo Services', 'desc' => 'Click [[+ Add Combo]] and tick [[Do today]] for Visit 1; unchecked slots save as Pending.'],
+                    ['title' => 'Pay 100% At Checkout', 'desc' => 'Click [[💳 Checkout]] → [[Complete Sale]] to unlock pending slots and start the 7-day clock.'],
+                    ['title' => 'Check Client Profile', 'desc' => 'Open [[View Full Profile]] to track [[Combo Packages]], remaining slots, and expiry date.'],
                 ],
-                'do_rule' => 'Package value splits equally across each redeemed stylist slot',
-                'avoid_rule' => 'Distinct services only · Reverse Visit 2 before cancelling Visit 1',
+                'do_rule' => $comboVisit1DoRule,
+                'avoid_rule' => 'Pending slots stay locked until Visit 1 is paid in full',
                 'actions' => array_values(array_filter([
                     $this->authorizedAction($user, 'Open Calendar ↗', 'appointments.calendar', [], 'module_view', 'bookings'),
-                    $this->authorizedAction($user, 'Combos ↗', 'services.index', [], 'module_view', 'services'),
+                    $this->authorizedAction($user, 'Combos ↗', 'combos.index', [], 'module_view', 'services'),
+                ])),
+            ];
+
+            $frontdeskCards[] = [
+                'id' => 'fd-combos-visit2',
+                'icon' => 'bx-gift',
+                'target' => '0.00 QAR Checkout',
+                'title' => 'Combos · Visit 2+ Redemption',
+                'flow' => [
+                    ['title' => 'Select Returning Client', 'desc' => 'Pick client by name or phone on the Calendar to load her active package badge.'],
+                    ['title' => 'Redeem Pending Slots', 'desc' => 'Click [[Redeem Package]], tick today\'s remaining services, and assign any stylist per slot.'],
+                    ['title' => 'Close At 0.00 QAR', 'desc' => 'Click [[💳 Checkout]] → [[Complete Sale]] ([[0.00 QAR]]) to mark Used and split staff credit ([[1/N]]).'],
+                ],
+                'do_rule' => 'Click [[Cancel]] on Visit 2 (never delete) to restore slots to her profile',
+                'avoid_rule' => 'Unused pending slots auto-expire after Day 7 (Doha time)',
+                'actions' => array_values(array_filter([
+                    $this->authorizedAction($user, 'Open Calendar ↗', 'appointments.calendar', [], 'module_view', 'bookings'),
                 ])),
             ];
 
@@ -675,6 +700,10 @@ class GuideController extends Controller
                 ? ['title' => 'Log Official Audit', 'desc' => 'Click [[+ New Branch Evaluation]] to score 30-point audit.']
                 : ['title' => 'Coach Weak Areas', 'desc' => 'Run morning huddles on any section scoring below 85%.'];
 
+            $complaintStep2Desc = $user->isAdmin()
+                ? 'Log [[Corrective Action]], redo impact, [[Manager Feedback]], and Admin [[Deduction]] or [[Generate Notice]] terms.'
+                : 'Log [[Corrective Action]], redo booking or revenue impact, and [[Manager Feedback]] coaching notes.';
+
             $managerCards = [
                 [
                     'id' => 'mgr-monday-evals',
@@ -725,20 +754,52 @@ class GuideController extends Controller
                         $this->authorizedAction($user, 'Open Staff Sales ↗', 'kpi.staff-sales.index', [], 'module_view', 'kpis'),
                     ])),
                 ],
+                [
+                    'id' => 'mgr-complaints-intake',
+                    'icon' => 'bx-message-alt-error',
+                    'target' => 'Same-Day Log',
+                    'title' => 'Complaints · Logging & Intake',
+                    'flow' => [
+                        ['title' => 'Open & Attach Client', 'desc' => 'Click [[+ Log Complaint]], select [[Old Airport]] or [[Al Wakrah]], and link the client profile.'],
+                        ['title' => 'Tag Staff & Issue', 'desc' => 'Pick [[Staff Involved]], [[Service Received]], and [[Category]], then write factual [[What Happened]] notes.'],
+                        ['title' => 'Save & Start SLA', 'desc' => 'Click [[Save Complaint]] to log as [[Pending HR]] and start the 48h clock.'],
+                    ],
+                    'do_rule' => 'Log every walk-in, WhatsApp, or review complaint the same day',
+                    'avoid_rule' => 'Never promise free redos or refunds off-system without a logged ticket',
+                    'actions' => array_values(array_filter([
+                        $this->authorizedAction($user, 'Open Complaints ↗', 'staffs.index', ['tab' => 'complaints'], 'module_view', 'staff_management'),
+                    ])),
+                ],
+                [
+                    'id' => 'mgr-complaints-resolution',
+                    'icon' => 'bx-check-shield',
+                    'target' => 'SLA: ≤ 48 Hours',
+                    'title' => 'Complaints · 48h Resolution & Outcome',
+                    'flow' => [
+                        ['title' => 'Contact Within 48h', 'desc' => 'Reach out within 48 hours to investigate and confirm redo, credit, or refund recovery.'],
+                        ['title' => 'Record Recovery & Impact', 'desc' => $complaintStep2Desc],
+                        ['title' => 'Close & Feed HR Review', 'desc' => 'Mark [[Resolved]] via [[Save Resolutions]] once recovery completes; incidents feed Mon–Tue staff evaluations.'],
+                    ],
+                    'do_rule' => 'Review open branch complaints daily until zero tickets breach 48h',
+                    'avoid_rule' => 'Never mark [[Resolved]] before the client confirms or completes her redo/refund',
+                    'actions' => array_values(array_filter([
+                        $this->authorizedAction($user, 'Open Complaints ↗', 'staffs.index', ['tab' => 'complaints'], 'module_view', 'staff_management'),
+                    ])),
+                ],
             ];
 
             if ($isAdmin || $this->userCanView($user, 'staff_management')) {
                 $managerCards[] = [
                     'id' => 'mgr-hr-payroll-shifts',
                     'icon' => 'bx-id-card',
-                    'target' => 'SLA: ≤ 48h',
-                    'title' => 'Roster, Shifts & HR SLA',
+                    'target' => 'Live Roster',
+                    'title' => 'Roster, Workspace & Shifts',
                     'flow' => [
-                        ['title' => 'Assign Staff Services', 'desc' => 'Enable bookable status and qualified services in Staff Workspace.'],
+                        ['title' => 'Assign Staff Services', 'desc' => 'Enable bookable status and qualified services in [[Staff Workspace]].'],
                         ['title' => 'Block Leave Shifts', 'desc' => 'Log Leave or Sick inside [[Scheduled shifts]] immediately.'],
-                        ['title' => 'Close Complaints ≤48h', 'desc' => 'Record CMP-YYYY-NNN resolution decisions under HR & Disciplinary.'],
+                        ['title' => 'Track Staff Overtime', 'desc' => 'Log approved extra hours via [[+ Log Overtime]] for payroll.'],
                     ],
-                    'do_rule' => 'Review prorated salary and overtime inside Payroll & Overtime',
+                    'do_rule' => 'Review prorated salary and overtime inside [[Payroll & Overtime]]',
                     'avoid_rule' => 'Unassigned services show "No staff available" on Calendar',
                     'actions' => array_values(array_filter([
                         $this->authorizedAction($user, 'Staff Directory ↗', 'staffs.index', [], 'module_view', 'staff_management'),
@@ -775,6 +836,7 @@ class GuideController extends Controller
                     ['value' => '100% Roster', 'label' => 'Incl. Leave / Sick', 'icon' => 'bx-user-check'],
                     ['value' => '≥ 85%', 'label' => 'Mystery Shopper', 'icon' => 'bx-award'],
                     ['value' => '1,700 QAR', 'label' => 'Staff Upsell', 'icon' => 'bx-up-arrow-circle'],
+                    ['value' => '≤ 48h', 'label' => 'Complaint SLA', 'icon' => 'bx-timer'],
                 ],
                 'cards' => $managerCards,
             ];

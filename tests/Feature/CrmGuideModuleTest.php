@@ -368,4 +368,181 @@ class CrmGuideModuleTest extends TestCase
             $resp->assertSee('Preview Role:');
         }
     }
+
+    public function test_calendar_and_combos_renders_two_uniform_three_column_combo_cards_with_strict_admin_override_isolation(): void
+    {
+        $frontdesk = User::factory()->create([
+            'name' => 'Reception',
+            'email' => 'reception@laleen.test',
+            'role' => 'staff',
+            'is_active' => true,
+            'permissions' => [
+                'bookings' => 'edit',
+                'services' => 'view',
+                'products' => 'view',
+                'clients' => 'edit',
+                'finance' => 'edit',
+                'leads' => 'none',
+                'kpis' => 'none',
+                'staff_management' => 'none',
+                'ecommerce' => 'none',
+            ],
+        ]);
+
+        $staffResponse = $this->actingAs($frontdesk)->get(route('guide.index'));
+        $staffResponse->assertOk();
+        $staffResponse->assertSee('data-initial-tab="frontdesk_pos"', false);
+
+        // Card A: Combos · Visit 1 & Pending Slots (3-column 1 ── 2 ── 3 + single-line ✓ / ✕)
+        $staffResponse->assertSee('Combos · Visit 1 & Pending Slots');
+        $staffResponse->assertSee('7-Day Validity');
+        $staffResponse->assertSee('Add Combo Services');
+        $staffResponse->assertSee('<span class="g-ui-pill">+ Add Combo</span>', false);
+        $staffResponse->assertSee('<span class="g-ui-pill">Do today</span>', false);
+        $staffResponse->assertSee('Pay 100% At Checkout');
+        $staffResponse->assertSee('Check Client Profile');
+        $staffResponse->assertSee('<span class="g-ui-pill">View Full Profile</span>', false);
+        $staffResponse->assertSee('<span class="g-ui-pill">Combo Packages</span>', false);
+        $staffResponse->assertSee('Build distinct-service packages in');
+        $staffResponse->assertSee('Pending slots stay locked until Visit 1 is paid in full');
+
+        // Card B: Combos · Visit 2+ Redemption (3-column 1 ── 2 ── 3 + single-line ✓ / ✕)
+        $staffResponse->assertSee('Combos · Visit 2+ Redemption');
+        $staffResponse->assertSee('0.00 QAR Checkout');
+        $staffResponse->assertSee('Select Returning Client');
+        $staffResponse->assertSee('Redeem Pending Slots');
+        $staffResponse->assertSee('<span class="g-ui-pill">Redeem Package</span>', false);
+        $staffResponse->assertSee('Close At 0.00 QAR');
+        $staffResponse->assertSee('<span class="g-ui-pill">1/N</span>', false);
+        $staffResponse->assertSee('restore slots to her profile');
+        $staffResponse->assertSee('Unused pending slots auto-expire after Day 7 (Doha time)');
+
+        // Zero vertical 5-stage lists or 3-column Q&A blocks
+        $staffResponse->assertDontSee('gd-stages-track', false);
+        $staffResponse->assertDontSee('gd-edge-row', false);
+        $staffResponse->assertDontSee('What happens to the rest:');
+
+        // Non-admin must NEVER receive Manage / Extend in HTML
+        $staffResponse->assertDontSee('Manage / Extend');
+        $staffResponse->assertDontSee('Admin:');
+
+        // Zero raw URLs leaked
+        $staffResponse->assertDontSee('(/combos)');
+        $staffResponse->assertDontSee('(/customers)');
+
+        // Real Admin receives inline "· Admin: Manage / Extend on profile", while frontdesk preview strips it
+        $admin = User::factory()->create([
+            'name' => 'Admin Lead',
+            'email' => 'admin-combo@laleen.qa',
+            'role' => 'admin',
+            'is_active' => true,
+        ]);
+
+        $adminResponse = $this->actingAs($admin)->get(route('guide.index'));
+        $adminResponse->assertOk();
+        $adminResponse->assertSee('· Admin: <span class="g-ui-pill">Manage / Extend</span> on profile', false);
+
+        $frontdeskPreview = $this->actingAs($admin)->get(route('guide.index', ['preview_role' => 'frontdesk']));
+        $frontdeskPreview->assertOk();
+        $frontdeskPreview->assertSee('Combos · Visit 1 & Pending Slots');
+        $frontdeskPreview->assertSee('Combos · Visit 2+ Redemption');
+        $frontdeskPreview->assertDontSee('Manage / Extend');
+        $frontdeskPreview->assertDontSee('· Admin:');
+    }
+
+    public function test_branch_manager_and_admin_see_complaints_48h_sla_cards_with_strict_role_isolation(): void
+    {
+        $manager = User::factory()->create([
+            'name' => 'Rhea',
+            'email' => 'rhea@laleen.test',
+            'role' => 'manager',
+            'is_active' => true,
+            'permissions' => [
+                'kpis' => 'edit',
+                'bookings' => 'edit',
+                'clients' => 'edit',
+                'services' => 'view',
+                'products' => 'view',
+                'staff_management' => 'view',
+                'leads' => 'none',
+                'finance' => 'none',
+                'ecommerce' => 'none',
+            ],
+        ]);
+
+        $mgrResponse = $this->actingAs($manager)->get(route('guide.index'));
+        $mgrResponse->assertOk();
+        $mgrResponse->assertSee('data-initial-tab="managers_hr"', false);
+
+        // Top target strip includes ≤ 48h Complaint SLA
+        $mgrResponse->assertSee('≤ 48h');
+        $mgrResponse->assertSee('Complaint SLA');
+
+        // Card A: Complaints · Logging & Intake (uniform 1 ── 2 ── 3 + single-line ✓ / ✕)
+        $mgrResponse->assertSee('Complaints · Logging & Intake');
+        $mgrResponse->assertSee('Same-Day Log');
+        $mgrResponse->assertSee('Open Complaints ↗');
+        $mgrResponse->assertSee(route('staffs.index', ['tab' => 'complaints']), false);
+        $mgrResponse->assertSee('Open & Attach Client');
+        $mgrResponse->assertSee('<span class="g-ui-pill">+ Log Complaint</span>', false);
+        $mgrResponse->assertSee('Tag Staff & Issue');
+        $mgrResponse->assertSee('<span class="g-ui-pill">What Happened</span>', false);
+        $mgrResponse->assertSee('Save & Start SLA');
+        $mgrResponse->assertSee('<span class="g-ui-pill">Save Complaint</span>', false);
+        $mgrResponse->assertSee('<span class="g-ui-pill">Pending HR</span>', false);
+        $mgrResponse->assertSee('Log every walk-in, WhatsApp, or review complaint the same day');
+        $mgrResponse->assertSee('Never promise free redos or refunds off-system without a logged ticket');
+
+        // Card B: Complaints · 48h Resolution & Outcome (uniform 1 ── 2 ── 3 + single-line ✓ / ✕)
+        $mgrResponse->assertSee('Complaints · 48h Resolution & Outcome');
+        $mgrResponse->assertSee('SLA: ≤ 48 Hours');
+        $mgrResponse->assertSee('Contact Within 48h');
+        $mgrResponse->assertSee('Record Recovery & Impact');
+        $mgrResponse->assertSee('<span class="g-ui-pill">Corrective Action</span>', false);
+        $mgrResponse->assertSee('<span class="g-ui-pill">Manager Feedback</span>', false);
+        $mgrResponse->assertSee('Close & Feed HR Review');
+        $mgrResponse->assertSee('<span class="g-ui-pill">Resolved</span>', false);
+        $mgrResponse->assertSee('Review open branch complaints daily until zero tickets breach 48h');
+        $mgrResponse->assertSee('before the client confirms or completes her redo/refund');
+
+        // Non-admin manager does NOT receive Admin payroll Deduction / Generate Notice override terms or raw URLs
+        $mgrResponse->assertDontSee('Deduction');
+        $mgrResponse->assertDontSee('Generate Notice');
+        $mgrResponse->assertDontSee('(/staffs');
+
+        // Admin sees both Complaints cards + Admin Deduction / Generate Notice terms, and ?preview_role=branch_manager works cleanly
+        $admin = User::factory()->create([
+            'name' => 'Executive Admin',
+            'email' => 'admin-complaints@laleen.qa',
+            'role' => 'admin',
+            'is_active' => true,
+        ]);
+
+        $adminResponse = $this->actingAs($admin)->get(route('guide.index'));
+        $adminResponse->assertOk();
+        $adminResponse->assertSee('Complaints · Logging & Intake');
+        $adminResponse->assertSee('Complaints · 48h Resolution & Outcome');
+        $adminResponse->assertSee('<span class="g-ui-pill">Deduction</span>', false);
+        $adminResponse->assertSee('<span class="g-ui-pill">Generate Notice</span>', false);
+
+        $previewMgr = $this->actingAs($admin)->get(route('guide.index', ['preview_role' => 'branch_manager']));
+        $previewMgr->assertOk();
+        $previewMgr->assertSee('Branch Manager View');
+        $previewMgr->assertSee('data-initial-tab="managers_hr"', false);
+        $previewMgr->assertSee('≤ 48h');
+        $previewMgr->assertSee('Complaint SLA');
+        $previewMgr->assertSee('Complaints · Logging & Intake');
+        $previewMgr->assertSee('Complaints · 48h Resolution & Outcome');
+        $previewMgr->assertDontSee('Deduction');
+        $previewMgr->assertDontSee('Generate Notice');
+
+        // Unauthorized roles (Marketing, E-commerce, Front-Desk) receive zero HTML leakage of Branch Manager Complaints cards
+        foreach (['marketing', 'ecommerce', 'frontdesk'] as $unauthPreview) {
+            $unauthResp = $this->actingAs($admin)->get(route('guide.index', ['preview_role' => $unauthPreview]));
+            $unauthResp->assertOk();
+            $unauthResp->assertDontSee('Complaints · Logging & Intake');
+            $unauthResp->assertDontSee('Complaints · 48h Resolution & Outcome');
+            $unauthResp->assertDontSee('Open Complaints ↗');
+        }
+    }
 }

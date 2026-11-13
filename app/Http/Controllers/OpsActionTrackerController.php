@@ -259,6 +259,12 @@ class OpsActionTrackerController extends Controller
             ], 201);
         }
 
+        if ($request->boolean('return_to_staff_hub')) {
+            return redirect()
+                ->route('staffs.index', ['tab' => 'ops_tracker', 'ops_week' => $weekMonday])
+                ->with('success', 'Task added.');
+        }
+
         return redirect()
             ->route('staff.ops-tracker.index', ['week' => $weekMonday])
             ->with('success', 'Task added.');

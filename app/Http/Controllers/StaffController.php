@@ -11,9 +11,8 @@ use App\Models\AppointmentService;
 use App\Models\Expense;
 use App\Models\OpsActionItem;
 use App\Models\StaffComplaint;
+use App\Models\StaffContract;
 use App\Models\StaffDeduction;
-use App\Models\StaffNotice;
-use App\Models\StaffOvertimeEntry;
 use App\Support\StaffPayrollCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -26,17 +25,32 @@ class StaffController extends Controller
 {
     public function index(Request $request)
     {
-        $rawTab = $request->query('tab');
-        if ($rawTab === 'notices') {
-            $rawTab = 'complaints';
-        }
-        $activeTab = in_array($rawTab, ['directory', 'payroll', 'complaints', 'workspace'], true)
-            ? $rawTab
-            : 'directory';
+        $rawTab = strtolower(trim((string) $request->query('tab', 'directory')));
+        $directorySubView = $rawTab === 'workspace' ? 'workspace' : 'directory';
+        $payrollSubView = $rawTab === 'payroll' ? 'payroll' : 'contracts';
+        $shiftsOpsSubView = $rawTab === 'ops_tracker' ? 'ops_tracker' : 'shifts';
+        $hrSubView = ($rawTab === 'deductions' || $request->query('hr_sub') === 'deductions') ? 'deductions' : 'complaints';
 
-        // ---- Staff Directory ----
-        $today = now()->toDateString();
-        $query = Staff::with(['user', 'timeOffs' => fn ($q) => $q->where('start_date', '<=', $today)->where('end_date', '>=', $today)]);
+        if ($rawTab === 'workspace') {
+            $activeTab = 'directory';
+        } elseif (in_array($rawTab, ['contracts', 'payroll'], true)) {
+            $activeTab = 'payroll';
+        } elseif (in_array($rawTab, ['shifts_ops', 'shifts', 'ops_tracker'], true)) {
+            $activeTab = 'shifts_ops';
+        } elseif (in_array($rawTab, ['notices', 'complaints', 'hr', 'deductions'], true)) {
+            $activeTab = 'complaints';
+        } else {
+            $activeTab = 'directory';
+        }
+
+        // ---- Staff Directory & Shift Roster Relations ----
+        $hasDirectoryFilter = $request->filled('branch') || $request->filled('status') || $request->filled('search');
+        $query = Staff::with([
+            'user',
+            'services:id',
+            'shiftPatterns.blocks',
+            'timeOffs' => fn ($q) => $q->orderByDesc('start_date'),
+        ]);
 
         if ($request->filled('branch')) {
             $query->where('branch', $request->branch);
@@ -59,8 +73,14 @@ class StaffController extends Controller
         $services = Service::orderBy('name')->get();
         $categories = ServiceCategory::with('services')->orderBy('sort_order')->get();
 
-        // Full roster, used by the pickers in the Payroll/Complaints/Notices tabs.
-        $allStaff = Staff::with('services:id')->orderBy('name')->get();
+        // Full roster, used by the pickers in Payroll/Shifts/Complaints tabs.
+        $allStaff = $hasDirectoryFilter
+            ? Staff::with([
+                'services:id',
+                'shiftPatterns.blocks',
+                'timeOffs' => fn ($q) => $q->orderByDesc('start_date'),
+            ])->orderBy('name')->get()
+            : $staff;
 
         // Plain-array projections for the tabs' JS (never pass a chained/argument
         // expression to Blade's @json() directly — see StaffPayrollCalculator's
@@ -94,7 +114,7 @@ class StaffController extends Controller
             ? (int) $request->staff
             : optional($allStaff->first())->id;
 
-        // ---- Payroll & Overtime ----
+        // ---- Payroll & Wage Settings ----
         $payrollBranch = $request->filled('payroll_branch') && in_array($request->payroll_branch, ['old_airport', 'wakrah'], true)
             ? $request->payroll_branch
             : null;
@@ -108,18 +128,99 @@ class StaffController extends Controller
         }
         $payrollRows = $payrollCalculator->payrollFor($payrollStaffQuery->get());
 
-        $overtimeEntries = StaffOvertimeEntry::with('staff')
-            ->whereBetween('entry_date', [$payrollFrom->copy()->startOfDay(), $payrollTo->copy()->endOfDay()])
-            ->orderByDesc('entry_date')->orderByDesc('id')
-            ->paginate(15, ['*'], 'overtime_page')
-            ->appends(array_filter([
-                'payroll_branch' => $payrollBranch,
-                'payroll_from' => $payrollFrom->format('Y-m-d'),
-                'payroll_to' => $payrollTo->format('Y-m-d'),
-                'tab' => 'payroll',
-            ]));
+        // ---- Scheduled Shifts Sub-Tab (In-Memory Roster from Eager-Loaded $allStaff) ----
+        $shiftWeekParam = $request->input('shift_week');
+        try {
+            $shiftWeekStart = $shiftWeekParam
+                ? Carbon::parse($shiftWeekParam)->startOfWeek(Carbon::SUNDAY)
+                : Carbon::now()->startOfWeek(Carbon::SUNDAY);
+        } catch (\Throwable) {
+            $shiftWeekStart = Carbon::now()->startOfWeek(Carbon::SUNDAY);
+        }
+        $shiftWeekEnd = $shiftWeekStart->copy()->addDays(6);
+        $shiftDays = collect(range(0, 6))->map(fn ($i) => $shiftWeekStart->copy()->addDays($i));
+        $shiftBranch = $request->filled('shift_branch') && in_array($request->shift_branch, ['old_airport', 'wakrah', 'both'], true)
+            ? $request->shift_branch
+            : '';
 
-        // ---- Complaints & Deductions ----
+        $shiftStaffMembers = $shiftBranch !== ''
+            ? $allStaff->filter(fn (Staff $s) => in_array($s->branch, [$shiftBranch, 'both'], true))->values()
+            : $allStaff;
+
+        $shiftRoster = [];
+        $rawShiftDayTotals = array_fill_keys($shiftDays->map->format('Y-m-d')->all(), 0);
+        $shiftConfigs = [];
+
+        foreach ($allStaff as $member) {
+            $activePatternNow = $member->activePatternFor(Carbon::now());
+            $shiftConfigs[$member->id] = [
+                'name' => $member->name,
+                'pattern' => $activePatternNow ? [
+                    'repeat_frequency' => $activePatternNow->repeat_frequency,
+                    'start_date' => optional($activePatternNow->start_date)->format('Y-m-d'),
+                    'end_date' => optional($activePatternNow->end_date)->format('Y-m-d'),
+                    'blocks' => $activePatternNow->blocks->map(fn ($b) => [
+                        'day_of_week' => $b->day_of_week,
+                        'start_time' => substr($b->start_time, 0, 5),
+                        'end_time' => substr($b->end_time, 0, 5),
+                    ])->values()->all(),
+                ] : null,
+                'time_offs' => $member->timeOffs->map(fn ($t) => [
+                    'id' => $t->id,
+                    'start_date' => $t->start_date->format('Y-m-d'),
+                    'end_date' => $t->end_date->format('Y-m-d'),
+                    'reason' => $t->reason,
+                    'notes' => $t->notes,
+                ])->values()->all(),
+            ];
+        }
+
+        foreach ($shiftStaffMembers as $member) {
+            $weeklyMinutes = 0;
+            $cells = [];
+
+            foreach ($shiftDays as $date) {
+                $dateKey = $date->format('Y-m-d');
+                $timeOff = $member->timeOffs->first(fn ($t) => $t->coversDate($date));
+
+                if ($timeOff) {
+                    $cells[$dateKey] = ['type' => 'timeoff', 'reason' => $timeOff->reason, 'blocks' => []];
+                    continue;
+                }
+
+                $pattern = $member->activePatternFor($date);
+                $blocks = $pattern
+                    ? $pattern->blocks->where('day_of_week', $date->dayOfWeek)->sortBy('start_time')
+                    : collect();
+
+                if ($blocks->isEmpty()) {
+                    $cells[$dateKey] = ['type' => 'off', 'blocks' => []];
+                    continue;
+                }
+
+                $formatted = $blocks->map(function ($block) use (&$weeklyMinutes, &$rawShiftDayTotals, $dateKey) {
+                    $minutes = $block->durationMinutes();
+                    $weeklyMinutes += $minutes;
+                    $rawShiftDayTotals[$dateKey] += $minutes;
+
+                    return [
+                        'label' => $this->formatShiftTimeRange($block->start_time, $block->end_time),
+                    ];
+                });
+
+                $cells[$dateKey] = ['type' => 'working', 'blocks' => $formatted->values()->all()];
+            }
+
+            $shiftRoster[] = [
+                'staff' => $member,
+                'weekly_hours' => round($weeklyMinutes / 60, 1),
+                'cells' => $cells,
+            ];
+        }
+
+        $shiftDayTotals = collect($rawShiftDayTotals)->map(fn ($m) => round($m / 60, 1))->all();
+
+        // ---- HR & Disciplinary (Complaints & Deductions) ----
         $complaintsStaffFilter = $request->filled('complaints_staff') ? (int) $request->complaints_staff : null;
         $complaintsSearch = $request->filled('complaints_search') ? trim((string) $request->input('complaints_search')) : null;
         $complaintsDate = $request->filled('complaints_date') ? $request->input('complaints_date') : null;
@@ -130,7 +231,7 @@ class StaffController extends Controller
         $deductionsFrom = $request->filled('deductions_from') ? $request->input('deductions_from') : null;
         $deductionsTo = $request->filled('deductions_to') ? $request->input('deductions_to') : null;
 
-        $hrAppendParams = array_filter([
+        $hrFilterParams = array_filter([
             'complaints_staff' => $complaintsStaffFilter,
             'complaints_search' => $complaintsSearch,
             'complaints_date' => $complaintsDate,
@@ -139,7 +240,6 @@ class StaffController extends Controller
             'deductions_date' => $deductionsDate,
             'deductions_from' => $deductionsFrom,
             'deductions_to' => $deductionsTo,
-            'tab' => 'complaints',
         ]);
 
         $complaints = StaffComplaint::with(['staffMembers', 'customer', 'service', 'deductions.staff', 'notices.staff'])
@@ -157,7 +257,7 @@ class StaffController extends Controller
             ->when($complaintsTo, fn ($q) => $q->whereDate('complaint_date', '<=', $complaintsTo))
             ->orderByDesc('complaint_date')->orderByDesc('id')
             ->paginate(15, ['*'], 'complaints_page')
-            ->appends($hrAppendParams);
+            ->appends(array_merge($hrFilterParams, ['tab' => 'complaints']));
 
         $deductions = StaffDeduction::with(['staff', 'complaint'])
             ->when($complaintsStaffFilter, fn ($q) => $q->where('staff_id', $complaintsStaffFilter))
@@ -166,7 +266,7 @@ class StaffController extends Controller
             ->when($deductionsTo, fn ($q) => $q->whereDate('deduction_date', '<=', $deductionsTo))
             ->orderByDesc('deduction_date')->orderByDesc('id')
             ->paginate(15, ['*'], 'deductions_page')
-            ->appends($hrAppendParams);
+            ->appends(array_merge($hrFilterParams, ['tab' => 'deductions']));
 
         // For the deduction quick-add's "link to penalty" dropdown.
         $openComplaints = StaffComplaint::with('staffMembers')->orderByDesc('complaint_date')->get();
@@ -178,40 +278,150 @@ class StaffController extends Controller
             'complaint_date_label' => $c->complaint_date->format('d M Y'),
         ])->values();
 
-        // ---- Notices ----
-        $noticesStaffFilter = $request->filled('notices_staff')
-            ? (int) $request->notices_staff
-            : $complaintsStaffFilter;
-
-        $notices = StaffNotice::with('staff')
-            ->when($noticesStaffFilter, fn ($q) => $q->where('staff_id', $noticesStaffFilter))
-            ->orderByDesc('notice_date')->orderByDesc('id')
-            ->paginate(15, ['*'], 'notices_page')
-            ->appends(array_merge($hrAppendParams, array_filter(['notices_staff' => $request->input('notices_staff')])));
-
+        // ---- Ops & Action Tracker Sub-Tab ----
         $pendingOwnerActionCount = 0;
+        $openOpsTasksCount = 0;
+        $opsMonday = now()->startOfWeek(Carbon::MONDAY)->startOfDay();
+        if ($request->filled('ops_week')) {
+            try {
+                $opsMonday = Carbon::parse($request->input('ops_week'))->startOfWeek(Carbon::MONDAY)->startOfDay();
+            } catch (\Throwable) {
+                $opsMonday = now()->startOfWeek(Carbon::MONDAY)->startOfDay();
+            }
+        }
+        $opsSunday = $opsMonday->copy()->endOfWeek(Carbon::SUNDAY);
+        $opsCurrentMonday = now()->startOfWeek(Carbon::MONDAY)->startOfDay();
+        $opsIsCurrentWeek = $opsMonday->equalTo($opsCurrentMonday);
+        $opsPrevWeek = $opsMonday->copy()->subWeek()->toDateString();
+        $opsNextWeek = $opsMonday->copy()->addWeek()->toDateString();
+        $opsStatus = strtolower(trim((string) $request->input('ops_status', 'open'))) === 'completed' ? 'completed' : 'open';
+        $opsMine = $request->boolean('ops_mine');
+        $opsSelectedStaffId = $request->filled('ops_staff_id') && is_numeric($request->input('ops_staff_id'))
+            ? (int) $request->input('ops_staff_id')
+            : null;
+        $opsSelectedStaffName = null;
+        $opsItems = collect();
+        $opsOpenCount = 0;
+        $opsCompletedCount = 0;
+        $opsTotalCount = 0;
+        $opsCompletionRate = 0;
+        $opsMyOpenCount = 0;
+        $opsAssigneeOptions = collect();
+        $opsScopes = OpsActionItem::SCOPES;
+        $opsSlaOptions = OpsActionItem::SLA_OPTIONS;
+
         try {
-            $usersById = User::where('is_active', true)->get(['id', 'name', 'role'])->keyBy('id');
-            $pendingOwnerActionCount = OpsActionItem::forWeek(now()->startOfWeek(Carbon::MONDAY))
-                ->where('is_completed', false)
-                ->get()
+            OpsActionItem::$referenceWeekMonday = $opsMonday->toDateString();
+
+            $staffAccessUsers = User::where('is_active', true)
+                ->orderByRaw("CASE role WHEN 'admin' THEN 1 WHEN 'manager' THEN 2 WHEN 'agent' THEN 3 ELSE 4 END ASC")
+                ->orderBy('name')
+                ->get(['id', 'name', 'email', 'role']);
+            $usersById = $staffAccessUsers->keyBy('id');
+
+            $rawOpsItems = OpsActionItem::forWeek($opsMonday)->executionOrder()->get();
+            $openOverdue = $rawOpsItems->filter(fn (OpsActionItem $i) => !$i->is_completed && $i->is_overdue)->values();
+            $openOnTrack = $rawOpsItems->filter(fn (OpsActionItem $i) => !$i->is_completed && !$i->is_overdue)->values();
+            $completedOps = $rawOpsItems->filter(fn (OpsActionItem $i) => $i->is_completed)->values();
+            $openOpsItems = $openOverdue->concat($openOnTrack)->values();
+
+            $opsOpenCount = $openOpsItems->count();
+            $opsCompletedCount = $completedOps->count();
+            $opsTotalCount = $opsOpenCount + $opsCompletedCount;
+            $opsCompletionRate = $opsTotalCount > 0 ? (int) round(($opsCompletedCount / $opsTotalCount) * 100) : 0;
+
+            $openOpsTasksCount = $opsOpenCount;
+            $pendingOwnerActionCount = $openOpsItems
                 ->filter(fn (OpsActionItem $item) => $item->involvesBucket('owner', $usersById))
                 ->count();
+
+            $authUser = $request->user();
+            $opsMyOpenCount = $authUser
+                ? $openOpsItems->filter(fn (OpsActionItem $item) => $item->isAssignedToUser((int) $authUser->id, $authUser->name))->count()
+                : 0;
+
+            $staffOpenCounts = [];
+            foreach ($staffAccessUsers as $u) {
+                $staffOpenCounts[$u->id] = $openOpsItems
+                    ->filter(fn (OpsActionItem $item) => $item->isAssignedToUser((int) $u->id, $u->name))
+                    ->count();
+            }
+
+            if ($opsSelectedStaffId !== null) {
+                $opsSelectedStaffName = $usersById->get($opsSelectedStaffId)?->name;
+            }
+
+            if ($opsStatus === 'completed') {
+                $opsItems = $completedOps;
+            } elseif ($opsMine && $authUser) {
+                $opsItems = $openOpsItems
+                    ->filter(fn (OpsActionItem $item) => $item->isAssignedToUser((int) $authUser->id, $authUser->name))
+                    ->values();
+            } elseif ($opsSelectedStaffId !== null) {
+                $opsItems = $openOpsItems
+                    ->filter(fn (OpsActionItem $item) => $item->isAssignedToUser($opsSelectedStaffId, $opsSelectedStaffName))
+                    ->values();
+            } else {
+                $opsItems = $openOpsItems;
+            }
+
+            $opsAssigneeOptions = $staffAccessUsers->map(function (User $u) use ($staffOpenCounts) {
+                $roleLabel = match ($u->role) {
+                    'admin' => 'Owner / Admin',
+                    'manager' => 'Ops Lead / Manager',
+                    'agent' => 'Agent',
+                    default => ucfirst((string) $u->role),
+                };
+
+                return [
+                    'id' => $u->id,
+                    'user_id' => $u->id,
+                    'type' => OpsActionItem::classifyAssigneeBucket($u->name, $u->role),
+                    'name' => $u->name,
+                    'role' => $u->role,
+                    'role_label' => $roleLabel,
+                    'open_count' => $staffOpenCounts[$u->id] ?? 0,
+                ];
+            })->values();
         } catch (\Throwable) {
             $pendingOwnerActionCount = 0;
+            $openOpsTasksCount = 0;
         }
         $pendingOwnerCount = $pendingOwnerActionCount;
 
+        $isAdminViewer = (bool) ($request->user() && $request->user()->isAdmin());
+        $staffContracts = collect();
+        if ($isAdminViewer) {
+            try {
+                $allStaffById = $allStaff->keyBy('id');
+                $staffContracts = StaffContract::orderByDesc('id')
+                    ->get()
+                    ->each(fn (StaffContract $c) => $c->setRelation('staff', $allStaffById->get($c->staff_id)));
+            } catch (\Throwable) {
+                $staffContracts = collect();
+            }
+        }
+        $contractTemplates = $isAdminViewer
+            ? StaffContract::allTemplates()
+            : StaffContract::TEMPLATES;
+
         return view('staff.index', compact(
-            'staff', 'services', 'categories', 'activeTab', 'allStaff', 'allStaffOptions', 'serviceOptions',
+            'staff', 'services', 'categories', 'activeTab',
+            'directorySubView', 'payrollSubView', 'shiftsOpsSubView', 'hrSubView',
+            'allStaff', 'allStaffOptions', 'serviceOptions',
             'staffWorkspaceOptions', 'selectedWorkspaceStaffId',
-            'payrollBranch', 'payrollFrom', 'payrollTo', 'payrollRows', 'overtimeEntries',
+            'payrollBranch', 'payrollFrom', 'payrollTo', 'payrollRows',
+            'shiftWeekStart', 'shiftWeekEnd', 'shiftDays', 'shiftRoster', 'shiftDayTotals', 'shiftConfigs', 'shiftBranch',
+            'opsItems', 'opsOpenCount', 'opsCompletedCount', 'opsTotalCount', 'opsCompletionRate',
+            'opsMyOpenCount', 'opsStatus', 'opsMine', 'opsSelectedStaffId', 'opsSelectedStaffName',
+            'opsAssigneeOptions', 'opsMonday', 'opsSunday', 'opsPrevWeek', 'opsNextWeek', 'opsIsCurrentWeek',
+            'opsScopes', 'opsSlaOptions',
+            'staffContracts', 'contractTemplates', 'isAdminViewer',
             'complaints', 'deductions', 'complaintsStaffFilter', 'complaintsSearch',
             'complaintsDate', 'complaintsFrom', 'complaintsTo',
             'deductionsDate', 'deductionsFrom', 'deductionsTo',
             'openComplaints', 'openComplaintOptions',
-            'notices', 'noticesStaffFilter',
-            'pendingOwnerActionCount', 'pendingOwnerCount'
+            'pendingOwnerActionCount', 'pendingOwnerCount', 'openOpsTasksCount'
         ));
     }
 
@@ -642,5 +852,15 @@ class StaffController extends Controller
         ]);
 
         $staff->update(['user_id' => $user->id]);
+    }
+
+    private function formatShiftTimeRange(string $start, string $end): string
+    {
+        $format = function (string $t): string {
+            $carbon = Carbon::createFromFormat('H:i:s', strlen($t) === 5 ? $t . ':00' : $t);
+            return strtolower($carbon->format($carbon->minute === 0 ? 'ga' : 'g:ia'));
+        };
+
+        return $format($start) . ' - ' . $format($end);
     }
 }

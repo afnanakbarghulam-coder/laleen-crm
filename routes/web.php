@@ -46,6 +46,7 @@ use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\StaffBlockController;
 use App\Http\Controllers\StaffComplaintController;
+use App\Http\Controllers\StaffContractController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StaffDeductionController;
 use App\Http\Controllers\StaffNoticeController;
@@ -55,6 +56,14 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
+});
+
+// ---- Secure Staff Contract Portal (Unguessable Token + 4-Digit PIN Gate) ----
+Route::prefix('my-contract/{token}')->name('contracts.portal.')->group(function () {
+    Route::get('/', [StaffContractController::class, 'showPortal'])->name('show');
+    Route::post('/unlock', [StaffContractController::class, 'unlockPortal'])->name('unlock');
+    Route::post('/sign', [StaffContractController::class, 'signPortal'])->name('sign');
+    Route::get('/pdf', [StaffContractController::class, 'downloadPdf'])->name('pdf');
 });
 
 Route::middleware(['auth'])->group(function () {
@@ -157,6 +166,14 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/staffs/{staff}/workspace', [StaffController::class, 'updateWorkspace'])->name('staffs.workspace.update');
         Route::delete('/staffs/{staff}', [StaffController::class, 'destroy'])->name('staffs.destroy');
         Route::post('/staff-payroll/post-to-finance', [StaffController::class, 'postPayrollToFinance'])->middleware('module:finance,edit')->name('staff.payroll.post-to-finance');
+
+        // ---- Native Staff Contracts Engine (Admin Only) ----
+        Route::post('/staff-contracts', [StaffContractController::class, 'store'])->name('staff-contracts.store');
+        Route::post('/staff-contract-categories', [StaffContractController::class, 'storeCategory'])->name('staff-contracts.categories.store');
+        Route::patch('/staff-contracts/{contract}/status', [StaffContractController::class, 'updateStatus'])->name('staff-contracts.update-status');
+        Route::post('/staff-contracts/{contract}/regenerate-token', [StaffContractController::class, 'regenerateToken'])->name('staff-contracts.regenerate-token');
+        Route::delete('/staff-contracts/{contract}', [StaffContractController::class, 'destroy'])->name('staff-contracts.destroy');
+        Route::match(['patch', 'post', 'put'], '/staffs/{staff}/contract-pin', [StaffContractController::class, 'updatePin'])->name('staff-contracts.update-pin');
         Route::post('/scheduled-shifts/{staff}/pattern', [ShiftController::class, 'savePattern'])->name('shifts.pattern.store');
         Route::post('/scheduled-shifts/{staff}/time-off', [ShiftController::class, 'storeTimeOff'])->name('shifts.timeoff.store');
         Route::delete('/scheduled-shifts/time-off/{timeOff}', [ShiftController::class, 'destroyTimeOff'])->name('shifts.timeoff.destroy');

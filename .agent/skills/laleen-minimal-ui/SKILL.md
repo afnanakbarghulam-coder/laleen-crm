@@ -49,6 +49,8 @@ Every operational or instructional card must contain **at most 2 clean zones** b
 3. **Zone 2 — Compact Single-Line Guardrail Footer (`✓` · `✕`):**
    - Separated only by a subtle top hairline border (`border-top: 1px solid rgba(255, 255, 255, 0.06)`).
    - Left side: **1 concise emerald `✓` rule**. Right side: **1 concise ruby `✕` rule** (inline text, zero heavy tinted box backgrounds).
+4. **Uniform 3-Column Card Rhythm:**
+   - Never render vertical 5-step multi-paragraph cards or 3-column Q&A footers. Any workflow longer than 3 steps must be split into two uniform horizontal `1 ── 2 ── 3` cards with single-line `✓ / ✕` footers.
 
 ---
 

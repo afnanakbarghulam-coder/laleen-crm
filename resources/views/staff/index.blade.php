@@ -528,56 +528,274 @@
         color: var(--luxe-body);
         border-color: rgba(217, 143, 131, 0.1);
     }
+
+    /* ---- Laleen Minimal UI: Contracts, Inline Sub-Views & 3-Column Track ---- */
+    .laleen-contract-card,
+    .laleen-ops-hub-card {
+        background: linear-gradient(180deg, rgba(34, 22, 27, 0.92) 0%, rgba(21, 14, 18, 0.96) 100%);
+        border: 1px solid rgba(229, 184, 168, 0.14);
+        border-radius: 16px;
+        padding: 20px 22px 16px;
+    }
+
+    .laleen-contract-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding-bottom: 14px;
+        margin-bottom: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .laleen-contract-guardrail {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding-top: 12px;
+        margin-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .sc-inline-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 600;
+        background: rgba(229, 184, 168, 0.09);
+        color: #e5b8a8;
+        border: 1px solid rgba(229, 184, 168, 0.18);
+    }
+
+    .sc-btn-rosegold {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 16px;
+        border-radius: 999px;
+        border: none;
+        background: linear-gradient(135deg, #d98f83, #c19a8c);
+        color: #1c110f !important;
+        font-size: 12.5px;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+        transition: filter 0.15s ease;
+    }
+
+    .sc-btn-rosegold:hover { filter: brightness(1.06); }
+
+    .sc-btn-ghost {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 13px;
+        border-radius: 999px;
+        border: 1px solid rgba(229, 184, 168, 0.22);
+        background: rgba(255, 255, 255, 0.03);
+        color: #f8efe6;
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .sc-btn-ghost:hover {
+        background: rgba(229, 184, 168, 0.1);
+        color: #f8efe6;
+    }
+
+    .sc-status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 700;
+    }
+
+    .sc-status-active {
+        background: rgba(110, 231, 183, 0.12);
+        color: #6ee7b7;
+        border: 1px solid rgba(110, 231, 183, 0.28);
+    }
+
+    .sc-status-pending_signature {
+        background: rgba(212, 163, 115, 0.14);
+        color: #d4a373;
+        border: 1px solid rgba(212, 163, 115, 0.32);
+    }
+
+    .sc-status-draft {
+        background: rgba(184, 162, 154, 0.12);
+        color: #b8a29a;
+        border: 1px solid rgba(184, 162, 154, 0.24);
+    }
+
+    .sc-action-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(229, 184, 168, 0.2);
+        background: rgba(255, 255, 255, 0.03);
+        color: #f8efe6;
+        font-size: 11.5px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .sc-action-pill:hover {
+        background: rgba(229, 184, 168, 0.12);
+        color: #f8efe6;
+    }
+
+    .sc-action-send {
+        color: #d4a373;
+        border-color: rgba(212, 163, 115, 0.35);
+    }
+
+    .sc-action-danger {
+        color: #fda4af;
+        border-color: rgba(253, 164, 175, 0.28);
+    }
+
+    .dir-inline-switch,
+    .cp-subnav-bar,
+    .hr-subnav-bar {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .cp-subnav-bar,
+    .hr-subnav-bar {
+        padding-bottom: 14px;
+        margin-bottom: 18px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        width: 100%;
+    }
+
+    .dir-sub-pill,
+    .cp-sub-pill,
+    .hr-sub-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 15px;
+        border-radius: 999px;
+        border: 1px solid rgba(229, 184, 168, 0.16);
+        background: rgba(34, 22, 27, 0.72);
+        color: #b8a29a;
+        font-size: 12.5px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.16s ease;
+    }
+
+    .dir-sub-pill:hover,
+    .cp-sub-pill:hover,
+    .hr-sub-pill:hover {
+        color: #f8efe6;
+        border-color: rgba(229, 184, 168, 0.3);
+        background: rgba(229, 184, 168, 0.1);
+    }
+
+    .dir-sub-pill.active,
+    .cp-sub-pill.active,
+    .hr-sub-pill.active {
+        background: linear-gradient(135deg, #d98f83, #c19a8c) !important;
+        color: #1c110f !important;
+        border-color: rgba(248, 239, 230, 0.24);
+        font-weight: 700;
+        box-shadow: 0 3px 12px rgba(217, 143, 131, 0.2);
+    }
+
+    .ops-hub-stepper {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        padding: 14px 0 8px;
+    }
+
+    @media (max-width: 768px) {
+        .ops-hub-stepper { grid-template-columns: 1fr; }
+    }
+
+    .ops-hub-step-num {
+        display: inline-flex;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #d98f83, #c19a8c);
+        color: #1c110f;
+        font-size: 12px;
+        font-weight: 800;
+        margin-bottom: 8px;
+    }
 </style>
 
 @section('content')
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    @php
+        $currentDirSub = $directorySubView ?? 'directory';
+        $currentPayrollSub = $payrollSubView ?? 'contracts';
+        $currentShiftsOpsSub = $shiftsOpsSubView ?? 'shifts';
+        $currentHrSub = $hrSubView ?? 'complaints';
+    @endphp
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <div>
             <h4 class="fw-bold mb-0">Team members <span class="badge bg-secondary">{{ $staff->count() }}</span></h4>
-            <p class="text-muted small mb-0">Manage your staff, payroll, operations, and CRM access.</p>
+            <p class="text-muted small mb-0">Directory, contracts &amp; payroll, shifts &amp; operations, and HR records.</p>
         </div>
-        @moduleEdit('staff_management')
-            <button id="globalAddStaffBtn" class="btn btn-dark {{ $activeTab === 'directory' ? '' : 'd-none' }}" data-bs-toggle="modal" data-bs-target="#addStaffModal" onclick="resetStaffForm()">
-                <i class="bx bx-plus me-1"></i> Add
-            </button>
-        @endmoduleEdit
-    </div>
-
-    <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
-        <a href="{{ route('staffs.index') }}" class="btn btn-sm btn-dark">👥 Staff Directory &amp; Payroll</a>
-        <a href="{{ route('shifts.index') }}" class="btn btn-sm btn-outline-secondary">Scheduled shifts</a>
-        <a href="{{ route('staff.ops-tracker.index') }}" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
-            <span>⚡ Ops &amp; Action Tracker</span>
-            @if(($pendingOwnerActionCount ?? 0) > 0)
-                <span class="badge rounded-pill ms-1" style="background:#7f1d1d !important; color:#ffffff !important; font-weight:700; border:1px solid rgba(255,255,255,0.2);">{{ $pendingOwnerActionCount }} Pending Owner</span>
+        <div class="d-flex align-items-center gap-2">
+            @if (auth()->user()->isSuperAdmin())
+                <a href="{{ route('users.index') }}" class="sc-btn-ghost">Staff Access</a>
             @endif
-        </a>
-        @if (auth()->user()->isSuperAdmin())
-            <a href="{{ route('users.index') }}" class="btn btn-sm btn-outline-secondary">Staff Access</a>
-        @endif
+            @moduleEdit('staff_management')
+                <button id="globalAddStaffBtn" class="btn btn-dark {{ $activeTab === 'directory' ? '' : 'd-none' }}" data-bs-toggle="modal" data-bs-target="#addStaffModal" onclick="resetStaffForm()">
+                    <i class="bx bx-plus me-1"></i> Add
+                </button>
+            @endmoduleEdit
+        </div>
     </div>
 
-    <div class="d-flex gap-2 mb-4 flex-wrap align-items-center">
-        <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'directory' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="directory">Staff Directory</button>
-        <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'workspace' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="workspace">Staff Workspace</button>
-        <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'payroll' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="payroll">Payroll &amp; Overtime</button>
-        <button type="button" class="staff-tab-btn btn btn-sm {{ $activeTab === 'complaints' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="complaints">HR &amp; Disciplinary</button>
-        <a href="{{ route('staff.ops-tracker.index') }}" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
-            <i class="bx bx-bolt-circle"></i> Ops &amp; Action Tracker
-            @if(($pendingOwnerActionCount ?? 0) > 0)
-                <span class="badge rounded-pill ms-1" style="background:#7f1d1d !important; color:#ffffff !important; font-weight:700; border:1px solid rgba(255,255,255,0.2);">{{ $pendingOwnerActionCount }} Pending Owner</span>
-            @endif
-        </a>
-    </div>
+    @include('staff.partials.top-pill-nav', ['inPlaceTabs' => true, 'activePill' => $activeTab])
 
-    {{-- ================= STAFF DIRECTORY ================= --}}
+    {{-- ================= 1. DIRECTORY & PROFILES (COMBINES DIRECTORY + WORKSPACE) ================= --}}
     <div id="staff-pane-directory" class="staff-tab-pane {{ $activeTab === 'directory' ? '' : 'd-none' }}">
-        <div class="mb-3">
-            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse">
-                <i class="bx bx-filter-alt me-1"></i> Filters
-            </button>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div class="dir-inline-switch">
+                <button type="button" class="dir-sub-pill {{ $currentDirSub === 'directory' ? 'active' : '' }}" data-dir-sub="directory">
+                    Team Directory
+                </button>
+                @moduleEdit('staff_management')
+                    <button type="button" class="dir-sub-pill {{ $currentDirSub === 'workspace' ? 'active' : '' }}" data-dir-sub="workspace">
+                        Service &amp; Branch Profiles
+                    </button>
+                @endmoduleEdit
+            </div>
 
-            <div class="collapse mt-3 {{ request()->hasAny(['branch', 'status', 'search']) ? 'show' : '' }}" id="filterCollapse">
+            <div id="dirFilterBtnWrap" class="{{ $currentDirSub === 'directory' ? '' : 'd-none' }}">
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse">
+                    <i class="bx bx-filter-alt me-1"></i> Filters
+                </button>
+            </div>
+        </div>
+
+        <div id="dir-subpane-directory" class="{{ $currentDirSub === 'directory' ? '' : 'd-none' }}">
+        <div class="mb-3">
+            <div class="collapse mt-2 {{ request()->hasAny(['branch', 'status', 'search']) ? 'show' : '' }}" id="filterCollapse">
                 <div class="card card-body shadow-sm border-0">
                     <form method="GET" action="{{ route('staffs.index') }}">
                         <input type="hidden" name="tab" value="directory">
@@ -659,7 +877,7 @@
                                 </td>
                                 <td class="team-rating">No reviews yet</td>
                                 <td>
-                                    @php $todayOff = $member->timeOffs->first(); @endphp
+                                    @php $todayOff = $member->timeOffs->first(fn ($t) => $t->coversDate(now())); @endphp
                                     @if ($todayOff)
                                         <span class="badge {{ $todayOff->reason === 'sick' ? 'bg-danger' : 'bg-warning' }}">
                                             {{ $todayOff->reason === 'sick' ? 'Sick' : ($todayOff->reason === 'unpaid' ? 'Unpaid leave' : ($todayOff->reason === 'other' ? 'Time off' : 'On leave')) }}
@@ -708,11 +926,11 @@
                 </table>
             </div>
         </div>
-    </div>
+        </div>
 
-    {{-- ================= STAFF WORKSPACE ================= --}}
-    <div id="staff-pane-workspace" class="staff-tab-pane {{ $activeTab === 'workspace' ? '' : 'd-none' }}">
-        @moduleEdit('staff_management')
+        {{-- Inline Service & Branch Profiles (Workspace) inside Directory & Profiles --}}
+        <div id="dir-subpane-workspace" class="{{ $currentDirSub === 'workspace' ? '' : 'd-none' }}">
+            @moduleEdit('staff_management')
             <div class="row g-3">
                 <div class="col-md-4 col-lg-3">
                     <div class="ws-staff-picker" id="wsStaffPicker">
@@ -843,11 +1061,32 @@
                     </form>
                 </div>
             </div>
-        @endmoduleEdit
+            @endmoduleEdit
+        </div>
     </div>
 
-    {{-- ================= PAYROLL & OVERTIME ================= --}}
+    {{-- ================= 2. CONTRACTS & PAYROLL ================= --}}
     <div id="staff-pane-payroll" class="staff-tab-pane {{ $activeTab === 'payroll' ? '' : 'd-none' }}">
+        <div class="cp-subnav-bar" role="tablist" aria-label="Contracts and Payroll Sub-Navigation">
+            <button type="button"
+                class="ui-chip cp-sub-pill {{ $currentPayrollSub === 'contracts' ? 'active' : '' }}"
+                data-cp-sub="contracts">
+                📄 Staff Contracts
+            </button>
+            <button type="button"
+                class="ui-chip cp-sub-pill {{ $currentPayrollSub === 'payroll' ? 'active' : '' }}"
+                data-cp-sub="payroll">
+                💰 Payroll &amp; Wage Settings
+            </button>
+        </div>
+
+        {{-- Isolated Sub-Tab 1: Staff Contracts (Default Active) --}}
+        <div id="cp-subpane-contracts" class="cp-sub-pane {{ $currentPayrollSub === 'contracts' ? '' : 'd-none' }}">
+            @include('staff.partials.contracts-section')
+        </div>
+
+        {{-- Isolated Sub-Tab 2: Payroll & Wage Settings --}}
+        <div id="cp-subpane-payroll" class="cp-sub-pane {{ $currentPayrollSub === 'payroll' ? '' : 'd-none' }}">
         <div class="mb-3">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
                 <div>
@@ -1056,10 +1295,41 @@
                 </table>
             </div>
         </div>
+        </div>
     </div>
 
-    {{-- ================= HR & DISCIPLINARY (COMPLAINTS, DEDUCTIONS & NOTICES) ================= --}}
+    {{-- ================= 3. SHIFTS & OPS ACTIONS ================= --}}
+    <div id="staff-pane-shifts_ops" class="staff-tab-pane {{ $activeTab === 'shifts_ops' ? '' : 'd-none' }}">
+        @include('staff.partials.shifts-ops-subnav', ['inPlaceSubTabs' => true, 'activeSub' => $currentShiftsOpsSub])
+
+        {{-- Isolated Sub-Tab 1: Scheduled Shifts (Default Active) --}}
+        <div id="so-subpane-shifts" class="so-sub-pane {{ $currentShiftsOpsSub === 'shifts' ? '' : 'd-none' }}">
+            @include('staff.partials.shifts-subpane')
+        </div>
+
+        {{-- Isolated Sub-Tab 2: Ops & Action Tracker --}}
+        <div id="so-subpane-ops_tracker" class="so-sub-pane {{ $currentShiftsOpsSub === 'ops_tracker' ? '' : 'd-none' }}">
+            @include('staff.partials.ops-tracker-subpane')
+        </div>
+    </div>
+
+    {{-- ================= 4. HR & DISCIPLINARY (COMPLAINTS & DEDUCTIONS) ================= --}}
     <div id="staff-pane-complaints" class="staff-tab-pane {{ $activeTab === 'complaints' ? '' : 'd-none' }}">
+        <div class="hr-subnav-bar" role="tablist" aria-label="HR and Disciplinary Sub-Navigation">
+            <button type="button"
+                class="ui-chip hr-sub-pill {{ $currentHrSub === 'complaints' ? 'active' : '' }}"
+                data-hr-sub="complaints">
+                📋 Complaints &amp; Feedback
+            </button>
+            <button type="button"
+                class="ui-chip hr-sub-pill {{ $currentHrSub === 'deductions' ? 'active' : '' }}"
+                data-hr-sub="deductions">
+                💸 Deductions &amp; Penalties
+            </button>
+        </div>
+
+        {{-- Isolated Sub-Tab 1: Complaints & Feedback (Default Active) --}}
+        <div id="hr-subpane-complaints" class="hr-sub-pane {{ $currentHrSub === 'complaints' ? '' : 'd-none' }}">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
             <div>
                 <h6 class="fw-bold mb-0">Complaints &amp; Feedback</h6>
@@ -1478,14 +1748,17 @@
             </div>
         </div>
         <div class="mb-3">{{ $complaints->links() }}</div>
+        </div>
 
+        {{-- Isolated Sub-Tab 2: Deductions & Penalties --}}
+        <div id="hr-subpane-deductions" class="hr-sub-pane {{ $currentHrSub === 'deductions' ? '' : 'd-none' }}">
         <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-2">
             <div>
-                <h6 class="fw-bold mb-0">Deductions</h6>
+                <h6 class="fw-bold mb-0">Deductions &amp; Penalties</h6>
                 <p class="text-muted small mb-0">Deductions are managed through the complaint HR Resolution panel. Click any linked complaint reference to jump to or copy it.</p>
             </div>
             <form method="GET" action="{{ route('staffs.index') }}" class="row g-2 align-items-end hr-filter-bar" style="max-width: 500px;">
-                <input type="hidden" name="tab" value="complaints">
+                <input type="hidden" name="tab" value="deductions">
                 @if ($complaintsStaffFilter)
                     <input type="hidden" name="complaints_staff" value="{{ $complaintsStaffFilter }}">
                 @endif
@@ -1513,7 +1786,7 @@
                 <div class="col-sm-4 d-flex gap-2">
                     <button type="submit" class="btn btn-sm btn-primary w-100">Filter</button>
                     @if ($deductionsDate || $deductionsFrom || $deductionsTo)
-                        <a href="{{ route('staffs.index', array_filter(['tab' => 'complaints', 'complaints_staff' => $complaintsStaffFilter, 'complaints_search' => $complaintsSearch, 'complaints_date' => $complaintsDate, 'complaints_from' => $complaintsFrom, 'complaints_to' => $complaintsTo])) }}" class="btn btn-sm btn-outline-secondary w-100">Reset</a>
+                        <a href="{{ route('staffs.index', array_filter(['tab' => 'deductions', 'complaints_staff' => $complaintsStaffFilter, 'complaints_search' => $complaintsSearch, 'complaints_date' => $complaintsDate, 'complaints_from' => $complaintsFrom, 'complaints_to' => $complaintsTo])) }}" class="btn btn-sm btn-outline-secondary w-100">Reset</a>
                     @endif
                 </div>
             </form>
@@ -1558,6 +1831,7 @@
             </div>
         </div>
         <div class="mb-4">{{ $deductions->links() }}</div>
+        </div>
     </div>
 
     @moduleEdit('staff_management')
@@ -1937,14 +2211,15 @@
         document.querySelectorAll('.staff-tab-btn').forEach(btn => {
             btn.addEventListener('click', function () {
                 document.querySelectorAll('.staff-tab-btn').forEach(b => {
-                    b.classList.remove('btn-dark');
-                    b.classList.add('btn-outline-secondary');
+                    b.classList.remove('active');
                 });
-                this.classList.remove('btn-outline-secondary');
-                this.classList.add('btn-dark');
+                this.classList.add('active');
 
                 document.querySelectorAll('.staff-tab-pane').forEach(p => p.classList.add('d-none'));
-                document.getElementById('staff-pane-' + this.dataset.tab).classList.remove('d-none');
+                const targetPane = document.getElementById('staff-pane-' + this.dataset.tab);
+                if (targetPane) {
+                    targetPane.classList.remove('d-none');
+                }
 
                 const globalAddBtn = document.getElementById('globalAddStaffBtn');
                 if (globalAddBtn) {
@@ -1952,7 +2227,82 @@
                 }
 
                 const url = new URL(window.location.href);
-                url.searchParams.set('tab', this.dataset.tab);
+                if (this.dataset.tab === 'payroll') {
+                    const activeCpPill = document.querySelector('.cp-sub-pill.active');
+                    url.searchParams.set('tab', activeCpPill?.dataset?.cpSub === 'payroll' ? 'payroll' : 'contracts');
+                } else if (this.dataset.tab === 'directory') {
+                    const activeDirPill = document.querySelector('.dir-sub-pill.active');
+                    url.searchParams.set('tab', activeDirPill?.dataset?.dirSub === 'workspace' ? 'workspace' : 'directory');
+                } else if (this.dataset.tab === 'shifts_ops') {
+                    const activeSoPill = document.querySelector('.so-sub-pill.active');
+                    url.searchParams.set('tab', activeSoPill?.dataset?.soSub === 'ops_tracker' ? 'ops_tracker' : 'shifts');
+                } else if (this.dataset.tab === 'complaints') {
+                    const activeHrPill = document.querySelector('.hr-sub-pill.active');
+                    url.searchParams.set('tab', activeHrPill?.dataset?.hrSub === 'deductions' ? 'deductions' : 'complaints');
+                } else {
+                    url.searchParams.set('tab', this.dataset.tab);
+                }
+                history.replaceState(null, '', url.toString());
+            });
+        });
+
+        document.querySelectorAll('.dir-sub-pill').forEach(pill => {
+            pill.addEventListener('click', function () {
+                document.querySelectorAll('.dir-sub-pill').forEach(p => p.classList.remove('active'));
+                this.classList.add('active');
+
+                const mode = this.dataset.dirSub;
+                document.getElementById('dir-subpane-directory')?.classList.toggle('d-none', mode !== 'directory');
+                document.getElementById('dir-subpane-workspace')?.classList.toggle('d-none', mode !== 'workspace');
+                document.getElementById('dirFilterBtnWrap')?.classList.toggle('d-none', mode !== 'directory');
+
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', mode === 'workspace' ? 'workspace' : 'directory');
+                history.replaceState(null, '', url.toString());
+            });
+        });
+
+        document.querySelectorAll('.cp-sub-pill').forEach(pill => {
+            pill.addEventListener('click', function () {
+                document.querySelectorAll('.cp-sub-pill').forEach(p => p.classList.remove('active'));
+                this.classList.add('active');
+
+                const mode = this.dataset.cpSub;
+                document.getElementById('cp-subpane-contracts')?.classList.toggle('d-none', mode !== 'contracts');
+                document.getElementById('cp-subpane-payroll')?.classList.toggle('d-none', mode !== 'payroll');
+
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', mode === 'payroll' ? 'payroll' : 'contracts');
+                history.replaceState(null, '', url.toString());
+            });
+        });
+
+        document.querySelectorAll('.so-sub-pill[data-so-sub]').forEach(pill => {
+            pill.addEventListener('click', function () {
+                document.querySelectorAll('.so-sub-pill[data-so-sub]').forEach(p => p.classList.remove('active'));
+                this.classList.add('active');
+
+                const mode = this.dataset.soSub;
+                document.getElementById('so-subpane-shifts')?.classList.toggle('d-none', mode !== 'shifts');
+                document.getElementById('so-subpane-ops_tracker')?.classList.toggle('d-none', mode !== 'ops_tracker');
+
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', mode === 'ops_tracker' ? 'ops_tracker' : 'shifts');
+                history.replaceState(null, '', url.toString());
+            });
+        });
+
+        document.querySelectorAll('.hr-sub-pill').forEach(pill => {
+            pill.addEventListener('click', function () {
+                document.querySelectorAll('.hr-sub-pill').forEach(p => p.classList.remove('active'));
+                this.classList.add('active');
+
+                const mode = this.dataset.hrSub;
+                document.getElementById('hr-subpane-complaints')?.classList.toggle('d-none', mode !== 'complaints');
+                document.getElementById('hr-subpane-deductions')?.classList.toggle('d-none', mode !== 'deductions');
+
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', mode === 'deductions' ? 'deductions' : 'complaints');
                 history.replaceState(null, '', url.toString());
             });
         });
@@ -3140,6 +3490,12 @@
 
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(referenceNumber).catch(() => {});
+            }
+
+            // Switch from Deductions sub-tab to Complaints & Feedback sub-tab before locating row
+            const complaintsSubPill = document.querySelector('.hr-sub-pill[data-hr-sub="complaints"]');
+            if (complaintsSubPill && !complaintsSubPill.classList.contains('active')) {
+                complaintsSubPill.click();
             }
 
             // Check if the complaint row is already visible on the current page

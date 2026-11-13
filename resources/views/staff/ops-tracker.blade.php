@@ -701,26 +701,16 @@
 @endphp
 
 <div class="ops-tracker-wrap">
-    {{-- Top Staff Management Sub-Nav Bar --}}
-    <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
-        <a href="{{ route('staffs.index') }}" class="btn btn-sm btn-outline-secondary">
-            👥 Staff Directory &amp; Payroll
-        </a>
-        <a href="{{ route('shifts.index') }}" class="btn btn-sm btn-outline-secondary">
-            Scheduled shifts
-        </a>
-        <a href="{{ route('staff.ops-tracker.index') }}" class="btn btn-sm btn-dark d-inline-flex align-items-center gap-2">
-            <span>⚡ Ops &amp; Action Tracker</span>
-            @if ($pendingOwnerCount > 0)
-                <span class="ops-owner-badge">{{ $pendingOwnerCount }} Pending Owner</span>
-            @endif
-        </a>
+    {{-- Streamlined 4-Tab Staff Management Top Pill Bar + Shifts & Ops Sub-Navigation --}}
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        @include('staff.partials.top-pill-nav', ['inPlaceTabs' => false, 'activePill' => 'shifts_ops'])
         @if (auth()->user()->isSuperAdmin())
-            <a href="{{ route('users.index') }}" class="btn btn-sm btn-outline-secondary">
-                Staff Access
-            </a>
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <a href="{{ route('users.index') }}" class="btn btn-sm btn-outline-secondary">Staff Access</a>
+            </div>
         @endif
     </div>
+    @include('staff.partials.shifts-ops-subnav', ['inPlaceSubTabs' => false, 'activeSub' => 'ops_tracker'])
 
     {{-- Clean Header & Week Switcher --}}
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-2">

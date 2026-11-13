@@ -1,0 +1,551 @@
+@php
+    $hubOpsItems = $opsItems ?? collect();
+    $hubOpsOpen = $opsOpenCount ?? 0;
+    $hubOpsCompleted = $opsCompletedCount ?? 0;
+    $hubOpsTotal = $opsTotalCount ?? 0;
+    $hubOpsRate = $opsCompletionRate ?? 0;
+    $hubOpsMyOpen = $opsMyOpenCount ?? 0;
+    $hubOpsStatus = $opsStatus ?? 'open';
+    $hubOpsMine = $opsMine ?? false;
+    $hubOpsStaffId = $opsSelectedStaffId ?? null;
+    $hubOpsStaffName = $opsSelectedStaffName ?? null;
+    $hubOpsAssignees = $opsAssigneeOptions ?? collect();
+    $hubOpsMon = $opsMonday ?? now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY);
+    $hubOpsSun = $opsSunday ?? $hubOpsMon->copy()->endOfWeek(\Illuminate\Support\Carbon::SUNDAY);
+    $hubOpsPrev = $opsPrevWeek ?? $hubOpsMon->copy()->subWeek()->toDateString();
+    $hubOpsNext = $opsNextWeek ?? $hubOpsMon->copy()->addWeek()->toDateString();
+    $hubOpsIsCurrent = $opsIsCurrentWeek ?? true;
+    $hubOpsScopes = $opsScopes ?? \App\Models\OpsActionItem::SCOPES;
+    $hubOpsSla = $opsSlaOptions ?? \App\Models\OpsActionItem::SLA_OPTIONS;
+
+    $hubScoreClass = $hubOpsRate >= 90
+        ? 'hub-ops-score-green'
+        : ($hubOpsRate >= 75 ? 'hub-ops-score-amber' : 'hub-ops-score-red');
+@endphp
+
+<style>
+    .hub-ops-score-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        border: 1px solid rgba(229, 184, 168, 0.24);
+        background: rgba(34, 22, 27, 0.88);
+        color: #f8efe6;
+    }
+    .hub-ops-score-green { border-color: rgba(110, 231, 183, 0.35); color: #6ee7b7; }
+    .hub-ops-score-amber { border-color: rgba(212, 163, 115, 0.38); color: #d4a373; }
+    .hub-ops-score-red { border-color: rgba(253, 164, 175, 0.35); color: #fda4af; }
+
+    .hub-ops-filter-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 13px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        border: 1px solid rgba(229, 184, 168, 0.16);
+        background: rgba(34, 22, 27, 0.65);
+        color: #b8a29a;
+        transition: all 0.15s ease;
+    }
+    .hub-ops-filter-pill:hover {
+        color: #f8efe6;
+        border-color: rgba(229, 184, 168, 0.32);
+    }
+    .hub-ops-filter-pill.active {
+        background: rgba(229, 184, 168, 0.16);
+        color: #f8efe6;
+        border-color: rgba(229, 184, 168, 0.44);
+        font-weight: 700;
+    }
+
+    .hub-ops-dropdown-wrap { position: relative; display: inline-block; }
+    .hub-ops-dropdown-menu {
+        display: none;
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        min-width: 220px;
+        background: #211519;
+        border: 1px solid rgba(229, 184, 168, 0.22);
+        border-radius: 12px;
+        padding: 6px;
+        z-index: 1050;
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+    }
+    .hub-ops-dropdown-menu.open { display: block; }
+    .hub-ops-dropdown-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 8px;
+        color: #f8efe6;
+        font-size: 12px;
+        text-decoration: none;
+    }
+    .hub-ops-dropdown-item:hover,
+    .hub-ops-dropdown-item.active {
+        background: rgba(229, 184, 168, 0.14);
+        color: #f8efe6;
+    }
+
+    .hub-ops-card {
+        background: linear-gradient(180deg, rgba(34, 22, 27, 0.92) 0%, rgba(21, 14, 18, 0.96) 100%);
+        border: 1px solid rgba(229, 184, 168, 0.14);
+        border-radius: 16px;
+        overflow: hidden;
+    }
+
+    .hub-ops-circle {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border: 1.5px solid rgba(229, 184, 168, 0.4);
+        background: transparent;
+        color: transparent;
+        font-size: 11px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+    .hub-ops-circle:hover { border-color: #6ee7b7; color: #6ee7b7; }
+    .hub-ops-circle.is-done {
+        background: rgba(110, 231, 183, 0.18);
+        border-color: #6ee7b7;
+        color: #6ee7b7;
+    }
+
+    .hub-ops-assignee-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 600;
+        background: rgba(229, 184, 168, 0.09);
+        border: 1px solid rgba(229, 184, 168, 0.18);
+        color: #f8efe6;
+    }
+
+    .hub-ops-drawer-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 6, 8, 0.62);
+        z-index: 1080;
+        display: none;
+    }
+    .hub-ops-drawer-backdrop.open { display: block; }
+
+    .hub-ops-slide-drawer {
+        position: fixed;
+        top: 0;
+        right: -460px;
+        width: 100%;
+        max-width: 430px;
+        height: 100vh;
+        background: linear-gradient(180deg, #24171c 0%, #170f13 100%);
+        border-left: 1px solid rgba(229, 184, 168, 0.22);
+        z-index: 1090;
+        display: flex;
+        flex-direction: column;
+        transition: right 0.22s ease;
+        box-shadow: -12px 0 36px rgba(0, 0, 0, 0.5);
+    }
+    .hub-ops-slide-drawer.open { right: 0; }
+</style>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <h6 class="fw-bold mb-0" style="color: #f8efe6;">Ops &amp; Action Tracker</h6>
+        <span class="hub-ops-score-pill {{ $hubScoreClass }}">
+            Weekly Score: {{ $hubOpsCompleted }}/{{ $hubOpsTotal }} ({{ $hubOpsRate }}%)
+        </span>
+    </div>
+
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <a href="{{ route('staffs.index', array_filter(['tab' => 'ops_tracker', 'ops_week' => $hubOpsPrev, 'ops_status' => $hubOpsStatus, 'ops_mine' => $hubOpsMine ? 1 : null, 'ops_staff_id' => $hubOpsStaffId])) }}"
+           class="sc-btn-ghost">
+            &#9664; Prev Week
+        </a>
+        <span class="sc-inline-chip">
+            Week of {{ $hubOpsMon->format('d M') }} &ndash; {{ $hubOpsSun->format('d M Y') }}
+        </span>
+        <a href="{{ route('staffs.index', array_filter(['tab' => 'ops_tracker', 'ops_week' => $hubOpsNext, 'ops_status' => $hubOpsStatus, 'ops_mine' => $hubOpsMine ? 1 : null, 'ops_staff_id' => $hubOpsStaffId])) }}"
+           class="sc-btn-ghost">
+            Next Week &#9654;
+        </a>
+        @if (!$hubOpsIsCurrent)
+            <a href="{{ route('staffs.index', array_filter(['tab' => 'ops_tracker', 'ops_status' => $hubOpsStatus, 'ops_mine' => $hubOpsMine ? 1 : null, 'ops_staff_id' => $hubOpsStaffId])) }}"
+               class="sc-btn-rosegold">
+                This Week
+            </a>
+        @endif
+    </div>
+</div>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <a href="{{ route('staffs.index', ['tab' => 'ops_tracker', 'ops_week' => $hubOpsMon->toDateString(), 'ops_status' => 'open']) }}"
+           class="hub-ops-filter-pill {{ $hubOpsStatus === 'open' && !$hubOpsMine && !$hubOpsStaffId ? 'active' : '' }}">
+            Open ({{ $hubOpsOpen }})
+        </a>
+
+        <a href="{{ route('staffs.index', ['tab' => 'ops_tracker', 'ops_week' => $hubOpsMon->toDateString(), 'ops_status' => 'completed']) }}"
+           class="hub-ops-filter-pill {{ $hubOpsStatus === 'completed' ? 'active' : '' }}">
+            ✅ Completed ({{ $hubOpsCompleted }})
+        </a>
+
+        <a href="{{ route('staffs.index', ['tab' => 'ops_tracker', 'ops_week' => $hubOpsMon->toDateString(), 'ops_status' => 'open', 'ops_mine' => 1]) }}"
+           class="hub-ops-filter-pill {{ $hubOpsMine && $hubOpsStatus === 'open' ? 'active' : '' }}">
+            🔴 Pending Me ({{ $hubOpsMyOpen }})
+        </a>
+
+        <div class="hub-ops-dropdown-wrap" id="hubOpsStaffDropdownWrap">
+            <button type="button"
+                    class="hub-ops-filter-pill {{ $hubOpsStaffId ? 'active' : '' }}"
+                    onclick="toggleHubOpsStaffMenu(event)">
+                👤 Staff: {{ $hubOpsStaffName ?? 'All Staff' }} ▾
+            </button>
+            <div class="hub-ops-dropdown-menu" id="hubOpsStaffMenu">
+                <a href="{{ route('staffs.index', ['tab' => 'ops_tracker', 'ops_week' => $hubOpsMon->toDateString(), 'ops_status' => 'open']) }}"
+                   class="hub-ops-dropdown-item {{ !$hubOpsStaffId && !$hubOpsMine && $hubOpsStatus === 'open' ? 'active' : '' }}">
+                    <span>All Staff</span>
+                    <span>{{ $hubOpsOpen }}</span>
+                </a>
+                @foreach ($hubOpsAssignees as $opt)
+                    <a href="{{ route('staffs.index', ['tab' => 'ops_tracker', 'ops_week' => $hubOpsMon->toDateString(), 'ops_status' => 'open', 'ops_staff_id' => $opt['id']]) }}"
+                       class="hub-ops-dropdown-item {{ (int) $hubOpsStaffId === (int) $opt['id'] ? 'active' : '' }}">
+                        <span class="text-truncate">{{ $opt['name'] }}</span>
+                        <span>{{ $opt['open_count'] }}</span>
+                    </a>
+                @endforeach
+            </div>
+        </div>
+    </div>
+
+    @moduleEdit('staff_management')
+        <button type="button" class="sc-btn-rosegold" onclick="openHubOpsCreateDrawer()">
+            + Add Task
+        </button>
+    @endmoduleEdit
+</div>
+
+<div class="hub-ops-card mb-3">
+    <div class="table-responsive">
+        <table class="table team-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Task &amp; Note</th>
+                    <th style="width: 220px;">Pending With</th>
+                    <th style="width: 200px;">Deadline / Status</th>
+                    <th class="text-end" style="width: 175px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse ($hubOpsItems as $item)
+                    @php
+                        $assignedStamp = ($item->ball_assigned_at ?? $item->created_at)
+                            ? ($item->ball_assigned_at ?? $item->created_at)->format('d M Y, h:i A')
+                            : now()->format('d M Y, h:i A');
+                        $completedStamp = ($item->completed_at ?? $item->updated_at)
+                            ? ($item->completed_at ?? $item->updated_at)->format('d M Y, h:i A')
+                            : now()->format('d M Y, h:i A');
+                        $canCompleteItem = $item->canBeCompletedBy(auth()->user());
+                        $isOwnerViewer = \App\Models\OpsActionItem::isAdminOrOwner(auth()->user());
+                        $itemSlaHrs = (int) ($item->sla_hours ?: 48);
+                        $editTaskPayload = [
+                            'id' => $item->id,
+                            'title' => $item->title,
+                            'notes' => (string) ($item->notes ?? ''),
+                            'assigned_user_ids' => is_array($item->assigned_user_ids) ? array_values(array_map('intval', $item->assigned_user_ids)) : [],
+                            'assigned_names' => $item->assignee_list,
+                            'sla_hours' => $itemSlaHrs,
+                            'update_url' => route('staff.ops-tracker.update', $item),
+                        ];
+                    @endphp
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-start gap-2">
+                                @if ($canCompleteItem)
+                                    <form method="POST" action="{{ route('staff.ops-tracker.toggle', $item) }}" class="m-0">
+                                        @csrf
+                                        <button type="submit"
+                                                class="hub-ops-circle {{ $item->is_completed ? 'is-done' : '' }}"
+                                                title="{{ $item->is_completed ? 'Move Back to Pending' : 'Mark Task Completed' }}">
+                                            ✓
+                                        </button>
+                                    </form>
+                                @else
+                                    <span class="hub-ops-circle {{ $item->is_completed ? 'is-done' : '' }}" style="opacity: 0.5; cursor: not-allowed;">✓</span>
+                                @endif
+
+                                <div class="flex-grow-1">
+                                    <div class="d-flex flex-wrap align-items-center gap-2">
+                                        <span class="fw-semibold {{ $item->is_completed ? 'text-decoration-line-through text-muted' : '' }}" style="color: #f8efe6; font-size: 13.5px;">
+                                            {{ $item->title }}
+                                        </span>
+                                        <span class="sc-inline-chip">{{ $item->scope }}</span>
+                                        @if (!$item->is_completed && $item->carryover_weeks > 0)
+                                            <span class="sc-status-badge sc-status-pending_signature">Carryover ({{ $item->carryover_weeks }}w)</span>
+                                        @endif
+                                        @moduleEdit('staff_management')
+                                            <button type="button"
+                                                    class="btn btn-sm btn-link p-0 text-decoration-none"
+                                                    style="color: #e5b8a8;"
+                                                    onclick="openHubOpsEditDrawer(@js($editTaskPayload))"
+                                                    title="Update note &amp; assignees">
+                                                &#9998;
+                                            </button>
+                                        @endmoduleEdit
+                                    </div>
+                                    <div class="small mt-1" style="color: #b8a29a; font-size: 11.5px;">
+                                        @if ($item->notes)
+                                            <span>{{ $item->notes }}</span> &bull;
+                                        @endif
+                                        <span>Assigned: {{ $assignedStamp }}</span>
+                                        @if ($item->is_completed)
+                                            &bull; <span style="color: #6ee7b7;">Completed: {{ $completedStamp }}</span>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-1">
+                                @foreach ($item->assignee_list as $assigneeName)
+                                    <span class="hub-ops-assignee-pill">👤 {{ $assigneeName }}</span>
+                                @endforeach
+                            </div>
+                        </td>
+                        <td>
+                            @if (!$item->is_completed)
+                                @if ($item->is_overdue)
+                                    <span class="sc-status-badge" style="background: rgba(253, 164, 175, 0.14); color: #fda4af; border: 1px solid rgba(253, 164, 175, 0.3);">🚨 Overdue</span>
+                                @else
+                                    <span class="sc-status-badge sc-status-pending_signature">⏳ {{ $item->hours_remaining }}h left</span>
+                                @endif
+                            @else
+                                <span class="sc-status-badge sc-status-active">✓ Completed</span>
+                            @endif
+                        </td>
+                        <td class="text-end">
+                            <div class="d-inline-flex align-items-center gap-1">
+                                @if ($canCompleteItem)
+                                    <form method="POST" action="{{ route('staff.ops-tracker.toggle', $item) }}" class="m-0 d-inline">
+                                        @csrf
+                                        <button type="submit" class="sc-action-pill">
+                                            {{ $item->is_completed ? '↺ Reopen' : '✓ Mark Done' }}
+                                        </button>
+                                    </form>
+                                @else
+                                    <span class="sc-inline-chip">🔒 Ops Lead</span>
+                                @endif
+
+                                @if ($isOwnerViewer)
+                                    <form method="POST" action="{{ route('staff.ops-tracker.destroy', $item) }}" class="m-0 d-inline" onsubmit="return confirm('Delete this task permanently?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="sc-action-pill sc-action-danger" title="Delete task">✕</button>
+                                    </form>
+                                @endif
+                            </div>
+                        </td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-4">
+                            No operational tasks in this view. Click <strong>+ Add Task</strong> above to log an action item.
+                        </td>
+                    </tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@moduleEdit('staff_management')
+    <div class="hub-ops-drawer-backdrop" id="hubOpsDrawerBackdrop" onclick="closeHubOpsDrawers()"></div>
+
+    <aside class="hub-ops-slide-drawer" id="hubOpsCreateDrawer" aria-hidden="true">
+        <div class="d-flex justify-content-between align-items-center p-3" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+            <h6 class="fw-bold mb-0" style="color: #f8efe6;">Add Action Item</h6>
+            <button type="button" class="sc-action-pill" onclick="closeHubOpsDrawers()">✕</button>
+        </div>
+
+        <form method="POST" action="{{ route('staff.ops-tracker.store') }}" class="d-flex flex-column flex-grow-1 overflow-hidden m-0">
+            @csrf
+            <input type="hidden" name="return_to_staff_hub" value="1">
+            <input type="hidden" name="week_start_date" value="{{ $hubOpsMon->toDateString() }}">
+
+            <div class="p-3 flex-grow-1 overflow-auto">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Task / Issue *</label>
+                    <input type="text" name="title" id="hubOpsCreateTitle" class="form-control form-control-sm" placeholder="What needs to be done or followed up?" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Note / Context (Optional)</label>
+                    <textarea name="notes" rows="2" class="form-control form-control-sm" placeholder="Optional context or details..."></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Area</label>
+                    <select name="scope" class="form-select form-select-sm">
+                        @foreach ($hubOpsScopes as $scopeOpt)
+                            <option value="{{ $scopeOpt }}" {{ $scopeOpt === 'Laleen Rituals' ? 'selected' : '' }}>{{ $scopeOpt }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Pending With (Staff Access) *</label>
+                    <div class="p-2 rounded" style="background: rgba(20, 14, 17, 0.6); border: 1px solid rgba(229, 184, 168, 0.16); max-height: 185px; overflow-y: auto;">
+                        @forelse ($hubOpsAssignees as $idx => $opt)
+                            <label class="d-flex justify-content-between align-items-center py-1 px-1 small" style="cursor: pointer;">
+                                <span class="d-inline-flex align-items-center gap-2">
+                                    <input type="checkbox" name="assigned_user_ids[]" value="{{ $opt['id'] }}" {{ $idx === 0 ? 'checked' : '' }}>
+                                    <span style="color: #f8efe6;">{{ $opt['name'] }}</span>
+                                </span>
+                                <span class="text-muted" style="font-size: 11px;">{{ $opt['role_label'] }}</span>
+                            </label>
+                        @empty
+                            <div class="text-muted small">No active Staff Access users found.</div>
+                        @endforelse
+                    </div>
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold">Timeframe</label>
+                    <select name="sla_hours" class="form-select form-select-sm">
+                        @foreach ($hubOpsSla as $hoursVal => $hoursLabel)
+                            <option value="{{ $hoursVal }}" {{ (int) $hoursVal === 48 ? 'selected' : '' }}>{{ $hoursLabel }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
+            <div class="p-3 d-flex justify-content-end gap-2" style="border-top: 1px solid rgba(255, 255, 255, 0.08);">
+                <button type="button" class="sc-btn-ghost" onclick="closeHubOpsDrawers()">Cancel</button>
+                <button type="submit" class="sc-btn-rosegold">+ Save Task</button>
+            </div>
+        </form>
+    </aside>
+
+    <aside class="hub-ops-slide-drawer" id="hubOpsEditDrawer" aria-hidden="true">
+        <div class="d-flex justify-content-between align-items-center p-3" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+            <h6 class="fw-bold mb-0" style="color: #f8efe6;">Update Note &amp; Staff</h6>
+            <button type="button" class="sc-action-pill" onclick="closeHubOpsDrawers()">✕</button>
+        </div>
+
+        <form method="POST" action="" id="hubOpsEditForm" class="d-flex flex-column flex-grow-1 overflow-hidden m-0">
+            @csrf
+            @method('PATCH')
+
+            <div class="p-3 flex-grow-1 overflow-auto">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Task / Issue (Locked)</label>
+                    <div class="p-2 rounded small fw-semibold" id="hubOpsEditLockedTitle" style="background: rgba(20, 14, 17, 0.6); border: 1px solid rgba(229, 184, 168, 0.16); color: #f8efe6;"></div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Note / Context</label>
+                    <textarea name="notes" id="hubOpsEditNotes" rows="3" class="form-control form-control-sm" placeholder="Add or update note..."></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Pending With (Staff Access)</label>
+                    <div class="p-2 rounded" style="background: rgba(20, 14, 17, 0.6); border: 1px solid rgba(229, 184, 168, 0.16); max-height: 185px; overflow-y: auto;">
+                        @foreach ($hubOpsAssignees as $opt)
+                            <label class="d-flex justify-content-between align-items-center py-1 px-1 small" style="cursor: pointer;">
+                                <span class="d-inline-flex align-items-center gap-2">
+                                    <input type="checkbox" name="assigned_user_ids[]" value="{{ $opt['id'] }}"
+                                           data-uid="{{ $opt['id'] }}" data-uname="{{ strtolower($opt['name']) }}"
+                                           class="hub-ops-edit-cb">
+                                    <span style="color: #f8efe6;">{{ $opt['name'] }}</span>
+                                </span>
+                                <span class="text-muted" style="font-size: 11px;">{{ $opt['role_label'] }}</span>
+                            </label>
+                        @endforeach
+                    </div>
+                </div>
+
+                @if (\App\Models\OpsActionItem::isAdminOrOwner(auth()->user()))
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Timeframe (Admin Only)</label>
+                        <select name="sla_hours" id="hubOpsEditSla" class="form-select form-select-sm">
+                            @foreach ($hubOpsSla as $hoursVal => $hoursLabel)
+                                <option value="{{ $hoursVal }}">{{ $hoursLabel }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                @endif
+            </div>
+
+            <div class="p-3 d-flex justify-content-end gap-2" style="border-top: 1px solid rgba(255, 255, 255, 0.08);">
+                <button type="button" class="sc-btn-ghost" onclick="closeHubOpsDrawers()">Cancel</button>
+                <button type="submit" class="sc-btn-rosegold">✓ Save Changes</button>
+            </div>
+        </form>
+    </aside>
+@endmoduleEdit
+
+<script>
+    window.toggleHubOpsStaffMenu = function (event) {
+        if (event) event.stopPropagation();
+        document.getElementById('hubOpsStaffMenu')?.classList.toggle('open');
+    };
+
+    window.openHubOpsCreateDrawer = function () {
+        document.getElementById('hubOpsEditDrawer')?.classList.remove('open');
+        document.getElementById('hubOpsDrawerBackdrop')?.classList.add('open');
+        document.getElementById('hubOpsCreateDrawer')?.classList.add('open');
+        setTimeout(() => document.getElementById('hubOpsCreateTitle')?.focus(), 160);
+    };
+
+    window.openHubOpsEditDrawer = function (payload) {
+        if (!payload) return;
+        document.getElementById('hubOpsCreateDrawer')?.classList.remove('open');
+        const form = document.getElementById('hubOpsEditForm');
+        if (form && payload.update_url) form.action = payload.update_url;
+        const titleEl = document.getElementById('hubOpsEditLockedTitle');
+        if (titleEl) titleEl.textContent = payload.title || '';
+        const notesEl = document.getElementById('hubOpsEditNotes');
+        if (notesEl) notesEl.value = payload.notes || '';
+        const slaEl = document.getElementById('hubOpsEditSla');
+        if (slaEl) slaEl.value = String(payload.sla_hours || 48);
+
+        const ids = Array.isArray(payload.assigned_user_ids) ? payload.assigned_user_ids.map(Number) : [];
+        const names = Array.isArray(payload.assigned_names) ? payload.assigned_names.map(n => String(n).toLowerCase()) : [];
+        document.querySelectorAll('.hub-ops-edit-cb').forEach(cb => {
+            cb.checked = ids.includes(Number(cb.dataset.uid)) || names.includes(cb.dataset.uname || '');
+        });
+
+        document.getElementById('hubOpsDrawerBackdrop')?.classList.add('open');
+        document.getElementById('hubOpsEditDrawer')?.classList.add('open');
+    };
+
+    window.closeHubOpsDrawers = function () {
+        document.getElementById('hubOpsDrawerBackdrop')?.classList.remove('open');
+        document.getElementById('hubOpsCreateDrawer')?.classList.remove('open');
+        document.getElementById('hubOpsEditDrawer')?.classList.remove('open');
+    };
+
+    document.addEventListener('click', function (e) {
+        const wrap = document.getElementById('hubOpsStaffDropdownWrap');
+        if (wrap && !wrap.contains(e.target)) {
+            document.getElementById('hubOpsStaffMenu')?.classList.remove('open');
+        }
+    });
+</script>

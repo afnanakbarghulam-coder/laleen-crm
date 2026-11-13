@@ -255,7 +255,7 @@
 
                 <div id="gdEmptySearchState" class="gd-card text-center py-5 d-none">
                     <h4 class="mb-1" style="color: #f8efe6; font-size: 16px;">No matching workflows</h4>
-                    <p class="text-muted small mb-3">Try searching for "Booking Agent", "Combo", "Monday", or "Checkout".</p>
+                    <p class="text-muted small mb-3">Try searching for "Booking Agent", "Combo", "Complaint", "Monday", or "Checkout".</p>
                     <button type="button" class="gd-action-btn mx-auto" id="gdResetSearchBtn">Clear Search</button>
                 </div>
             </div>
@@ -280,7 +280,8 @@
         }
 
         /* INLINE UI BUTTON CHIP */
-        .g-ui-pill {
+        .g-ui-pill,
+        .ui-chip {
             display: inline-flex;
             align-items: center;
             padding: 1px 7px;
@@ -542,7 +543,7 @@
             display: flex;
             align-items: center;
             flex-wrap: wrap;
-            gap: 22px;
+            gap: 12px 20px;
             padding: 12px 18px;
             margin-bottom: 16px;
             border-radius: 13px;
@@ -853,11 +854,13 @@
             .gd-track-desc,
             .gd-guard-do,
             .gd-guard-avoid,
-            .g-ui-pill {
+            .g-ui-pill,
+            .ui-chip {
                 color: #111111 !important;
             }
 
-            .g-ui-pill {
+            .g-ui-pill,
+            .ui-chip {
                 background: #eeeeee !important;
                 border: 1px solid #999999 !important;
             }

@@ -87,20 +87,20 @@
 </style>
 
 @section('content')
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <div>
             <h4 class="fw-bold mb-0">Scheduled shifts</h4>
             <p class="text-muted small mb-0">Manage your team's recurring working hours and time off.</p>
         </div>
-        @moduleEdit('staff_management')
-            <button class="btn btn-dark" id="addShiftBtn"><i class="bx bx-plus me-1"></i> Add</button>
-        @endmoduleEdit
+        <div class="d-flex align-items-center gap-2">
+            @moduleEdit('staff_management')
+                <button class="btn btn-dark" id="addShiftBtn"><i class="bx bx-plus me-1"></i> Add</button>
+            @endmoduleEdit
+        </div>
     </div>
 
-    <div class="team-tabs d-flex gap-2 mb-3">
-        <a href="{{ route('staffs.index') }}" class="btn btn-sm btn-outline-secondary">Team members</a>
-        <a href="{{ route('shifts.index') }}" class="btn btn-sm btn-dark">Scheduled shifts</a>
-    </div>
+    @include('staff.partials.top-pill-nav', ['inPlaceTabs' => false, 'activePill' => 'shifts_ops'])
+    @include('staff.partials.shifts-ops-subnav', ['inPlaceSubTabs' => false, 'activeSub' => 'shifts'])
 
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <form method="GET" action="{{ route('shifts.index') }}" id="branchFilterForm">
@@ -108,7 +108,7 @@
             <select name="branch" class="form-select form-select-sm" onchange="document.getElementById('branchFilterForm').submit()">
                 <option value="">All Locations</option>
                 <option value="old_airport" {{ request('branch') == 'old_airport' ? 'selected' : '' }}>Old Airport</option>
-                <option value="wakrah" {{ request('branch') == 'wakrah' ? 'selected' : '' }}>Wakrah</option>
+                <option value="wakrah" {{ request('branch') == 'wakrah' ? 'selected' : '' }}>Al Wakrah</option>
                 <option value="both" {{ request('branch') == 'both' ? 'selected' : '' }}>Both</option>
             </select>
         </form>

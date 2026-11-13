@@ -6,12 +6,19 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class Staff extends Model
 {
     use HasFactory;
 
+    public const DEFAULT_CONTRACT_PIN = '2456';
+
     protected $table = 'staff';
+
+    protected $hidden = [
+        'contract_pin',
+    ];
 
     protected $fillable = [
         'name',
@@ -44,6 +51,7 @@ class Staff extends Model
         'commission_rate',
         'base_salary',
         'user_id',
+        'contract_pin',
     ];
 
     protected $casts = [
@@ -197,5 +205,41 @@ class Staff extends Model
     public function notices()
     {
         return $this->hasMany(StaffNotice::class);
+    }
+
+    public function contracts()
+    {
+        return $this->hasMany(StaffContract::class, 'staff_id');
+    }
+
+    public function setContractPin(string $pin): void
+    {
+        $this->forceFill([
+            'contract_pin' => Hash::make($pin),
+        ])->save();
+    }
+
+    public function hasCustomContractPin(): bool
+    {
+        return !empty($this->contract_pin);
+    }
+
+    public function verifyContractPin(string $inputPin): bool
+    {
+        $cleanInput = trim($inputPin);
+        if (!preg_match('/^\d{4}$/', $cleanInput)) {
+            return false;
+        }
+
+        $stored = (string) ($this->contract_pin ?? '');
+        if ($stored === '') {
+            return hash_equals(self::DEFAULT_CONTRACT_PIN, $cleanInput);
+        }
+
+        if (str_starts_with($stored, '$2y$') || str_starts_with($stored, '$2a$') || str_starts_with($stored, '$argon2')) {
+            return Hash::check($cleanInput, $stored);
+        }
+
+        return hash_equals($stored, $cleanInput);
     }
 }
