@@ -640,6 +640,30 @@
         color: var(--ops-muted);
     }
 
+    .ops-drawer-select {
+        width: 100%;
+        background-color: #1b1214;
+        color: #f8efe6;
+        border: 1px solid rgba(229, 184, 168, 0.26);
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 13px;
+        color-scheme: dark;
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    .ops-drawer-select:focus {
+        outline: none;
+        border-color: #e5b8a8;
+        box-shadow: 0 0 0 3px rgba(229, 184, 168, 0.14);
+    }
+
+    .ops-drawer-select option,
+    .ops-drawer-select optgroup {
+        background-color: #1b1214;
+        color: #f8efe6;
+    }
+
     .btn-ops-drawer-save {
         flex: 1;
         background: linear-gradient(135deg, #e09b8f 0%, #c97c70 100%);
@@ -889,6 +913,7 @@
                                 'assigned_names' => $item->assignee_list,
                                 'sla_hours' => $itemSlaHours,
                                 'timeframe_label' => $itemTimeframeLabel,
+                                'keep_deadline_label' => $item->currentDeadlineOptionLabel(),
                                 'update_url' => route('staff.ops-tracker.update', $item),
                             ];
                         @endphp
@@ -1123,7 +1148,7 @@
                                                {{ $idx === 0 ? 'checked' : '' }}>
                                         <span>{{ $opt['name'] }}</span>
                                     </span>
-                                    <span class="ops-role-chip">{{ $opt['role_label'] }}</span>
+                                    <span class="ops-role-chip">{{ ucwords(str_replace(['_', '-'], ' ', (string) ($opt['role_label'] ?? ''))) }}</span>
                                 </label>
                             @empty
                                 <div class="text-muted small px-2 py-2">No active Staff Access users found.</div>
@@ -1204,28 +1229,31 @@
                                                class="ops-edit-drawer-cb">
                                         <span>{{ $opt['name'] }}</span>
                                     </span>
-                                    <span class="ops-role-chip">{{ $opt['role_label'] }}</span>
+                                    <span class="ops-role-chip">{{ ucwords(str_replace(['_', '-'], ' ', (string) ($opt['role_label'] ?? ''))) }}</span>
                                 </label>
                             @endforeach
                         </div>
                     </div>
 
-                    {{-- Admin-Only Timeframe Control (Editable for Admin/Owner, Locked Read-Only for Non-Admin) --}}
-                    @if (\App\Models\OpsActionItem::isAdminOrOwner(auth()->user()))
+                    {{-- Admin-Only Timeframe / Extend Deadline Control --}}
+                    @if (auth()->user()?->isAdmin())
                         <div class="mb-2" id="opsEditDrawerTimeframeSection">
-                            <label class="ops-drawer-field-label">Timeframe (Admin Only)</label>
-                            <div class="ops-chip-group">
-                                @foreach ($slaOptions as $hoursVal => $hoursLabel)
-                                    <label class="ops-chip-option">
-                                        <input type="radio"
-                                               name="sla_hours"
-                                               value="{{ $hoursVal }}"
-                                               data-sla-value="{{ $hoursVal }}"
-                                               class="ops-edit-drawer-sla-radio">
-                                        <span class="ops-chip-pill">{{ $hoursLabel }}</span>
-                                    </label>
-                                @endforeach
-                            </div>
+                            <label class="ops-drawer-field-label" for="opsEditDrawerDeadlineAction">Timeframe / Extend Deadline (Admin Only)</label>
+                            <select name="deadline_action" id="opsEditDrawerDeadlineAction" class="ops-drawer-select">
+                                <option value="keep" id="opsEditDrawerKeepDeadlineOpt" selected>Keep Current Deadline</option>
+                                <optgroup label="Extend from Current Time">
+                                    <option value="extend_24">+24 Hours (from now)</option>
+                                    <option value="extend_48">+48 Hours (from now)</option>
+                                    <option value="extend_72">+72 Hours / 3 Days (from now)</option>
+                                    <option value="extend_168">+1 Week (from now)</option>
+                                </optgroup>
+                                <optgroup label="Standard Timeframe Presets">
+                                    <option value="preset_24">24h (1 Day)</option>
+                                    <option value="preset_48">48h (2 Days)</option>
+                                    <option value="preset_72">3 Days</option>
+                                    <option value="preset_168">1 Week</option>
+                                </optgroup>
+                            </select>
                         </div>
                     @else
                         <div class="mb-2" id="opsEditDrawerTimeframeLocked">
@@ -1340,10 +1368,14 @@
         }
 
         const currentSlaHours = parseInt(payload.sla_hours || 48, 10);
-        document.querySelectorAll('.ops-edit-drawer-sla-radio').forEach(function (radio) {
-            const val = parseInt(radio.getAttribute('data-sla-value') || radio.value || '48', 10);
-            radio.checked = val === currentSlaHours;
-        });
+        const keepDeadlineOptEl = document.getElementById('opsEditDrawerKeepDeadlineOpt');
+        if (keepDeadlineOptEl) {
+            keepDeadlineOptEl.textContent = payload.keep_deadline_label || 'Keep Current Deadline';
+        }
+        const deadlineSelectEl = document.getElementById('opsEditDrawerDeadlineAction');
+        if (deadlineSelectEl) {
+            deadlineSelectEl.value = 'keep';
+        }
 
         if (lockedTimeframeEl) {
             const tfLabel = payload.timeframe_label || (currentSlaHours + 'h');

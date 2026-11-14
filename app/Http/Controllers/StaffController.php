@@ -379,8 +379,7 @@ class StaffController extends Controller
                 $roleLabel = match ($u->role) {
                     'admin' => 'Owner / Admin',
                     'manager' => 'Ops Lead / Manager',
-                    'agent' => 'Agent',
-                    default => ucfirst((string) $u->role),
+                    default => User::roleLabel($u->role),
                 };
 
                 return [

@@ -248,6 +248,23 @@
         box-shadow: -12px 0 36px rgba(0, 0, 0, 0.5);
     }
     .hub-ops-slide-drawer.open { right: 0; }
+
+    .hub-ops-dark-select {
+        background-color: #1b1214 !important;
+        color: #f8efe6 !important;
+        border: 1px solid rgba(229, 184, 168, 0.24) !important;
+        border-radius: 10px !important;
+        color-scheme: dark;
+    }
+    .hub-ops-dark-select:focus {
+        border-color: #e5b8a8 !important;
+        box-shadow: 0 0 0 3px rgba(229, 184, 168, 0.14) !important;
+    }
+    .hub-ops-dark-select option,
+    .hub-ops-dark-select optgroup {
+        background-color: #1b1214;
+        color: #f8efe6;
+    }
 </style>
 
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
@@ -358,6 +375,7 @@
                             'assigned_user_ids' => is_array($item->assigned_user_ids) ? array_values(array_map('intval', $item->assigned_user_ids)) : [],
                             'assigned_names' => $item->assignee_list,
                             'sla_hours' => $itemSlaHrs,
+                            'keep_deadline_label' => $item->currentDeadlineOptionLabel(),
                             'update_url' => route('staff.ops-tracker.update', $item),
                         ];
                         $verifyModalPayload = [
@@ -522,7 +540,7 @@
                                     <input type="checkbox" name="assigned_user_ids[]" value="{{ $opt['id'] }}" {{ $idx === 0 ? 'checked' : '' }}>
                                     <span style="color: #f8efe6;">{{ $opt['name'] }}</span>
                                 </span>
-                                <span class="text-muted" style="font-size: 11px;">{{ $opt['role_label'] }}</span>
+                                <span class="text-muted" style="font-size: 11px;">{{ ucwords(str_replace(['_', '-'], ' ', (string) ($opt['role_label'] ?? ''))) }}</span>
                             </label>
                         @empty
                             <div class="text-muted small">No active Staff Access users found.</div>
@@ -532,7 +550,7 @@
 
                 <div class="mb-2">
                     <label class="form-label small fw-semibold">Timeframe</label>
-                    <select name="sla_hours" class="form-select form-select-sm">
+                    <select name="sla_hours" class="form-select form-select-sm hub-ops-dark-select">
                         @foreach ($hubOpsSla as $hoursVal => $hoursLabel)
                             <option value="{{ $hoursVal }}" {{ (int) $hoursVal === 48 ? 'selected' : '' }}>{{ $hoursLabel }}</option>
                         @endforeach
@@ -579,19 +597,29 @@
                                            class="hub-ops-edit-cb">
                                     <span style="color: #f8efe6;">{{ $opt['name'] }}</span>
                                 </span>
-                                <span class="text-muted" style="font-size: 11px;">{{ $opt['role_label'] }}</span>
+                                <span class="text-muted" style="font-size: 11px;">{{ ucwords(str_replace(['_', '-'], ' ', (string) ($opt['role_label'] ?? ''))) }}</span>
                             </label>
                         @endforeach
                     </div>
                 </div>
 
-                @if (\App\Models\OpsActionItem::isAdminOrOwner(auth()->user()))
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Timeframe (Admin Only)</label>
-                        <select name="sla_hours" id="hubOpsEditSla" class="form-select form-select-sm">
-                            @foreach ($hubOpsSla as $hoursVal => $hoursLabel)
-                                <option value="{{ $hoursVal }}">{{ $hoursLabel }}</option>
-                            @endforeach
+                @if (auth()->user()?->isAdmin())
+                    <div class="mb-2" id="hubOpsEditTimeframeSection">
+                        <label class="form-label small fw-semibold" for="hubOpsEditDeadlineAction">Timeframe / Extend Deadline (Admin Only)</label>
+                        <select name="deadline_action" id="hubOpsEditDeadlineAction" class="form-select form-select-sm hub-ops-dark-select">
+                            <option value="keep" id="hubOpsEditKeepDeadlineOpt" selected>Keep Current Deadline</option>
+                            <optgroup label="Extend from Current Time">
+                                <option value="extend_24">+24 Hours (from now)</option>
+                                <option value="extend_48">+48 Hours (from now)</option>
+                                <option value="extend_72">+72 Hours / 3 Days (from now)</option>
+                                <option value="extend_168">+1 Week (from now)</option>
+                            </optgroup>
+                            <optgroup label="Standard Timeframe Presets">
+                                <option value="preset_24">24h (1 Day)</option>
+                                <option value="preset_48">48h (2 Days)</option>
+                                <option value="preset_72">3 Days</option>
+                                <option value="preset_168">1 Week</option>
+                            </optgroup>
                         </select>
                     </div>
                 @endif
@@ -795,8 +823,14 @@
         if (titleEl) titleEl.textContent = payload.title || '';
         const notesEl = document.getElementById('hubOpsEditNotes');
         if (notesEl) notesEl.value = payload.notes || '';
-        const slaEl = document.getElementById('hubOpsEditSla');
-        if (slaEl) slaEl.value = String(payload.sla_hours || 48);
+        const keepOptEl = document.getElementById('hubOpsEditKeepDeadlineOpt');
+        if (keepOptEl) {
+            keepOptEl.textContent = payload.keep_deadline_label || 'Keep Current Deadline';
+        }
+        const deadlineEl = document.getElementById('hubOpsEditDeadlineAction');
+        if (deadlineEl) {
+            deadlineEl.value = 'keep';
+        }
 
         const ids = Array.isArray(payload.assigned_user_ids) ? payload.assigned_user_ids.map(Number) : [];
         const names = Array.isArray(payload.assigned_names) ? payload.assigned_names.map(n => String(n).toLowerCase()) : [];

@@ -135,8 +135,7 @@ class OpsActionTrackerController extends Controller
             $roleLabel = match ($u->role) {
                 'admin' => 'Owner / Admin',
                 'manager' => 'Ops Lead / Manager',
-                'agent' => 'Agent',
-                default => ucfirst((string) $u->role),
+                default => User::roleLabel($u->role),
             };
 
             return [
@@ -274,19 +273,33 @@ class OpsActionTrackerController extends Controller
     /**
      * Update an existing Ops Action Item.
      * Task title is strictly immutable after creation — only notes, Staff Access
-     * assignees (assigned_user_ids / assigned_names), and Admin-only sla_hours may be updated.
+     * assignees (assigned_user_ids / assigned_names), and Admin-only deadline extensions/timeframes may be updated.
      */
     public function update(Request $request, OpsActionItem $opsActionItem)
     {
         $currentSlaHours = (int) ($opsActionItem->sla_hours ?: 48);
-        $isAdmin = OpsActionItem::isAdminOrOwner($request->user());
+        $existingDueAt = $opsActionItem->effectiveDueAt();
+        $isAdmin = (bool) ($request->user() && $request->user()->isAdmin());
 
-        if ($request->filled('sla_hours')) {
-            $requestedSla = (int) $request->input('sla_hours');
-            if (! $isAdmin && $requestedSla !== $currentSlaHours) {
-                abort(403, 'Only an Admin or Owner can modify a task timeframe.');
+        $rawDeadlineAction = strtolower(trim((string) $request->input('deadline_action', '')));
+
+        if (! $isAdmin) {
+            if ($rawDeadlineAction !== '' && $rawDeadlineAction !== 'keep') {
+                abort(403, 'Only an administrator can extend or modify a task deadline.');
+            }
+            if ($request->filled('due_at') || $request->filled('extend_hours')) {
+                abort(403, 'Only an administrator can extend or modify a task deadline.');
+            }
+            if ($request->filled('sla_hours') && (int) $request->input('sla_hours') !== $currentSlaHours) {
+                abort(403, 'Only an administrator can extend or modify a task deadline.');
             }
         }
+
+        $allowedDeadlineActions = array_merge(
+            ['keep'],
+            array_keys(OpsActionItem::EXTEND_HOURS_MAP),
+            array_keys(OpsActionItem::PRESET_HOURS_MAP)
+        );
 
         $validated = $request->validate([
             'notes' => ['nullable', 'string', 'max:3000'],
@@ -294,6 +307,7 @@ class OpsActionTrackerController extends Controller
             'assigned_names' => ['nullable', 'array'],
             'pending_with_name' => ['nullable', 'string', 'max:500'],
             'pending_with_type' => ['nullable', Rule::in(['owner', 'ops_lead', 'staff'])],
+            'deadline_action' => ['nullable', 'string', Rule::in($allowedDeadlineActions)],
             'sla_hours' => ['nullable', 'integer', Rule::in([6, 24, 48, 72, 120, 168])],
         ]);
 
@@ -305,10 +319,6 @@ class OpsActionTrackerController extends Controller
                 ? trim($validated['notes'])
                 : null;
         }
-
-        $effectiveSlaHours = ($isAdmin && ! empty($validated['sla_hours']))
-            ? (int) $validated['sla_hours']
-            : $currentSlaHours;
 
         if ($request->hasAny(['assigned_user_ids', 'assigned_names', 'pending_with_name', 'pending_with_type', 'pending_with'])) {
             [$newType, $newName, $newUserIds, $newNames] = $this->resolveMultiAssignees($request);
@@ -327,18 +337,38 @@ class OpsActionTrackerController extends Controller
             $payload['assigned_names'] = $newNames;
 
             if ($assigneesChanged) {
-                $now = now();
-                $payload['ball_assigned_at'] = $now;
-                $payload['due_at'] = $now->copy()->addHours($effectiveSlaHours);
+                $payload['ball_assigned_at'] = now();
+                if ($opsActionItem->due_at === null) {
+                    // Preserve original computed deadline when "Keep Current Deadline" is active
+                    $payload['due_at'] = $existingDueAt;
+                }
             }
         }
 
-        if ($isAdmin && ! empty($validated['sla_hours'])) {
-            $newSlaHours = (int) $validated['sla_hours'];
-            $payload['sla_hours'] = $newSlaHours;
+        if ($isAdmin) {
+            $deadlineAction = $validated['deadline_action'] ?? '';
 
-            if (! $assigneesChanged) {
-                $baseTime = ($opsActionItem->ball_assigned_at ?? $opsActionItem->created_at ?? now())->copy();
+            if (isset(OpsActionItem::EXTEND_HOURS_MAP[$deadlineAction])) {
+                $extendHours = OpsActionItem::EXTEND_HOURS_MAP[$deadlineAction];
+                $now = now();
+
+                $payload['sla_hours'] = $extendHours;
+                $payload['due_at'] = match ($extendHours) {
+                    72 => $now->copy()->addDays(3),
+                    168 => $now->copy()->addWeek(),
+                    default => $now->copy()->addHours($extendHours),
+                };
+            } elseif (isset(OpsActionItem::PRESET_HOURS_MAP[$deadlineAction])) {
+                $presetHours = OpsActionItem::PRESET_HOURS_MAP[$deadlineAction];
+                $baseTime = ($payload['ball_assigned_at'] ?? $opsActionItem->ball_assigned_at ?? $opsActionItem->created_at ?? now())->copy();
+
+                $payload['sla_hours'] = $presetHours;
+                $payload['due_at'] = $baseTime->addHours($presetHours);
+            } elseif ($deadlineAction === '' && ! empty($validated['sla_hours'])) {
+                $newSlaHours = (int) $validated['sla_hours'];
+                $baseTime = ($payload['ball_assigned_at'] ?? $opsActionItem->ball_assigned_at ?? $opsActionItem->created_at ?? now())->copy();
+
+                $payload['sla_hours'] = $newSlaHours;
                 $payload['due_at'] = $baseTime->addHours($newSlaHours);
             }
         }

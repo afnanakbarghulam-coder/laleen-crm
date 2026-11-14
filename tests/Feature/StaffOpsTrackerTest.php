@@ -520,24 +520,27 @@ class StaffOpsTrackerTest extends TestCase
             'is_completed' => false,
         ]);
 
-        // 1. Admin sees the editable Timeframe (Admin Only) selector inside the Edit drawer
+        // 1. Admin sees the editable Timeframe / Extend Deadline (Admin Only) selector inside the Edit drawer
         $adminIndex = $this->actingAs($this->admin)
             ->get(route('staff.ops-tracker.index'))
             ->assertOk();
 
         $adminIndex->assertSee('id="opsEditDrawerTimeframeSection"', false);
-        $adminIndex->assertSee('Timeframe (Admin Only)');
-        $adminIndex->assertSee('class="ops-edit-drawer-sla-radio"', false);
+        $adminIndex->assertSee('Timeframe / Extend Deadline (Admin Only)');
+        $adminIndex->assertSee('name="deadline_action"', false);
+        $adminIndex->assertSee('Keep Current Deadline');
+        $adminIndex->assertSee('+24 Hours (from now)');
+        $adminIndex->assertSee('+48 Hours (from now)');
         $adminIndex->assertSee('data-sla-hours="48"', false);
         $adminIndex->assertDontSee('id="opsEditDrawerTimeframeLocked"', false);
 
-        // 2. Non-Admin Staff (Ops Lead / Manager & Ayan / Agent) do NOT see editable timeframe radio inputs in Edit drawer
+        // 2. Non-Admin Staff (Ops Lead / Manager & Ayan / Agent) do NOT see editable deadline_action select in Edit drawer
         $opsLeadIndex = $this->actingAs($this->opsLeadUser)
             ->get(route('staff.ops-tracker.index'))
             ->assertOk();
 
         $opsLeadIndex->assertDontSee('id="opsEditDrawerTimeframeSection"', false);
-        $opsLeadIndex->assertDontSee('class="ops-edit-drawer-sla-radio"', false);
+        $opsLeadIndex->assertDontSee('name="deadline_action"', false);
         $opsLeadIndex->assertSee('id="opsEditDrawerTimeframeLocked"', false);
         $opsLeadIndex->assertSee('🔒 Timeframe: 48h (2 Days)');
 
@@ -666,5 +669,199 @@ class StaffOpsTrackerTest extends TestCase
         $hubCompletedView->assertSee('Verify Al Wakrah sterilization logbook');
         $hubCompletedView->assertSee('Verified by Arbab');
         $hubCompletedView->assertSee('Inspected logbook on video call; all stations signed off.');
+    }
+
+    public function test_keep_current_deadline_and_extend_from_now_options_and_title_case_role_labels(): void
+    {
+        try {
+            Carbon::setTestNow(Carbon::parse('2026-11-14 14:30:00'));
+
+            $marketingUser = User::factory()->create([
+                'name' => 'Hira Marketing',
+                'email' => 'hira.mkt@laleen.qa',
+                'role' => 'marketing_specialist',
+                'is_active' => true,
+                'permissions' => User::defaultPermissionsForRole('marketing_specialist'),
+            ]);
+
+            $socialEditor = User::factory()->create([
+                'name' => 'Zainab Reels',
+                'email' => 'zainab.reels@laleen.qa',
+                'role' => 'social_media_editor',
+                'is_active' => true,
+                'permissions' => User::defaultPermissionsForRole('social_media_editor'),
+            ]);
+
+            // UI Check: Pending With role labels format snake_case into clean Title Case & Edit modal renders Extend options
+            $hubResp = $this->actingAs($this->admin)
+                ->get(route('staffs.index', ['tab' => 'ops_tracker']))
+                ->assertOk();
+
+            $hubResp->assertSee('Marketing Specialist');
+            $hubResp->assertSee('Social Media Editor');
+            $hubResp->assertDontSee('Marketing_specialist');
+            $hubResp->assertDontSee('Social_media_editor');
+            $hubResp->assertSee('Timeframe / Extend Deadline (Admin Only)');
+            $hubResp->assertSee('Keep Current Deadline');
+            $hubResp->assertSee('+24 Hours (from now)');
+            $hubResp->assertSee('+48 Hours (from now)');
+            $hubResp->assertSee('+72 Hours / 3 Days (from now)');
+            $hubResp->assertSee('+1 Week (from now)');
+
+            $standaloneResp = $this->actingAs($this->admin)
+                ->get(route('staff.ops-tracker.index'))
+                ->assertOk();
+
+            $standaloneResp->assertSee('Marketing Specialist');
+            $standaloneResp->assertSee('Social Media Editor');
+            $standaloneResp->assertDontSee('Marketing_specialist');
+            $standaloneResp->assertDontSee('Social_media_editor');
+
+            // 1. Editing Note / Context or Pending With with "Keep Current Deadline" leaves existing due_at untouched
+            $originalCreated = Carbon::parse('2026-11-13 10:00:00');
+            $originalDueAt = Carbon::parse('2026-11-15 18:00:00');
+
+            $activeTask = OpsActionItem::create([
+                'title' => 'Finalize Bridal Henna & Hair ad creatives',
+                'scope' => 'Marketing & Ads',
+                'pending_with_type' => 'staff',
+                'pending_with_name' => 'Hira Marketing',
+                'assigned_user_ids' => [$marketingUser->id],
+                'assigned_names' => ['Hira Marketing'],
+                'sla_hours' => 48,
+                'ball_assigned_at' => $originalCreated,
+                'due_at' => $originalDueAt,
+                'week_start_date' => Carbon::now()->startOfWeek(Carbon::MONDAY)->toDateString(),
+                'is_completed' => false,
+            ]);
+            $activeTask->timestamps = false;
+            $activeTask->forceFill(['created_at' => $originalCreated])->save();
+            $activeTask->timestamps = true;
+
+            $this->actingAs($this->admin)
+                ->patch(route('staff.ops-tracker.update', $activeTask), [
+                    'notes' => 'Added Zainab for reel cutdowns while keeping Friday evening deadline.',
+                    'assigned_user_ids' => [$marketingUser->id, $socialEditor->id],
+                    'deadline_action' => 'keep',
+                ])
+                ->assertRedirect();
+
+            $activeTask->refresh();
+            $this->assertSame('Added Zainab for reel cutdowns while keeping Friday evening deadline.', $activeTask->notes);
+            $this->assertSame([$marketingUser->id, $socialEditor->id], $activeTask->assigned_user_ids);
+            $this->assertTrue($activeTask->due_at->equalTo($originalDueAt));
+            $this->assertSame(48, $activeTask->sla_hours);
+
+            // 2. Admin extending an OVERDUE task with +24h / +48h / +72h / +1w sets due_at relative to Carbon::now() (not created_at) and clears Overdue state
+            $pastCreated = Carbon::parse('2026-11-10 09:00:00');
+            $expiredDueAt = Carbon::parse('2026-11-12 09:00:00');
+
+            $overdueTask = OpsActionItem::create([
+                'title' => 'Audit Al Wakrah keratin serum inventory',
+                'scope' => 'Al Wakrah',
+                'pending_with_type' => 'ops_lead',
+                'pending_with_name' => 'Ops Lead',
+                'assigned_user_ids' => [$this->opsLeadUser->id],
+                'assigned_names' => ['Ops Lead'],
+                'sla_hours' => 48,
+                'ball_assigned_at' => $pastCreated,
+                'due_at' => $expiredDueAt,
+                'week_start_date' => Carbon::now()->startOfWeek(Carbon::MONDAY)->toDateString(),
+                'is_completed' => false,
+            ]);
+            $overdueTask->timestamps = false;
+            $overdueTask->forceFill(['created_at' => $pastCreated])->save();
+            $overdueTask->timestamps = true;
+
+            $this->assertTrue($overdueTask->fresh()->is_overdue);
+            $this->assertSame(0, $overdueTask->fresh()->hours_remaining);
+
+            // Extend +24 Hours (from now = 2026-11-14 14:30:00 -> 2026-11-15 14:30:00)
+            $this->actingAs($this->admin)
+                ->patch(route('staff.ops-tracker.update', $overdueTask), [
+                    'notes' => 'Granted +24h from now to recount backbar bottles.',
+                    'assigned_user_ids' => [$this->opsLeadUser->id],
+                    'deadline_action' => 'extend_24',
+                ])
+                ->assertRedirect();
+
+            $overdueTask->refresh();
+            $this->assertTrue($overdueTask->due_at->equalTo(Carbon::now()->copy()->addHours(24)));
+            $this->assertTrue($overdueTask->created_at->equalTo($pastCreated));
+            $this->assertFalse($overdueTask->is_overdue);
+            $this->assertSame(24, $overdueTask->hours_remaining);
+
+            $afterExtend24Hub = $this->actingAs($this->admin)
+                ->get(route('staffs.index', ['tab' => 'ops_tracker']))
+                ->assertOk();
+            $afterExtend24Hub->assertDontSee('🚨 Overdue');
+            $afterExtend24Hub->assertSee('⏳ 24h left');
+
+            // Extend +48 Hours (from now = 2026-11-14 14:30:00 -> 2026-11-16 14:30:00)
+            $this->actingAs($this->admin)
+                ->patch(route('staff.ops-tracker.update', $overdueTask), [
+                    'deadline_action' => 'extend_48',
+                ])
+                ->assertRedirect();
+
+            $overdueTask->refresh();
+            $this->assertTrue($overdueTask->due_at->equalTo(Carbon::now()->copy()->addHours(48)));
+            $this->assertFalse($overdueTask->is_overdue);
+            $this->assertSame(48, $overdueTask->hours_remaining);
+
+            // Extend +72 Hours / 3 Days (from now) and +1 Week (from now)
+            $this->actingAs($this->admin)
+                ->patch(route('staff.ops-tracker.update', $overdueTask), [
+                    'deadline_action' => 'extend_72',
+                ])
+                ->assertRedirect();
+            $this->assertTrue($overdueTask->fresh()->due_at->equalTo(Carbon::now()->copy()->addDays(3)));
+
+            $this->actingAs($this->admin)
+                ->patch(route('staff.ops-tracker.update', $overdueTask), [
+                    'deadline_action' => 'extend_168',
+                ])
+                ->assertRedirect();
+            $this->assertTrue($overdueTask->fresh()->due_at->equalTo(Carbon::now()->copy()->addWeek()));
+
+            $lockedAdminDeadline = $overdueTask->fresh()->due_at->copy();
+
+            // 3. Non-admin users cannot extend or mutate the deadline (403 on deadline_action / due_at, and untouched on note/staff edit)
+            foreach ([$this->opsLeadUser, $this->ayanUser] as $nonAdminEditor) {
+                $this->actingAs($nonAdminEditor)
+                    ->get(route('staffs.index', ['tab' => 'ops_tracker']))
+                    ->assertOk()
+                    ->assertDontSee('id="hubOpsEditDeadlineAction"', false)
+                    ->assertDontSee('Timeframe / Extend Deadline (Admin Only)');
+
+                $this->actingAs($nonAdminEditor)
+                    ->patch(route('staff.ops-tracker.update', $overdueTask), [
+                        'notes' => 'Attempted unauthorized +48h extension',
+                        'deadline_action' => 'extend_48',
+                    ])
+                    ->assertForbidden();
+
+                $this->actingAs($nonAdminEditor)
+                    ->patch(route('staff.ops-tracker.update', $overdueTask), [
+                        'notes' => 'Attempted direct due_at injection',
+                        'due_at' => Carbon::now()->copy()->addMonth()->toDateTimeString(),
+                    ])
+                    ->assertForbidden();
+            }
+
+            // Non-admin editing Note & Pending With leaves due_at 100% untouched
+            $this->actingAs($this->opsLeadUser)
+                ->patch(route('staff.ops-tracker.update', $overdueTask), [
+                    'notes' => 'Shelf count completed; awaiting Arbab check.',
+                    'assigned_user_ids' => [$this->opsLeadUser->id, $this->ayanUser->id],
+                ])
+                ->assertRedirect();
+
+            $overdueTask->refresh();
+            $this->assertSame('Shelf count completed; awaiting Arbab check.', $overdueTask->notes);
+            $this->assertTrue($overdueTask->due_at->equalTo($lockedAdminDeadline));
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 }

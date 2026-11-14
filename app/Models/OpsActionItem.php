@@ -29,6 +29,27 @@ class OpsActionItem extends Model
         168 => '1 Week',
     ];
 
+    public const EXTEND_OPTIONS = [
+        'extend_24' => '+24 Hours (from now)',
+        'extend_48' => '+48 Hours (from now)',
+        'extend_72' => '+72 Hours / 3 Days (from now)',
+        'extend_168' => '+1 Week (from now)',
+    ];
+
+    public const EXTEND_HOURS_MAP = [
+        'extend_24' => 24,
+        'extend_48' => 48,
+        'extend_72' => 72,
+        'extend_168' => 168,
+    ];
+
+    public const PRESET_HOURS_MAP = [
+        'preset_24' => 24,
+        'preset_48' => 48,
+        'preset_72' => 72,
+        'preset_168' => 168,
+    ];
+
     public const IMPACT_LEVERS = [
         'revenue_leads' => '💰 Revenue & Leads',
         'retention_delivery' => '🛡️ Retention & Delivery',
@@ -431,13 +452,23 @@ class OpsActionItem extends Model
     }
 
     /**
-     * Scope items that have exceeded their SLA hours in the current person's court and are still open.
+     * Scope items that have exceeded their deadline and are still open.
      */
     public function scopeBottlenecks($query)
     {
+        $now = now();
+
         return $query
             ->where('is_completed', false)
-            ->where('ball_assigned_at', '<=', now()->subHours(48));
+            ->where(function ($q) use ($now) {
+                $q->where(function ($sub) use ($now) {
+                    $sub->whereNotNull('due_at')
+                        ->where('due_at', '<=', $now);
+                })->orWhere(function ($sub) use ($now) {
+                    $sub->whereNull('due_at')
+                        ->where('ball_assigned_at', '<=', $now->copy()->subHours(48));
+                });
+            });
     }
 
     /**
@@ -482,23 +513,71 @@ class OpsActionItem extends Model
     }
 
     /**
-     * Hours remaining before SLA deadline.
+     * Resolve the authoritative deadline timestamp (`due_at` if stored, else `ball_assigned_at + sla_hours`).
      */
-    public function getHoursRemainingAttribute(): int
+    public function effectiveDueAt(): Carbon
     {
-        $sla = (int) ($this->sla_hours ?: 48);
+        if ($this->due_at) {
+            return Carbon::parse($this->due_at);
+        }
 
-        return max(0, $sla - $this->hours_in_court);
+        $sla = (int) ($this->sla_hours ?: 48);
+        $base = $this->ball_assigned_at
+            ? Carbon::parse($this->ball_assigned_at)
+            : ($this->created_at ? Carbon::parse($this->created_at) : now());
+
+        return $base->copy()->addHours($sla);
     }
 
     /**
-     * Whether this open item is past its SLA deadline.
+     * Human-readable summary of current deadline for "Keep Current Deadline" select option.
+     */
+    public function currentDeadlineOptionLabel(): string
+    {
+        $dueAt = $this->effectiveDueAt();
+        $formattedDue = $dueAt->format('d M, h:i A');
+
+        if ($this->is_completed) {
+            return "Keep Current Deadline (Due {$formattedDue})";
+        }
+
+        if ($this->is_overdue) {
+            return "Keep Current Deadline (Overdue · Due {$formattedDue})";
+        }
+
+        return "Keep Current Deadline ({$this->hours_remaining}h left · Due {$formattedDue})";
+    }
+
+    /**
+     * Hours remaining before `due_at` deadline.
+     */
+    public function getHoursRemainingAttribute(): int
+    {
+        if ($this->is_completed) {
+            return 0;
+        }
+
+        $now = now();
+        $dueAt = $this->effectiveDueAt();
+        $secondsLeft = $dueAt->getTimestamp() - $now->getTimestamp();
+
+        if ($secondsLeft <= 0) {
+            return 0;
+        }
+
+        return (int) ceil($secondsLeft / 3600);
+    }
+
+    /**
+     * Whether this open item is past its `due_at` deadline.
      */
     public function getIsOverdueAttribute(): bool
     {
-        $sla = (int) ($this->sla_hours ?: 48);
+        if ($this->is_completed) {
+            return false;
+        }
 
-        return ! $this->is_completed && $this->hours_in_court >= $sla;
+        return $this->effectiveDueAt()->getTimestamp() <= now()->getTimestamp();
     }
 
     /**
