@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CrmIdea;
+use App\Models\CrmIdeaVote;
+use App\Models\CrmPresentation;
 use App\Models\KpiStaffEvaluation;
 use App\Models\OpsActionItem;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 
 class GuideController extends Controller
 {
@@ -33,7 +37,17 @@ class GuideController extends Controller
         );
     }
 
-    public function index(Request $request)
+    public function presentations(Request $request)
+    {
+        return $this->index($request, 'presentations');
+    }
+
+    public function ideas(Request $request)
+    {
+        return $this->index($request, 'ideas');
+    }
+
+    public function index(Request $request, ?string $forcedSection = null)
     {
         /** @var User $realUser */
         $realUser = $request->user();
@@ -62,6 +76,16 @@ class GuideController extends Controller
         $defaultTab = $this->resolveDefaultTab($effectiveUser, $playbooks);
 
         $requestedTab = strtolower(trim((string) $request->query('tab', '')));
+        $requestedSection = strtolower(trim((string) ($forcedSection ?? $request->query('section', ''))));
+
+        if ($requestedSection === '' && in_array($requestedTab, ['presentations', 'ideas', 'guides'], true)) {
+            $requestedSection = $requestedTab;
+        }
+
+        $activeSection = in_array($requestedSection, ['guides', 'presentations', 'ideas'], true)
+            ? $requestedSection
+            : 'guides';
+
         $validTabs = array_keys($playbooks);
         if (count($playbooks) > 1) {
             $validTabs[] = 'all';
@@ -73,15 +97,70 @@ class GuideController extends Controller
 
         $scopeBadge = $this->resolveScopeBadge($effectiveUser, $previewRole);
 
+        $presentations = collect();
+        if (Schema::hasTable('crm_presentations')) {
+            $presentations = CrmPresentation::with('creator:id,name')
+                ->orderByDesc('is_pinned')
+                ->orderByDesc('id')
+                ->get();
+        }
+
+        $ideas = collect();
+        $votedIdeaIds = [];
+        if (Schema::hasTable('crm_ideas')) {
+            $ideas = CrmIdea::with(['author:id,name,role', 'comments.user:id,name,role', 'opsTask:id,title,due_at,is_completed,pending_with_name'])
+                ->orderByRaw("CASE status WHEN 'New Idea' THEN 1 WHEN 'Approved' THEN 2 WHEN 'Converted to Ops' THEN 3 ELSE 4 END ASC")
+                ->orderByDesc('upvotes_count')
+                ->orderByDesc('id')
+                ->get();
+
+            if (Schema::hasTable('crm_idea_votes')) {
+                $votedIdeaIds = CrmIdeaVote::where('user_id', $realUser->id)
+                    ->pluck('idea_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+            }
+        }
+
+        $isPreviewMode = $previewRole !== null;
+        $canManagePresentations = CrmPresentationController::canManage($effectiveUser);
+        $canAdminIdeas = $isRealAdmin && !$isPreviewMode;
+
+        $opsAssigneeUsers = collect();
+        if ($canAdminIdeas) {
+            $opsAssigneeUsers = User::where('is_active', true)
+                ->orderByRaw("CASE role WHEN 'admin' THEN 1 WHEN 'manager' THEN 2 WHEN 'agent' THEN 3 ELSE 4 END ASC")
+                ->orderBy('name')
+                ->get(['id', 'name', 'role'])
+                ->map(fn (User $u) => [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'role_label' => User::roleLabel($u->role),
+                ]);
+        }
+
         return view('guide.index', [
             'playbooks' => $playbooks,
             'activeTab' => $activeTab,
             'defaultTab' => $defaultTab,
+            'activeSection' => $activeSection,
             'scopeBadge' => $scopeBadge,
             'showAdminPreviewBar' => $isRealAdmin,
             'previewRoles' => $isRealAdmin ? self::PREVIEW_ROLES : [],
             'activePreviewRole' => $previewRole ?? 'all',
-            'isPreviewMode' => $previewRole !== null,
+            'isPreviewMode' => $isPreviewMode,
+            'presentations' => $presentations,
+            'presentationCategories' => CrmPresentation::CATEGORIES,
+            'presentationLayouts' => CrmPresentation::LAYOUTS,
+            'canManagePresentations' => $canManagePresentations,
+            'canDeletePresentations' => $canAdminIdeas,
+            'ideas' => $ideas,
+            'ideaCategories' => CrmIdea::CATEGORIES,
+            'ideaStatuses' => CrmIdea::STATUSES,
+            'votedIdeaIds' => $votedIdeaIds,
+            'canAdminIdeas' => $canAdminIdeas,
+            'opsAssigneeUsers' => $opsAssigneeUsers,
+            'realUserId' => (int) $realUser->id,
         ]);
     }
 

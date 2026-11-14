@@ -4,6 +4,8 @@ use App\Http\Controllers\AiScriptController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\ComboController;
 use App\Http\Controllers\CommandCenterController;
+use App\Http\Controllers\CrmIdeaController;
+use App\Http\Controllers\CrmPresentationController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\Ecommerce\EcommerceAiAgentController;
 use App\Http\Controllers\Ecommerce\EcommerceContentCalendarController;
@@ -84,7 +86,39 @@ Route::middleware('role:admin')->group(function () {
 
 Route::middleware(['auth'])->group(function () {
     Route::middleware('module:dashboard')->get('/dashboard', [UserController::class, 'dashboard'])->name('dashboard');
-    Route::middleware(['active', 'module:guide'])->get('/guide', [GuideController::class, 'index'])->name('guide.index');
+    Route::middleware(['active', 'module:guide'])->group(function () {
+        Route::get('/guide', [GuideController::class, 'index'])->name('guide.index');
+        Route::get('/guide/presentations', [GuideController::class, 'presentations'])->name('guide.presentations.index');
+        Route::post('/guide/presentations', [CrmPresentationController::class, 'store'])->name('guide.presentations.store');
+        Route::post('/guide/presentations/import', [CrmPresentationController::class, 'importJson'])->name('guide.presentations.import');
+        Route::match(['put', 'patch'], '/guide/presentations/{presentation}', [CrmPresentationController::class, 'update'])
+            ->whereNumber('presentation')
+            ->name('guide.presentations.update');
+        Route::delete('/guide/presentations/{presentation}', [CrmPresentationController::class, 'destroy'])
+            ->whereNumber('presentation')
+            ->name('guide.presentations.destroy');
+
+        Route::get('/guide/ideas', [GuideController::class, 'ideas'])->name('guide.ideas.index');
+        Route::post('/guide/ideas', [CrmIdeaController::class, 'store'])->name('guide.ideas.store');
+        Route::match(['put', 'patch'], '/guide/ideas/{idea}', [CrmIdeaController::class, 'update'])
+            ->whereNumber('idea')
+            ->name('guide.ideas.update');
+        Route::delete('/guide/ideas/{idea}', [CrmIdeaController::class, 'destroy'])
+            ->whereNumber('idea')
+            ->name('guide.ideas.destroy');
+        Route::post('/guide/ideas/{idea}/vote', [CrmIdeaController::class, 'toggleVote'])
+            ->whereNumber('idea')
+            ->name('guide.ideas.vote');
+        Route::post('/guide/ideas/{idea}/comments', [CrmIdeaController::class, 'storeComment'])
+            ->whereNumber('idea')
+            ->name('guide.ideas.comments.store');
+        Route::match(['put', 'patch'], '/guide/ideas/{idea}/status', [CrmIdeaController::class, 'updateStatus'])
+            ->whereNumber('idea')
+            ->name('guide.ideas.status');
+        Route::post('/guide/ideas/{idea}/convert-to-ops', [CrmIdeaController::class, 'convertToOps'])
+            ->whereNumber('idea')
+            ->name('guide.ideas.convert');
+    });
     Route::middleware('module:command_center')->group(function () {
         Route::get('/command-center', [CommandCenterController::class, 'index'])->name('command-center.index');
         Route::get('/command-center/telemetry', [CommandCenterController::class, 'telemetry'])->name('command-center.telemetry');

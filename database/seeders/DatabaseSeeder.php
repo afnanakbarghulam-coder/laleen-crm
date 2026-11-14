@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
         $this->call(RolesAndPermissionsSeeder::class);
         $this->call(EcommerceProductLineSeeder::class);
         $this->call(EcommerceComponentTypeSeeder::class);
+        $this->call(CrmPresentationSeeder::class);
 
         User::factory()->create([
             'name' => 'Test User',
