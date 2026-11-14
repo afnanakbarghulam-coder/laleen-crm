@@ -164,7 +164,6 @@ class CrmPhaseOneHardeningTest extends TestCase
         $this->actingAs($agent)->get(route('command-center.index'))->assertForbidden();
         $this->actingAs($agent)->getJson(route('command-center.telemetry'))->assertForbidden();
         $this->actingAs($agent)->postJson(route('command-center.ask'), ['prompt' => 'Show revenue'])->assertForbidden();
-        $this->actingAs($agent)->postJson(route('command-center.tts'), ['spoken_text' => 'Hello'])->assertForbidden();
 
         $this->actingAs($agent)->get(route('legal.index'))->assertForbidden();
         $this->actingAs($agent)->get(route('legal.tasks.index'))->assertForbidden();

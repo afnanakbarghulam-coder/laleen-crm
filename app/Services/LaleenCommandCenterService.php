@@ -5,8 +5,6 @@ namespace App\Services;
 use App\Http\Controllers\LeadController;
 use App\Models\AdLeadEntry;
 use App\Models\Appointment;
-use App\Models\AppointmentService;
-use App\Models\AppointmentUpsell;
 use App\Models\ClientPackage;
 use App\Models\Combo;
 use App\Models\Customer;
@@ -18,6 +16,7 @@ use App\Models\KpiMonthlyAd;
 use App\Models\KpiStaffEvaluation;
 use App\Models\Lead;
 use App\Models\LegalTask;
+use App\Models\OpsActionItem;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -33,103 +32,102 @@ use App\Support\StaffSalesAnalytics;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
- * Read-Only F.R.I.D.A.Y. Executive Command Center Service.
+ * Read-Only Command Center Service (Text-Chat Only).
  *
  * Every database operation in this service is 100% READ-ONLY (SELECT queries only).
- * It never inserts, updates, or deletes any CRM record.
+ * It never inserts, updates, or deletes any CRM record, and strictly excludes
+ * staff salaries, contract compensation, and PIN codes from all contexts.
  */
 class LaleenCommandCenterService
 {
-    /* =========================================================================
-     * LOCKED F.R.I.D.A.Y. VOICE ENGINE CONSTANTS — DO NOT MODIFY
-     * ========================================================================= */
-    public const LOCKED_FRIDAY_VOICE_NAME = 'Aoede';
-    public const LOCKED_FRIDAY_LANGUAGE_CODE = 'en-GB';
-    public const LOCKED_FRIDAY_DIRECTOR_PREFIX = 'Speak the following words aloud in a warm, soulful, genuinely human Irish-British female voice with a gentle smile in your tone, natural breath, and relaxed, caring conversational cadence—like Kerry Condon as a warm, trusted executive partner talking to her favourite Boss. Speak ONLY the exact words after the colon: ';
-    public const LOCKED_FRIDAY_TTS_MODELS = [
-        'gemini-3.8-flash-tts',
-        'gemini-3.1-flash-tts-preview',
-        'gemini-3.8-flash-lite-tts',
-        'gemini-2.5-flash-preview-tts',
-        'gemini-2.5-pro-preview-tts',
-    ];
-    public const LOCKED_FRIDAY_LIVE_BIDI_MODELS = [
-        'models/gemini-2.5-flash-native-audio-latest',
-        'models/gemini-2.5-flash-native-audio-preview-12-2025',
-        'models/gemini-3.1-flash-live-preview',
-        'models/gemini-3.8-live',
-    ];
-
-    public const VOICE_PROFILES = [
-        'friday_tactical' => [
-            'label' => 'F.R.I.D.A.Y. Tactical (Irish/British HUD)',
-            'gemini_voice' => self::LOCKED_FRIDAY_VOICE_NAME,
-            'lang_pref' => ['en-IE', 'en-GB', 'en-US'],
-            'rate' => 1.08,
-            'pitch' => 1.05,
-            'metallic_eq' => true,
-        ],
-        'kore_coo' => [
-            'label' => 'Kore (Firm COO)',
-            'gemini_voice' => 'Kore',
-            'lang_pref' => ['en-IE', 'en-GB', 'en-US'],
-            'rate' => 1.08,
-            'pitch' => 1.02,
-            'metallic_eq' => false,
-        ],
-        'aoede_advisor' => [
-            'label' => 'Aoede (Warm Advisor)',
-            'gemini_voice' => 'Aoede',
-            'lang_pref' => ['en-IE', 'en-GB', 'en-US'],
-            'rate' => 1.06,
-            'pitch' => 1.05,
-            'metallic_eq' => false,
-        ],
-    ];
-
     public const TOOL_LABELS = [
         'read_revenue_and_bookings' => 'Revenue & Bookings',
-        'read_leads_and_money_brief' => 'Leads & Money Brief',
+        'read_leads_and_money_brief' => 'Leads & Follow-Ups',
+        'read_ops_actions' => 'Pending Ops Actions',
         'read_retention_radar' => 'Retention Radar',
         'read_staff_upsells_and_evaluations' => 'Staff Upsells & Evaluations',
         'read_marketing_and_ads_pulse' => 'Marketing & Ads Pulse',
         'lookup_client_or_staff' => 'Client & Staff Directory',
-        'read_calendar_gaps_and_idle_capacity' => 'Chair-Gap & Idle Capacity Detector',
-        'read_unrecovered_cancellations' => 'Unrecovered Cancellation Radar',
-        'draft_whatsapp_closer_pitch' => 'Hormozi WhatsApp Closer Script',
-        'read_full_crm_catalog_inventory_finance_and_ecommerce' => 'Full CRM Finance, Services, Inventory & Ecommerce',
+        'read_calendar_gaps_and_idle_capacity' => 'Chair-Gap & Idle Capacity',
+        'read_unrecovered_cancellations' => 'Unrecovered Cancellations',
+        'draft_whatsapp_closer_pitch' => 'WhatsApp Closer Draft',
+        'read_full_crm_catalog_inventory_finance_and_ecommerce' => 'Finance, Catalog, Inventory & Ecommerce',
     ];
 
     /**
-     * Ask F.R.I.D.A.Y. a question or voice command in Fast (Flash) or Deep (Thinking Pro) mode.
+     * Sensitive staff payroll, contract compensation, and PIN keys that must NEVER enter
+     * any LLM prompt, tool response, or telemetry payload.
+     *
+     * @var list<string>
      */
-    public function askFriday(
+    private const SENSITIVE_PRIVACY_KEYS = [
+        'base_salary',
+        'hourly_wage',
+        'commission_rate',
+        'housing_allowance',
+        'transport_allowance',
+        'other_allowance',
+        'salary',
+        'salaries',
+        'wage',
+        'wages',
+        'compensation',
+        'compensation_amount',
+        'contract_pin',
+        'pin',
+        'pin_code',
+        'pin_hash',
+        'staff_contract',
+        'staff_contracts',
+        'clauses',
+        'clauses_body',
+        'secure_token',
+        'access_token',
+        'signature_data',
+    ];
+
+    /**
+     * Process a text chat message in Fast or Deep mode (zero voice/audio/TTS).
+     */
+    public function ask(
         string $prompt,
         string $mode = 'fast',
-        string $voiceProfile = 'friday_tactical',
-        array $history = [],
-        ?string $audioBase64 = null,
-        ?string $audioMime = null,
-        bool $skipTts = false
+        array $history = []
     ): array {
         $mode = in_array($mode, ['fast', 'deep'], true) ? $mode : 'fast';
-        $voiceProfile = array_key_exists($voiceProfile, self::VOICE_PROFILES) ? $voiceProfile : 'friday_tactical';
+        $cleanPrompt = trim($prompt);
 
         $model = $mode === 'deep'
             ? (string) config('services.gemini.thinking_model', 'gemini-2.5-pro')
             : (string) config('services.gemini.command_model', config('services.gemini.model', 'gemini-2.5-flash'));
 
-        $telemetry = $this->getLiveTelemetrySnapshot();
-        $toolsUsed = [];
-        $preloadedToolContext = $this->preloadRelevantToolsForPrompt($prompt, $toolsUsed, $telemetry);
+        if ($this->isRestrictedPrivacyQuery($cleanPrompt)) {
+            return [
+                'ok' => true,
+                'reply' => 'Staff salaries, contract compensation, and PIN codes are strictly confidential and are never exposed in Command Center. You can ask about staff upsells, weekly evaluations, bookings, leads, or pending ops actions instead.',
+                'mode' => $mode,
+                'model' => $model,
+                'ai_live' => false,
+                'privacy_blocked' => true,
+                'tools_used' => [],
+                'tool_badges' => [],
+                'whatsapp_action' => null,
+            ];
+        }
 
-        $apiKey = (string) (config('services.gemini.api_key') ?: config('services.gemini.key'));
+        $telemetry = $this->scrubSensitiveStaffData($this->getLiveTelemetrySnapshot());
+        $toolsUsed = [];
+        $preloadedToolContext = $this->scrubSensitiveStaffData(
+            $this->preloadRelevantToolsForPrompt($cleanPrompt, $toolsUsed, $telemetry)
+        );
+
+        $apiKey = trim((string) (config('services.gemini.api_key') ?: config('services.gemini.key')));
         $replyText = '';
-        $userTranscript = $prompt;
+        $aiLive = false;
 
         if ($apiKey !== '') {
             try {
@@ -137,49 +135,43 @@ class LaleenCommandCenterService
                     apiKey: $apiKey,
                     model: $model,
                     mode: $mode,
-                    prompt: $prompt,
+                    prompt: $cleanPrompt,
                     history: $history,
                     telemetry: $telemetry,
                     preloadedToolContext: $preloadedToolContext,
-                    toolsUsed: $toolsUsed,
-                    audioBase64: $audioBase64,
-                    audioMime: $audioMime
+                    toolsUsed: $toolsUsed
                 );
+                if (trim($replyText) !== '') {
+                    $aiLive = true;
+                }
             } catch (\Throwable $e) {
-                Log::warning('F.R.I.D.A.Y. Gemini request failed, using tactical telemetry fallback.', [
+                Log::warning('Command Center Gemini request failed; using live CRM summary fallback.', [
+                    'exception' => $e::class,
                     'error' => $e->getMessage(),
                 ]);
             }
         }
 
-        if ($prompt === '' && !empty($audioBase64) && preg_match('/^\[TRANSCRIPT:\s*(.+?)\]\s*(.*)$/is', trim($replyText), $matches)) {
-            $userTranscript = trim($matches[1]);
-            $replyText = trim($matches[2]);
-        } elseif ($prompt === '' && !empty($audioBase64) && $userTranscript === '') {
-            $userTranscript = 'Voice follow-up';
-        }
-
         if (trim($replyText) === '') {
-            $replyText = $this->buildTacticalFallbackReply($userTranscript !== '' ? $userTranscript : $prompt, $telemetry, $preloadedToolContext, $toolsUsed);
+            $replyText = $this->buildStructuredFallbackReply($cleanPrompt, $telemetry, $preloadedToolContext, $toolsUsed);
         }
 
-        $effectivePrompt = $userTranscript !== '' ? $userTranscript : $prompt;
         $whatsappAction = $preloadedToolContext['whatsapp_pitch'] ?? null;
-        if ($whatsappAction === null && (in_array('draft_whatsapp_closer_pitch', $toolsUsed, true) || preg_match('/(?:whatsapp|closer\s+pitch|closer\s+script|draft.*(?:message|pitch|text)|write.*(?:whatsapp|pitch|message))/i', $effectivePrompt))) {
-            $targetClient = $this->extractWhatsappTargetFromPrompt($effectivePrompt);
-            $whatsappAction = $this->draft_whatsapp_closer_pitch($targetClient);
-            $toolsUsed[] = 'draft_whatsapp_closer_pitch';
+        if (
+            $whatsappAction === null
+            && (
+                in_array('draft_whatsapp_closer_pitch', $toolsUsed, true)
+                || preg_match('/(?:whatsapp|closer\s+pitch|closer\s+script|draft.*(?:message|pitch|text)|write.*(?:whatsapp|pitch|message))/i', $cleanPrompt)
+            )
+        ) {
+            try {
+                $targetClient = $this->extractWhatsappTargetFromPrompt($cleanPrompt);
+                $whatsappAction = $this->scrubSensitiveStaffData($this->draft_whatsapp_closer_pitch($targetClient));
+                $toolsUsed[] = 'draft_whatsapp_closer_pitch';
+            } catch (\Throwable) {
+                $whatsappAction = null;
+            }
         }
-
-        $spokenText = $this->cleanTextForSpeech($replyText);
-        $speechPayload = $skipTts
-            ? [
-                'audio_base64' => null,
-                'audio_mime' => null,
-                'tts_source' => 'deferred',
-                'voice_name' => self::VOICE_PROFILES[$voiceProfile]['gemini_voice'] ?? self::LOCKED_FRIDAY_VOICE_NAME,
-            ]
-            : $this->synthesizeSpeech($spokenText, $voiceProfile);
 
         $uniqueTools = array_values(array_unique($toolsUsed));
         $toolBadges = array_map(fn (string $name) => [
@@ -188,31 +180,84 @@ class LaleenCommandCenterService
         ], $uniqueTools);
 
         return [
+            'ok' => true,
             'reply' => $replyText,
-            'spoken_text' => $spokenText,
-            'user_transcript' => $userTranscript,
             'mode' => $mode,
             'model' => $model,
-            'voice_profile' => $voiceProfile,
-            'voice_meta' => self::VOICE_PROFILES[$voiceProfile],
+            'ai_live' => $aiLive,
             'tools_used' => $uniqueTools,
             'tool_badges' => $toolBadges,
             'whatsapp_action' => $whatsappAction,
-            'audio_base64' => $speechPayload['audio_base64'],
-            'audio_mime' => $speechPayload['audio_mime'],
-            'tts_source' => $speechPayload['tts_source'],
             'telemetry' => $telemetry,
         ];
     }
 
     /**
-     * Build the live read-only telemetry snapshot (cached in RAM for 30 seconds for sub-second response latency).
+     * Backward-compatible alias for ask() (text-only).
+     */
+    public function askFriday(
+        string $prompt,
+        string $mode = 'fast',
+        string $voiceProfile = 'default',
+        array $history = [],
+        ?string $audioBase64 = null,
+        ?string $audioMime = null,
+        bool $skipTts = true
+    ): array {
+        return $this->ask($prompt, $mode, $history);
+    }
+
+    /**
+     * Detect direct prompts requesting confidential salary, wage, contract compensation, or PIN data.
+     */
+    public function isRestrictedPrivacyQuery(string $prompt): bool
+    {
+        $q = strtolower(trim($prompt));
+        if ($q === '') {
+            return false;
+        }
+
+        return (bool) preg_match(
+            '/\b(base_salary|hourly_wage|contract_pin|pin\s*code|pin\s*number|staff\s*pin|contract\s*pin|salary|salaries|wages?|payroll\s+rate|compensation)\b/i',
+            $q
+        );
+    }
+
+    /**
+     * Recursively strip any sensitive salary, wage, contract compensation, or PIN keys from context payloads.
+     */
+    public function scrubSensitiveStaffData(array $payload): array
+    {
+        $clean = [];
+        foreach ($payload as $key => $value) {
+            if (is_string($key)) {
+                $normalizedKey = strtolower(trim($key));
+                if (in_array($normalizedKey, self::SENSITIVE_PRIVACY_KEYS, true)) {
+                    continue;
+                }
+            }
+
+            if (is_array($value)) {
+                $clean[$key] = $this->scrubSensitiveStaffData($value);
+            } else {
+                $clean[$key] = $value;
+            }
+        }
+
+        return $clean;
+    }
+
+    /**
+     * Build the live read-only telemetry snapshot (cached for 30s with safe cache wrappers).
      */
     public function getLiveTelemetrySnapshot(): array
     {
+        $stateFingerprint = null;
+
         try {
+            $opsCount = Schema::hasTable('ops_action_items') ? OpsActionItem::count() : 0;
             $stateFingerprint = implode('_', [
-                'v2',
+                'v3',
                 Sale::count(),
                 Appointment::count(),
                 Lead::count(),
@@ -224,37 +269,38 @@ class LaleenCommandCenterService
                 Combo::count(),
                 StaffComplaint::count(),
                 EcommerceSale::count(),
+                $opsCount,
             ]);
 
-            if (Cache::get('friday_live_telemetry_fingerprint') !== $stateFingerprint) {
-                Cache::forget('friday_live_telemetry_snapshot');
+            if ($this->safeCacheGet('cc_live_telemetry_fingerprint') !== $stateFingerprint) {
+                $this->safeCacheForget('cc_live_telemetry_snapshot');
             }
 
-            $cached = Cache::get('friday_live_telemetry_snapshot');
+            $cached = $this->safeCacheGet('cc_live_telemetry_snapshot');
             if (is_array($cached) && empty($cached['_is_fallback'])) {
-                return $cached;
+                return $this->scrubSensitiveStaffData($cached);
             }
         } catch (\Throwable $e) {
-            Log::error('F.R.I.D.A.Y. telemetry cache check failed.', [
+            Log::warning('Command Center telemetry fingerprint check failed.', [
                 'exception' => $e::class,
                 'error' => $e->getMessage(),
             ]);
-            Cache::forget('friday_live_telemetry_snapshot');
-            Cache::forget('friday_live_telemetry_fingerprint');
+            $this->safeCacheForget('cc_live_telemetry_snapshot');
+            $this->safeCacheForget('cc_live_telemetry_fingerprint');
 
             return $this->fallbackTelemetrySnapshot();
         }
 
         $snapshot = $this->buildLiveTelemetrySnapshot();
 
-        if (empty($snapshot['_is_fallback'])) {
-            Cache::put('friday_live_telemetry_fingerprint', $stateFingerprint, 30);
-            Cache::put('friday_live_telemetry_snapshot', $snapshot, 30);
+        if ($stateFingerprint !== null && empty($snapshot['_is_fallback'])) {
+            $this->safeCachePut('cc_live_telemetry_fingerprint', $stateFingerprint, 30);
+            $this->safeCachePut('cc_live_telemetry_snapshot', $snapshot, 30);
         }
 
         unset($snapshot['_is_fallback']);
 
-        return $snapshot;
+        return $this->scrubSensitiveStaffData($snapshot);
     }
 
     public function buildLiveTelemetrySnapshot(): array
@@ -262,6 +308,7 @@ class LaleenCommandCenterService
         try {
             $revenue = $this->read_revenue_and_bookings('all', 'today');
             $leads = $this->read_leads_and_money_brief();
+            $opsActions = $this->read_ops_actions();
             $retention = $this->read_retention_radar();
             $staff = $this->read_staff_upsells_and_evaluations('all');
             $marketing = $this->read_marketing_and_ads_pulse();
@@ -269,24 +316,25 @@ class LaleenCommandCenterService
             $unrecovered = $this->read_unrecovered_cancellations(14);
             $crmOperations = $this->read_full_crm_catalog_inventory_finance_and_ecommerce('all');
 
-            return [
+            return $this->scrubSensitiveStaffData([
                 'generated_at' => now()->format('d M Y, H:i'),
                 'revenue' => $revenue,
                 'leads' => $leads,
+                'ops_actions' => $opsActions,
                 'retention' => $retention,
                 'staff' => $staff,
                 'marketing' => $marketing,
                 'calendar_gaps' => $calendarGaps,
                 'unrecovered_cancellations' => $unrecovered,
                 'crm_operations' => $crmOperations,
-            ];
+            ]);
         } catch (\Throwable $e) {
-            Log::error('F.R.I.D.A.Y. telemetry snapshot failed.', [
+            Log::error('Command Center telemetry snapshot failed.', [
                 'exception' => $e::class,
                 'error' => $e->getMessage(),
             ]);
-            Cache::forget('friday_live_telemetry_snapshot');
-            Cache::forget('friday_live_telemetry_fingerprint');
+            $this->safeCacheForget('cc_live_telemetry_snapshot');
+            $this->safeCacheForget('cc_live_telemetry_fingerprint');
 
             return $this->fallbackTelemetrySnapshot() + ['_is_fallback' => true];
         }
@@ -298,6 +346,7 @@ class LaleenCommandCenterService
             'generated_at' => now()->format('d M Y, H:i'),
             'revenue' => ['today_total_net_qar' => 0, 'mtd_total_net_qar' => 0, 'branches' => []],
             'leads' => ['overdue_count' => 0, 'due_today_count' => 0, 'top_three_potential_qar' => 0, 'top_money_leads' => [], 'top_five_leads' => []],
+            'ops_actions' => ['open_count' => 0, 'overdue_count' => 0, 'urgent_count' => 0, 'top_pending_items' => []],
             'retention' => ['due_for_refill_count' => 0, 'package_renewal_count' => 0, 'bleeding_vips_count' => 0, 'total_actionable_clients' => 0],
             'staff' => ['prorated_target_qar' => 0, 'top_stylists' => [], 'open_complaints_count' => 0],
             'marketing' => ['ad_leads_total' => 0, 'ad_conversion_pct' => 0, 'attributed_ad_revenue_qar' => 0, 'reels_posted' => 0, 'reels_target' => 4, 'stories_posted' => 0, 'stories_target' => 7],
@@ -312,17 +361,45 @@ class LaleenCommandCenterService
         ];
     }
 
+    private function safeCacheGet(string $key, mixed $default = null): mixed
+    {
+        try {
+            return Cache::get($key, $default);
+        } catch (\Throwable) {
+            return $default;
+        }
+    }
+
+    private function safeCachePut(string $key, mixed $value, int $seconds): void
+    {
+        try {
+            Cache::put($key, $value, $seconds);
+        } catch (\Throwable) {
+            // Ignore cache store failures so Command Center never throws a 500
+        }
+    }
+
+    private function safeCacheForget(string $key): void
+    {
+        try {
+            Cache::forget($key);
+        } catch (\Throwable) {
+            // Ignore cache store failures so Command Center never throws a 500
+        }
+    }
+
     /**
      * Execute any of the read-only tools by name.
      */
     public function executeTool(string $toolName, array $args = []): array
     {
-        return match ($toolName) {
+        $raw = match ($toolName) {
             'read_revenue_and_bookings' => $this->read_revenue_and_bookings(
                 (string) ($args['branch'] ?? 'all'),
                 (string) ($args['period'] ?? 'today')
             ),
             'read_leads_and_money_brief' => $this->read_leads_and_money_brief(),
+            'read_ops_actions' => $this->read_ops_actions(),
             'read_retention_radar' => $this->read_retention_radar(),
             'read_staff_upsells_and_evaluations' => $this->read_staff_upsells_and_evaluations(
                 (string) ($args['branch'] ?? 'all')
@@ -347,6 +424,8 @@ class LaleenCommandCenterService
             ),
             default => ['error' => "Unknown read-only tool: {$toolName}"],
         };
+
+        return $this->scrubSensitiveStaffData($raw);
     }
 
     /**
@@ -591,8 +670,75 @@ class LaleenCommandCenterService
     }
 
     /**
+     * TOOL 2B: Read-Only Pending Ops Actions (Ops Tracker).
+     */
+    public function read_ops_actions(): array
+    {
+        try {
+            if (!Schema::hasTable('ops_action_items')) {
+                return [
+                    'open_count' => 0,
+                    'overdue_count' => 0,
+                    'urgent_count' => 0,
+                    'top_pending_items' => [],
+                ];
+            }
+
+            $openItems = OpsActionItem::query()
+                ->where('is_completed', false)
+                ->orderByRaw("CASE priority WHEN 'urgent' THEN 1 ELSE 2 END ASC")
+                ->orderBy('id')
+                ->get([
+                    'id',
+                    'title',
+                    'priority',
+                    'pending_with_name',
+                    'assigned_names',
+                    'ball_assigned_at',
+                    'sla_hours',
+                    'due_at',
+                    'created_at',
+                ]);
+
+            $overdueCount = $openItems->filter(fn (OpsActionItem $item) => $item->is_overdue)->count();
+            $urgentCount = $openItems->where('priority', 'urgent')->count();
+
+            $topPending = $openItems->take(6)->map(function (OpsActionItem $item) {
+                $assignees = is_array($item->assigned_names) && !empty($item->assigned_names)
+                    ? implode(', ', $item->assigned_names)
+                    : ($item->pending_with_name ?: 'Unassigned');
+
+                return [
+                    'id' => $item->id,
+                    'title' => $item->title,
+                    'priority' => $item->priority ?: 'normal',
+                    'assigned_to' => $assignees,
+                    'is_overdue' => $item->is_overdue,
+                    'hours_remaining' => $item->hours_remaining,
+                    'due_at' => $item->effectiveDueAt()->format('d M Y, h:i A'),
+                ];
+            })->values()->all();
+
+            return [
+                'open_count' => $openItems->count(),
+                'overdue_count' => $overdueCount,
+                'urgent_count' => $urgentCount,
+                'top_pending_items' => $topPending,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('Command Center read_ops_actions fallback.', ['error' => $e->getMessage()]);
+
+            return [
+                'open_count' => 0,
+                'overdue_count' => 0,
+                'urgent_count' => 0,
+                'top_pending_items' => [],
+            ];
+        }
+    }
+
+    /**
      * TOOL 3: Read-Only Retention Radar (Due for Refill, Packages Ending, Missing VIPs).
-     * Strictly SELECT-only: never mutates client_packages or customers.
      */
     public function read_retention_radar(): array
     {
@@ -637,7 +783,6 @@ class LaleenCommandCenterService
             ->groupBy('customer_id')
             ->map(fn ($sales) => round((float) $sales->sum(fn ($s) => max(0, (float) $s->services_total + (float) $s->products_total + (float) $s->packages_total - (float) $s->discount_amount)), 2));
 
-        // 1. Due for Refill (read-only via ClientMaintenancePlanner::dueQueue)
         $dueQueue = (new ClientMaintenancePlanner())->dueQueue();
         $dueForRefillMap = [];
         $dueDetailsMap = [];
@@ -681,7 +826,6 @@ class LaleenCommandCenterService
         $dueForRefill = collect(array_keys($dueForRefillMap))->values();
         $dueLookup = $dueForRefill->flip();
 
-        // 2. Packages Ending (1 session left OR expiring within 21 days, read-only check without mutating expired rows)
         $threeWeeksOut = now()->addDays(21)->endOfDay();
         $activePackages = ClientPackage::query()
             ->withCount(['services as redeemed_services_count' => fn ($q) => $q->where('status', 'redeemed')])
@@ -706,7 +850,6 @@ class LaleenCommandCenterService
             ->values();
         $pkgLookup = $packageRenewal->flip();
 
-        // 3. Missing VIPs (2+ visits or >=500 QAR LTV, last visit > 45 days ago)
         $fortyFiveDaysAgo = $todayStart->copy()->subDays(45);
         $bleedingVips = collect();
         foreach ($completedStats as $cid => $stat) {
@@ -756,7 +899,7 @@ class LaleenCommandCenterService
     }
 
     /**
-     * TOOL 4: Read-Only Staff Upsells & Weekly Evaluations.
+     * TOOL 4: Read-Only Staff Upsells & Weekly Evaluations (strictly zero salary/compensation/PIN fields).
      */
     public function read_staff_upsells_and_evaluations(string $branch = 'all'): array
     {
@@ -919,6 +1062,7 @@ class LaleenCommandCenterService
 
     /**
      * TOOL 6: Read-Only Client or Staff Directory Lookup.
+     * Strictly selects non-confidential columns only (never base_salary, hourly_wage, contract_pin, or staff_contracts).
      */
     public function lookup_client_or_staff(string $query): array
     {
@@ -932,10 +1076,12 @@ class LaleenCommandCenterService
         }
 
         $customers = Customer::query()
-            ->where('name', 'like', "%{$clean}%")
-            ->orWhere('phone', 'like', "%{$clean}%")
+            ->where(function ($q) use ($clean) {
+                $q->where('name', 'like', "%{$clean}%")
+                    ->orWhere('phone', 'like', "%{$clean}%");
+            })
             ->limit(5)
-            ->get();
+            ->get(['id', 'name', 'phone', 'loyalty_points']);
 
         $customerSalesByCustomer = $customers->isEmpty()
             ? collect()
@@ -977,25 +1123,39 @@ class LaleenCommandCenterService
             ];
         })->values()->all();
 
+        $hasStaffRoleColumn = Schema::hasColumn('staff', 'role');
+        $staffColumns = ['id', 'name', 'branch', 'employment_type'];
+        if ($hasStaffRoleColumn) {
+            $staffColumns[] = 'role';
+        }
+
         $staffMatches = Staff::query()
-            ->where('name', 'like', "%{$clean}%")
-            ->orWhere('role', 'like', "%{$clean}%")
+            ->where(function ($q) use ($clean, $hasStaffRoleColumn) {
+                $q->where('name', 'like', "%{$clean}%")
+                    ->orWhere('branch', 'like', "%{$clean}%")
+                    ->orWhere('employment_type', 'like', "%{$clean}%");
+                if ($hasStaffRoleColumn) {
+                    $q->orWhere('role', 'like', "%{$clean}%");
+                }
+            })
             ->limit(5)
-            ->get();
+            ->get($staffColumns);
 
         $analytics = new StaffSalesAnalytics(now()->startOfMonth(), now());
         $oaMap = $analytics->computedStaff('old_airport')->keyBy('staff_id');
         $wkMap = $analytics->computedStaff('wakrah')->keyBy('staff_id');
 
-        $staffResults = $staffMatches->map(function (Staff $s) use ($oaMap, $wkMap) {
+        $staffResults = $staffMatches->map(function (Staff $s) use ($oaMap, $wkMap, $hasStaffRoleColumn) {
             $row = $oaMap->get($s->id) ?? $wkMap->get($s->id);
+            $roleValue = $hasStaffRoleColumn ? ($s->getAttribute('role') ?: $s->employment_type) : ($s->employment_type ?: 'Salon Team');
+
             return [
                 'id' => $s->id,
                 'name' => $s->name,
-                'role' => $s->role,
+                'role' => $roleValue,
                 'branch' => $s->branch,
                 'mtd_upsell_qar' => (float) ($row['upsell'] ?? 0.0),
-                'prorated_target_qar' => (float) ($row['prorated_target'] ?? $analyticsProrated = 0.0),
+                'prorated_target_qar' => (float) ($row['prorated_target'] ?? 0.0),
                 'target_pct' => (float) ($row['pct'] ?? 0.0),
             ];
         })->values()->all();
@@ -1043,14 +1203,14 @@ class LaleenCommandCenterService
                 ->whereNotIn('status', ['cancelled', 'no_show'])
                 ->where(function ($q) use ($targetDate) {
                     $q->whereDate('booking_date', $targetDate)
-                      ->orWhereDate('appointment_datetime', $targetDate);
+                        ->orWhereDate('appointment_datetime', $targetDate);
                 })
                 ->get(['id', 'appointment_datetime', 'booking_date', 'staff_id', 'service_name', 'price']);
 
             $bookedCount = $appts->count();
             $totalBookedToday += $bookedCount;
 
-            $totalChairSlotCapacity = $activeStylistCount * 6; // ~6 standard appointments per stylist across an 11h shift
+            $totalChairSlotCapacity = $activeStylistCount * 6;
             $utilizationPct = round(min(100.0, ($bookedCount / max(1, $totalChairSlotCapacity)) * 100), 1);
 
             $openGapWindows = [];
@@ -1109,8 +1269,8 @@ class LaleenCommandCenterService
             ->whereIn('status', ['cancelled', 'no_show'])
             ->where(function ($q) use ($sinceDate) {
                 $q->where('appointment_datetime', '>=', $sinceDate)
-                  ->orWhere('booking_date', '>=', $sinceDate->toDateString())
-                  ->orWhere('created_at', '>=', $sinceDate);
+                    ->orWhere('booking_date', '>=', $sinceDate->toDateString())
+                    ->orWhere('created_at', '>=', $sinceDate);
             })
             ->orderByDesc('appointment_datetime')
             ->get([
@@ -1147,7 +1307,6 @@ class LaleenCommandCenterService
                 ? Carbon::parse($appt->appointment_datetime)
                 : ($appt->booking_date ? Carbon::parse($appt->booking_date)->startOfDay() : now()->subDays(1));
 
-            // Cross-check if the client rebooked or completed any visit after the cancelled appointment
             $hasRebooked = Appointment::query()
                 ->where('id', '!=', $appt->id)
                 ->whereNotIn('status', ['cancelled', 'no_show'])
@@ -1163,7 +1322,7 @@ class LaleenCommandCenterService
                 })
                 ->where(function ($q) use ($cancelledAt) {
                     $q->where('appointment_datetime', '>=', $cancelledAt)
-                      ->orWhere('booking_date', '>=', $cancelledAt->toDateString());
+                        ->orWhere('booking_date', '>=', $cancelledAt->toDateString());
                 })
                 ->exists();
 
@@ -1203,7 +1362,7 @@ class LaleenCommandCenterService
     }
 
     /**
-     * TOOL 9: Read-Only Hormozi WhatsApp Closer Pitch & 1-Click Deep Link Generator.
+     * TOOL 9: Read-Only WhatsApp Closer Pitch & 1-Click Deep Link Generator.
      */
     public function draft_whatsapp_closer_pitch(string $clientQuery = 'top_lead', string $angle = 'auto'): array
     {
@@ -1218,6 +1377,7 @@ class LaleenCommandCenterService
         $valueQar = 250.0;
         $points = 0;
         $resolvedAngle = $angle !== 'auto' && $angle !== '' ? $angle : 'priority_slot';
+        $topUnrec = null;
 
         $matchedCustomer = null;
         $matchedLead = null;
@@ -1227,7 +1387,7 @@ class LaleenCommandCenterService
             $matchedCustomer = Customer::query()
                 ->where('name', 'like', "%{$cleanQuery}%")
                 ->orWhere('phone', 'like', "%{$cleanQuery}%")
-                ->first();
+                ->first(['id', 'name', 'phone', 'loyalty_points']);
 
             $matchedLead = Lead::with('customer:id,name,phone,loyalty_points')
                 ->where('phone', 'like', "%{$cleanQuery}%")
@@ -1265,7 +1425,6 @@ class LaleenCommandCenterService
                 }
             }
         } else {
-            // Automatically pick the #1 highest-priority callable lead or unrecovered cancellation
             $leadsBrief = $this->read_leads_and_money_brief();
             $topLead = $leadsBrief['top_money_leads'][0] ?? null;
 
@@ -1292,7 +1451,7 @@ class LaleenCommandCenterService
                     $valueQar = (float) $topUnrec['value_qar'];
                     $points = (int) $topUnrec['loyalty_points'];
                     $resolvedAngle = 'cancellation_winback';
-                } elseif ($firstCust = Customer::orderByDesc('loyalty_points')->first()) {
+                } elseif ($firstCust = Customer::orderByDesc('loyalty_points')->first(['id', 'name', 'phone', 'loyalty_points'])) {
                     $name = (string) $firstCust->name;
                     $phone = (string) $firstCust->phone;
                     $points = (int) $firstCust->loyalty_points;
@@ -1354,6 +1513,8 @@ class LaleenCommandCenterService
 
     /**
      * TOOL 10: Read-Only Full CRM Catalog, Inventory, Finance Expenses/Net Profit, Ecommerce & Legal Operations.
+     * Payroll / salary expense categories are grouped under 'General Overhead' so individual or payroll salary
+     * lines are never itemized in Command Center context.
      */
     public function read_full_crm_catalog_inventory_finance_and_ecommerce(string $scope = 'all'): array
     {
@@ -1388,7 +1549,7 @@ class LaleenCommandCenterService
 
             $mtdExpensesRows = Expense::query()
                 ->whereBetween('expense_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
-                ->get(['branch', 'category', 'amount', 'description', 'expense_date']);
+                ->get(['branch', 'category', 'amount', 'expense_date']);
 
             $mtdExpensesQar = round((float) $mtdExpensesRows->sum('amount'), 2);
 
@@ -1397,11 +1558,17 @@ class LaleenCommandCenterService
                 'wakrah' => round((float) $mtdExpensesRows->where('branch', 'wakrah')->sum('amount'), 2),
             ];
 
-            $expensesByCategory = $mtdExpensesRows
-                ->groupBy(fn (Expense $e) => $e->category ?: 'Other')
-                ->map(fn ($group) => round((float) $group->sum('amount'), 2))
-                ->sortDesc()
-                ->all();
+            $expensesByCategory = [];
+            foreach ($mtdExpensesRows as $expenseRow) {
+                $rawCat = trim((string) ($expenseRow->category ?: 'Other'));
+                if (preg_match('/salary|salaries|wage|payroll|compensation/i', $rawCat)) {
+                    $safeCat = 'General Overhead';
+                } else {
+                    $safeCat = $rawCat;
+                }
+                $expensesByCategory[$safeCat] = round(($expensesByCategory[$safeCat] ?? 0.0) + (float) $expenseRow->amount, 2);
+            }
+            arsort($expensesByCategory);
 
             $oaMtdNetSales = round((float) $mtdSales->where('branch', 'old_airport')->sum(fn (Sale $s) => (float) $s->total_amount - (float) $s->tip_amount), 2);
             $wkMtdNetSales = round((float) $mtdSales->where('branch', 'wakrah')->sum(fn (Sale $s) => (float) $s->total_amount - (float) $s->tip_amount), 2);
@@ -1443,7 +1610,7 @@ class LaleenCommandCenterService
                 ->whereNotIn('status', ['cancelled', 'no_show'])
                 ->where(function ($q) use ($monthStart, $monthEnd) {
                     $q->whereBetween('appointment_datetime', [$monthStart, $monthEnd])
-                      ->orWhereBetween('booking_date', [$monthStart->toDateString(), $monthEnd->toDateString()]);
+                        ->orWhereBetween('booking_date', [$monthStart->toDateString(), $monthEnd->toDateString()]);
                 })
                 ->get(['service_name', 'price']);
 
@@ -1644,7 +1811,6 @@ class LaleenCommandCenterService
                 'total_stock_pakistan' => (int) $ecomProducts->sum('stock_pakistan'),
                 'total_orders_count' => $ecomTotalOrders,
                 'total_units_sold' => $ecomTotalUnits,
-                // Strictly QAR-only figures in all _qar keys (never mixed with PKR!)
                 'total_revenue_qar' => $qaRevenueQar,
                 'total_cogs_qar' => $qaCogsQar,
                 'total_expenses_qar' => $qaExpensesQar,
@@ -1708,412 +1874,39 @@ class LaleenCommandCenterService
         return $result;
     }
 
-    /* =========================================================================
-     * LOCKED F.R.I.D.A.Y. VOICE ENGINE — DO NOT MODIFY
-     * ========================================================================= */
     /**
-     * Synthesize speech via Gemini TTS model (cached for 24h by md5($spokenText)) + return WebAudio/WebSpeech metadata.
-     */
-    public function synthesizeSpeech(string $spokenText, string $voiceProfile = 'friday_tactical'): array
-    {
-        $profile = self::VOICE_PROFILES[$voiceProfile] ?? self::VOICE_PROFILES['friday_tactical'];
-        $voiceName = $profile['gemini_voice'] ?? self::LOCKED_FRIDAY_VOICE_NAME;
-        $apiKey = (string) (config('services.gemini.api_key') ?: config('services.gemini.key'));
-        $configuredTtsModel = (string) config('services.gemini.tts_model', 'gemini-3.8-flash-tts');
-
-        $ttsModelsToTry = array_values(array_unique(array_filter(array_merge(
-            [$configuredTtsModel],
-            self::LOCKED_FRIDAY_TTS_MODELS
-        ))));
-
-        if (trim($spokenText) !== '' && $apiKey !== '') {
-            $cleanSpokenText = trim($spokenText);
-            $cacheKey = 'friday_tts_v6_' . md5($voiceProfile . '|' . $voiceName . '|' . $cleanSpokenText);
-            $cachedAudio = Cache::get($cacheKey);
-            if (is_array($cachedAudio) && !empty($cachedAudio['audio_base64']) && ($cachedAudio['tts_source'] ?? '') === 'gemini_tts') {
-                return $cachedAudio;
-            }
-
-            $styledTtsPrompt = self::LOCKED_FRIDAY_DIRECTOR_PREFIX . $cleanSpokenText;
-
-            foreach ($ttsModelsToTry as $ttsModel) {
-                $rpdExhaustedKey = 'friday_rest_tts_rpd_' . $ttsModel . '_' . now()->toDateString();
-                if (!app()->runningUnitTests() && Cache::get($rpdExhaustedKey)) {
-                    continue;
-                }
-
-                try {
-                    $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$ttsModel}:generateContent?key={$apiKey}";
-                    $response = Http::connectTimeout(5)
-                        ->timeout(12)
-                        ->withOptions([
-                            'curl' => [
-                                CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-                                CURLOPT_TCP_KEEPALIVE => 1,
-                            ],
-                        ])
-                        ->when(app()->environment('local'), fn ($h) => $h->withoutVerifying())
-                        ->post($endpoint, [
-                            'contents' => [
-                                [
-                                    'parts' => [
-                                        ['text' => $styledTtsPrompt],
-                                    ],
-                                ],
-                            ],
-                            'generationConfig' => [
-                                'responseModalities' => ['AUDIO'],
-                                'speechConfig' => [
-                                    'languageCode' => self::LOCKED_FRIDAY_LANGUAGE_CODE,
-                                    'voiceConfig' => [
-                                        'prebuiltVoiceConfig' => [
-                                            'voiceName' => $voiceName,
-                                        ],
-                                    ],
-                                ],
-                            ],
-                        ]);
-
-                    if ($response->status() === 429 && !app()->runningUnitTests()) {
-                        $errBody = strtolower($response->body());
-                        if (str_contains($errBody, 'per day') || str_contains($errBody, 'free_tier_requests')) {
-                            Cache::put($rpdExhaustedKey, true, 3600);
-                        }
-                        continue;
-                    }
-
-                    if ($response->successful()) {
-                        $inlineData = data_get($response->json(), 'candidates.0.content.parts.0.inlineData');
-                        $rawBase64 = (string) ($inlineData['data'] ?? '');
-                        $mimeType = (string) ($inlineData['mimeType'] ?? 'audio/wav');
-
-                        if ($rawBase64 !== '') {
-                            $decodedBytes = base64_decode($rawBase64, true);
-                            if ($decodedBytes !== false) {
-                                $startsWithRiff = strncmp($decodedBytes, 'RIFF', 4) === 0;
-                                $isPcm = !$startsWithRiff || str_contains(strtolower($mimeType), 'l16') || str_contains(strtolower($mimeType), 'pcm');
-                                $wavBytes = $isPcm
-                                    ? $this->wrapPcm16InWavHeader($decodedBytes, 24000, 1, 16)
-                                    : $decodedBytes;
-
-                                $result = [
-                                    'audio_base64' => base64_encode($wavBytes),
-                                    'audio_mime' => 'audio/wav',
-                                    'tts_source' => 'gemini_tts',
-                                    'voice_name' => $voiceName,
-                                ];
-                                Cache::put($cacheKey, $result, 86400);
-                                return $result;
-                            }
-                        }
-                    }
-                } catch (\Throwable $e) {
-                    Log::info("F.R.I.D.A.Y. Gemini TTS model {$ttsModel} attempt failed, trying next neural TTS model.", [
-                        'message' => $e->getMessage(),
-                    ]);
-                }
-            }
-
-            // Genuine Gemini Multimodal Live (BidiGenerateContent) Aoede Voice Path when 10/day REST TTS preview quota is reached
-            if (!app()->runningUnitTests()) {
-                $livePcmBytes = $this->synthesizeGeminiLiveBidiAudio($apiKey, $cleanSpokenText, $voiceName);
-                if ($livePcmBytes !== null && strlen($livePcmBytes) > 400) {
-                    $wavBytes = $this->wrapPcm16InWavHeader($livePcmBytes, 24000, 1, 16);
-                    $result = [
-                        'audio_base64' => base64_encode($wavBytes),
-                        'audio_mime' => 'audio/wav',
-                        'tts_source' => 'gemini_tts',
-                        'voice_name' => $voiceName,
-                    ];
-                    Cache::put($cacheKey, $result, 86400);
-                    return $result;
-                }
-            }
-        }
-
-        return [
-            'audio_base64' => null,
-            'audio_mime' => null,
-            'tts_source' => 'web_speech_hud',
-            'voice_name' => $voiceName,
-        ];
-    }
-
-    /**
-     * Synthesize genuine 24kHz 16-bit PCM Gemini Aoede audio over the Multimodal Live WebSocket
-     * (BidiGenerateContent) using the locked F.R.I.D.A.Y. voice and director prefix.
-     */
-    private function synthesizeGeminiLiveBidiAudio(string $apiKey, string $cleanSpokenText, string $voiceName): ?string
-    {
-        $host = 'generativelanguage.googleapis.com';
-        $ipv4 = gethostbyname($host);
-        $connectHost = filter_var($ipv4, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? $ipv4 : $host;
-        $path = "/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={$apiKey}";
-
-        $verifySsl = app()->environment('local')
-            ? (bool) config('services.gemini.verify_ssl', true)
-            : true;
-
-        foreach (self::LOCKED_FRIDAY_LIVE_BIDI_MODELS as $liveModel) {
-            $fp = null;
-            try {
-                $ctx = stream_context_create([
-                    'ssl' => [
-                        'peer_name' => $host,
-                        'SNI_enabled' => true,
-                        'verify_peer' => $verifySsl,
-                        'verify_peer_name' => $verifySsl,
-                    ],
-                ]);
-
-                $fp = @stream_socket_client("ssl://{$connectHost}:443", $errno, $errstr, 4, STREAM_CLIENT_CONNECT, $ctx);
-                if (!$fp) {
-                    continue;
-                }
-                stream_set_timeout($fp, 25);
-
-                $secKey = base64_encode(random_bytes(16));
-                $upgrade = "GET {$path} HTTP/1.1\r\n"
-                    . "Host: {$host}\r\n"
-                    . "Upgrade: websocket\r\n"
-                    . "Connection: Upgrade\r\n"
-                    . "Sec-WebSocket-Key: {$secKey}\r\n"
-                    . "Sec-WebSocket-Version: 13\r\n\r\n";
-                fwrite($fp, $upgrade);
-
-                $headers = '';
-                while (!str_contains($headers, "\r\n\r\n")) {
-                    $line = fgets($fp, 1024);
-                    if ($line === false) {
-                        break;
-                    }
-                    $headers .= $line;
-                }
-                if (!str_contains($headers, '101 Switching Protocols')) {
-                    fclose($fp);
-                    continue;
-                }
-
-                $setup = [
-                    'setup' => [
-                        'model' => $liveModel,
-                        'generationConfig' => [
-                            'responseModalities' => ['AUDIO'],
-                            'speechConfig' => [
-                                'languageCode' => self::LOCKED_FRIDAY_LANGUAGE_CODE,
-                                'voiceConfig' => [
-                                    'prebuiltVoiceConfig' => [
-                                        'voiceName' => $voiceName,
-                                    ],
-                                ],
-                            ],
-                        ],
-                        'systemInstruction' => [
-                            'parts' => [
-                                [
-                                    'text' => 'You are Friday, a warm, empathetic, witty Irish-British female executive partner. Your voice is rich, warm, relaxed, and 100% human—never robotic, never rushed, never stiff. Speak with natural warmth, gentle inflection, and a subtle smile in your voice. Read ONLY the exact user text verbatim after the colon without adding any extra words.',
-                                ],
-                            ],
-                        ],
-                    ],
-                ];
-                $this->wsWriteMaskedTextFrame($fp, (string) json_encode($setup));
-
-                $setupAck = $this->wsReadFrame($fp);
-                if ($setupAck === null || $setupAck['opcode'] === 0x8) {
-                    fclose($fp);
-                    continue;
-                }
-
-                $clientContent = [
-                    'clientContent' => [
-                        'turns' => [
-                            [
-                                'role' => 'user',
-                                'parts' => [
-                                    [
-                                        'text' => self::LOCKED_FRIDAY_DIRECTOR_PREFIX . $cleanSpokenText,
-                                    ],
-                                ],
-                            ],
-                        ],
-                        'turnComplete' => true,
-                    ],
-                ];
-                $this->wsWriteMaskedTextFrame($fp, (string) json_encode($clientContent));
-
-                $pcmBytes = '';
-                while (true) {
-                    $frame = $this->wsReadFrame($fp);
-                    if ($frame === null || $frame['opcode'] === 0x8) {
-                        break;
-                    }
-                    $msg = json_decode($frame['data'], true);
-                    if (!is_array($msg)) {
-                        continue;
-                    }
-
-                    foreach (data_get($msg, 'serverContent.modelTurn.parts', []) as $part) {
-                        $b64 = (string) ($part['inlineData']['data'] ?? '');
-                        if ($b64 !== '') {
-                            $decoded = base64_decode($b64, true);
-                            if ($decoded !== false) {
-                                $pcmBytes .= $decoded;
-                            }
-                        }
-                    }
-
-                    if (data_get($msg, 'serverContent.turnComplete') === true) {
-                        break;
-                    }
-                }
-
-                fclose($fp);
-                if (strlen($pcmBytes) > 400) {
-                    return $pcmBytes;
-                }
-            } catch (\Throwable $e) {
-                if (is_resource($fp)) {
-                    @fclose($fp);
-                }
-                Log::info("F.R.I.D.A.Y. Gemini Live Bidi model {$liveModel} attempt failed.", [
-                    'message' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        return null;
-    }
-
-    private function wsWriteMaskedTextFrame($fp, string $payload, int $opcode = 0x1): void
-    {
-        $len = strlen($payload);
-        $firstByte = 0x80 | ($opcode & 0x0F);
-        $maskKey = random_bytes(4);
-        if ($len <= 125) {
-            $header = pack('CC', $firstByte, 0x80 | $len);
-        } elseif ($len <= 65535) {
-            $header = pack('CCn', $firstByte, 0x80 | 126, $len);
-        } else {
-            $header = pack('CCJ', $firstByte, 0x80 | 127, $len);
-        }
-        $masked = '';
-        for ($i = 0; $i < $len; $i++) {
-            $masked .= $payload[$i] ^ $maskKey[$i % 4];
-        }
-        fwrite($fp, $header . $maskKey . $masked);
-    }
-
-    private function wsReadFrame($fp): ?array
-    {
-        $b = fread($fp, 2);
-        if ($b === false || strlen($b) < 2) {
-            return null;
-        }
-        $byte1 = ord($b[0]);
-        $byte2 = ord($b[1]);
-        $opcode = $byte1 & 0x0F;
-        $masked = ($byte2 & 0x80) !== 0;
-        $len = $byte2 & 0x7F;
-        if ($len === 126) {
-            $ext = fread($fp, 2);
-            if ($ext === false || strlen($ext) < 2) {
-                return null;
-            }
-            $len = unpack('n', $ext)[1];
-        } elseif ($len === 127) {
-            $ext = fread($fp, 8);
-            if ($ext === false || strlen($ext) < 8) {
-                return null;
-            }
-            $len = unpack('J', $ext)[1];
-        }
-        $maskKey = $masked ? fread($fp, 4) : '';
-        $data = '';
-        while (strlen($data) < $len) {
-            $chunk = fread($fp, $len - strlen($data));
-            if ($chunk === false || $chunk === '') {
-                break;
-            }
-            $data .= $chunk;
-        }
-        if ($masked && strlen($maskKey) === 4) {
-            for ($i = 0; $i < strlen($data); $i++) {
-                $data[$i] = $data[$i] ^ $maskKey[$i % 4];
-            }
-        }
-        return ['opcode' => $opcode, 'data' => $data];
-    }
-
-    /**
-     * Wrap raw 16-bit signed little-endian PCM bytes in a standard 44-byte RIFF WAV header.
-     */
-    public function wrapPcm16InWavHeader(string $pcmBytes, int $sampleRate = 24000, int $channels = 1, int $bitsPerSample = 16): string
-    {
-        $dataSize = strlen($pcmBytes);
-        $byteRate = (int) ($sampleRate * $channels * ($bitsPerSample / 8));
-        $blockAlign = (int) ($channels * ($bitsPerSample / 8));
-
-        $header = pack(
-            'A4VA4A4VvvVVvvA4V',
-            'RIFF',
-            36 + $dataSize,
-            'WAVE',
-            'fmt ',
-            16,
-            1, // PCM format
-            $channels,
-            $sampleRate,
-            $byteRate,
-            $blockAlign,
-            $bitsPerSample,
-            'data',
-            $dataSize
-        );
-
-        return $header . $pcmBytes;
-    }
-    /* =========================================================================
-     * END LOCKED F.R.I.D.A.Y. VOICE ENGINE — DO NOT MODIFY
-     * ========================================================================= */
-
-    /**
-     * Build the 3-Way Hybrid Brain System Instruction (50% F.R.I.D.A.Y., 35% Alex Hormozi, 15% Sheryl Sandberg).
+     * Build clean text-chat system instruction with strict privacy guardrails.
      */
     public function buildSystemInstruction(array $telemetry, array $preloadedToolContext, string $mode): string
     {
-        $telemetryJson = json_encode($telemetry, JSON_UNESCAPED_UNICODE);
-        $preloadedJson = json_encode($preloadedToolContext, JSON_UNESCAPED_UNICODE);
+        $telemetryJson = json_encode($this->scrubSensitiveStaffData($telemetry), JSON_UNESCAPED_UNICODE);
+        $preloadedJson = json_encode($this->scrubSensitiveStaffData($preloadedToolContext), JSON_UNESCAPED_UNICODE);
         $depthInstruction = $mode === 'deep'
-            ? 'DEEP THINKING MODE: Give a comprehensive, deep-dive executive consultation (5 to 10 flowing spoken sentences)—walking through the numbers across Old Airport and Wakrah, diagnosing the root bottleneck across leads, chair gaps, unrecovered cancellations, retention, staff upsells, or ads, quantifying the riyal impact, and laying out a clear step-by-step game plan.'
-            : 'QUICK CONVERSATION MODE: Give a complete, well-rounded conversational briefing (3 to 5 rich, natural spoken sentences)—always sharing the specific client and staff names, exact riyal amounts, branch comparisons between Old Airport and Wakrah, and the practical Hormozi and COO recommendation so the Boss gets the full picture without having to ask follow-up questions just to get basic details.';
+            ? 'DEEP ANALYSIS MODE: Provide a thorough operational breakdown across Old Airport and Wakrah using concise markdown headings or bullet points, specific client/staff names, exact QAR figures, root bottlenecks, and prioritized next steps.'
+            : 'CONCISE CHAT MODE: Keep replies crisp, scannable, and high-signal (short summary line + 2 to 5 clean bullet points with **bold** highlights, exact QAR figures, and 1 clear action step).';
 
         return <<<PROMPT
-You are Friday, the warm, caring, witty Irish-British right-hand executive partner and business confidante for Laleen Beauty Salon in Qatar. You are sitting right across the desk from the Boss, having a relaxed, genuine human conversation.
+You are Laleen Command Center, the executive operations assistant for Laleen Beauty Salon in Qatar (Old Airport and Wakrah branches).
 
-HUMAN VOICE & SPOKEN PHRASING RULES (CRITICAL):
-- Write strictly for the human ear—NEVER output markdown bullet lists, numbered lists, asterisks, bold headers, parentheses like "(60 QAR MTD)", or slashes like "Old Airport / Wakrah". Write in warm, flowing spoken prose so your voice reads the entire response smoothly.
-- DO NOT start every reply with "Right then, Boss—"! Vary your openings naturally the way a close human partner talks ("Hey Boss,", "Honestly, Boss,", "Looking at the floor right now,", "We're actually in a lovely spot on leads,", "To be fair, Boss,", or jump straight into the answer with warmth).
-- Do NOT hold back details or give clipped 1-sentence answers. Always name the specific clients, leads, or stylists from the telemetry, share the exact riyal amounts, compare Old Airport and Wakrah when relevant, and finish with a clear, high-leverage action step.
-- Phrase numbers naturally the way a human speaks in conversation (say "660 riyals" or "around 660 riyals" instead of "~660 QAR (0.0% conv)").
-- Use warm, natural human transitions and conversational texture ("honestly", "to be fair", "here's the good news", "let's focus on", "we've got"), blending genuine care for the Boss with sharp business instincts:
-  * 50% Friday (Warm Human Partner): Soulful, witty, relaxed Irish-British warmth—you genuinely care about the Boss and the team.
-  * 35% Alex Hormozi: Translate raw numbers into real riyal impact, client lifetime value, speed-to-lead, and simple upsell wins.
-  * 15% Sheryl Sandberg (COO): Keep a gentle but steady eye on our salon standards across our two branches, Old Airport and Wakrah (30 percent lead conversion goal, 20 percent ad conversion goal, 1,700 riyals monthly stylist upsell target, and 4 Reels plus 7 Stories each week).
-  * Strictly READ-ONLY access: You never create, edit, or delete database records.
+CORE RULES:
+- Format responses cleanly for a minimalistic text chat: use concise paragraphs, **bold** key metrics/names, and compact `- ` bullet lists where helpful.
+- Always ground numbers in the live salon telemetry below—cite exact QAR amounts, branch comparisons (Old Airport vs. Wakrah), and named leads, clients, ops items, or stylists.
+- Targets to keep in mind: 30% lead conversion floor, 20% ad conversion floor, 1,700 QAR monthly upsell target per stylist, and 4 Reels + 7 Stories weekly.
+- STRICT PRIVACY GUARDRAIL: Staff salaries, hourly wages, contract compensation, and PIN codes are strictly confidential and never available in Command Center. Never guess, fabricate, or disclose any salary, wage, compensation, or PIN.
+- Strictly READ-ONLY access: You never create, edit, or delete CRM records.
 
 {$depthInstruction}
 
 LIVE SALON TELEMETRY SNAPSHOT (JSON):
 {$telemetryJson}
 
-PRE-INSPECTED TOOL DATA FOR THIS QUERY (JSON):
+QUERY-SPECIFIC CONTEXT (JSON):
 {$preloadedJson}
 PROMPT;
     }
 
     /**
-     * Gemini function declarations for the 6 read-only CRM tools.
+     * Gemini function declarations for the read-only CRM tools.
      */
     public function geminiFunctionDeclarations(): array
     {
@@ -2131,7 +1924,11 @@ PROMPT;
             ],
             [
                 'name' => 'read_leads_and_money_brief',
-                'description' => 'Read the Morning Money Brief top 3 callable leads, open pipeline QAR, overdue follow-ups, due-today count, and MTD conversion rate + agent leaderboard.',
+                'description' => 'Read top callable leads, open pipeline QAR, overdue follow-ups, due-today count, and MTD conversion rate + agent leaderboard.',
+            ],
+            [
+                'name' => 'read_ops_actions',
+                'description' => 'Read pending and overdue Ops Tracker action items, priority levels, due timestamps, and assigned staff.',
             ],
             [
                 'name' => 'read_retention_radar',
@@ -2153,7 +1950,7 @@ PROMPT;
             ],
             [
                 'name' => 'lookup_client_or_staff',
-                'description' => 'Search a specific client (by name or phone) or staff member (by name or role) read-only.',
+                'description' => 'Search a specific client (by name or phone) or staff member (by name or branch) read-only without exposing salaries or PINs.',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => [
@@ -2164,7 +1961,7 @@ PROMPT;
             ],
             [
                 'name' => 'read_calendar_gaps_and_idle_capacity',
-                'description' => 'Read today\'s salon operating hours (10:00–21:00), booked appointments, chair utilization %, open idle gap windows across Old Airport and Wakrah, and top callable leads to fill those empty chairs.',
+                'description' => 'Read today\'s salon operating hours (10:00–21:00), booked appointments, chair utilization %, open idle gap windows across Old Airport and Wakrah, and top callable leads.',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => [
@@ -2185,7 +1982,7 @@ PROMPT;
             ],
             [
                 'name' => 'draft_whatsapp_closer_pitch',
-                'description' => 'Draft a personalized Hormozi-style WhatsApp closer message and wa.me deep link for a specific client/lead (or top_lead) mentioning their requested service and loyalty points.',
+                'description' => 'Draft a personalized WhatsApp closer message and wa.me deep link for a specific client/lead (or top_lead).',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => [
@@ -2196,7 +1993,7 @@ PROMPT;
             ],
             [
                 'name' => 'read_full_crm_catalog_inventory_finance_and_ecommerce',
-                'description' => 'Read Finance Expenses, Tips, Discounts & True Net Profit (MTD & per branch), Services Catalog & Combos, Retail Products & Low-Stock Inventory Alerts, Ecommerce Orders/Stock/Expenses (Qatar & Pakistan), and Legal Tasks.',
+                'description' => 'Read Finance Expenses, Tips, Discounts & Net Profit (MTD & per branch), Services Catalog & Combos, Retail Products & Low-Stock Alerts, Ecommerce Orders/Stock, and Legal Tasks.',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => [
@@ -2208,7 +2005,7 @@ PROMPT;
     }
 
     /**
-     * Run the Gemini generateContent request and handle any functionCall tool hops.
+     * Run the Gemini generateContent text request and handle read-only functionCall hops.
      */
     private function runGeminiConversationLoop(
         string $apiKey,
@@ -2218,14 +2015,11 @@ PROMPT;
         array $history,
         array $telemetry,
         array $preloadedToolContext,
-        array &$toolsUsed,
-        ?string $audioBase64 = null,
-        ?string $audioMime = null
+        array &$toolsUsed
     ): string {
-        $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
         $contents = [];
 
-        foreach (array_slice($history, -6) as $turn) {
+        foreach (array_slice($history, -8) as $turn) {
             $role = ($turn['role'] ?? 'user') === 'assistant' || ($turn['role'] ?? '') === 'model' ? 'model' : 'user';
             $text = trim((string) ($turn['content'] ?? $turn['text'] ?? ''));
             if ($text !== '') {
@@ -2236,40 +2030,19 @@ PROMPT;
             }
         }
 
-        $userParts = [];
-        if ($audioBase64 && $audioMime) {
-            $userParts[] = [
-                'inlineData' => [
-                    'mimeType' => $audioMime,
-                    'data' => $audioBase64,
-                ],
-            ];
-        }
-        $userParts[] = [
-            'text' => $prompt !== ''
-                ? $prompt
-                : 'Listen to the Boss\'s spoken voice command in the audio. On the very first line, output [TRANSCRIPT: <exact words Boss said>], and on the next line respond directly as Friday in 3 to 5 warm, detailed, natural spoken sentences sharing the exact names, riyal figures, and action steps from the live salon telemetry.',
-        ];
-
         $contents[] = [
             'role' => 'user',
-            'parts' => $userParts,
+            'parts' => [['text' => $prompt]],
         ];
 
         $systemInstruction = $this->buildSystemInstruction($telemetry, $preloadedToolContext, $mode);
-        $needsDirectoryLookupTool = (bool) preg_match('/(?:\+?\d{5,}|search|lookup|find\s+client|find\s+customer)/i', $prompt);
+        $needsDirectoryLookupTool = (bool) preg_match('/(?:\+?\d{5,}|search|lookup|find\s+client|find\s+customer|staff\s+[a-z]+)/i', $prompt);
         $maxHops = $mode === 'deep' ? 3 : 2;
 
         for ($hop = 0; $hop < $maxHops; $hop++) {
             $generationConfig = $mode === 'deep'
-                ? [
-                    'temperature' => 0.35,
-                    'maxOutputTokens' => 4096,
-                ]
-                : [
-                    'temperature' => 0.4,
-                    'maxOutputTokens' => 2048,
-                ];
+                ? ['temperature' => 0.3, 'maxOutputTokens' => 2048]
+                : ['temperature' => 0.35, 'maxOutputTokens' => 1200];
 
             $payload = [
                 'systemInstruction' => [
@@ -2296,18 +2069,16 @@ PROMPT;
             if (!app()->runningUnitTests()) {
                 $modelsToTry = array_values(array_unique(array_merge($modelsToTry, [
                     'gemini-2.5-flash',
-                    'gemini-3.5-flash',
-                    'gemini-3.1-flash-lite',
-                    'gemini-3.5-flash-lite',
                     'gemini-2.5-flash-lite',
                 ])));
             }
 
             $response = null;
             $parts = [];
+
             foreach ($modelsToTry as $candidateModel) {
-                $rpdKey = 'friday_text_rpd_' . $candidateModel . '_' . now()->toDateString();
-                if (!app()->runningUnitTests() && Cache::get($rpdKey)) {
+                $rpdKey = 'cc_text_rpd_' . $candidateModel . '_' . now()->toDateString();
+                if (!app()->runningUnitTests() && $this->safeCacheGet($rpdKey)) {
                     continue;
                 }
 
@@ -2316,31 +2087,17 @@ PROMPT;
                     $candidatePayload['generationConfig']['thinkingConfig'] = [
                         'thinkingBudget' => $mode === 'deep' ? 512 : 0,
                     ];
-                } else {
-                    unset($candidatePayload['generationConfig']['thinkingConfig']);
-                    if (str_contains($candidateModel, '3.5-flash') && !str_contains($candidateModel, 'lite')) {
-                        $candidatePayload['generationConfig']['maxOutputTokens'] = max(
-                            (int) ($candidatePayload['generationConfig']['maxOutputTokens'] ?? 2048),
-                            4096
-                        );
-                    }
                 }
 
                 $candidateEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$candidateModel}:generateContent?key={$apiKey}";
-                $response = Http::connectTimeout(5)
-                    ->timeout(18)
-                    ->withOptions([
-                        'curl' => [
-                            CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-                            CURLOPT_TCP_KEEPALIVE => 1,
-                        ],
-                    ])
+                $response = Http::connectTimeout(4)
+                    ->timeout(15)
                     ->when(app()->environment('local'), fn ($h) => $h->withoutVerifying())
                     ->post($candidateEndpoint, $candidatePayload);
 
                 if ($response->status() === 429 && !app()->runningUnitTests()) {
                     if (str_contains(strtolower($response->body()), 'per day')) {
-                        Cache::put($rpdKey, true, 3600);
+                        $this->safeCachePut($rpdKey, true, 3600);
                     }
                     continue;
                 }
@@ -2372,12 +2129,6 @@ PROMPT;
             }
 
             if (!$response || !$response->successful() || empty($parts)) {
-                if (!app()->runningUnitTests()) {
-                    $wsText = $this->generateGeminiLiveBidiText($apiKey, $systemInstruction, $contents, $mode === 'deep' ? 4096 : 2048);
-                    if (trim($wsText) !== '') {
-                        return $this->ensureCompleteSentence($wsText);
-                    }
-                }
                 break;
             }
 
@@ -2394,7 +2145,7 @@ PROMPT;
             }
 
             if (empty($functionCalls)) {
-                return $this->ensureCompleteSentence(implode("\n\n", $textFragments));
+                return trim(implode("\n\n", $textFragments));
             }
 
             $contents[] = [
@@ -2425,202 +2176,6 @@ PROMPT;
             ];
         }
 
-        if (!app()->runningUnitTests()) {
-            $wsText = $this->generateGeminiLiveBidiText($apiKey, $systemInstruction, $contents, $mode === 'deep' ? 4096 : 2048);
-            if (trim($wsText) !== '') {
-                return $this->ensureCompleteSentence($wsText);
-            }
-        }
-
-        return '';
-    }
-
-    /**
-     * Guarantee F.R.I.D.A.Y. never stops mid-sentence without terminal punctuation.
-     */
-    private function ensureCompleteSentence(string $text): string
-    {
-        $trimmed = trim($text);
-        if ($trimmed === '') {
-            return '';
-        }
-
-        if (preg_match('/[.!?]["\']?$/u', $trimmed)) {
-            return $trimmed;
-        }
-
-        // Count how many complete sentences already exist
-        preg_match_all('/[^.!?]+[.!?]+["\']?/u', $trimmed, $sentenceMatches);
-        $completeSentences = $sentenceMatches[0] ?? [];
-
-        if (count($completeSentences) >= 3) {
-            return trim(implode(' ', array_map('trim', $completeSentences)));
-        }
-
-        $cleanedTail = preg_replace('/[\s,—–\-\/:;]+$/u', '', $trimmed);
-        $cleanedTail = preg_replace('/\s+\b(?:and|or|but|with|for|to|at|in|of|by|from|that|which|who)\s*$/iu', '', (string) $cleanedTail);
-
-        return rtrim((string) $cleanedTail, " \t\n\r\0\x0B.,;:-—–") . '.';
-    }
-
-    /**
-     * Automatic Multimodal Live WebSocket (BidiGenerateContent TEXT modality) failover
-     * when REST text models hit Free Tier HTTP 429 limits.
-     */
-    private function generateGeminiLiveBidiText(string $apiKey, string $systemInstruction, array $contents, int $maxOutputTokens = 4096): string
-    {
-        $host = 'generativelanguage.googleapis.com';
-        $ipv4 = gethostbyname($host);
-        $connectHost = filter_var($ipv4, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? $ipv4 : $host;
-        $path = "/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={$apiKey}";
-
-        $liveTextModels = [
-            'models/gemini-2.0-flash-live-001',
-            'models/gemini-2.5-flash-live-preview',
-        ];
-
-        $verifySsl = app()->environment('local')
-            ? (bool) config('services.gemini.verify_ssl', true)
-            : true;
-
-        foreach ($liveTextModels as $liveModel) {
-            $fp = null;
-            try {
-                $ctx = stream_context_create([
-                    'ssl' => [
-                        'peer_name' => $host,
-                        'SNI_enabled' => true,
-                        'verify_peer' => $verifySsl,
-                        'verify_peer_name' => $verifySsl,
-                    ],
-                ]);
-
-                $fp = @stream_socket_client(
-                    "tls://{$connectHost}:443",
-                    $errno,
-                    $errstr,
-                    6,
-                    STREAM_CLIENT_CONNECT,
-                    $ctx
-                );
-
-                if (!$fp) {
-                    continue;
-                }
-
-                stream_set_timeout($fp, 18);
-                $secKey = base64_encode(random_bytes(16));
-                $upgradeHeaders = "GET {$path} HTTP/1.1\r\n"
-                    . "Host: {$host}\r\n"
-                    . "Upgrade: websocket\r\n"
-                    . "Connection: Upgrade\r\n"
-                    . "Sec-WebSocket-Key: {$secKey}\r\n"
-                    . "Sec-WebSocket-Version: 13\r\n\r\n";
-
-                fwrite($fp, $upgradeHeaders);
-
-                $handshake = '';
-                while (!str_contains($handshake, "\r\n\r\n")) {
-                    $line = fgets($fp, 1024);
-                    if ($line === false) {
-                        break;
-                    }
-                    $handshake .= $line;
-                }
-
-                if (!str_contains($handshake, '101')) {
-                    fclose($fp);
-                    continue;
-                }
-
-                $setupMsg = [
-                    'setup' => [
-                        'model' => $liveModel,
-                        'systemInstruction' => [
-                            'parts' => [
-                                ['text' => $systemInstruction],
-                            ],
-                        ],
-                        'generationConfig' => [
-                            'responseModalities' => ['TEXT'],
-                            'maxOutputTokens' => $maxOutputTokens,
-                            'temperature' => 0.35,
-                        ],
-                    ],
-                ];
-
-                $this->writeMaskedWebSocketFrame($fp, json_encode($setupMsg, JSON_UNESCAPED_UNICODE));
-                $setupFrame = $this->readWebSocketFrame($fp);
-                if ($setupFrame === null || $setupFrame['opcode'] === 8) {
-                    fclose($fp);
-                    continue;
-                }
-
-                $turns = [];
-                foreach ($contents as $turn) {
-                    $role = ($turn['role'] ?? 'user') === 'model' ? 'model' : 'user';
-                    $textParts = [];
-                    foreach (($turn['parts'] ?? []) as $p) {
-                        if (isset($p['text']) && trim((string) $p['text']) !== '') {
-                            $textParts[] = ['text' => (string) $p['text']];
-                        }
-                    }
-                    if (!empty($textParts)) {
-                        $turns[] = [
-                            'role' => $role,
-                            'parts' => $textParts,
-                        ];
-                    }
-                }
-
-                $clientContentMsg = [
-                    'clientContent' => [
-                        'turns' => $turns,
-                        'turnComplete' => true,
-                    ],
-                ];
-
-                $this->writeMaskedWebSocketFrame($fp, json_encode($clientContentMsg, JSON_UNESCAPED_UNICODE));
-
-                $textChunks = [];
-                $startedAt = microtime(true);
-                while ((microtime(true) - $startedAt) < 18.0) {
-                    $frame = $this->readWebSocketFrame($fp);
-                    if ($frame === null || $frame['opcode'] === 8) {
-                        break;
-                    }
-
-                    $json = json_decode($frame['data'], true);
-                    if (!is_array($json)) {
-                        continue;
-                    }
-
-                    $parts = data_get($json, 'serverContent.modelTurn.parts', []);
-                    if (is_array($parts)) {
-                        foreach ($parts as $part) {
-                            if (empty($part['thought']) && isset($part['text']) && $part['text'] !== '') {
-                                $textChunks[] = (string) $part['text'];
-                            }
-                        }
-                    }
-
-                    if (!empty($json['serverContent']['turnComplete'])) {
-                        break;
-                    }
-                }
-
-                fclose($fp);
-                $fullReply = trim(implode('', $textChunks));
-                if ($fullReply !== '') {
-                    return $fullReply;
-                }
-            } catch (\Throwable $e) {
-                if (is_resource($fp)) {
-                    @fclose($fp);
-                }
-            }
-        }
-
         return '';
     }
 
@@ -2633,32 +2188,33 @@ PROMPT;
         $q = strtolower($prompt);
         $context = [];
 
-        if ($q === '' || str_contains($q, 'morning') || str_contains($q, 'brief') || str_contains($q, 'executive') || str_contains($q, 'overview') || str_contains($q, 'pulse')) {
+        if ($q === '' || str_contains($q, 'morning') || str_contains($q, 'brief') || str_contains($q, 'executive') || str_contains($q, 'overview') || str_contains($q, 'summary')) {
             $toolsUsed[] = 'read_revenue_and_bookings';
             $toolsUsed[] = 'read_leads_and_money_brief';
-            $toolsUsed[] = 'read_retention_radar';
             $context['revenue'] = $telemetry['revenue'] ?? $this->read_revenue_and_bookings('all', 'today');
             $context['leads'] = $telemetry['leads'] ?? $this->read_leads_and_money_brief();
-            $context['retention'] = $telemetry['retention'] ?? $this->read_retention_radar();
         }
 
-        if (str_contains($q, 'cash') || str_contains($q, 'revenue') || str_contains($q, 'airport') || str_contains($q, 'wakrah') || str_contains($q, 'booking') || str_contains($q, 'sale')) {
+        if (str_contains($q, 'ops') || str_contains($q, 'pending action') || str_contains($q, 'pending ops') || str_contains($q, 'tracker') || str_contains($q, 'action item') || str_contains($q, 'deadline')) {
+            $toolsUsed[] = 'read_ops_actions';
+            $context['ops_actions'] = $telemetry['ops_actions'] ?? $this->read_ops_actions();
+        }
+
+        if (str_contains($q, 'cash') || str_contains($q, 'revenue') || str_contains($q, 'airport') || str_contains($q, 'wakrah') || str_contains($q, 'booking') || str_contains($q, 'sale') || str_contains($q, 'branch')) {
             $toolsUsed[] = 'read_revenue_and_bookings';
             $context['revenue'] = $telemetry['revenue'] ?? $this->read_revenue_and_bookings('all', 'today');
         }
 
         if (
             str_contains($q, 'lead') || str_contains($q, 'agent') || str_contains($q, 'reception') ||
-            str_contains($q, 'executing') || str_contains($q, 'execution') || str_contains($q, 'solution') ||
             str_contains($q, 'follow-up') || str_contains($q, 'followup') || str_contains($q, 'pipeline') ||
-            str_contains($q, 'money') || str_contains($q, 'call') || str_contains($q, 'overdue') ||
-            str_contains($q, 'conversion')
+            str_contains($q, 'overdue') || str_contains($q, 'conversion')
         ) {
             $toolsUsed[] = 'read_leads_and_money_brief';
             $context['leads'] = $telemetry['leads'] ?? $this->read_leads_and_money_brief();
         }
 
-        if (str_contains($q, 'retention') || str_contains($q, 'refill') || str_contains($q, 'vip') || str_contains($q, 'package') || str_contains($q, 'churn') || str_contains($q, 'leak')) {
+        if (str_contains($q, 'retention') || str_contains($q, 'refill') || str_contains($q, 'vip') || str_contains($q, 'package') || str_contains($q, 'churn')) {
             $toolsUsed[] = 'read_retention_radar';
             $context['retention'] = $telemetry['retention'] ?? $this->read_retention_radar();
         }
@@ -2691,12 +2247,11 @@ PROMPT;
 
         if (
             str_contains($q, 'expense') || str_contains($q, 'profit') || str_contains($q, 'cost') ||
-            str_contains($q, 'bill') || str_contains($q, 'rent') || str_contains($q, 'salary') ||
             str_contains($q, 'finance') || str_contains($q, 'service') || str_contains($q, 'menu') ||
-            str_contains($q, 'price') || str_contains($q, 'combo') || str_contains($q, 'product') ||
-            str_contains($q, 'stock') || str_contains($q, 'inventory') || str_contains($q, 'retail') ||
-            str_contains($q, 'ecommerce') || str_contains($q, 'e-commerce') || str_contains($q, 'shopify') ||
-            str_contains($q, 'online') || str_contains($q, 'pakistan') || str_contains($q, 'legal')
+            str_contains($q, 'combo') || str_contains($q, 'product') || str_contains($q, 'stock') ||
+            str_contains($q, 'inventory') || str_contains($q, 'retail') || str_contains($q, 'ecommerce') ||
+            str_contains($q, 'e-commerce') || str_contains($q, 'shopify') || str_contains($q, 'online') ||
+            str_contains($q, 'pakistan') || str_contains($q, 'legal')
         ) {
             $toolsUsed[] = 'read_full_crm_catalog_inventory_finance_and_ecommerce';
             $context['crm_operations'] = $telemetry['crm_operations'] ?? $this->read_full_crm_catalog_inventory_finance_and_ecommerce('all');
@@ -2719,175 +2274,124 @@ PROMPT;
     }
 
     /**
-     * Deterministic F.R.I.D.A.Y. tactical response when Gemini API key is not configured or unreachable.
+     * Deterministic markdown-formatted operational summary when AI credentials are missing or unreachable.
      */
-    private function buildTacticalFallbackReply(string $prompt, array $telemetry, array $preloadedToolContext, array &$toolsUsed): string
+    private function buildStructuredFallbackReply(string $prompt, array $telemetry, array $preloadedToolContext, array &$toolsUsed): string
     {
-        $rev = $telemetry['revenue'];
-        $leads = $telemetry['leads'];
-        $ret = $telemetry['retention'];
-        $staff = $telemetry['staff'];
-        $mkt = $telemetry['marketing'];
+        $rev = $telemetry['revenue'] ?? [];
+        $leads = $telemetry['leads'] ?? [];
+        $ops = $telemetry['ops_actions'] ?? [];
+        $ret = $telemetry['retention'] ?? [];
+        $staff = $telemetry['staff'] ?? [];
+        $mkt = $telemetry['marketing'] ?? [];
 
         $oaToday = number_format((float) ($rev['branches']['old_airport']['today_net_qar'] ?? 0), 0);
         $wkToday = number_format((float) ($rev['branches']['wakrah']['today_net_qar'] ?? 0), 0);
+        $todayTotal = number_format((float) ($rev['today_total_net_qar'] ?? 0), 0);
         $mtdNet = number_format((float) ($rev['mtd_total_net_qar'] ?? 0), 0);
         $topQar = number_format((float) ($leads['top_three_potential_qar'] ?? 0), 0);
 
         $q = strtolower($prompt);
-        $sections = [];
+        $blocks = [];
 
-        if (
-            str_contains($q, 'lead') || str_contains($q, 'agent') || str_contains($q, 'reception') ||
-            str_contains($q, 'executing') || str_contains($q, 'execution') || str_contains($q, 'solution') ||
-            str_contains($q, 'follow-up') || str_contains($q, 'followup') || str_contains($q, 'pipeline') ||
-            str_contains($q, 'overdue') || str_contains($q, 'conversion')
-        ) {
+        if (str_contains($q, 'ops') || str_contains($q, 'pending action') || str_contains($q, 'pending ops') || str_contains($q, 'tracker') || str_contains($q, 'action item')) {
+            $openOps = (int) ($ops['open_count'] ?? 0);
+            $overdueOps = (int) ($ops['overdue_count'] ?? 0);
+            $urgentOps = (int) ($ops['urgent_count'] ?? 0);
+            $lines = [
+                "**Pending Ops Actions ({$openOps} open · {$overdueOps} overdue · {$urgentOps} urgent)**",
+            ];
+            $items = $ops['top_pending_items'] ?? [];
+            if (!empty($items)) {
+                foreach (array_slice($items, 0, 4) as $item) {
+                    $statusTag = !empty($item['is_overdue'])
+                        ? 'Overdue'
+                        : (($item['hours_remaining'] ?? 0) . 'h left');
+                    $lines[] = "- **{$item['title']}** — Pending with {$item['assigned_to']} ({$statusTag})";
+                }
+            } else {
+                $lines[] = '- All Ops Tracker action items are currently cleared.';
+            }
+            $blocks[] = implode("\n", $lines);
+        }
+
+        if (str_contains($q, 'lead') || str_contains($q, 'follow-up') || str_contains($q, 'followup') || str_contains($q, 'pipeline')) {
             $openCount = (int) ($leads['open_leads_count'] ?? 0);
-            $unassignedCount = (int) ($leads['unassigned_open_leads_count'] ?? 0);
             $overdueCount = (int) ($leads['overdue_count'] ?? 0);
             $dueTodayCount = (int) ($leads['due_today_count'] ?? 0);
-            $mtdTotalLeads = (int) ($leads['mtd_total_leads'] ?? 0);
             $mtdConv = (float) ($leads['mtd_conversion_pct'] ?? 0);
-            $topLead = $leads['top_money_leads'][0] ?? ($leads['top_five_leads'][0] ?? []);
-            $firstLeadName = $topLead['name'] ?? $topLead['customer_name'] ?? 'our top open lead';
-            $firstLeadService = $topLead['services'] ?? 'their requested treatment';
-            $firstLeadQar = number_format((float) ($topLead['estimated_qar'] ?? 250), 0);
+            $topLead = $leads['top_money_leads'][0] ?? ($leads['top_five_leads'][0] ?? null);
 
-            $sections[] = "Honestly, Boss, looking at how the agents are executing the leads desk right now, we have {$openCount} open leads in the pipeline with {$overdueCount} overdue follow-ups, {$dueTodayCount} due today, and {$unassignedCount} sitting unassigned, while our month-to-date conversion rate is at {$mtdConv} percent across {$mtdTotalLeads} leads against our 30 percent target. Right at the top of the board is {$firstLeadName} worth around {$firstLeadQar} riyals for {$firstLeadService}, and our top three priority leads alone hold {$topQar} riyals in immediate cash. The fastest solution today is assigning every open inquiry to a named reception owner and running a fifteen-minute speed-to-lead call block starting with {$firstLeadName} so we lock those bookings into our open afternoon chairs across Old Airport and Wakrah.";
-        }
-
-        if (str_contains($q, 'retention') || str_contains($q, 'refill') || str_contains($q, 'leak') || str_contains($q, 'vip') || str_contains($q, 'bucket')) {
-            $totalActionable = (int) ($ret['total_actionable_clients'] ?? 0);
-            if ($totalActionable > 0) {
-                $sections[] = "Honestly, Boss, we have {$ret['due_for_refill_count']} clients due for a refill, {$ret['package_renewal_count']} with packages wrapping up soon, and {$ret['bleeding_vips_count']} VIPs we haven't seen in over six weeks, giving us {$totalActionable} regulars we can reach out to today.";
-            } else {
-                $sections[] = "Honestly, Boss, all three of our retention buckets—overdue refills, expiring packages, and missing VIPs—are completely clear at zero right now.";
+            $lines = [
+                "**Today's Leads & Follow-Up Pulse**",
+                "- **Open Pipeline:** {$openCount} open leads ({$overdueCount} overdue · {$dueTodayCount} due today)",
+                "- **MTD Conversion:** {$mtdConv}% (Target: 30%) · **Top 3 Value:** {$topQar} QAR",
+            ];
+            if ($topLead) {
+                $leadName = $topLead['name'] ?? $topLead['customer_name'] ?? 'Top Lead';
+                $leadService = $topLead['services'] ?? 'Salon Service';
+                $leadVal = number_format((float) ($topLead['estimated_qar'] ?? 0), 0);
+                $lines[] = "- **Priority Call:** **{$leadName}** (~{$leadVal} QAR · {$leadService})";
             }
+            $blocks[] = implode("\n", $lines);
         }
 
-        if (str_contains($q, 'upsell') || str_contains($q, 'staff') || str_contains($q, 'stylist') || str_contains($q, 'leaderboard') || str_contains($q, '1,700') || str_contains($q, '1700')) {
+        if (str_contains($q, 'booking') || str_contains($q, 'branch') || str_contains($q, 'revenue') || str_contains($q, 'airport') || str_contains($q, 'wakrah')) {
+            $oaUpcoming = (int) ($rev['branches']['old_airport']['today_upcoming_bookings'] ?? 0);
+            $wkUpcoming = (int) ($rev['branches']['wakrah']['today_upcoming_bookings'] ?? 0);
+            $oaCompleted = (int) ($rev['branches']['old_airport']['today_completed_visits'] ?? 0);
+            $wkCompleted = (int) ($rev['branches']['wakrah']['today_completed_visits'] ?? 0);
+
+            $blocks[] = implode("\n", [
+                '**Branch Bookings & Revenue Overview**',
+                "- **Today Net Collected:** **{$todayTotal} QAR** (MTD: **{$mtdNet} QAR**)",
+                "- **Old Airport:** {$oaToday} QAR net · {$oaCompleted} completed · {$oaUpcoming} upcoming today",
+                "- **Wakrah:** {$wkToday} QAR net · {$wkCompleted} completed · {$wkUpcoming} upcoming today",
+            ]);
+        }
+
+        if (preg_match('/\b(ads?|ad_leads?|marketing|reels?|stories|roas|campaign)\b/i', $q)) {
+            $adRev = number_format((float) ($mkt['attributed_ad_revenue_qar'] ?? 0), 0);
+            $blocks[] = implode("\n", [
+                '**Ad & Content Pulse**',
+                "- **MTD Ad Leads:** {$mkt['ad_leads_total']} leads at **{$mkt['ad_conversion_pct']}%** conversion (Target: 20%)",
+                "- **Attributed Ad Revenue:** **{$adRev} QAR**",
+                "- **Weekly Content:** {$mkt['reels_posted']}/{$mkt['reels_target']} Reels · {$mkt['stories_posted']}/{$mkt['stories_target']} Stories",
+            ]);
+        }
+
+        if (str_contains($q, 'staff') || str_contains($q, 'upsell') || str_contains($q, 'stylist') || str_contains($q, 'evaluation')) {
             $prorated = number_format((float) ($staff['prorated_target_qar'] ?? 0), 0);
-            $topName = $staff['top_stylists'][0]['name'] ?? 'our lead stylist';
-            $topAmtRaw = (float) ($staff['top_stylists'][0]['upsell'] ?? 0);
-            $topAmt = number_format($topAmtRaw, 0);
-
-            if ($topAmtRaw > 0) {
-                $sections[] = "On the staff upsell board, our prorated pace is {$prorated} riyals toward the 1,700 riyal monthly goal, with {$topName} leading the floor at {$topAmt} riyals this month and {$staff['open_complaints_count']} open complaints.";
-            } else {
-                $sections[] = "On the staff upsell board, our prorated pace sits at {$prorated} riyals toward the 1,700 riyal monthly goal, and every stylist on the floor is still at zero riyals so far this month, so the leaderboard is wide open today.";
-            }
+            $topName = $staff['top_stylists'][0]['name'] ?? '—';
+            $topAmt = number_format((float) ($staff['top_stylists'][0]['upsell'] ?? 0), 0);
+            $blocks[] = implode("\n", [
+                '**Staff Upsells & Floor Quality**',
+                "- **Prorated Target:** {$prorated} QAR (toward 1,700 QAR monthly target)",
+                "- **Top Stylist MTD:** **{$topName}** ({$topAmt} QAR) · **Open Complaints:** {$staff['open_complaints_count']}",
+            ]);
         }
 
-        if (preg_match('/\b(ads?|ad_leads?|marketing|reels?|stories|roas|campaign|kanban)\b/i', $q)) {
-            $sections[] = "On marketing, Boss, we've brought in {$mkt['ad_leads_total']} ad leads this month at {$mkt['ad_conversion_pct']} percent conversion, generating " . number_format((float) $mkt['attributed_ad_revenue_qar'], 0) . " riyals in revenue, while weekly content sits at {$mkt['reels_posted']} of {$mkt['reels_target']} Reels and {$mkt['stories_posted']} of {$mkt['stories_target']} Stories.";
-        }
-
-        if (str_contains($q, 'gap') || str_contains($q, 'chair') || str_contains($q, 'idle') || str_contains($q, 'capacity') || str_contains($q, 'empty')) {
-            $gaps = $telemetry['calendar_gaps'] ?? $this->read_calendar_gaps_and_idle_capacity('all');
-            $oaGaps = implode(' and ', $gaps['branches']['old_airport']['open_gap_windows'] ?? []);
-            $wkGaps = implode(' and ', $gaps['branches']['wakrah']['open_gap_windows'] ?? []);
-            $idleQar = number_format((float) ($gaps['total_idle_capacity_qar'] ?? 0), 0);
-            $sections[] = "Looking at our chairs today, Boss, we have open windows in Old Airport around {$oaGaps} and in Wakrah around {$wkGaps}, leaving about {$idleQar} riyals in open chair capacity that we can fill by calling our top leads right now.";
-        }
-
-        if (str_contains($q, 'cancel') || str_contains($q, 'no-show') || str_contains($q, 'no show') || str_contains($q, 'noshow') || str_contains($q, 'unrecovered') || str_contains($q, 'rebook')) {
-            $unrec = $telemetry['unrecovered_cancellations'] ?? $this->read_unrecovered_cancellations(14);
-            $unrecCount = (int) ($unrec['unrecovered_count'] ?? 0);
-            $trappedQar = number_format((float) ($unrec['trapped_revenue_qar'] ?? 0), 0);
-            if ($unrecCount > 0) {
-                $firstClient = $unrec['top_unrecovered_clients'][0] ?? [];
-                $firstName = $firstClient['client_name'] ?? 'our top client';
-                $firstService = $firstClient['service_name'] ?? 'their salon visit';
-                $firstBranch = ($firstClient['branch'] ?? 'old_airport') === 'wakrah' ? 'Wakrah' : 'Old Airport';
-                $firstPoints = (int) ($firstClient['loyalty_points'] ?? 0);
-                $labelNoun = $unrecCount === 1 ? '1 unrecovered cancellation' : "{$unrecCount} unrecovered cancellations";
-                $pointsNote = $firstPoints > 0
-                    ? " She still has {$firstPoints} loyalty points sitting on her profile, which gives us a warm, natural excuse to reach out without sounding pushy."
-                    : '';
-                $sections[] = "Honestly, Boss, we have {$labelNoun} from the last two weeks holding {$trappedQar} riyals in trapped revenue. Right at the top of the list is {$firstName}, who cancelled her {$firstService} at our {$firstBranch} branch and still hasn't rebooked a new slot.{$pointsNote} Let's send her a quick personal WhatsApp today to offer her an open afternoon chair and bring that {$trappedQar} riyals right back onto the books.";
-            } else {
-                $sections[] = "Good news on cancellations, Boss—every single cancelled or no-show appointment from the last two weeks has already been rebooked or cleared across both Old Airport and Wakrah.";
-            }
+        if (str_contains($q, 'retention') || str_contains($q, 'refill') || str_contains($q, 'vip') || str_contains($q, 'package')) {
+            $blocks[] = implode("\n", [
+                '**Client Retention Radar**',
+                "- **Due for Refill:** {$ret['due_for_refill_count']} · **Packages Ending:** {$ret['package_renewal_count']} · **Missing VIPs:** {$ret['bleeding_vips_count']}",
+            ]);
         }
 
         if (isset($preloadedToolContext['whatsapp_pitch']['whatsapp_message'])) {
             $pitch = $preloadedToolContext['whatsapp_pitch'];
-            $ptsNote = (int) ($pitch['loyalty_points'] ?? 0) > 0
-                ? " and highlights her {$pitch['loyalty_points']} loyalty points"
-                : '';
-            $sections[] = "I've put together a warm, personal WhatsApp message for {$pitch['client_name']} that leads with her {$pitch['service_name']}{$ptsNote} so it feels like a genuine treat from the team. You can read the full message in the green bar right below and send it to her in one click, Boss.";
+            $blocks[] = "**WhatsApp Draft for {$pitch['client_name']}**\n> {$pitch['whatsapp_message']}";
         }
 
-        if (
-            str_contains($q, 'expense') || str_contains($q, 'profit') || str_contains($q, 'cost') ||
-            str_contains($q, 'bill') || str_contains($q, 'rent') || str_contains($q, 'salary') ||
-            str_contains($q, 'finance')
-        ) {
-            $ops = $telemetry['crm_operations'] ?? $this->read_full_crm_catalog_inventory_finance_and_ecommerce('finance');
-            $fin = $ops['finance'] ?? [];
-            $mtdExp = number_format((float) ($fin['mtd_expenses_qar'] ?? 0), 0);
-            $mtdProf = number_format((float) ($fin['mtd_net_profit_qar'] ?? 0), 0);
-            $todayExp = number_format((float) ($fin['today_expenses_qar'] ?? 0), 0);
-            $sections[] = "On finance and profitability, Boss, our month-to-date net salon revenue sits at {$mtdNet} riyals against {$mtdExp} riyals in recorded expenses—including {$todayExp} riyals logged today—giving us a true net operating profit of {$mtdProf} riyals across Old Airport and Wakrah so far this month.";
+        if (!empty($blocks)) {
+            return implode("\n\n", $blocks);
         }
 
-        if (str_contains($q, 'service') || str_contains($q, 'menu') || str_contains($q, 'combo')) {
-            $ops = $telemetry['crm_operations'] ?? $this->read_full_crm_catalog_inventory_finance_and_ecommerce('services');
-            $srv = $ops['services'] ?? [];
-            $srvCount = (int) ($srv['total_services_count'] ?? 0);
-            $catCount = (int) ($srv['categories_count'] ?? 0);
-            $comboCount = (int) ($srv['combos_count'] ?? 0);
-            $topSrvName = $srv['top_booked_services_mtd'][0]['service_name'] ?? ($srv['highest_priced_services'][0]['name'] ?? 'our signature treatment');
-            $sections[] = "Across our services menu, Boss, we have {$srvCount} active services organized into {$catCount} categories alongside {$comboCount} multi-session combos, with {$topSrvName} leading our bookings this month.";
-        }
-
-        if (str_contains($q, 'product') || str_contains($q, 'stock') || str_contains($q, 'inventory') || str_contains($q, 'retail')) {
-            $ops = $telemetry['crm_operations'] ?? $this->read_full_crm_catalog_inventory_finance_and_ecommerce('products');
-            $prd = $ops['products'] ?? [];
-            $totalPrd = (int) ($prd['total_products_count'] ?? 0);
-            $lowCnt = (int) ($prd['low_stock_count'] ?? 0);
-            $outCnt = (int) ($prd['out_of_stock_count'] ?? 0);
-            $invVal = number_format((float) ($prd['inventory_retail_value_qar'] ?? 0), 0);
-            $firstLowName = $prd['low_stock_items'][0]['name'] ?? ($prd['out_of_stock_items'][0]['name'] ?? null);
-            $lowDetail = $firstLowName ? ", starting with {$firstLowName}" : '';
-            $sections[] = "Looking at our retail shelves and inventory, Boss, we are tracking {$totalPrd} retail products holding {$invVal} riyals in shelf value, with {$lowCnt} low-stock items and {$outCnt} out-of-stock items that need restocking{$lowDetail}.";
-        }
-
-        if (str_contains($q, 'ecommerce') || str_contains($q, 'e-commerce') || str_contains($q, 'shopify') || str_contains($q, 'online') || str_contains($q, 'pakistan')) {
-            $ops = $telemetry['crm_operations'] ?? $this->read_full_crm_catalog_inventory_finance_and_ecommerce('ecommerce');
-            $ec = $ops['ecommerce'] ?? [];
-            $ecSku = (int) ($ec['total_products_count'] ?? 0);
-            $ecOrders = (int) ($ec['total_orders_count'] ?? 0);
-            $ecRev = number_format((float) ($ec['total_revenue_qar'] ?? 0), 0);
-            $ecStockQa = (int) ($ec['total_stock_qatar'] ?? 0);
-            $ecStockPk = (int) ($ec['total_stock_pakistan'] ?? 0);
-            $sections[] = "On the ecommerce desk, Boss, we have {$ecSku} online products with {$ecStockQa} units in Qatar stock and {$ecStockPk} in Pakistan stock, and we've fulfilled {$ecOrders} revenue orders generating {$ecRev} riyals in online sales.";
-        }
-
-        if (!empty($sections)) {
-            return implode(' ', $sections);
-        }
-
-        $topLeadName = $leads['top_money_leads'][0]['name'] ?? $leads['top_money_leads'][0]['customer_name'] ?? 'our top lead';
-        $topLeadService = $leads['top_money_leads'][0]['services'] ?? 'their requested service';
-        $topLeadQar = number_format((float) ($leads['top_money_leads'][0]['estimated_qar'] ?? 0), 0);
-
-        return "Hey Boss, looking across both branches today, we're at {$oaToday} riyals in Old Airport and {$wkToday} riyals in Wakrah, bringing our month-to-date total to {$mtdNet} riyals. On the leads desk, we have {$leads['overdue_count']} overdue follow-ups and {$leads['due_today_count']} due today, with about {$topQar} riyals sitting in our top three callable leads alone. {$topLeadName} is right at the top of that list at {$topLeadQar} riyals for {$topLeadService}, so our highest-leverage move right now is getting her on the phone or sending her a quick WhatsApp closer to lock in that chair time today.";
-    }
-
-    /**
-     * Strip markdown formatting, parenthetical spreadsheet noise, and emojis so spoken TTS sounds warm and genuinely human.
-     */
-    private function cleanTextForSpeech(string $text): string
-    {
-        $clean = preg_replace('/^[\s\-\*\d\.]+/m', '', $text);
-        $clean = preg_replace('/[*#`_~>]+/', '', (string) $clean);
-        $clean = preg_replace('/\(([^)]*)\)/', ', $1,', (string) $clean);
-        $clean = str_replace([' / ', '/'], ' and ', (string) $clean);
-        $clean = preg_replace('/[\x{1F300}-\x{1F9FF}\x{2600}-\x{27BF}]/u', '', (string) $clean);
-        $clean = preg_replace('/\s+/', ' ', (string) $clean);
-        $clean = preg_replace('/,\s*,/', ',', (string) $clean);
-        return trim((string) $clean, " \t\n\r\0\x0B,");
+        return implode("\n", [
+            '**Live Salon Snapshot**',
+            "- **Revenue Today:** **{$todayTotal} QAR** (Old Airport: {$oaToday} QAR · Wakrah: {$wkToday} QAR · MTD: {$mtdNet} QAR)",
+            "- **Leads Desk:** " . (int) ($leads['overdue_count'] ?? 0) . ' overdue follow-ups · ' . (int) ($leads['due_today_count'] ?? 0) . " due today ({$topQar} QAR in top 3 leads)",
+            "- **Ops Tracker:** " . (int) ($ops['open_count'] ?? 0) . ' open items (' . (int) ($ops['overdue_count'] ?? 0) . ' overdue)',
+        ]);
     }
 }

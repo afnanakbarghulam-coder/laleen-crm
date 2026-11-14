@@ -64,7 +64,6 @@ class CrmSystemSecurityAndHealthTest extends TestCase
 
         $aiAndBulkRouteNames = [
             'command-center.ask',
-            'command-center.tts',
             'ai-script.generate',
             'leads.analytics.ai-diagnosis',
             'leads.ai-morning-brief',

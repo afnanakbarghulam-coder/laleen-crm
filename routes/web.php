@@ -88,10 +88,7 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('module:command_center')->group(function () {
         Route::get('/command-center', [CommandCenterController::class, 'index'])->name('command-center.index');
         Route::get('/command-center/telemetry', [CommandCenterController::class, 'telemetry'])->name('command-center.telemetry');
-    });
-    Route::middleware('module:command_center,edit')->group(function () {
         Route::post('/command-center/ask', [CommandCenterController::class, 'ask'])->middleware('throttle:20,1')->name('command-center.ask');
-        Route::post('/command-center/tts', [CommandCenterController::class, 'tts'])->middleware('throttle:20,1')->name('command-center.tts');
     });
     Route::post('/ai-script/{leadId?}', [AiScriptController::class, 'generate'])->middleware('throttle:20,1')->name('ai-script.generate');
 
