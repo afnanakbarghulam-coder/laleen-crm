@@ -15,8 +15,8 @@ use App\Models\Staff;
 use App\Models\User;
 use App\Support\DashboardScorecardBuilder;
 use App\Support\StaffSalesAnalytics;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -28,12 +28,15 @@ class UserController extends Controller
 
     public function dashboard(Request $request)
     {
-        // ---- Date range filter (defaults to start of current month -> today) ----
-        $dashFrom = $request->filled('date_from')
-            ? Carbon::parse($request->input('date_from'))->startOfDay()
+        // ---- Date range (defaults automatically to Month-to-Date; honors optional ?from=&to= or ?date_from=&date_to=) ----
+        $rawFrom = $request->input('from') ?: $request->input('date_from');
+        $rawTo = $request->input('to') ?: $request->input('date_to');
+
+        $dashFrom = filled($rawFrom)
+            ? Carbon::parse($rawFrom)->startOfDay()
             : now()->startOfMonth();
-        $dashTo = $request->filled('date_to')
-            ? Carbon::parse($request->input('date_to'))->endOfDay()
+        $dashTo = filled($rawTo)
+            ? Carbon::parse($rawTo)->endOfDay()
             : now()->endOfDay();
 
         if ($dashFrom->gt($dashTo)) {
@@ -215,7 +218,7 @@ class UserController extends Controller
      * Computes Content KPI compliance strictly from the active Weekly Content Calendar
      * (SocialContentPlan / social_content_plans) overlapping [$from, $to].
      */
-    private function resolveDashboardContentMetrics(\Illuminate\Support\Carbon|Carbon $from, \Illuminate\Support\Carbon|Carbon $to): array
+    private function resolveDashboardContentMetrics(Carbon|\Carbon\Carbon $from, Carbon|\Carbon\Carbon $to): array
     {
         $startWeek = Carbon::instance($from)->startOfWeek(Carbon::MONDAY)->toDateString();
         $endWeek = Carbon::instance($to)->startOfWeek(Carbon::MONDAY)->toDateString();

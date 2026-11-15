@@ -467,7 +467,8 @@ class ServicesProductsKpisDashboardWave5Test extends TestCase
             ->get(route('dashboard'));
 
         $response->assertOk();
-        $response->assertSee('Live Today Salon Pulse');
+        $response->assertDontSee('Live Today Salon Pulse');
+        $response->assertSee('Team KPI Scorecards');
         $response->assertSee(route('kpi.content-calendar.index'));
         $response->assertViewHas('contentMetrics', function (array $metrics) {
             return $metrics['overall'] === 100.0 && $metrics['grade'] === 'Excellent';

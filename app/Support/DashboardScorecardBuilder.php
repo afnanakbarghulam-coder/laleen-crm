@@ -12,10 +12,9 @@ use App\Models\OpsActionItem;
 use App\Models\SocialContentPlan;
 use App\Models\SocialLateReplyLog;
 use App\Models\Staff;
-use App\Models\StaffComplaint;
 use App\Models\User;
-use Carbon\Carbon;
 use Carbon\CarbonPeriod;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
@@ -29,7 +28,6 @@ class DashboardScorecardBuilder
     public const BRANCH_AD_MONTHLY_TARGET_QAR = 15000.0;
     public const COMBINED_AD_MONTHLY_TARGET_QAR = 30000.0;
     public const BRANCH_AUDIT_TARGET_PCT = 85.0;
-    public const COMPLAINT_SLA_HOURS = 48.0;
 
     private Carbon $from;
     private Carbon $to;
@@ -43,8 +41,8 @@ class DashboardScorecardBuilder
     }
 
     /**
-     * Build all 8 tracked staff Split Scorecards, enforcing the Primary Output Gate,
-     * bottleneck-first auto-sorting, and non-admin viewer self-pinning.
+     * Build all 8 tracked staff Split Scorecards, each standardized to strictly 3 KPIs,
+     * enforcing the Primary Output Gate, bottleneck-first auto-sorting, and non-admin viewer self-pinning.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -62,13 +60,13 @@ class DashboardScorecardBuilder
         $cards = [
             $this->buildAyanCard($periodDays, $daysInMonth, $sanaMetrics),
             $this->buildSanaCard($sanaMetrics),
-            $this->buildChatAgentCard('zoya', 'Zoya', 'Customer Service Chat Agent', $periodDays, $referenceDate),
-            $this->buildChatAgentCard('areeba', 'Areeba', 'Customer Service Chat Agent', $periodDays, $referenceDate),
+            $this->buildChatAgentCard('zoya', 'Zoya', 'Chat Agent', $periodDays, $referenceDate),
+            $this->buildChatAgentCard('areeba', 'Areeba', 'Chat Agent', $periodDays, $referenceDate),
             $this->buildLadenCard($periodDays, $referenceDate),
             $this->buildBranchManagerCard(
                 'ahana',
                 'Ahana',
-                'Old Airport Branch Manager',
+                'Old Airport',
                 'old_airport',
                 $periodDays,
                 $daysInMonth,
@@ -77,7 +75,7 @@ class DashboardScorecardBuilder
             $this->buildBranchManagerCard(
                 'rhea',
                 'Rhea',
-                'Al Wakrah Branch Manager',
+                'Al Wakrah',
                 'wakrah',
                 $periodDays,
                 $daysInMonth,
@@ -110,7 +108,7 @@ class DashboardScorecardBuilder
     }
 
     /**
-     * Format a single mini-bar KPI item with standard Red (<50%), Amber (50-84.9%), Green (85%+) thresholds.
+     * Format a single thin-line KPI item with muted Red (<50%), Amber (50-84.9%), Green (85%+) thresholds.
      *
      * @return array<string, mixed>
      */
@@ -139,7 +137,8 @@ class DashboardScorecardBuilder
     }
 
     /**
-     * Finalize a Split Scorecard with weighted overall %, Primary Output Gate, and viewer matching.
+     * Finalize a Split Scorecard with weighted overall %, rounded whole-number display,
+     * Primary Output Gate, and viewer matching.
      *
      * @param  array<int, array<string, mixed>>  $kpis
      * @return array<string, mixed>
@@ -194,7 +193,6 @@ class DashboardScorecardBuilder
         return [
             'key' => $key,
             'name' => $name,
-            'initials' => strtoupper(substr($name, 0, 2)),
             'role' => $role,
             'url' => $url,
             'kpis' => $kpis,
@@ -202,11 +200,45 @@ class DashboardScorecardBuilder
             'total_kpis' => $totalKpis,
             'primary_pct' => $primaryPct,
             'overall_pct' => $overallPct,
+            'overall_rounded' => (int) round($overallPct),
             'status' => $status,
             'status_color' => $statusColor,
             'status_rank' => $statusRank,
             'is_self' => $this->isViewerSelf($key),
         ];
+    }
+
+    private function resolveKpiUrl(string $routeName, array $params = []): string
+    {
+        if ($this->viewer && !$this->viewer->isAdmin() && !$this->viewer->canView('kpis')) {
+            return '#';
+        }
+
+        return route($routeName, $params);
+    }
+
+    private function resolveOpsUrl(): string
+    {
+        if (!$this->viewer || $this->viewer->isAdmin() || $this->viewer->canView('staff')) {
+            return route('staff.ops-tracker.index');
+        }
+
+        if ($this->viewer->canView('kpis')) {
+            return route('kpi.operations');
+        }
+
+        return '#';
+    }
+
+    private function formatCompactQarTarget(float $amount): string
+    {
+        if ($amount >= 1000) {
+            $k = round($amount / 1000, 1);
+
+            return (floor($k) == $k ? (string) (int) $k : (string) $k) . 'k';
+        }
+
+        return number_format($amount, 0);
     }
 
     private function isViewerSelf(string $key): bool
@@ -271,8 +303,8 @@ class DashboardScorecardBuilder
         if ($completedDays === 0) {
             $reelsTarget = 1;
             $storiesTarget = 1;
-            $reelsPct = ($hasActivity && $publishedReels >= 1) ? 100.0 : ($hasActivity ? 100.0 : 0.0);
-            $storiesPct = ($hasActivity && $publishedStories >= 1) ? 100.0 : ($hasActivity ? 100.0 : 0.0);
+            $reelsPct = $hasActivity ? 100.0 : 0.0;
+            $storiesPct = $hasActivity ? 100.0 : 0.0;
         } else {
             $storiesTarget = max(1, $completedDays);
             $reelsTarget = max(1, (int) floor(($completedDays * SocialContentPlan::WEEKLY_REEL_TARGET) / 7));
@@ -298,46 +330,46 @@ class DashboardScorecardBuilder
     }
 
     /**
+     * Sana (Content): Reels (X / Y), Daily Stories (X / Y), Reply SLA (X%)
+     *
      * @param  array<string, mixed>  $sanaMetrics
      * @return array<string, mixed>
      */
     private function buildSanaCard(array $sanaMetrics): array
     {
-        $replyLabel = !$sanaMetrics['has_activity']
-            ? 'No logs yet / 0 Late'
-            : ($sanaMetrics['late_replies'] === 0
-                ? '0 Late / 0 Allowed'
-                : $sanaMetrics['late_replies'] . ' Late / 0 Allowed');
+        $replyPct = (float) $sanaMetrics['reply_sla_pct'];
 
         $kpis = [
             $this->makeKpiBar(
-                'Reels Published',
-                $sanaMetrics['published_reels'] . ' / ' . $sanaMetrics['reels_target'] . ' Reels',
+                'Reels',
+                $sanaMetrics['published_reels'] . ' / ' . $sanaMetrics['reels_target'],
                 (float) $sanaMetrics['reels_pct'],
                 true
             ),
             $this->makeKpiBar(
                 'Daily Stories',
-                $sanaMetrics['published_stories'] . ' / ' . $sanaMetrics['stories_target'] . ' Days',
+                $sanaMetrics['published_stories'] . ' / ' . $sanaMetrics['stories_target'],
                 (float) $sanaMetrics['stories_pct']
             ),
             $this->makeKpiBar(
-                '<5m Reply Compliance',
-                $replyLabel,
-                (float) $sanaMetrics['reply_sla_pct']
+                'Reply SLA',
+                ((int) round($replyPct)) . '%',
+                $replyPct
             ),
         ];
 
         return $this->finalizeCard(
             'sana',
             'Sana',
-            'Content & Social Media',
-            route('kpi.content-calendar.index'),
+            'Content',
+            $this->resolveKpiUrl('kpi.content-calendar.index'),
             $kpis
         );
     }
 
     /**
+     * Ayan (Paid Ads): Ad Revenue (QAR X / 15k), Ad Conversion (X%), Funnel Pace (X%)
+     *
      * @param  array<string, mixed>  $sanaMetrics
      * @return array<string, mixed>
      */
@@ -372,40 +404,39 @@ class DashboardScorecardBuilder
         $adConversionPct = $totalLeadsCount > 0 ? round(($bookedLeadsCount / $totalLeadsCount) * 100, 1) : 0.0;
         $adConversionAttainmentPct = min(100.0, round(($adConversionPct / self::AD_CONVERSION_TARGET_PCT) * 100, 1));
 
+        $funnelPacePct = round(($branchBalancePct + (float) $sanaMetrics['composite_pct']) / 2, 1);
+
         $kpis = [
             $this->makeKpiBar(
-                'Paid Ad Revenue (To-Date)',
-                'QAR ' . number_format($totalAdRevenue, 0) . ' / QAR ' . number_format($combinedProratedTarget, 0),
+                'Ad Revenue',
+                'QAR ' . number_format($totalAdRevenue, 0) . ' / ' . $this->formatCompactQarTarget($combinedProratedTarget),
                 $combinedAdPct,
                 true
             ),
             $this->makeKpiBar(
-                'Paid Ad Conversion',
-                $adConversionPct . '% / 20% (' . $bookedLeadsCount . '/' . $totalLeadsCount . ')',
+                'Ad Conversion',
+                ((int) round($adConversionPct)) . '%',
                 $adConversionAttainmentPct
             ),
             $this->makeKpiBar(
-                'Branch Ad Pace (OA · WK)',
-                'OA ' . number_format($oaRevenue, 0) . ' · WK ' . number_format($wkRevenue, 0) . ' / ' . number_format($branchProratedTarget, 0),
-                $branchBalancePct
-            ),
-            $this->makeKpiBar(
-                'Content & Funnel Oversight',
-                $sanaMetrics['composite_pct'] . '% / 100%',
-                (float) $sanaMetrics['composite_pct']
+                'Funnel Pace',
+                ((int) round($funnelPacePct)) . '%',
+                $funnelPacePct
             ),
         ];
 
         return $this->finalizeCard(
             'ayan',
             'Ayan',
-            'Marketing & Paid Ads',
-            route('kpi.ads.index'),
+            'Paid Ads',
+            $this->resolveKpiUrl('kpi.ads.index'),
             $kpis
         );
     }
 
     /**
+     * Zoya & Areeba (Chat Agent): Bookings MTD (X / Y), Today's Quota (X / 13), Chat QA (<5m) (X%)
+     *
      * @return array<string, mixed>
      */
     private function buildChatAgentCard(
@@ -470,19 +501,19 @@ class DashboardScorecardBuilder
 
         $kpis = [
             $this->makeKpiBar(
-                'Bookings Pace (To-Date)',
-                $mtdBookings . ' / ' . $mtdTarget . ' (Today: ' . $todayBookings . '/' . $dailyTarget . ')',
+                'Bookings MTD',
+                $mtdBookings . ' / ' . $mtdTarget,
                 $mtdPct,
                 true
             ),
             $this->makeKpiBar(
-                "Today's Booking Quota",
-                $todayBookings . ' / ' . $dailyTarget . ' Today',
+                "Today's Quota",
+                $todayBookings . ' / ' . $dailyTarget,
                 $todayPct
             ),
             $this->makeKpiBar(
-                'Chat QA & <5m Reply',
-                $evalCount > 0 ? ($chatAvgPct . '% / 85%') : '0% / 85% (0 evals)',
+                'Chat QA (<5m)',
+                ((int) round($chatAvgPct)) . '%',
                 $chatAttainmentPct
             ),
         ];
@@ -491,12 +522,14 @@ class DashboardScorecardBuilder
             $key,
             $name,
             $role,
-            route('kpi.agents.index'),
+            $this->resolveKpiUrl('kpi.agents.index'),
             $kpis
         );
     }
 
     /**
+     * Laden (Sales Lead): Team Bookings (X / Y), Overdue Leads (N Overdue), Lead Conversion (X%)
+     *
      * @return array<string, mixed>
      */
     private function buildLadenCard(int $periodDays, Carbon $referenceDate): array
@@ -505,12 +538,7 @@ class DashboardScorecardBuilder
         $dailyTarget = self::LADEN_DAILY_BOOKING_QUOTA;
         $mtdTarget = max(1, $dailyTarget * $periodDays);
 
-        $refDateStr = $referenceDate->toDateString();
-        $todayStart = Carbon::parse($refDateStr)->startOfDay();
-        $todayEnd = Carbon::parse($refDateStr)->endOfDay();
-
         $mtdBookings = 0;
-        $todayBookings = 0;
 
         if ($chatAgentIds->isNotEmpty()) {
             $rawAppointments = Appointment::query()
@@ -529,9 +557,6 @@ class DashboardScorecardBuilder
 
             $deduped = Appointment::deduplicateForAgentQuota($rawAppointments);
             $mtdBookings = $deduped->count();
-            $todayBookings = $deduped
-                ->filter(fn (Appointment $appt) => $appt->created_at && $appt->created_at->between($todayStart, $todayEnd))
-                ->count();
         }
 
         $bookingsPct = min(100.0, round(($mtdBookings / $mtdTarget) * 100, 1));
@@ -553,90 +578,37 @@ class DashboardScorecardBuilder
         $leadConvPct = $totalLeadsCount > 0 ? round(($bookedLeadsCount / $totalLeadsCount) * 100, 1) : 0.0;
         $leadConvAttainmentPct = min(100.0, round(($leadConvPct / self::LEAD_CONVERSION_TARGET_PCT) * 100, 1));
 
-        $complaintSlaPct = $this->computeComplaintSlaPct();
-        $teamChatEvals = KpiChatEvaluation::query()
-            ->whereBetween('evaluation_date', [$this->from->toDateString(), $this->to->toDateString()])
-            ->get(['id', 'percentage']);
-        $chatEvalCount = $teamChatEvals->count();
-        $chatAvgPct = $chatEvalCount > 0 ? round((float) $teamChatEvals->avg('percentage'), 1) : 0.0;
-        $chatAttainmentPct = $chatEvalCount > 0
-            ? min(100.0, round(($chatAvgPct / self::CHAT_QA_TARGET_PCT) * 100, 1))
-            : 0.0;
-        $shiftRecoveryPct = round(($chatAttainmentPct + $complaintSlaPct) / 2, 1);
-
         $kpis = [
             $this->makeKpiBar(
-                'Team Bookings & Sweep',
-                $mtdBookings . ' / ' . $mtdTarget . ' (Today: ' . $todayBookings . '/' . $dailyTarget . ')',
+                'Team Bookings',
+                $mtdBookings . ' / ' . $mtdTarget,
                 $bookingsPct,
                 true
             ),
             $this->makeKpiBar(
-                'Overdue Leads Queue',
-                $overdueLeadsCount === 0 ? '0 Overdue / Clean' : ($overdueLeadsCount . ' Overdue / 0 Max'),
+                'Overdue Leads',
+                $overdueLeadsCount . ' Overdue',
                 $overdueSweepPct
             ),
             $this->makeKpiBar(
-                'Lead Conversion Rate',
-                $leadConvPct . '% / 30% (' . $bookedLeadsCount . '/' . $totalLeadsCount . ')',
+                'Lead Conversion',
+                ((int) round($leadConvPct)) . '%',
                 $leadConvAttainmentPct
-            ),
-            $this->makeKpiBar(
-                'Shift QA & 48h Recovery',
-                'QA ' . $chatAvgPct . '% · SLA ' . $complaintSlaPct . '%',
-                $shiftRecoveryPct
             ),
         ];
 
         return $this->finalizeCard(
             'laden',
             'Laden',
-            'Customer Service Lead',
-            route('kpi.customer-service.index'),
+            'Sales Lead',
+            $this->resolveKpiUrl('kpi.customer-service.index'),
             $kpis
         );
     }
 
-    private function computeComplaintSlaPct(): float
-    {
-        $complaints = StaffComplaint::with('notices')
-            ->whereDate('complaint_date', '>=', $this->from->toDateString())
-            ->whereDate('complaint_date', '<=', $this->to->toDateString())
-            ->get();
-
-        if ($complaints->isEmpty()) {
-            return 100.0;
-        }
-
-        $compliant = 0;
-        foreach ($complaints as $complaint) {
-            $dateStr = $complaint->complaint_date
-                ? Carbon::parse($complaint->complaint_date)->toDateString()
-                : ($complaint->created_at ? Carbon::parse($complaint->created_at)->toDateString() : $this->from->toDateString());
-
-            if (filled($complaint->complaint_time)) {
-                $slaStart = Carbon::parse($dateStr . ' ' . trim((string) $complaint->complaint_time));
-            } elseif ($complaint->created_at && Carbon::parse($complaint->created_at)->toDateString() === $dateStr) {
-                $slaStart = Carbon::parse($complaint->created_at);
-            } else {
-                $slaStart = Carbon::parse($dateStr)->startOfDay();
-            }
-
-            $isResolved = ($complaint->is_staff_mistake !== null || $complaint->notices->isNotEmpty());
-            $endTime = $isResolved
-                ? ($complaint->resolved_at ? Carbon::parse($complaint->resolved_at) : ($complaint->updated_at ? Carbon::parse($complaint->updated_at) : $slaStart))
-                : now();
-
-            $elapsedHours = max(0.0, $slaStart->diffInMinutes($endTime, false) / 60.0);
-            if ($elapsedHours <= self::COMPLAINT_SLA_HOURS) {
-                $compliant++;
-            }
-        }
-
-        return round(($compliant / $complaints->count()) * 100, 1);
-    }
-
     /**
+     * Ahana (Old Airport) & Rhea (Al Wakrah): Chair Upsells (QAR X / Y), Staff Evals (X / Y), Branch Audit (X%)
+     *
      * @return array<string, mixed>
      */
     private function buildBranchManagerCard(
@@ -734,19 +706,19 @@ class DashboardScorecardBuilder
 
         $kpis = [
             $this->makeKpiBar(
-                'Branch Chair Upsells',
-                'QAR ' . number_format($upsellActual, 0) . ' / QAR ' . number_format($upsellTarget, 0),
+                'Chair Upsells',
+                'QAR ' . number_format($upsellActual, 0) . ' / ' . number_format($upsellTarget, 0),
                 $upsellPct,
                 true
             ),
             $this->makeKpiBar(
-                'Monday Staff Evals',
-                $completedEvals . ' / ' . $expectedEvals . ' Evals',
+                'Staff Evals',
+                $completedEvals . ' / ' . $expectedEvals,
                 $evalCompliancePct
             ),
             $this->makeKpiBar(
-                'Branch Audit Score',
-                $auditsCount > 0 ? ($auditAvgPct . '% / 85%') : '0% / 85% (0 audits)',
+                'Branch Audit',
+                ((int) round($auditAvgPct)) . '%',
                 $auditAttainmentPct
             ),
         ];
@@ -755,12 +727,14 @@ class DashboardScorecardBuilder
             $key,
             $name,
             $role,
-            route('kpi.staff-sales.index', ['branch' => $branch]),
+            $this->resolveKpiUrl('kpi.staff-sales.index', ['branch' => $branch]),
             $kpis
         );
     }
 
     /**
+     * Arbab (Ops Lead): Overdue Tasks (N Overdue), Ops Actions (X / Y), SLA On-Time (X%)
+     *
      * @return array<string, mixed>
      */
     private function buildArbabCard(): array
@@ -791,41 +765,31 @@ class DashboardScorecardBuilder
 
         if ($totalCount === 0) {
             $zeroOverduePct = 0.0;
-            $zeroOverdueLabel = '0 Tasks Logged';
             $completionPct = 0.0;
-            $completionLabel = '0 / 0 Closed';
             $slaPct = 0.0;
-            $slaLabel = '0 / 0 On-Time';
         } else {
             $zeroOverduePct = $overdueCount === 0
                 ? 100.0
                 : max(0.0, 45.0 - (($overdueCount - 1) * 20.0));
-            $zeroOverdueLabel = $overdueCount === 0
-                ? '0 Overdue / Clean'
-                : ($overdueCount . ' Overdue / 0 Max');
-
             $completionPct = round(($completedCount / $totalCount) * 100, 1);
-            $completionLabel = $completedCount . ' / ' . $totalCount . ' Closed';
-
             $slaPct = round(($onTimeCount / $totalCount) * 100, 1);
-            $slaLabel = $onTimeCount . ' / ' . $totalCount . ' On-Time';
         }
 
         $kpis = [
             $this->makeKpiBar(
-                'Zero Overdue Tasks',
-                $zeroOverdueLabel,
+                'Overdue Tasks',
+                $overdueCount . ' Overdue',
                 $zeroOverduePct,
                 true
             ),
             $this->makeKpiBar(
-                'Ops Action Completion',
-                $completionLabel,
+                'Ops Actions',
+                $completedCount . ' / ' . $totalCount,
                 $completionPct
             ),
             $this->makeKpiBar(
-                'SLA On-Time Execution',
-                $slaLabel,
+                'SLA On-Time',
+                ((int) round($slaPct)) . '%',
                 $slaPct
             ),
         ];
@@ -833,8 +797,8 @@ class DashboardScorecardBuilder
         return $this->finalizeCard(
             'arbab',
             'Arbab',
-            'Operations & Execution Lead',
-            route('staff.ops-tracker.index'),
+            'Ops Lead',
+            $this->resolveOpsUrl(),
             $kpis
         );
     }

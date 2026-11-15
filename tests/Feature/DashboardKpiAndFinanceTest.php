@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\BranchEvaluation;
 use App\Models\Expense;
 use App\Models\KpiStaffEvaluation;
-use App\Models\Lead;
 use App\Models\OpsActionItem;
 use App\Models\Sale;
 use App\Models\SocialContentPlan;
@@ -37,7 +36,7 @@ class DashboardKpiAndFinanceTest extends TestCase
         ]);
     }
 
-    public function test_admin_sees_two_branch_to_date_revenue_expenses_net_profit_margin_safeguard_and_exact_leads_queue_sum(): void
+    public function test_dashboard_removes_hero_and_live_pulse_while_rendering_admin_two_branch_pnl_and_silent_from_to_params(): void
     {
         // Old Airport: Revenue 3,500.00, Expenses 0.00 -> must NOT show 100% margin, must show 'No expenses logged' + '+ Add Expense'
         Sale::create([
@@ -70,28 +69,19 @@ class DashboardKpiAndFinanceTest extends TestCase
             'created_by' => $this->admin->id,
         ]);
 
-        // Seed Leads Action Queue: 0 due today + 4 overdue + 1 unscheduled = 5 actionable leads
-        for ($i = 1; $i <= 4; $i++) {
-            Lead::create([
-                'phone' => '+9745511000' . $i,
-                'category' => 'inquiry',
-                'categories' => ['inquiry'],
-                'next_followup_date' => today()->subDays(2)->toDateString(),
-            ]);
-        }
-
-        Lead::create([
-            'phone' => '+97455110099',
-            'category' => 'inquiry',
-            'categories' => ['inquiry'],
-            'next_followup_date' => null,
-        ]);
-
         $response = $this->actingAs($this->admin)->get(route('dashboard'));
 
         $response->assertOk();
 
-        // Combined To-Date header + both crisp branch cards
+        // 1. Removed top Laleen Ops hero card, date form, and Live Today Salon Pulse strip
+        $response->assertDontSee('Executive salon pulse, to-date branch performance');
+        $response->assertDontSee('Live Today Salon Pulse');
+        $response->assertDontSee("Today's Appointments");
+        $response->assertDontSee('Leads Action Queue');
+        $response->assertDontSee('Active Staff on Duty');
+        $response->assertDontSee('Total Active Clients');
+
+        // 2. Combined To-Date header + both crisp branch cards
         $response->assertSee('Branch Revenue & Expenses — To Date');
         $response->assertSee('OLD AIRPORT — TO DATE');
         $response->assertSee('AL WAKRAH — TO DATE');
@@ -102,25 +92,22 @@ class DashboardKpiAndFinanceTest extends TestCase
         $response->assertSee('QAR 2,000.00'); // Al Wakrah Revenue
         $response->assertSee('QAR 1,500.00'); // Al Wakrah Net Profit
 
-        // Margin Safeguard: Al Wakrah has expenses > 0 -> shows 75.0% margin; Old Airport has 0 expenses -> hides 100% margin
+        // 3. Margin Safeguard: Al Wakrah has expenses > 0 -> shows 75.0% margin; Old Airport has 0 expenses -> hides 100% margin
         $response->assertSee('75.0% margin');
         $response->assertDontSee('100.0% margin');
         $response->assertDontSee('100% margin');
         $response->assertSee('No expenses logged');
         $response->assertSee('+ Add Expense');
 
-        // Leads Action Queue math fix: 0 due today + 4 overdue + 1 unscheduled = 5
-        $response->assertViewHas('operationalPulse', function (array $pulse): bool {
-            return $pulse['leads_due_today'] === 0
-                && $pulse['leads_overdue'] === 4
-                && $pulse['leads_unscheduled'] === 1
-                && $pulse['leads_action_queue'] === 5;
-        });
-        $response->assertSee('0 due today · 4 overdue · 1 unscheduled');
-        $this->assertMatchesRegularExpression(
-            '/data-testid="leads-action-queue-count">\s*5\s*</',
-            $response->getContent()
-        );
+        // 4. Optional ?from=&to= query params honored silently
+        $pastFrom = now()->subMonths(2)->startOfMonth()->toDateString();
+        $pastTo = now()->subMonths(2)->endOfMonth()->toDateString();
+        $filteredResp = $this->actingAs($this->admin)->get(route('dashboard', [
+            'from' => $pastFrom,
+            'to' => $pastTo,
+        ]));
+        $filteredResp->assertOk();
+        $this->assertSame(0.0, (float) $filteredResp->viewData('combinedPnl')['sales']);
     }
 
     public function test_non_admin_roles_receive_200_ok_with_financial_pnl_strictly_hidden(): void
@@ -171,17 +158,17 @@ class DashboardKpiAndFinanceTest extends TestCase
             $response->assertDontSee('AL WAKRAH — TO DATE');
             $response->assertDontSee('9,876.50');
             $response->assertDontSee('1,234.00');
-            $response->assertSee('Team KPI Split Scorecards');
+            $response->assertSee('Team KPI Scorecards');
         }
     }
 
-    public function test_split_scorecards_render_ahana_mini_bars_enforce_primary_output_gate_sort_bottlenecks_first_and_pin_self_on_staff_login(): void
+    public function test_minimalistic_split_scorecards_have_uniform_3_kpis_rounded_scores_short_roles_primary_gate_and_self_pinning(): void
     {
         $monthStart = now()->startOfMonth()->startOfDay();
         $today = now()->endOfDay();
 
-        // 1. Seed Ahana (Old Airport) with 100% secondary habits (Monday Staff Evals + 96% Branch Audit),
-        //    but 0 QAR Branch Chair Upsells (<50% of primary output target) -> Primary Output Gate must block 'On Target'!
+        // 1. Seed Ahana (Old Airport) with 100% secondary habits (Staff Evals + 96% Branch Audit),
+        //    but 0 QAR Chair Upsells (<50% of primary output target) -> Primary Output Gate must block 'On Target'!
         $oaBeautician = Staff::create([
             'name' => 'Mina Stylist',
             'role' => 'Hair Stylist',
@@ -215,7 +202,7 @@ class DashboardKpiAndFinanceTest extends TestCase
             'evaluation_date' => today()->toDateString(),
             'answers' => ['q1' => 5, 'q2' => 5],
             'total_score' => 130,
-            'percentage' => 96.3,
+            'percentage' => 96.6,
             'grade' => 'Excellent',
             'created_by' => $this->admin->id,
         ]);
@@ -257,25 +244,50 @@ class DashboardKpiAndFinanceTest extends TestCase
         $adminResponse = $this->actingAs($this->admin)->get(route('dashboard'));
         $adminResponse->assertOk();
 
-        // All 8 tracked team members rendered, 'Ahana' present and 'Faye' strictly absent, zero 'Click to inspect'
+        // All 8 tracked team members rendered, 'Ahana' present and 'Faye' strictly absent
         foreach (['Ayan', 'Sana', 'Zoya', 'Areeba', 'Laden', 'Ahana', 'Rhea', 'Arbab'] as $memberName) {
             $adminResponse->assertSee($memberName);
         }
         $adminResponse->assertDontSee('Faye');
         $adminResponse->assertDontSee('Click to inspect');
+        $adminResponse->assertDontSee('KPIs Passing');
 
-        // Individual mini-bar labels cleanly visible
-        $adminResponse->assertSee('Branch Chair Upsells');
-        $adminResponse->assertSee('Monday Staff Evals');
-        $adminResponse->assertSee('Branch Audit Score');
-        $adminResponse->assertSee('Bookings Pace (To-Date)');
-        $adminResponse->assertSee('Reels Published');
-        $adminResponse->assertSee('Paid Ad Revenue (To-Date)');
-        $adminResponse->assertSee('Zero Overdue Tasks');
+        // Minimalist short roles & streamlined 3-row KPI labels cleanly visible
+        foreach (['Chat Agent', 'Content', 'Sales Lead', 'Old Airport', 'Al Wakrah', 'Paid Ads', 'Ops Lead'] as $shortRole) {
+            $adminResponse->assertSee($shortRole);
+        }
+        foreach ([
+            'Bookings MTD',
+            "Today's Quota",
+            'Chat QA (<5m)',
+            'Reels',
+            'Daily Stories',
+            'Reply SLA',
+            'Team Bookings',
+            'Overdue Leads',
+            'Lead Conversion',
+            'Chair Upsells',
+            'Staff Evals',
+            'Branch Audit',
+            'Ad Revenue',
+            'Ad Conversion',
+            'Funnel Pace',
+            'Overdue Tasks',
+            'Ops Actions',
+            'SLA On-Time',
+        ] as $kpiLabel) {
+            $adminResponse->assertSee($kpiLabel);
+        }
 
         /** @var array<int, array<string, mixed>> $cards */
         $cards = $adminResponse->viewData('teamScorecards');
         $this->assertCount(8, $cards);
+
+        // Every single card has strictly 3 KPIs and an integer rounded score
+        foreach ($cards as $card) {
+            $this->assertCount(3, $card['kpis'], "Expected strictly 3 KPIs on {$card['name']}");
+            $this->assertIsInt($card['overall_rounded']);
+        }
 
         $cardsByKey = collect($cards)->keyBy('key');
 
@@ -285,6 +297,7 @@ class DashboardKpiAndFinanceTest extends TestCase
         $this->assertLessThan(50.0, $ahanaCard['primary_pct']);
         $this->assertNotSame('On Target', $ahanaCard['status']);
         $this->assertContains($ahanaCard['status'], ['Off Track', 'At Risk']);
+        $this->assertSame('97%', $ahanaCard['kpis'][2]['value_label']); // 96.6% rounded cleanly to '97%'
 
         // Sana & Arbab are 100% On Target -> Bottleneck auto-sorting puts all 'Off Track' / 'At Risk' cards BEFORE 'On Target' cards
         $this->assertSame('On Target', $cardsByKey->get('arbab')['status']);
@@ -296,7 +309,7 @@ class DashboardKpiAndFinanceTest extends TestCase
         sort($sortedStatusRanks);
         $this->assertSame($sortedStatusRanks, $statusRanks, 'Scorecards must sort Off Track -> At Risk -> On Target');
 
-        // Staff Login View verification: When Arbab (non-admin) logs in, Arbab's own scorecard is pinned FIRST (index 0) even though Arbab is 100% On Target!
+        // Staff Login View verification: When Arbab (non-admin) logs in, Arbab's own scorecard is pinned FIRST (index 0)
         $arbabPerms = User::defaultPermissionsForRole('manager');
         $arbabPerms['dashboard'] = 'view';
         $arbabUser = User::create([
@@ -310,7 +323,6 @@ class DashboardKpiAndFinanceTest extends TestCase
 
         $staffResponse = $this->actingAs($arbabUser)->get(route('dashboard'));
         $staffResponse->assertOk();
-        $staffResponse->assertSee('Your Scorecard');
 
         $staffCards = $staffResponse->viewData('teamScorecards');
         $this->assertSame('arbab', $staffCards[0]['key']);
