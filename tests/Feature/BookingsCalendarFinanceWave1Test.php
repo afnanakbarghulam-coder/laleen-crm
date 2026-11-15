@@ -424,8 +424,8 @@ class BookingsCalendarFinanceWave1Test extends TestCase
         ]);
         $combo->services()->sync([$service->id]);
 
-        // 1. Store a booking that includes a combo package at booking time (unpaid pre-checkout)
-        // Frontend sends price = 500 (service) + 1200 (combo) = 1700, but appointments.price must only store 500!
+        // 1. Store a booking that includes a combo package at booking time (unpaid pre-checkout):
+        // appointments.price locks in the 500 QAR service + 1200 QAR combo = 1700 QAR projected total!
         $slot1 = Carbon::today()->setHour(14)->setMinute(0);
         $this->actingAs($user)->post(route('appointments.store'), [
             'customer_name' => 'Huda Client',
@@ -444,7 +444,7 @@ class BookingsCalendarFinanceWave1Test extends TestCase
         ])->assertRedirect();
 
         $bookedAppt = Appointment::whereIn('phone', ['97455440001', '55440001'])->firstOrFail();
-        $this->assertEquals(500.0, (float) $bookedAppt->price);
+        $this->assertEquals(1700.0, (float) $bookedAppt->price);
 
         // 2. Create a completed + paid booking (300 QAR)
         $paidAppt = Appointment::create([
@@ -502,16 +502,16 @@ class BookingsCalendarFinanceWave1Test extends TestCase
 
         $response = $this->actingAs($user)->get(route('appointments.index', ['period' => 'today']));
 
-        // Active pipeline = 500 + 300 = 800 QAR (excludes 600 cancelled and 450 no_show)
+        // Active pipeline = 1700 + 300 = 2000 QAR (excludes 600 cancelled and 450 no_show)
         // Collected revenue = 300 QAR
         $response->assertOk()
             ->assertViewHas('totalBookings', 4)
             ->assertViewHas('activeBookingsCount', 2)
-            ->assertViewHas('projectedRevenue', 800.0)
-            ->assertViewHas('totalRevenue', 800.0)
+            ->assertViewHas('projectedRevenue', 2000.0)
+            ->assertViewHas('totalRevenue', 2000.0)
             ->assertViewHas('collectedRevenue', 300.0)
-            ->assertViewHas('avgBookingValue', 400.0)
-            ->assertSee('800.00')
+            ->assertViewHas('avgBookingValue', 1000.0)
+            ->assertSee('2,000.00')
             ->assertSee('Collected (Paid):')
             ->assertSee('300.00 QAR');
     }

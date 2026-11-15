@@ -497,6 +497,343 @@
         opacity: .9;
     }
 
+    .cal-combo-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        max-width: 100%;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: #f8efe6;
+        background: rgba(212, 163, 115, 0.24);
+        border: 1px solid rgba(229, 184, 168, 0.38);
+        border-radius: 999px;
+        padding: 1px 6px;
+        margin: 1px 0 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    #apptDrawer .drawer-combo-card {
+        background: rgba(255, 255, 255, 0.025);
+        border: 1px solid rgba(229, 184, 168, 0.22);
+        border-radius: 12px;
+        padding: 12px 13px;
+        margin-bottom: 10px;
+        transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    #apptDrawer .drawer-combo-card.is-clickable {
+        cursor: pointer;
+    }
+
+    #apptDrawer .drawer-combo-card.is-clickable:hover {
+        background: rgba(229, 184, 168, 0.06);
+        border-color: rgba(229, 184, 168, 0.42);
+    }
+
+    #apptDrawer .drawer-combo-eyebrow {
+        display: inline-block;
+        font-size: 9.5px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #e5b8a8;
+        background: rgba(229, 184, 168, 0.13);
+        border-radius: 999px;
+        padding: 2px 7px;
+        flex-shrink: 0;
+    }
+
+    #apptDrawer .drawer-combo-title {
+        font-size: 13.5px;
+        font-weight: 700;
+        color: #f8efe6;
+        line-height: 1.3;
+    }
+
+    #apptDrawer .drawer-combo-price {
+        font-size: 13px;
+        font-weight: 700;
+        color: #e5b8a8;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    #apptDrawer .drawer-combo-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    #apptDrawer .drawer-combo-empty-hint {
+        font-size: 12px;
+        color: #d4a373;
+        font-weight: 500;
+        line-height: 1.35;
+    }
+
+    #apptDrawer .drawer-combo-picked-list {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+        font-size: 12px;
+        line-height: 1.45;
+    }
+
+    #apptDrawer .drawer-combo-picked-item {
+        color: #f8efe6;
+        font-weight: 500;
+    }
+
+    #apptDrawer .drawer-combo-picked-item .state-today {
+        color: #6ee7b7;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    #apptDrawer .drawer-combo-picked-item .state-pending {
+        color: #d4a373;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    #apptDrawer .drawer-combo-picked-sep {
+        color: rgba(248, 239, 230, 0.28);
+        font-size: 11px;
+    }
+
+    #apptDrawer .drawer-combo-edit-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: #e5b8a8;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    #apptDrawer .drawer-combo-chevron {
+        font-size: 15px;
+        line-height: 1;
+        color: #e5b8a8;
+    }
+
+    /* Nested Combo Service Picker Sub-View (#drawerComboSubHeader / #drawerComboSubView / #drawerComboSubFooter) */
+    #apptDrawer .drawer-combo-subheader {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    #apptDrawer .drawer-combo-subcounter {
+        display: inline-flex;
+        align-items: center;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: #e5b8a8;
+        background: rgba(229, 184, 168, 0.13);
+        border-radius: 999px;
+        padding: 3px 9px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    #apptDrawer .drawer-combo-subcounter.is-full {
+        color: #6ee7b7;
+        background: rgba(110, 231, 183, 0.14);
+    }
+
+    #apptDrawer .drawer-combo-subview {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    #apptDrawer .drawer-combo-search-wrap {
+        position: relative;
+        padding: 12px 16px 8px;
+    }
+
+    #apptDrawer .drawer-combo-search-wrap i {
+        position: absolute;
+        left: 27px;
+        top: 50%;
+        transform: translateY(-32%);
+        color: #9b8882;
+        font-size: 15px;
+        pointer-events: none;
+    }
+
+    #apptDrawer .drawer-combo-search-input {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(229, 184, 168, 0.2);
+        border-radius: 9px;
+        color: #f8efe6;
+        font-size: 12.5px;
+        padding: 8px 12px 8px 34px;
+        outline: none;
+        transition: border-color 0.15s ease;
+    }
+
+    #apptDrawer .drawer-combo-search-input::placeholder {
+        color: #8f7c76;
+    }
+
+    #apptDrawer .drawer-combo-search-input:focus {
+        border-color: rgba(229, 184, 168, 0.48);
+    }
+
+    #apptDrawer .drawer-combo-skip-bar {
+        margin: 0 16px 8px;
+        padding: 8px 12px;
+        border-radius: 9px;
+        border: 1px dashed rgba(212, 163, 115, 0.34);
+        background: rgba(212, 163, 115, 0.07);
+        color: #e8c7a1;
+        font-size: 12px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        cursor: pointer;
+        text-align: left;
+        transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    #apptDrawer .drawer-combo-skip-bar:hover {
+        background: rgba(212, 163, 115, 0.14);
+        border-color: rgba(212, 163, 115, 0.55);
+    }
+
+    #apptDrawer .drawer-combo-cap-hint {
+        margin: 0 16px 6px;
+        font-size: 11px;
+        color: #d4a373;
+        font-weight: 500;
+    }
+
+    #apptDrawer .drawer-combo-sublist {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 2px 16px 14px;
+    }
+
+    #apptDrawer .drawer-combo-svc-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 2px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        transition: opacity 0.15s ease;
+    }
+
+    #apptDrawer .drawer-combo-svc-row:last-child {
+        border-bottom: none;
+    }
+
+    #apptDrawer .drawer-combo-svc-row.is-dimmed {
+        opacity: 0.42;
+    }
+
+    #apptDrawer .drawer-combo-svc-name {
+        font-size: 13px;
+        color: #f8efe6;
+        font-weight: 600;
+        line-height: 1.3;
+    }
+
+    #apptDrawer .drawer-combo-svc-dur {
+        font-size: 11.5px;
+        color: #9f8c86;
+        margin-top: 1px;
+    }
+
+    #apptDrawer .drawer-combo-seg {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 999px;
+        padding: 2px;
+        gap: 2px;
+        flex-shrink: 0;
+    }
+
+    #apptDrawer .drawer-combo-pill-btn {
+        border: none;
+        border-radius: 999px;
+        background: transparent;
+        color: #b8a29a;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 10px;
+        line-height: 1.25;
+        transition: all 0.15s ease;
+    }
+
+    #apptDrawer .drawer-combo-pill-btn.is-today {
+        background: rgba(110, 231, 183, 0.18);
+        color: #6ee7b7;
+    }
+
+    #apptDrawer .drawer-combo-pill-btn.is-pending {
+        background: rgba(212, 163, 115, 0.2);
+        color: #e8c7a1;
+    }
+
+    #apptDrawer .drawer-combo-pill-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    #apptDrawer .drawer-combo-subfooter {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 16px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        background: #1b1416;
+    }
+
+    #apptDrawer .drawer-combo-apply-btn {
+        border: 1px solid rgba(229, 184, 168, 0.45);
+        border-radius: 9px;
+        background: #e5b8a8;
+        color: #1f1416;
+        font-size: 12.5px;
+        font-weight: 700;
+        padding: 8px 15px;
+        transition: filter 0.15s ease;
+        white-space: nowrap;
+    }
+
+    #apptDrawer .drawer-combo-apply-btn:hover {
+        filter: brightness(1.05);
+    }
+
+    #apptDrawer .drawer-combo-apply-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+
     .cal-appt.status-cancelled {
         opacity: .55;
         text-decoration: line-through;
@@ -1040,53 +1377,160 @@
         max-width: 100%;
     }
 
-    /* ---------------- TOAST NOTIFICATIONS ---------------- */
+    /* ---------------- TOAST NOTIFICATIONS (FLOATING TOP-RIGHT, 5S) ---------------- */
     .cal-toast-container {
         position: fixed;
-        top: 16px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 2000;
+        top: 20px;
+        right: 20px;
+        left: auto;
+        transform: none;
+        z-index: 2100;
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        align-items: center;
+        gap: 10px;
+        align-items: flex-end;
+        max-width: min(420px, calc(100vw - 32px));
         pointer-events: none;
     }
 
     .cal-toast {
-        background: #241e1c;
-        color: #fff;
-        padding: 10px 18px;
-        border-radius: 999px;
-        font-size: 13.5px;
-        font-weight: 600;
+        background: #1c1513;
+        color: #f6e7dc;
+        border: 1px solid rgba(217, 143, 131, 0.28);
+        padding: 11px 15px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 1.42;
         display: flex;
-        align-items: center;
-        gap: 12px;
-        box-shadow: 0 8px 20px rgba(0, 0, 0, .25);
+        align-items: flex-start;
+        gap: 11px;
+        box-shadow: 0 12px 28px rgba(0, 0, 0, .42);
         animation: calToastIn .2s ease;
         pointer-events: auto;
+        width: 100%;
+    }
+
+    .cal-toast-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: #8ea88a;
+        margin-top: 6px;
+        flex-shrink: 0;
     }
 
     .cal-toast.error {
-        background: #a8524a;
+        background: #221615;
+        border-color: rgba(168, 82, 74, 0.55);
+        color: #f9ebe8;
+    }
+
+    .cal-toast.error .cal-toast-dot {
+        background: #d97b73;
+    }
+
+    .cal-toast .cal-toast-text {
+        flex: 1 1 auto;
+        min-width: 0;
     }
 
     .cal-toast .toast-close {
+        background: transparent;
+        border: 0;
+        color: #c9a39a;
         cursor: pointer;
-        opacity: .7;
-        font-size: 16px;
+        opacity: .8;
+        font-size: 17px;
         line-height: 1;
+        padding: 0 2px;
+        flex-shrink: 0;
     }
 
     .cal-toast .toast-close:hover {
         opacity: 1;
+        color: #fff;
     }
 
     @keyframes calToastIn {
-        from { opacity: 0; transform: translateY(-10px); }
-        to { opacity: 1; transform: translateY(0); }
+        from { opacity: 0; transform: translateX(12px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+
+    .drawer-conflict-banner {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 16px;
+        background: rgba(168, 82, 74, 0.14);
+        border-top: 1px solid rgba(168, 82, 74, 0.38);
+        color: #f6e7dc;
+        font-size: 0.8rem;
+        line-height: 1.42;
+    }
+
+    .drawer-conflict-banner-body {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .drawer-conflict-banner-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: #d97b73;
+        margin-top: 5px;
+        flex-shrink: 0;
+    }
+
+    .drawer-conflict-banner-close {
+        background: transparent;
+        border: 0;
+        color: #c9a39a;
+        font-size: 1rem;
+        line-height: 1;
+        padding: 0 2px;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .drawer-conflict-banner-close:hover {
+        color: #f6e7dc;
+    }
+
+    .cal-appt.is-reverting,
+    .cal-appt.is-previewing {
+        transition: top .22s cubic-bezier(0.22, 1, 0.36, 1), height .22s cubic-bezier(0.22, 1, 0.36, 1), opacity .18s ease;
+    }
+
+    .cal-appt-resize-handle {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 7px;
+        cursor: ns-resize;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity .15s ease;
+    }
+
+    .cal-appt-resize-handle::after {
+        content: '';
+        width: 24px;
+        height: 2px;
+        border-radius: 2px;
+        background: currentColor;
+        opacity: 0.55;
+    }
+
+    .cal-appt:hover .cal-appt-resize-handle {
+        opacity: 1;
     }
 
     /* ---------------- DRAG AND DROP ---------------- */
@@ -1418,7 +1862,7 @@
                             <select id="filterStaff" class="cal-filter-select">
                                 <option value="">All Team Members</option>
                                 @foreach ($staffs as $staff)
-                                    <option value="{{ $staff->id }}">{{ $staff->name }}</option>
+                                    <option value="{{ $staff->id }}" data-branch="{{ $staff->branch ?: 'both' }}">{{ $staff->name }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -1483,7 +1927,10 @@
                             <span class="unsched-customer">{{ $booking['customer_name'] ?: 'Walk-in' }}</span>
                             <i class="bx bx-grid-vertical unsched-grip"></i>
                         </div>
-                        <div class="unsched-service">{{ $booking['service_name'] }}</div>
+                        @if (!empty($booking['combo_name']))
+                            <div class="mb-1"><span class="cal-combo-badge">{{ $booking['combo_name'] }}</span></div>
+                        @endif
+                        <div class="unsched-service">{{ !empty($booking['is_combo_tbd']) ? 'Services TBD in Salon' : $booking['service_name'] }}</div>
                         <div class="unsched-meta">
                             <span class="unsched-contact"><i class="bx bx-phone"></i> {{ $booking['phone'] ?: 'No phone' }}</span>
                             <span class="unsched-duration">{{ $booking['duration'] ?? 30 }}m</span>
@@ -1507,7 +1954,7 @@
 
     <!-- Appointment Drawer -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="apptDrawer">
-        <div class="offcanvas-header border-bottom">
+        <div class="offcanvas-header border-bottom" id="drawerMainHeader">
             <div class="flex-grow-1 me-2">
                 <div class="d-flex align-items-center gap-2" id="drawerCustomerNameRow">
                     <h5 class="offcanvas-title mb-0" id="drawerCustomer">&nbsp;</h5>
@@ -1531,8 +1978,14 @@
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
         </div>
+        <div class="drawer-combo-subheader d-none" id="drawerComboSubHeader">
+            <button type="button" class="drawer-back-btn" id="drawerComboSubBackBtn" title="Back to booking"><i class="bx bx-arrow-back"></i></button>
+            <h6 class="mb-0 fw-bold text-truncate flex-grow-1" id="drawerComboSubTitle" style="color: #f8efe6; font-size: 14.5px;">&nbsp;</h6>
+            <span class="drawer-combo-subcounter" id="drawerComboSubCounter">0 / 0 Selected</span>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+        </div>
         <div class="offcanvas-body p-0 d-flex flex-column">
-            <div class="flex-grow-1 overflow-auto">
+            <div class="flex-grow-1 overflow-auto" id="drawerMainBody">
                 <div class="px-3 pt-3">
                     <span class="status-pill" id="drawerStatusPill"></span>
                 </div>
@@ -1561,7 +2014,8 @@
                 <div class="drawer-section px-3" id="drawerServicesSection">
                     <!-- LIST VIEW -->
                     <div id="drawerServicesListView">
-                        <h6 class="text-uppercase small fw-bold text-muted mb-2">Services</h6>
+                        <h6 class="text-uppercase small fw-bold text-muted mb-2">Services &amp; Combos</h6>
+                        <div id="drawerComboPackagesList"></div>
                         <div id="drawerServices"></div>
                         <button type="button" class="drawer-add-pill" id="drawerAddServiceBtn">
                             <i class="bx bx-plus"></i> Add service
@@ -1635,7 +2089,7 @@
                         <select id="editSvcStaff" class="form-select form-select-sm">
                             <option value="">Unassigned</option>
                             @foreach ($staffs as $staff)
-                                <option value="{{ $staff->id }}">{{ $staff->name }}</option>
+                                <option value="{{ $staff->id }}" data-branch="{{ $staff->branch ?: 'both' }}">{{ $staff->name }}</option>
                             @endforeach
                         </select>
 
@@ -1683,7 +2137,7 @@
                         <select id="upsellStaff" class="form-select form-select-sm mb-2">
                             <option value="">Select staff member</option>
                             @foreach ($activeStaffs as $staff)
-                                <option value="{{ $staff->id }}">{{ $staff->name }}</option>
+                                <option value="{{ $staff->id }}" data-branch="{{ $staff->branch ?: 'both' }}">{{ $staff->name }}</option>
                             @endforeach
                         </select>
 
@@ -1692,7 +2146,33 @@
                 </div>
             </div>
 
-            <div class="px-3 py-3 border-top">
+            <!-- DEDICATED COMBO SERVICE PICKER SUB-VIEW -->
+            <div class="drawer-combo-subview d-none" id="drawerComboSubView">
+                <div class="drawer-combo-search-wrap">
+                    <i class="bx bx-search"></i>
+                    <input type="text"
+                        id="drawerComboSubSearch"
+                        class="drawer-combo-search-input"
+                        placeholder="Search services in this combo..."
+                        autocomplete="off">
+                </div>
+                <button type="button" class="drawer-combo-skip-bar" id="drawerComboSubSkipBtn">
+                    <span>Skip selection — Decide services in salon</span>
+                    <span style="opacity:0.75; font-size:14px;">&rsaquo;</span>
+                </button>
+                <div class="drawer-combo-cap-hint d-none" id="drawerComboSubCapHint"></div>
+                <div class="drawer-combo-sublist" id="drawerComboSubList"></div>
+            </div>
+
+            <div id="drawerConflictBanner" class="drawer-conflict-banner d-none" role="alert" aria-live="polite">
+                <div class="drawer-conflict-banner-body">
+                    <span class="drawer-conflict-banner-dot" aria-hidden="true"></span>
+                    <span id="drawerConflictText"></span>
+                </div>
+                <button type="button" class="drawer-conflict-banner-close" id="drawerConflictDismiss" aria-label="Dismiss">&times;</button>
+            </div>
+
+            <div class="px-3 py-3 border-top" id="drawerMainFooter">
                 <div class="d-flex gap-2 mb-2" id="drawerStatusRow"></div>
 
                 <div class="dropdown mb-2" id="drawerQuickActionsWrap">
@@ -1708,10 +2188,7 @@
                 </div>
 
                 <div id="drawerRescheduleForm" class="d-none border rounded p-2 mb-2 bg-light">
-                    <select id="drawerRescheduleBranch" class="form-select form-select-sm mb-2">
-                        <option value="old_airport">Old Airport</option>
-                        <option value="wakrah">Al Wakrah</option>
-                    </select>
+                    <input type="hidden" id="drawerRescheduleBranch" value="old_airport">
                     <div class="row g-2">
                         <div class="col-6">
                             <input type="date" id="drawerRescheduleDate" class="form-control form-control-sm">
@@ -1721,8 +2198,9 @@
                         </div>
                     </div>
                     <select id="drawerRescheduleStaff" class="form-select form-select-sm mt-2">
+                        <option value="">Unassigned</option>
                         @foreach ($staffs as $staff)
-                            <option value="{{ $staff->id }}">{{ $staff->name }}</option>
+                            <option value="{{ $staff->id }}" data-branch="{{ $staff->branch ?: 'both' }}">{{ $staff->name }}</option>
                         @endforeach
                     </select>
                     <div class="d-flex gap-2 mt-2">
@@ -1735,6 +2213,16 @@
                 <a href="#" id="drawerProfileLink" class="btn btn-link w-100 mt-1 d-none">
                     <i class="bx bx-user-circle"></i> View Full Profile
                 </a>
+            </div>
+
+            <div class="drawer-combo-subfooter d-none" id="drawerComboSubFooter">
+                <div>
+                    <div id="drawerComboSubHoldSummary" style="font-size: 12px; font-weight: 700; color: #f8efe6;">60m hold</div>
+                    <div id="drawerComboSubPriceSummary" style="font-size: 11px; color: #a9958f;">Locked package price</div>
+                </div>
+                <button type="button" class="drawer-combo-apply-btn" id="drawerComboSubApplyBtn">
+                    Done &middot; Apply to Booking
+                </button>
             </div>
         </div>
     </div>
@@ -1755,7 +2243,7 @@
                             <select name="staff_id" id="blockStaffSelect" class="form-select" required>
                                 <option value="">-- Select --</option>
                                 @foreach ($staffs as $staff)
-                                    <option value="{{ $staff->id }}">{{ $staff->name }}</option>
+                                    <option value="{{ $staff->id }}" data-branch="{{ $staff->branch ?: 'both' }}">{{ $staff->name }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -1813,6 +2301,34 @@
         // that cached an empty value from before that option was removed.
         const DEFAULT_BRANCH = 'old_airport';
 
+        function normalizeCalendarBranch(raw) {
+            if (!raw) return '';
+            const slug = String(raw).trim().toLowerCase().replace(/[\s\-]+/g, '_');
+            if (slug === 'old_airport' || slug === 'airport') return 'old_airport';
+            if (slug === 'wakrah' || slug === 'al_wakrah' || slug === 'alwakrah') return 'wakrah';
+            return '';
+        }
+
+        function scopeSelectOptionsToBranch(selectEl, branchKey, keepStaffId = null) {
+            if (!selectEl) return;
+            const normBranch = normalizeCalendarBranch(branchKey) || DEFAULT_BRANCH;
+            Array.from(selectEl.options).forEach(opt => {
+                if (!opt.value) return;
+                const optBranch = normalizeCalendarBranch(opt.dataset.branch) || opt.dataset.branch || 'both';
+                const matches = optBranch === 'both'
+                    || optBranch === normBranch
+                    || (keepStaffId && String(opt.value) === String(keepStaffId));
+                opt.hidden = !matches;
+                opt.disabled = !matches;
+            });
+            if (selectEl.value) {
+                const selectedOpt = Array.from(selectEl.options).find(o => o.value === selectEl.value);
+                if (selectedOpt && selectedOpt.disabled) {
+                    selectEl.value = '';
+                }
+            }
+        }
+
         function loadFilters() {
             let saved = {};
             try {
@@ -1825,7 +2341,16 @@
                 staff_id: '',
                 zoom: 56
             }, saved);
-            if (!state.branch || !['old_airport', 'wakrah'].includes(state.branch)) state.branch = DEFAULT_BRANCH;
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlBranch = normalizeCalendarBranch(urlParams.get('branch'));
+            if (urlBranch) {
+                state.branch = urlBranch;
+            } else {
+                state.branch = normalizeCalendarBranch(state.branch) || DEFAULT_BRANCH;
+            }
+            if (urlParams.get('date')) {
+                state.date = urlParams.get('date');
+            }
             return state;
         }
 
@@ -1834,11 +2359,13 @@
         }
 
         let state = loadFilters();
+        window.getActiveCalendarBranch = () => state.branch;
         const CAL_BRANCH_LABELS = { old_airport: 'Old Airport', wakrah: 'Al Wakrah' };
         let latestData = null;
         let nowLineTimer = null;
         const DRAWER_SERVICES_CATALOG = @json($servicesCatalog);
         const DRAWER_PRODUCTS_CATALOG = @json($productsCatalog);
+        const DRAWER_STAFFS_CATALOG = @json($activeStaffs->map(fn($s) => ['id' => $s->id, 'name' => $s->name, 'branch' => $s->branch ?: 'both'])->values());
 
         // Hide every mutating "Add" entry point up front for view-only users.
         (function applyCalendarPermissionGates() {
@@ -1873,10 +2400,24 @@
             document.querySelectorAll('.cal-view-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.view === state.view);
             });
+            state.branch = normalizeCalendarBranch(state.branch) || DEFAULT_BRANCH;
             document.getElementById('filterBranch').value = state.branch;
-            document.getElementById('filterStaff').value = state.staff_id;
+
+            const filterStaffEl = document.getElementById('filterStaff');
+            scopeSelectOptionsToBranch(filterStaffEl, state.branch);
+            filterStaffEl.value = state.staff_id;
+            if (state.staff_id && filterStaffEl.value !== String(state.staff_id)) {
+                state.staff_id = '';
+                saveFilters();
+            }
+
+            scopeSelectOptionsToBranch(document.getElementById('blockStaffSelect'), state.branch);
+            if (typeof window.syncCalendarBookBranch === 'function') {
+                window.syncCalendarBookBranch(state.branch);
+            }
+
             document.getElementById('activeBranchHeading').textContent =
-                'Laleen — ' + (CAL_BRANCH_LABELS[state.branch] || 'All Locations');
+                'Laleen — ' + (CAL_BRANCH_LABELS[state.branch] || 'Old Airport');
 
             // Location is now a mandatory branch scope, not an optional
             // filter (there's no "All Locations" to clear back to), so only
@@ -1943,10 +2484,13 @@
                     <div class="cal-slots">`;
 
                 if (isOff) {
-                    data.time_slots.forEach(() => {
-                        html += `<div class="cal-slot-cell" style="height:${SLOT_H}px"></div>`;
+                    data.time_slots.forEach(t => {
+                        html += `<div class="cal-slot-cell" style="height:${SLOT_H}px" data-time="${t}"
+                                onclick="onSlotClick(event, ${staff.id}, '${data.date}', '${t}')"
+                                ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
+                                ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${t}')"></div>`;
                     });
-                    html += `<div class="cal-off-tag">Not working<br>${data.off[staff.id]}</div>`;
+                    html += `<div class="cal-off-tag" style="pointer-events:none;">Not working<br>${data.off[staff.id]}</div>`;
                 } else {
                     data.time_slots.forEach(t => {
                         html += `<div class="cal-slot-cell" style="height:${SLOT_H}px" data-time="${t}"
@@ -1963,6 +2507,8 @@
                         const top = diffMinutes * PPM;
                         const height = Math.max((b.end_minutes - b.start_minutes) * PPM, 30);
                         html += `<div class="cal-block" style="top:${top}px;height:${height}px" title="${b.reason}"
+                                ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
+                                ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${b.start}')"
                                 onclick="event.stopPropagation(); removeBlock(${b.id})">
                                 🚫 ${b.reason}
                             </div>`;
@@ -1974,19 +2520,23 @@
                         // Same reasoning as .cal-block above: .cal-slots already sits
                         // below the header, so this must not add HEADER_H again.
                         const top = diffMinutes * PPM;
-                        const height = Math.max(a.duration * PPM, 46);
+                        const height = Math.max(a.duration * PPM, a.combo_name ? 58 : 46);
+                        const displaySvcLabel = a.is_combo_tbd ? 'Services TBD in Salon' : (a.decide_in_salon ? 'Decide in Salon' : a.service_name);
+                        const canDragOrResize = CAN_EDIT_BOOKINGS && a.status !== 'completed' && a.status !== 'cancelled';
 
-                        html += `<div class="cal-appt status-${a.status}" data-id="${a.id}"
-                                draggable="${(!CAN_EDIT_BOOKINGS || a.status === 'completed' || a.status === 'cancelled') ? 'false' : 'true'}"
+                        html += `<div class="cal-appt status-${a.status}" data-id="${a.id}" data-staff-id="${staff.id}" data-start="${a.start}" data-duration="${a.duration}"
+                                draggable="${canDragOrResize ? 'true' : 'false'}"
                                 ondragstart="onApptDragStart(event, ${a.id}, ${a.start_minutes})" ondragend="onApptDragEnd(event)"
                                 ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
                                 ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${a.start}')"
                                 onclick="event.stopPropagation(); openDrawer(${a.id})"
                                 style="top:${top}px;height:${height}px;background:${tint(color, .14)};border-left-color:${color};color:${color};">
-                                <span class="cust">${a.customer_name || 'Walk-in'}</span>
-                                <span class="svc">${a.service_name}</span>
-                                <span class="svc">${to12Hour(a.start)} - ${to12Hour(a.end)}</span>
-                                ${a.has_upsell ? `<span class="upsell-flag" title="Upsell by ${a.upsell_staff_names}">⬆ Upsell${a.upsell_staff_names ? ' · ' + a.upsell_staff_names : ''}</span>` : ''}
+                                <span class="cust">${escapeHtml(a.customer_name || 'Walk-in')}</span>
+                                ${a.combo_name ? `<span class="cal-combo-badge">${escapeHtml(a.combo_name)}</span>` : ''}
+                                <span class="svc">${escapeHtml(displaySvcLabel)}</span>
+                                <span class="svc cal-appt-time-label">${to12Hour(a.start)} - ${to12Hour(a.end)}</span>
+                                ${a.has_upsell ? `<span class="upsell-flag" title="Upsell by ${escapeHtml(a.upsell_staff_names)}">⬆ Upsell${a.upsell_staff_names ? ' · ' + escapeHtml(a.upsell_staff_names) : ''}</span>` : ''}
+                                ${canDragOrResize ? `<div class="cal-appt-resize-handle" title="Drag to resize duration" onmousedown="onApptResizeStart(event, ${a.id}, ${staff.id}, '${data.date}', '${a.start}', ${a.duration}, ${PPM})"></div>` : ''}
                             </div>`;
                     });
                 }
@@ -2124,14 +2674,16 @@
 
                         dayAppts.forEach(a => {
                             const color = data.status_colors[a.status] || '#c9a39a';
+                            const displaySvcLabel = a.is_combo_tbd ? 'Services TBD in Salon' : (a.decide_in_salon ? 'Decide in Salon' : a.service_name);
                             html += `<div class="cal-chip status-${a.status}" data-id="${a.id}"
                                 draggable="${(!CAN_EDIT_BOOKINGS || a.status === 'completed' || a.status === 'cancelled') ? 'false' : 'true'}"
                                 ondragstart="event.stopPropagation(); onApptDragStart(event, ${a.id}, ${a.start_minutes})"
                                 ondragend="onApptDragEnd(event)"
                                 onclick="event.stopPropagation(); openDrawer(${a.id})"
                                 style="background:${tint(color, .14)};border-left-color:${color};color:${color};">
-                                <strong>${a.time} · ${a.customer_name || 'Walk-in'}</strong>
-                                ${a.service_name}
+                                <strong>${a.time} · ${escapeHtml(a.customer_name || 'Walk-in')}</strong>
+                                ${a.combo_name ? `<div><span class="cal-combo-badge">${escapeHtml(a.combo_name)}</span></div>` : ''}
+                                ${escapeHtml(displaySvcLabel)}
                                 ${a.has_upsell ? `<span class="upsell-flag">⬆ Upsell</span>` : ''}
                             </div>`;
                         });
@@ -2173,7 +2725,7 @@
                     html += `<div class="cal-month-chip status-${a.status}" data-id="${a.id}"
                         onclick="event.stopPropagation(); openDrawer(${a.id})"
                         style="background:${tint(color, .14)};border-left-color:${color};color:${color};">
-                        ${a.time} ${a.customer_name || 'Walk-in'}
+                        ${a.time} ${escapeHtml(a.customer_name || 'Walk-in')}${a.combo_name ? ` · ${escapeHtml(a.combo_name)}` : (a.decide_in_salon ? ' · Decide in Salon' : '')}
                     </div>`;
                 });
 
@@ -2235,7 +2787,8 @@
                         <span class="unsched-customer">${escapeHtml(b.customer_name || 'Walk-in')}</span>
                         <i class="bx bx-grid-vertical unsched-grip"></i>
                     </div>
-                    <div class="unsched-service">${escapeHtml(b.service_name)}</div>
+                    ${b.combo_name ? `<div class="mb-1"><span class="cal-combo-badge">${escapeHtml(b.combo_name)}</span></div>` : ''}
+                    <div class="unsched-service">${escapeHtml(b.is_combo_tbd ? 'Services TBD in Salon' : (b.decide_in_salon ? 'Decide in Salon' : b.service_name))}</div>
                     <div class="unsched-meta">
                         <span class="unsched-contact"><i class="bx bx-phone"></i> ${escapeHtml(b.phone || 'No phone')}</span>
                         <span class="unsched-duration">${b.duration || 30}m</span>
@@ -2314,9 +2867,9 @@
             loadCalendar();
         });
         document.getElementById('filterBranch').addEventListener('change', function() {
-            state.branch = this.value;
-            saveFilters();
+            state.branch = normalizeCalendarBranch(this.value) || DEFAULT_BRANCH;
             syncToolbar();
+            saveFilters();
             loadCalendar();
         });
         document.getElementById('filterStaff').addEventListener('change', function() {
@@ -2385,15 +2938,69 @@
             }
         }, 30000);
 
-        /* ---------------- TOAST NOTIFICATIONS ---------------- */
-        function showCalToast(message, type) {
+        /* ---------------- TOAST NOTIFICATIONS (FLOATING TOP-RIGHT, 5S AUTO-DISMISS) ---------------- */
+        function showCalToast(message, type, reason) {
             const container = document.getElementById('calToastContainer');
+            if (!container) return;
             const toast = document.createElement('div');
             toast.className = 'cal-toast' + (type === 'error' ? ' error' : '');
-            toast.innerHTML = `<span>${message}</span><span class="toast-close">&times;</span>`;
-            toast.querySelector('.toast-close').addEventListener('click', () => toast.remove());
+            if (reason) {
+                toast.dataset.reason = reason;
+            }
+            toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+            toast.innerHTML = `
+                <span class="cal-toast-dot" aria-hidden="true"></span>
+                <span class="cal-toast-text">${escapeHtml(message)}</span>
+                <button type="button" class="toast-close" aria-label="Close">&times;</button>
+            `;
+            let dismissed = false;
+            const removeToast = () => {
+                if (dismissed) return;
+                dismissed = true;
+                toast.remove();
+            };
+            toast.querySelector('.toast-close').addEventListener('click', removeToast);
             container.appendChild(toast);
-            setTimeout(() => toast.remove(), 4000);
+            setTimeout(removeToast, 5000);
+        }
+        window.showCalToast = showCalToast;
+        window.refreshCalendarView = loadCalendar;
+
+        function extractApiErrorMessage(data, fallback) {
+            if (!data || typeof data !== 'object') return fallback;
+            if (data.message) return data.message;
+            if (data.errors && typeof data.errors === 'object') {
+                const firstField = Object.values(data.errors)[0];
+                if (Array.isArray(firstField) && firstField[0]) return firstField[0];
+                if (typeof firstField === 'string') return firstField;
+            }
+            return fallback;
+        }
+
+        function showDrawerConflict(message, reason) {
+            const banner = document.getElementById('drawerConflictBanner');
+            const textEl = document.getElementById('drawerConflictText');
+            if (!banner || !textEl) {
+                showCalToast(message, 'error', reason);
+                return;
+            }
+            textEl.textContent = message || 'Unable to update booking due to a schedule conflict.';
+            banner.dataset.reason = reason || '';
+            banner.classList.remove('d-none');
+        }
+
+        function clearDrawerConflict() {
+            const banner = document.getElementById('drawerConflictBanner');
+            const textEl = document.getElementById('drawerConflictText');
+            if (!banner) return;
+            banner.classList.add('d-none');
+            banner.dataset.reason = '';
+            if (textEl) textEl.textContent = '';
+        }
+
+        const drawerConflictDismissBtn = document.getElementById('drawerConflictDismiss');
+        if (drawerConflictDismissBtn) {
+            drawerConflictDismissBtn.addEventListener('click', clearDrawerConflict);
         }
 
         /* ---------------- APPOINTMENT DRAWER ---------------- */
@@ -2408,12 +3015,15 @@
 
         function openDrawer(appointmentId) {
             selectedAppointmentId = appointmentId;
+            clearDrawerConflict();
+            closeDrawerComboSubView();
 
             document.getElementById('drawerCustomer').textContent = 'Loading…';
             document.getElementById('drawerEditCustomerNameBtn').classList.add('d-none');
             document.getElementById('drawerCustomerEditWrap').classList.add('d-none');
             document.getElementById('drawerCustomerEditWrap').classList.remove('d-flex');
             document.getElementById('drawerCustomerNameRow').classList.remove('d-none');
+            document.getElementById('drawerComboPackagesList').innerHTML = '';
             document.getElementById('drawerServices').innerHTML = '';
             document.getElementById('drawerUpsells').innerHTML = '';
             document.getElementById('drawerStatusRow').innerHTML = '';
@@ -2516,11 +3126,19 @@
             checkoutBtn.href = a.payment_url;
             checkoutBtn.classList.toggle('d-none', isCancelledOrNoShow || isPaid || !CAN_EDIT_FINANCE);
 
-            // Reschedule form prefill
-            document.getElementById('drawerRescheduleBranch').value = a.branch_raw;
+            // Reschedule form & drawer staff scoping
+            const drawerBranchKey = normalizeCalendarBranch(a.branch_raw) || state.branch;
+            document.getElementById('drawerRescheduleBranch').value = drawerBranchKey;
             document.getElementById('drawerRescheduleDate').value = a.date;
             document.getElementById('drawerRescheduleTime').value = a.time;
-            if (a.staff_id) document.getElementById('drawerRescheduleStaff').value = a.staff_id;
+            scopeSelectOptionsToBranch(document.getElementById('drawerRescheduleStaff'), drawerBranchKey, a.staff_id);
+            scopeSelectOptionsToBranch(document.getElementById('upsellStaff'), drawerBranchKey);
+            scopeSelectOptionsToBranch(document.getElementById('editSvcStaff'), drawerBranchKey);
+            if (a.staff_id) {
+                document.getElementById('drawerRescheduleStaff').value = a.staff_id;
+            } else {
+                document.getElementById('drawerRescheduleStaff').value = '';
+            }
         }
 
         (function initDrawerCustomerRename() {
@@ -2613,42 +3231,463 @@
             document.getElementById('drawerServicesEditView').classList.toggle('d-none', view !== 'edit');
         }
 
-        function renderDrawerServiceList(a, isFinal) {
-            const el = document.getElementById('drawerServices');
-            el.innerHTML = a.services.map(s => {
-                // discount_amount is the authoritative original-vs-final gap
-                // (raw price override + any flat/percent discount combined);
-                // discount_type only tells us whether a flat/percent
-                // discount was ALSO layered on top of an unchanged price.
-                const hasDiscount = Number(s.discount_amount) > 0;
-                return `
-                <div class="svc-item" data-line-id="${s.id}">
-                    <div>
-                        <div class="name">${s.name}</div>
-                        <div class="meta">${s.start_time_label} · ${s.duration}min${s.staff_name ? ' · ' + s.staff_name : ''}</div>
-                        ${hasDiscount ? `
-                            <div class="meta" style="color:#8ea88a;" title="${s.discount_reason ? s.discount_reason.replace(/"/g,'&quot;') : ''}">
-                                <i class="bx bx-purchase-tag"></i> −${Number(s.discount_amount).toFixed(2)} QAR off ${Number(s.original_price).toFixed(2)}
-                                ${s.discount_reason ? ` · ${s.discount_reason}` : ''}
+        let drawerComboDrafts = {};
+        let activeDrawerComboConfig = null;
+
+        function closeDrawerComboSubView() {
+            activeDrawerComboConfig = null;
+            document.getElementById('drawerMainHeader').classList.remove('d-none');
+            document.getElementById('drawerMainBody').classList.remove('d-none');
+            document.getElementById('drawerMainFooter').classList.remove('d-none');
+            document.getElementById('drawerComboSubHeader').classList.add('d-none');
+            document.getElementById('drawerComboSubView').classList.add('d-none');
+            document.getElementById('drawerComboSubFooter').classList.add('d-none');
+        }
+
+        function openDrawerComboSubView(clientPackageId) {
+            const base = drawerComboDrafts[clientPackageId];
+            if (!base) return;
+
+            clearDrawerConflict();
+            activeDrawerComboConfig = {
+                clientPackageId: Number(clientPackageId),
+                pkg: base.pkg,
+                todayIds: [...base.todayIds],
+                pendingIds: [...base.pendingIds],
+                staffMap: { ...base.staffMap },
+                branchStaffs: base.branchStaffs || []
+            };
+
+            const searchEl = document.getElementById('drawerComboSubSearch');
+            if (searchEl) searchEl.value = '';
+
+            document.getElementById('drawerMainHeader').classList.add('d-none');
+            document.getElementById('drawerMainBody').classList.add('d-none');
+            document.getElementById('drawerMainFooter').classList.add('d-none');
+            document.getElementById('drawerComboSubHeader').classList.remove('d-none');
+            document.getElementById('drawerComboSubView').classList.remove('d-none');
+            document.getElementById('drawerComboSubFooter').classList.remove('d-none');
+
+            renderDrawerComboSubView();
+        }
+
+        function renderDrawerComboSubView() {
+            if (!activeDrawerComboConfig) return;
+            const cfg = activeDrawerComboConfig;
+            const pkg = cfg.pkg;
+            const pool = Array.isArray(pkg.pool_services) ? pkg.pool_services : [];
+            const qtyIncluded = Number(pkg.quantity_included) || 0;
+            const usedEarlier = Number(pkg.redeemed_elsewhere_count) || 0;
+            const maxForThisVisit = Math.max(0, qtyIncluded - usedEarlier);
+            const visitSelected = cfg.todayIds.length + cfg.pendingIds.length;
+            const totalSelected = visitSelected + usedEarlier;
+            const capReached = visitSelected >= maxForThisVisit && maxForThisVisit > 0;
+
+            document.getElementById('drawerComboSubTitle').textContent = pkg.combo_name || 'Combo Package';
+            const counterEl = document.getElementById('drawerComboSubCounter');
+            counterEl.textContent = `${totalSelected} / ${qtyIncluded} Selected`;
+            counterEl.classList.toggle('is-full', capReached);
+
+            const capHintEl = document.getElementById('drawerComboSubCapHint');
+            if (capReached && pool.length > qtyIncluded) {
+                capHintEl.textContent = `Max ${qtyIncluded} of ${pool.length} services selected — tap an active pill to swap`;
+                capHintEl.classList.remove('d-none');
+            } else {
+                capHintEl.textContent = '';
+                capHintEl.classList.add('d-none');
+            }
+
+            const todayDuration = pool
+                .filter(s => cfg.todayIds.includes(Number(s.id)))
+                .reduce((sum, s) => sum + (Number(s.duration) || 30), 0);
+
+            const holdSummaryEl = document.getElementById('drawerComboSubHoldSummary');
+            if (cfg.todayIds.length > 0) {
+                const pendingPart = cfg.pendingIds.length > 0 ? ` · ${cfg.pendingIds.length} Pending` : '';
+                holdSummaryEl.textContent = `${todayDuration}m salon time (${cfg.todayIds.length} Today${pendingPart})`;
+            } else if (cfg.pendingIds.length > 0) {
+                holdSummaryEl.textContent = `60m hold · ${cfg.pendingIds.length} Pending`;
+            } else {
+                holdSummaryEl.textContent = '60m hold · Decide in Salon';
+            }
+            document.getElementById('drawerComboSubPriceSummary').textContent = `${Number(pkg.price_paid).toFixed(2)} QAR locked package`;
+
+            const query = (document.getElementById('drawerComboSubSearch').value || '').trim().toLowerCase();
+            const filtered = query
+                ? pool.filter(svc => String(svc.name || '').toLowerCase().includes(query))
+                : pool;
+
+            const listEl = document.getElementById('drawerComboSubList');
+            if (!filtered.length) {
+                listEl.innerHTML = `<div class="text-muted small py-4 text-center">No matching services in this combo.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = filtered.map(svc => {
+                const sid = Number(svc.id);
+                const dur = Number(svc.duration) || 30;
+                if (svc.state === 'redeemed_elsewhere') {
+                    return `
+                        <div class="drawer-combo-svc-row is-dimmed">
+                            <div>
+                                <div class="drawer-combo-svc-name">${escapeHtml(svc.name)}</div>
+                                <div class="drawer-combo-svc-dur">${dur} min</div>
                             </div>
-                        ` : ''}
-                    </div>
-                    <div class="d-flex align-items-center gap-1">
-                        <span class="price">
-                            ${hasDiscount ? `<span class="strike">${Number(s.original_price).toFixed(2)}</span>` : ''}
-                            ${Number(s.final_price).toFixed(2)} QAR
-                        </span>
-                        ${(isFinal || !CAN_EDIT_BOOKINGS) ? '' : `
-                            <button type="button" class="icon-btn" data-edit="${s.id}"><i class="bx bx-pencil"></i></button>
-                            <button type="button" class="icon-btn danger" data-delete="${s.id}"><i class="bx bx-trash"></i></button>
-                        `}
-                    </div>
-                </div>
-            `;
+                            <span class="drawer-combo-pill-btn">Redeemed</span>
+                        </div>`;
+                }
+
+                const isToday = cfg.todayIds.includes(sid);
+                const isPending = !isToday && cfg.pendingIds.includes(sid);
+                const isUnselected = !isToday && !isPending;
+                const disableNewPick = isUnselected && (capReached || maxForThisVisit === 0);
+
+                const currentStaff = cfg.staffMap[sid] || '';
+                const staffSelectHtml = isToday && cfg.branchStaffs.length ? `
+                    <select class="form-select form-select-sm drawer-combo-staff-sel mt-1"
+                        data-svc="${sid}"
+                        style="max-width: 156px; font-size: 11px; padding: 2px 24px 2px 8px;">
+                        <option value="">Main stylist</option>
+                        ${cfg.branchStaffs.map(st => `<option value="${st.id}" ${String(currentStaff) === String(st.id) ? 'selected' : ''}>${escapeHtml(st.name)}</option>`).join('')}
+                    </select>` : '';
+
+                return `
+                    <div class="drawer-combo-svc-row ${disableNewPick ? 'is-dimmed' : ''}">
+                        <div class="me-2">
+                            <div class="drawer-combo-svc-name">${escapeHtml(svc.name)}</div>
+                            <div class="drawer-combo-svc-dur">${dur} min</div>
+                            ${staffSelectHtml}
+                        </div>
+                        <div class="drawer-combo-seg">
+                            <button type="button"
+                                class="drawer-combo-pill-btn drawer-combo-today-toggle ${isToday ? 'is-today' : ''}"
+                                data-svc="${sid}"
+                                ${disableNewPick ? 'disabled' : ''}>Today</button>
+                            <button type="button"
+                                class="drawer-combo-pill-btn drawer-combo-pending-toggle ${isPending ? 'is-pending' : ''}"
+                                data-svc="${sid}"
+                                ${disableNewPick ? 'disabled' : ''}>Pending</button>
+                        </div>
+                    </div>`;
             }).join('');
+
+            listEl.querySelectorAll('.drawer-combo-today-toggle').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!activeDrawerComboConfig) return;
+                    clearDrawerConflict();
+                    const sid = Number(btn.dataset.svc);
+                    if (cfg.todayIds.includes(sid)) {
+                        cfg.todayIds = cfg.todayIds.filter(id => id !== sid);
+                        delete cfg.staffMap[sid];
+                    } else {
+                        const wasPending = cfg.pendingIds.includes(sid);
+                        if (wasPending) {
+                            cfg.pendingIds = cfg.pendingIds.filter(id => id !== sid);
+                        }
+                        if (cfg.todayIds.length + cfg.pendingIds.length < maxForThisVisit) {
+                            cfg.todayIds.push(sid);
+                        }
+                    }
+                    renderDrawerComboSubView();
+                });
+            });
+
+            listEl.querySelectorAll('.drawer-combo-pending-toggle').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!activeDrawerComboConfig) return;
+                    clearDrawerConflict();
+                    const sid = Number(btn.dataset.svc);
+                    if (cfg.pendingIds.includes(sid)) {
+                        cfg.pendingIds = cfg.pendingIds.filter(id => id !== sid);
+                    } else {
+                        const wasToday = cfg.todayIds.includes(sid);
+                        if (wasToday) {
+                            cfg.todayIds = cfg.todayIds.filter(id => id !== sid);
+                            delete cfg.staffMap[sid];
+                        }
+                        if (cfg.todayIds.length + cfg.pendingIds.length < maxForThisVisit) {
+                            cfg.pendingIds.push(sid);
+                        }
+                    }
+                    renderDrawerComboSubView();
+                });
+            });
+
+            listEl.querySelectorAll('.drawer-combo-staff-sel').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    if (!activeDrawerComboConfig) return;
+                    clearDrawerConflict();
+                    const sid = Number(sel.dataset.svc);
+                    if (sel.value) {
+                        cfg.staffMap[sid] = Number(sel.value);
+                    } else {
+                        delete cfg.staffMap[sid];
+                    }
+                });
+            });
+        }
+
+        function persistDrawerComboConfig(cfg, btnEl) {
+            if (!cfg || !selectedAppointmentId) return;
+
+            clearDrawerConflict();
+            const applyBtn = document.getElementById('drawerComboSubApplyBtn');
+            const skipBtn = document.getElementById('drawerComboSubSkipBtn');
+            if (btnEl) btnEl.disabled = true;
+            if (applyBtn) applyBtn.disabled = true;
+            if (skipBtn) skipBtn.disabled = true;
+
+            fetch(`/appointments/${selectedAppointmentId}/combo-services`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_package_id: cfg.clientPackageId,
+                        today_service_ids: cfg.todayIds,
+                        pending_service_ids: cfg.pendingIds,
+                        service_staff: cfg.staffMap
+                    })
+                })
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    if (ok && data.success) {
+                        clearDrawerConflict();
+                        showCalToast(data.message || 'Combo services updated');
+                        closeDrawerComboSubView();
+                        loadCalendar();
+                        fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
+                    } else {
+                        showDrawerConflict(extractApiErrorMessage(data, 'Could not update combo services.'), data && data.reason);
+                    }
+                })
+                .catch(() => showDrawerConflict('Could not update combo services.', 'network'))
+                .finally(() => {
+                    if (btnEl) btnEl.disabled = false;
+                    if (applyBtn) applyBtn.disabled = false;
+                    if (skipBtn) skipBtn.disabled = false;
+                });
+        }
+
+        (function initDrawerComboSubViewEvents() {
+            const backBtn = document.getElementById('drawerComboSubBackBtn');
+            const searchEl = document.getElementById('drawerComboSubSearch');
+            const skipBtn = document.getElementById('drawerComboSubSkipBtn');
+            const applyBtn = document.getElementById('drawerComboSubApplyBtn');
+
+            if (backBtn) {
+                backBtn.addEventListener('click', () => {
+                    clearDrawerConflict();
+                    closeDrawerComboSubView();
+                });
+            }
+            if (searchEl) {
+                searchEl.addEventListener('input', () => renderDrawerComboSubView());
+            }
+            if (skipBtn) {
+                skipBtn.addEventListener('click', () => {
+                    if (!activeDrawerComboConfig) return;
+                    activeDrawerComboConfig.todayIds = [];
+                    activeDrawerComboConfig.pendingIds = [];
+                    activeDrawerComboConfig.staffMap = {};
+                    persistDrawerComboConfig(activeDrawerComboConfig, skipBtn);
+                });
+            }
+            if (applyBtn) {
+                applyBtn.addEventListener('click', () => {
+                    if (!activeDrawerComboConfig) return;
+                    persistDrawerComboConfig(activeDrawerComboConfig, applyBtn);
+                });
+            }
+        })();
+
+        function renderDrawerComboPackages(a, isFinal) {
+            const comboWrap = document.getElementById('drawerComboPackagesList');
+            const pkgs = Array.isArray(a.combo_packages) ? a.combo_packages : [];
+            if (!pkgs.length) {
+                comboWrap.innerHTML = '';
+                drawerComboDrafts = {};
+                return;
+            }
+
+            const drawerBranchKey = normalizeCalendarBranch(a.branch_raw) || state.branch;
+            const branchStaffs = DRAWER_STAFFS_CATALOG.filter(st => !st.branch || st.branch === 'both' || normalizeCalendarBranch(st.branch) === drawerBranchKey);
+
+            drawerComboDrafts = {};
+            pkgs.forEach(pkg => {
+                const todayIds = [];
+                const pendingIds = [];
+                const staffMap = {};
+                (pkg.pool_services || []).forEach(svc => {
+                    if (svc.state === 'today') {
+                        todayIds.push(Number(svc.id));
+                        if (svc.staff_id) staffMap[svc.id] = Number(svc.staff_id);
+                    } else if (svc.state === 'pending') {
+                        pendingIds.push(Number(svc.id));
+                    }
+                });
+                drawerComboDrafts[pkg.client_package_id] = {
+                    pkg,
+                    todayIds,
+                    pendingIds,
+                    staffMap,
+                    branchStaffs
+                };
+            });
+
+            drawDrawerComboDrafts(isFinal);
+        }
+
+        function drawDrawerComboDrafts(isFinal) {
+            const comboWrap = document.getElementById('drawerComboPackagesList');
+            const drafts = Object.values(drawerComboDrafts);
+            if (!drafts.length) {
+                comboWrap.innerHTML = '';
+                return;
+            }
+
+            const canEditCombo = !isFinal && CAN_EDIT_BOOKINGS;
+
+            comboWrap.innerHTML = drafts.map(draft => {
+                const pkg = draft.pkg;
+                const qtyIncluded = Number(pkg.quantity_included) || 0;
+                const usedEarlier = Number(pkg.redeemed_elsewhere_count) || 0;
+                const pool = Array.isArray(pkg.pool_services) ? pkg.pool_services : [];
+
+                const pickedChips = [];
+                pool.forEach(svc => {
+                    const sid = Number(svc.id);
+                    if (draft.todayIds.includes(sid)) {
+                        pickedChips.push(`<span class="drawer-combo-picked-item">${escapeHtml(svc.name)} <span class="state-today">(Today)</span></span>`);
+                    } else if (draft.pendingIds.includes(sid)) {
+                        pickedChips.push(`<span class="drawer-combo-picked-item">${escapeHtml(svc.name)} <span class="state-pending">(Pending)</span></span>`);
+                    }
+                });
+                if (usedEarlier > 0) {
+                    pickedChips.push(`<span class="drawer-combo-picked-item" style="color:#9f8c86;">${usedEarlier} redeemed</span>`);
+                }
+
+                const totalSelected = draft.todayIds.length + draft.pendingIds.length + usedEarlier;
+                let secondRowHtml = '';
+
+                if (totalSelected === 0) {
+                    secondRowHtml = `
+                        <div class="drawer-combo-trigger">
+                            <span class="drawer-combo-empty-hint">
+                                0 / ${qtyIncluded} Selected &middot; Decide in Salon${canEditCombo ? ' &mdash; Click to choose services' : ''}
+                            </span>
+                            ${canEditCombo ? `<span class="drawer-combo-chevron" aria-hidden="true">&rsaquo;</span>` : ''}
+                        </div>`;
+                } else {
+                    secondRowHtml = `
+                        <div class="drawer-combo-trigger">
+                            <div class="drawer-combo-picked-list">
+                                ${pickedChips.join('<span class="drawer-combo-picked-sep">&middot;</span>')}
+                            </div>
+                            ${canEditCombo ? `
+                                <span class="drawer-combo-edit-cta">
+                                    Edit services (${totalSelected}/${qtyIncluded}) <span class="drawer-combo-chevron" aria-hidden="true">&rsaquo;</span>
+                                </span>` : ''}
+                        </div>`;
+                }
+
+                return `
+                    <div class="drawer-combo-card ${canEditCombo ? 'is-clickable' : ''}"
+                        data-pkg-id="${pkg.client_package_id}"
+                        ${canEditCombo ? `data-open-combo-pkg="${pkg.client_package_id}" role="button" tabindex="0"` : ''}>
+                        <div class="d-flex align-items-center justify-content-between gap-2">
+                            <div class="d-flex align-items-center gap-2 min-w-0">
+                                <span class="drawer-combo-eyebrow">COMBO</span>
+                                <span class="drawer-combo-title text-truncate">${escapeHtml(pkg.combo_name)}</span>
+                            </div>
+                            <span class="drawer-combo-price">${Number(pkg.price_paid).toFixed(2)} QAR</span>
+                        </div>
+                        ${secondRowHtml}
+                    </div>`;
+            }).join('');
+
+            if (canEditCombo) {
+                comboWrap.querySelectorAll('[data-open-combo-pkg]').forEach(card => {
+                    card.addEventListener('click', () => {
+                        openDrawerComboSubView(Number(card.dataset.openComboPkg));
+                    });
+                    card.addEventListener('keydown', e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openDrawerComboSubView(Number(card.dataset.openComboPkg));
+                        }
+                    });
+                });
+            }
+        }
+
+        function renderDrawerServiceList(a, isFinal) {
+            renderDrawerComboPackages(a, isFinal);
+
+            const hasComboCards = Array.isArray(a.combo_packages) && a.combo_packages.length > 0;
+            const comboPkgIds = new Set((a.combo_packages || []).map(p => Number(p.client_package_id)));
+
+            // Exclude lines already managed inside a parent Combo card above so
+            // services are never shown twice in the drawer; standalone services
+            // (or redemptions from an older visit's package not rendered as a
+            // combo card) still render cleanly with a subtle Combo Name pill.
+            const standaloneServices = (a.services || []).filter(s => {
+                if (!hasComboCards) return true;
+                if (s.client_package_id && comboPkgIds.has(Number(s.client_package_id))) return false;
+                return true;
+            });
+
+            const el = document.getElementById('drawerServices');
+            if (!hasComboCards && standaloneServices.length === 0 && a.decide_in_salon) {
+                const holdMin = Number(a.hold_duration) || 60;
+                el.innerHTML = `
+                    <div class="svc-item" id="drawerDecideInSalonRow">
+                        <div>
+                            <div class="name">Decide in Salon</div>
+                            <div class="meta">Client will choose services on arrival &middot; ${holdMin} min hold</div>
+                        </div>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="price">0.00 QAR</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                el.innerHTML = standaloneServices.map(s => {
+                    const hasDiscount = Number(s.discount_amount) > 0;
+                    const comboBadge = s.combo_name
+                        ? `<span class="cal-combo-badge ms-1">${escapeHtml(s.combo_name)}</span>`
+                        : '';
+                    return `
+                    <div class="svc-item" data-line-id="${s.id}">
+                        <div>
+                            <div class="name">${escapeHtml(s.name)}${comboBadge}</div>
+                            <div class="meta">${s.start_time_label} · ${s.duration}min${s.staff_name ? ' · ' + escapeHtml(s.staff_name) : ''}</div>
+                            ${hasDiscount ? `
+                                <div class="meta" style="color:#8ea88a;" title="${s.discount_reason ? escapeHtml(s.discount_reason) : ''}">
+                                    <i class="bx bx-purchase-tag"></i> −${Number(s.discount_amount).toFixed(2)} QAR off ${Number(s.original_price).toFixed(2)}
+                                    ${s.discount_reason ? ` · ${escapeHtml(s.discount_reason)}` : ''}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="price">
+                                ${hasDiscount ? `<span class="strike">${Number(s.original_price).toFixed(2)}</span>` : ''}
+                                ${Number(s.final_price).toFixed(2)} QAR
+                            </span>
+                            ${(isFinal || !CAN_EDIT_BOOKINGS) ? '' : `
+                                <button type="button" class="icon-btn" data-edit="${s.id}"><i class="bx bx-pencil"></i></button>
+                                <button type="button" class="icon-btn danger" data-delete="${s.id}"><i class="bx bx-trash"></i></button>
+                            `}
+                        </div>
+                    </div>
+                `;
+                }).join('');
+            }
             document.getElementById('drawerTotal').textContent = Number(a.price).toFixed(2) + ' QAR';
 
-            const totalDiscount = (a.services || []).reduce((sum, s) => sum + (Number(s.discount_amount) || 0), 0);
+            const totalDiscount = standaloneServices.reduce((sum, s) => sum + (Number(s.discount_amount) || 0), 0);
             document.getElementById('drawerDiscountRow').classList.toggle('d-none', totalDiscount <= 0);
             document.getElementById('drawerDiscountTotal').textContent = '−' + totalDiscount.toFixed(2) + ' QAR';
 
@@ -2663,6 +3702,15 @@
         document.getElementById('drawerAddServiceBtn').addEventListener('click', () => {
             showDrawerServicesView('add');
             renderDrawerServiceCatalog('');
+        });
+        document.getElementById('drawerCheckoutBtn')?.addEventListener('click', function(e) {
+            if (!lastDrawerData) return;
+            const hasRealServices = Array.isArray(lastDrawerData.services) && lastDrawerData.services.length > 0;
+            const hasCombos = Array.isArray(lastDrawerData.combo_packages) && lastDrawerData.combo_packages.length > 0;
+            if (lastDrawerData.decide_in_salon && !hasRealServices && !hasCombos) {
+                e.preventDefault();
+                showDrawerConflict('Please add the service(s) or combo performed before completing checkout.', 'decide_in_salon');
+            }
         });
         document.getElementById('drawerAddServiceBack').addEventListener('click', () => showDrawerServicesView('list'));
         document.getElementById('drawerEditServiceBack').addEventListener('click', () => showDrawerServicesView('list'));
@@ -2692,6 +3740,7 @@
         }
 
         function addServiceToAppointment(serviceId) {
+            clearDrawerConflict();
             fetch(`/appointments/${selectedAppointmentId}/services`, {
                     method: 'POST',
                     headers: {
@@ -2704,11 +3753,13 @@
                 .then(r => r.json().then(data => ({ ok: r.ok, data })))
                 .then(({ ok, data }) => {
                     if (ok && data.success) {
+                        clearDrawerConflict();
                         showCalToast(data.message || 'Service added');
                         loadCalendar();
+                        showDrawerServicesView('list');
                         fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
                     } else {
-                        showCalToast(data.message || 'Could not add service.', 'error');
+                        showDrawerConflict(extractApiErrorMessage(data, 'Could not add service.'), data && data.reason);
                     }
                 });
         }
@@ -2730,6 +3781,8 @@
             document.getElementById('editSvcDiscountValue').value = line.discount_value || 0;
             document.getElementById('editSvcDiscountValue').classList.toggle('d-none', !line.discount_type);
             document.getElementById('editSvcDiscountReason').value = line.discount_reason || '';
+            const editDrawerBranch = (lastDrawerData && normalizeCalendarBranch(lastDrawerData.branch_raw)) || state.branch;
+            scopeSelectOptionsToBranch(document.getElementById('editSvcStaff'), editDrawerBranch, line.staff_id);
             document.getElementById('editSvcStartTime').value = line.start_time;
             document.getElementById('editSvcDuration').value = line.duration;
             document.getElementById('editSvcStaff').value = line.staff_id || '';
@@ -2785,7 +3838,13 @@
             document.getElementById(id).addEventListener('input', updateEditSvcDiscountSummary);
         });
 
+        ['editSvcServiceSelect', 'editSvcStartTime', 'editSvcDuration', 'editSvcStaff'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', clearDrawerConflict);
+        });
+
         document.getElementById('editSvcApplyBtn').addEventListener('click', function() {
+            clearDrawerConflict();
             const date = lastDrawerData.date;
             const time = document.getElementById('editSvcStartTime').value;
 
@@ -2810,11 +3869,13 @@
                 .then(r => r.json().then(data => ({ ok: r.ok, data })))
                 .then(({ ok, data }) => {
                     if (ok && data.success) {
+                        clearDrawerConflict();
                         showCalToast(data.message || 'Service updated');
                         loadCalendar();
+                        showDrawerServicesView('list');
                         fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
                     } else {
-                        showCalToast(data.message || 'Could not update service.', 'error');
+                        showDrawerConflict(extractApiErrorMessage(data, 'Could not update service.'), data && data.reason);
                     }
                 });
         });
@@ -2972,16 +4033,22 @@
 
         function updateDrawerStatus(status) {
             if (!CAN_EDIT_BOOKINGS) return;
+            clearDrawerConflict();
             fetch(`/appointments/${selectedAppointmentId}/status`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify({ status })
                 })
-                .then(r => r.json())
-                .then(res => {
+                .then(r => r.json().then(res => ({ ok: r.ok, res })))
+                .then(({ ok, res }) => {
+                    if (!ok || res.success === false) {
+                        showDrawerConflict(extractApiErrorMessage(res, 'Could not update status.'), res && res.reason);
+                        return;
+                    }
                     if (res.redirect) {
                         window.location.href = res.redirect;
                     } else {
@@ -3002,33 +4069,54 @@
             updateDrawerStatus('cancelled');
         });
 
-        /* ---------------- RESCHEDULE (drawer form + drag-and-drop) ---------------- */
+        /* ---------------- RESCHEDULE (drawer form + drag-and-drop + duration resize) ---------------- */
+        ['drawerRescheduleDate', 'drawerRescheduleTime', 'drawerRescheduleStaff'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', clearDrawerConflict);
+        });
+
         document.getElementById('drawerRescheduleBtn').addEventListener('click', function(e) {
             e.preventDefault();
+            clearDrawerConflict();
             document.getElementById('drawerRescheduleForm').classList.remove('d-none');
         });
         document.getElementById('drawerCancelRescheduleBtn').addEventListener('click', function() {
+            clearDrawerConflict();
             document.getElementById('drawerRescheduleForm').classList.add('d-none');
         });
         document.getElementById('drawerConfirmRescheduleBtn').addEventListener('click', function() {
+            clearDrawerConflict();
             const date = document.getElementById('drawerRescheduleDate').value;
             const time = document.getElementById('drawerRescheduleTime').value;
             const staffId = document.getElementById('drawerRescheduleStaff').value;
             const branch = document.getElementById('drawerRescheduleBranch').value;
             if (!date || !time) {
-                showCalToast('Please pick a date and time.', 'error');
+                showDrawerConflict('Please pick both a date and start time.', 'validation');
                 return;
             }
             rescheduleAppointment(selectedAppointmentId, `${date}T${time}`, staffId, function(ok) {
                 if (ok) {
+                    clearDrawerConflict();
                     document.getElementById('drawerRescheduleForm').classList.add('d-none');
                     fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
                 }
-            }, branch);
+            }, branch, { source: 'drawer' });
         });
 
-        function rescheduleAppointment(appointmentId, datetime, staffId, callback, branch) {
+        function rescheduleAppointment(appointmentId, datetime, staffId, callback, branch, options) {
             if (!CAN_EDIT_BOOKINGS) return;
+            const opts = options || {};
+            const isDrawer = opts.source === 'drawer';
+
+            const payload = {
+                appointment_datetime: datetime,
+                staff_id: staffId ? Number(staffId) : null,
+                branch: branch || null
+            };
+            if (opts.duration) {
+                payload.duration = Number(opts.duration);
+            }
+
             fetch(`/appointments/${appointmentId}/reschedule`, {
                     method: 'PATCH',
                     headers: {
@@ -3036,35 +4124,59 @@
                         'X-CSRF-TOKEN': '{{ csrf_token() }}',
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ appointment_datetime: datetime, staff_id: staffId || null, branch: branch || null })
+                    body: JSON.stringify(payload)
                 })
                 .then(r => r.json().then(data => ({ ok: r.ok, data })))
                 .then(({ ok, data }) => {
                     if (ok && data.success) {
-                        showCalToast(data.message || 'Appointment rescheduled');
+                        showCalToast(data.message || 'Appointment rescheduled', 'success');
                         loadCalendar();
-                        if (callback) callback(true);
+                        if (callback) callback(true, data);
                     } else {
-                        showCalToast(data.message || 'Could not reschedule appointment.', 'error');
-                        if (callback) callback(false);
+                        const errMsg = extractApiErrorMessage(data, 'Could not reschedule appointment.');
+                        const reason = data && data.reason ? data.reason : '';
+                        if (isDrawer) {
+                            showDrawerConflict(errMsg, reason);
+                        } else {
+                            showCalToast(errMsg, 'error', reason);
+                        }
+                        if (callback) callback(false, data);
                     }
                 })
                 .catch(() => {
-                    showCalToast('Could not reschedule appointment.', 'error');
-                    if (callback) callback(false);
+                    const fallbackMsg = 'Could not reschedule appointment. Please try again.';
+                    if (isDrawer) {
+                        showDrawerConflict(fallbackMsg, 'network');
+                    } else {
+                        showCalToast(fallbackMsg, 'error', 'network');
+                    }
+                    if (callback) callback(false, null);
                 });
         }
 
-        /* ---------------- DRAG AND DROP ---------------- */
+        /* ---------------- DRAG-AND-DROP & DURATION RESIZE ---------------- */
         let draggedAppointmentId = null;
         let draggedApptMinutes = null;
         let draggedFromUnscheduled = false;
+        let draggedSourceSnapshot = null;
+        let isResizingAppt = false;
 
         function onApptDragStart(e, id, startMinutes, isUnscheduled = false) {
+            if (isResizingAppt) {
+                e.preventDefault();
+                return;
+            }
             draggedAppointmentId = id;
             draggedApptMinutes = startMinutes;
             draggedFromUnscheduled = !!isUnscheduled;
-            e.currentTarget.classList.add('dragging');
+            const cardEl = e.currentTarget;
+            draggedSourceSnapshot = {
+                el: cardEl,
+                parent: cardEl.parentElement,
+                nextSibling: cardEl.nextSibling,
+                top: cardEl.style.top,
+            };
+            cardEl.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', String(id));
         }
@@ -3080,52 +4192,6 @@
 
         function onDropTargetDragLeave(e) {
             e.currentTarget.classList.remove('drag-over');
-        }
-
-        /**
-         * Looks up a dragged appointment's service names from the last
-         * fetched calendar payload (including `pending_time_bookings`),
-         * without a round trip.
-         */
-        function findApptServiceNames(id) {
-            if (latestData) {
-                const pendingList = latestData.pending_time_bookings || latestData.pendingTimeBookings || [];
-                const foundPending = pendingList.find(a => String(a.id) === String(id));
-                if (foundPending && foundPending.service_name) {
-                    return foundPending.service_name.split(',').map(s => s.trim()).filter(s => s && s !== 'Decide in Salon');
-                }
-            }
-            const cardEl = document.querySelector(`.cal-unscheduled-card[data-id="${id}"]`);
-            if (cardEl && cardEl.dataset.services) {
-                return cardEl.dataset.services.split(',').map(s => s.trim()).filter(s => s && s !== 'Decide in Salon');
-            }
-            if (!latestData || !latestData.appointments) return null;
-            for (const key in latestData.appointments) {
-                const byKey = latestData.appointments[key];
-                const lists = Array.isArray(byKey) ? [byKey] : Object.values(byKey);
-                for (const list of lists) {
-                    const found = list.find(a => String(a.id) === String(id));
-                    if (found) {
-                        return found.service_name.split(',').map(s => s.trim()).filter(s => s && s !== 'Decide in Salon');
-                    }
-                }
-            }
-            return null;
-        }
-
-        /**
-         * Service names the target staff member is NOT trained for, per the
-         * `skills` list calendarData() attaches to each staff (service_staff
-         * pivot). Returns [] (treated as "allowed") when we can't determine
-         * services or staff client-side - the server-side check in
-         * reschedule() is the real authority and still applies either way.
-         */
-        function staffMissingSkillsFor(staffId, serviceNames) {
-            if (!latestData || !latestData.staffs || !serviceNames || !serviceNames.length) return [];
-            const staff = latestData.staffs.find(s => String(s.id) === String(staffId));
-            if (!staff) return [];
-            const skills = staff.skills || [];
-            return serviceNames.filter(name => name !== 'Decide in Salon' && !skills.includes(name));
         }
 
         function removeCardFromUnscheduledSidebar(id) {
@@ -3150,6 +4216,21 @@
             }
         }
 
+        function revertDraggedCardSmoothly(snapshot) {
+            if (!snapshot || !snapshot.el || !snapshot.parent || !document.body.contains(snapshot.parent)) {
+                return;
+            }
+            const el = snapshot.el;
+            el.classList.add('is-reverting');
+            if (el.parentElement !== snapshot.parent) {
+                snapshot.parent.insertBefore(el, snapshot.nextSibling || null);
+            }
+            requestAnimationFrame(() => {
+                el.style.top = snapshot.top;
+                setTimeout(() => el.classList.remove('is-reverting', 'is-previewing'), 240);
+            });
+        }
+
         function onSlotDrop(e, staffId, date, time) {
             e.preventDefault();
             e.currentTarget.classList.remove('drag-over');
@@ -3157,24 +4238,38 @@
 
             const id = draggedAppointmentId;
             const fromUnscheduled = draggedFromUnscheduled;
+            const snapshot = draggedSourceSnapshot;
             draggedAppointmentId = null;
             draggedFromUnscheduled = false;
-
-            const missing = staffMissingSkillsFor(staffId, findApptServiceNames(id));
-            if (missing.length) {
-                showCalToast('Staff member is not skilled to do this service: ' + missing.join(', ') + '.', 'error');
-                return;
-            }
+            draggedSourceSnapshot = null;
 
             if (fromUnscheduled) {
                 removeCardFromUnscheduledSidebar(id);
+            } else if (snapshot && snapshot.el && latestData && latestData.ui_start) {
+                // Optimistically position card onto the target slot so any 422 revert animates smoothly back
+                const targetColSlots = document.querySelector(`.cal-staff-col[data-staff-id="${staffId}"] .cal-slots`);
+                const [sh, sm] = latestData.ui_start.split(':').map(Number);
+                const [th, tm] = time.split(':').map(Number);
+                const ppm = state.zoom / 30;
+                const newTop = ((th * 60 + tm) - (sh * 60 + sm)) * ppm;
+                if (targetColSlots) {
+                    snapshot.el.classList.add('is-previewing');
+                    if (snapshot.el.parentElement !== targetColSlots) {
+                        targetColSlots.appendChild(snapshot.el);
+                    }
+                    snapshot.el.style.top = `${newTop}px`;
+                }
             }
 
             rescheduleAppointment(id, `${date}T${time}`, staffId, function(ok) {
-                if (!ok && fromUnscheduled) {
-                    loadCalendar();
+                if (!ok) {
+                    if (fromUnscheduled) {
+                        loadCalendar();
+                    } else {
+                        revertDraggedCardSmoothly(snapshot);
+                    }
                 }
-            });
+            }, state.branch, { source: 'drag' });
         }
 
         function onWeekCellDrop(e, staffId, date) {
@@ -3184,27 +4279,92 @@
 
             const id = draggedAppointmentId;
             const fromUnscheduled = draggedFromUnscheduled;
+            const snapshot = draggedSourceSnapshot;
             const minutes = draggedApptMinutes ?? 600;
             draggedAppointmentId = null;
             draggedFromUnscheduled = false;
-
-            const missing = staffMissingSkillsFor(staffId, findApptServiceNames(id));
-            if (missing.length) {
-                showCalToast('Staff member is not skilled to do this service: ' + missing.join(', ') + '.', 'error');
-                return;
-            }
+            draggedSourceSnapshot = null;
 
             if (fromUnscheduled) {
                 removeCardFromUnscheduledSidebar(id);
+            } else if (snapshot && snapshot.el && e.currentTarget) {
+                e.currentTarget.appendChild(snapshot.el);
             }
 
             const hh = String(Math.floor(minutes / 60)).padStart(2, '0');
             const mm = String(minutes % 60).padStart(2, '0');
             rescheduleAppointment(id, `${date}T${hh}:${mm}`, staffId, function(ok) {
-                if (!ok && fromUnscheduled) {
-                    loadCalendar();
+                if (!ok) {
+                    if (fromUnscheduled) {
+                        loadCalendar();
+                    } else {
+                        revertDraggedCardSmoothly(snapshot);
+                    }
                 }
-            });
+            }, state.branch, { source: 'drag' });
+        }
+
+        function onApptResizeStart(e, appointmentId, staffId, date, startStr, origDuration, ppm) {
+            if (!CAN_EDIT_BOOKINGS) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const cardEl = e.currentTarget.closest('.cal-appt');
+            if (!cardEl) return;
+
+            isResizingAppt = true;
+            const prevDraggable = cardEl.getAttribute('draggable');
+            cardEl.setAttribute('draggable', 'false');
+
+            const startY = e.clientY;
+            const origHeight = parseFloat(cardEl.style.height) || Math.max(origDuration * ppm, 46);
+            const minHeight = cardEl.querySelector('.cal-combo-badge') ? 58 : 46;
+            const timeLabelEl = cardEl.querySelector('.cal-appt-time-label');
+            const origTimeText = timeLabelEl ? timeLabelEl.textContent : '';
+            const [sh, sm] = startStr.split(':').map(Number);
+            const startMinutes = sh * 60 + sm;
+
+            let candidateDuration = origDuration;
+
+            function onMouseMove(moveEv) {
+                const deltaY = moveEv.clientY - startY;
+                const rawDeltaMins = deltaY / ppm;
+                const snappedDelta = Math.round(rawDeltaMins / 15) * 15;
+                candidateDuration = Math.max(15, Math.min(720, origDuration + snappedDelta));
+                cardEl.style.height = `${Math.max(candidateDuration * ppm, minHeight)}px`;
+
+                if (timeLabelEl) {
+                    const endMins = startMinutes + candidateDuration;
+                    const endHh = String(Math.floor(endMins / 60) % 24).padStart(2, '0');
+                    const endMm = String(endMins % 60).padStart(2, '0');
+                    timeLabelEl.textContent = `${to12Hour(startStr)} - ${to12Hour(`${endHh}:${endMm}`)}`;
+                }
+            }
+
+            function onMouseUp(upEv) {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+                setTimeout(() => { isResizingAppt = false; }, 60);
+                if (prevDraggable) cardEl.setAttribute('draggable', prevDraggable);
+
+                if (candidateDuration === origDuration) {
+                    cardEl.style.height = `${origHeight}px`;
+                    if (timeLabelEl) timeLabelEl.textContent = origTimeText;
+                    return;
+                }
+
+                rescheduleAppointment(appointmentId, `${date}T${startStr}`, staffId, function(ok) {
+                    if (!ok) {
+                        cardEl.classList.add('is-reverting');
+                        cardEl.style.height = `${origHeight}px`;
+                        if (timeLabelEl) timeLabelEl.textContent = origTimeText;
+                        setTimeout(() => cardEl.classList.remove('is-reverting'), 240);
+                    }
+                }, state.branch, { duration: candidateDuration, source: 'drag' });
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
         }
     </script>
 @endsection

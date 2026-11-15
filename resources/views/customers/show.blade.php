@@ -375,7 +375,24 @@
                         <div class="appt-row">
                             <div>
                                 <strong>{{ $a->appointment_datetime->format('D, d M Y · h:i A') }}</strong>
-                                <div class="text-muted small">{{ $a->service_name }} · {{ $a->staff->name ?? 'Unassigned' }}</div>
+                                <div class="text-muted small d-flex align-items-center gap-1 flex-wrap mt-1">
+                                    @if ($a->display_combo_name)
+                                        <span style="display:inline-flex;align-items:center;padding:1px 7px;border-radius:999px;font-size:10.5px;font-weight:700;color:#f8efe6;background:rgba(212,163,115,0.2);border:1px solid rgba(229,184,168,0.35);">
+                                            {{ $a->display_combo_name }}
+                                        </span>
+                                    @endif
+                                    @if ($a->decide_in_salon && !$a->display_combo_name)
+                                        <span style="display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:10.5px;font-weight:600;color:#c9a39a;background:rgba(201,163,154,0.12);border:1px solid rgba(201,163,154,0.28);">
+                                            Decide in Salon
+                                        </span>
+                                        <span>· {{ $a->staff->name ?? 'Unassigned' }}</span>
+                                    @else
+                                        <span>{{ $a->is_combo_tbd ? 'Choose in Salon' : $a->service_name }} · {{ $a->staff->name ?? 'Unassigned' }}</span>
+                                    @endif
+                                    @if ($a->price)
+                                        <span>· {{ number_format($a->price, 2) }} QAR</span>
+                                    @endif
+                                </div>
                             </div>
                             <span class="status-badge" style="background:#d98f83">{{ $a->status }}</span>
                         </div>
@@ -395,10 +412,29 @@
                         <div class="appt-row">
                             <div>
                                 <strong>{{ $a->appointment_datetime->format('d M Y · h:i A') }}</strong>
-                                <div class="text-muted small">
-                                    {{ $a->service_name }} · {{ $a->staff->name ?? 'Unassigned' }}
-                                    @if ($a->price)
-                                        · {{ number_format($a->price, 2) }} QAR
+                                <div class="text-muted small d-flex align-items-center gap-1 flex-wrap mt-1">
+                                    @if ($a->display_combo_name)
+                                        <span style="display:inline-flex;align-items:center;padding:1px 7px;border-radius:999px;font-size:10.5px;font-weight:700;color:#f8efe6;background:rgba(212,163,115,0.2);border:1px solid rgba(229,184,168,0.35);">
+                                            {{ $a->display_combo_name }}
+                                        </span>
+                                    @endif
+                                    @if ($a->decide_in_salon && !$a->display_combo_name)
+                                        <span style="display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:10.5px;font-weight:600;color:#c9a39a;background:rgba(201,163,154,0.12);border:1px solid rgba(201,163,154,0.28);">
+                                            Decide in Salon
+                                        </span>
+                                        <span>
+                                            · {{ $a->staff->name ?? 'Unassigned' }}
+                                            @if ($a->price)
+                                                · {{ number_format($a->price, 2) }} QAR
+                                            @endif
+                                        </span>
+                                    @else
+                                        <span>
+                                            {{ $a->is_combo_tbd ? 'Choose in Salon' : $a->service_name }} · {{ $a->staff->name ?? 'Unassigned' }}
+                                            @if ($a->price)
+                                                · {{ number_format($a->price, 2) }} QAR
+                                            @endif
+                                        </span>
                                     @endif
                                 </div>
                             </div>
@@ -469,15 +505,19 @@
                                 · {{ $pkg->redeemed_count }} / {{ $pkg->effective_quantity_included }} redeemed
                             </div>
                             <div class="package-svc-list">
+                                @php
+                                    $namedPendingRowsCount = $pkg->services->where('status', 'pending')->count();
+                                    $unnamedPendingSlots = max(0, $pkg->remaining_count - $namedPendingRowsCount);
+                                @endphp
                                 @foreach ($pkg->services as $svc)
                                     <div class="package-svc-chip">
                                         <span>{{ $svc->service_name }}</span>
                                         <span class="svc-status {{ $svc->status }}">{{ $svc->status }}</span>
                                     </div>
                                 @endforeach
-                                @if ($pkg->remaining_count > 0)
+                                @if ($unnamedPendingSlots > 0)
                                     <div class="package-svc-chip">
-                                        <span class="text-muted">{{ $pkg->remaining_count }} more service{{ $pkg->remaining_count === 1 ? '' : 's' }} available (any remaining option)</span>
+                                        <span class="text-muted">{{ $unnamedPendingSlots }} more service{{ $unnamedPendingSlots === 1 ? '' : 's' }} available (any remaining option)</span>
                                         <span class="svc-status pending">pending</span>
                                     </div>
                                 @endif

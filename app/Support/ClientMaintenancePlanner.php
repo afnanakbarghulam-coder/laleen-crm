@@ -58,13 +58,16 @@ class ClientMaintenancePlanner
 
             if ($appt->appointmentServices && $appt->appointmentServices->isNotEmpty()) {
                 foreach ($appt->appointmentServices as $line) {
+                    if ($line->is_pending) {
+                        continue;
+                    }
                     $lineTime = $line->start_time ? Carbon::parse($line->start_time) : $apptTime;
                     if ($lineTime->gt(now()->endOfDay())) {
                         continue;
                     }
                     $svc = $line->service_id ? $servicesById->get((int) $line->service_id) : null;
                     $rawName = trim((string) ($svc?->name ?: $line->name));
-                    if ($rawName === '' || strcasecmp($rawName, 'Decide in Salon') === 0) {
+                    if ($rawName === '' || in_array(strtolower($rawName), ['decide in salon', 'choose in salon', 'services tbd in salon'], true)) {
                         continue;
                     }
                     if (!$svc) {
@@ -79,7 +82,7 @@ class ClientMaintenancePlanner
             } else {
                 $flatNames = array_filter(array_map('trim', explode(',', (string) $appt->service_name)));
                 foreach ($flatNames as $rawName) {
-                    if ($rawName === '' || strcasecmp($rawName, 'Decide in Salon') === 0) {
+                    if ($rawName === '' || in_array(strtolower($rawName), ['decide in salon', 'choose in salon', 'services tbd in salon'], true)) {
                         continue;
                     }
                     $svc = $servicesByName->get(strtolower($rawName));

@@ -21,6 +21,10 @@ class Appointment extends Model
         'start_time',
         // 'service_id',
         'service_name',
+        'combo_id',
+        'combo_name',
+        'decide_in_salon',
+        'hold_duration',
         'notes',
         'branch',
         'price',
@@ -36,6 +40,8 @@ class Appointment extends Model
     protected $casts = [
         'appointment_datetime' => 'datetime',
         'paid_at' => 'datetime',
+        'decide_in_salon' => 'boolean',
+        'hold_duration' => 'integer',
     ];
 
     protected static function booted(): void
@@ -49,6 +55,23 @@ class Appointment extends Model
                 );
             }
         });
+    }
+
+    public function setBranchAttribute($value): void
+    {
+        if (is_string($value)) {
+            $normalized = Customer::normalizeBranch($value);
+            $this->attributes['branch'] = $normalized ?? trim($value);
+            return;
+        }
+
+        $this->attributes['branch'] = $value;
+    }
+
+    public function getBranchLabelAttribute(): string
+    {
+        return Customer::branchLabel($this->attributes['branch'] ?? null)
+            ?? ucwords(str_replace('_', ' ', (string) ($this->attributes['branch'] ?? '')));
     }
 
     public function getAppointmentDateAttribute(): Carbon
@@ -103,7 +126,76 @@ class Appointment extends Model
 
     public function appointmentServices()
     {
-        return $this->hasMany(AppointmentService::class)->orderBy('start_time');
+        return $this->hasMany(AppointmentService::class)->orderBy('start_time')->orderBy('id');
+    }
+
+    public function activeAppointmentServices()
+    {
+        return $this->hasMany(AppointmentService::class)
+            ->where('is_pending', false)
+            ->orderBy('start_time')
+            ->orderBy('id');
+    }
+
+    public function combo()
+    {
+        return $this->belongsTo(Combo::class, 'combo_id');
+    }
+
+    public function clientPackages()
+    {
+        return $this->hasMany(ClientPackage::class, 'appointment_id');
+    }
+
+    public function getDisplayComboNameAttribute(): ?string
+    {
+        $direct = trim((string) ($this->attributes['combo_name'] ?? ''));
+        if ($direct !== '') {
+            return $direct;
+        }
+
+        $names = collect();
+
+        if ($this->relationLoaded('clientPackages')) {
+            $names = $names->merge($this->clientPackages->pluck('combo_name'));
+        }
+
+        if ($this->relationLoaded('appointmentServices')) {
+            $names = $names->merge($this->appointmentServices->pluck('combo_name'));
+            foreach ($this->appointmentServices as $svc) {
+                if ($svc->relationLoaded('clientPackageService') && $svc->clientPackageService?->relationLoaded('clientPackage')) {
+                    $names->push($svc->clientPackageService->clientPackage?->combo_name);
+                } elseif (is_string($svc->discount_reason) && preg_match('/^Redeemed from (.+) package$/i', trim($svc->discount_reason), $m)) {
+                    $names->push(trim($m[1]));
+                }
+            }
+        }
+
+        $unique = $names->map(fn ($n) => trim((string) $n))->filter()->unique()->values();
+
+        return $unique->isNotEmpty() ? $unique->implode(', ') : null;
+    }
+
+    public function getEffectiveHoldDurationAttribute(): int
+    {
+        $dur = (int) ($this->attributes['hold_duration'] ?? 0);
+
+        return $dur > 0 ? $dur : 60;
+    }
+
+    public function getIsComboTbdAttribute(): bool
+    {
+        if (!$this->display_combo_name) {
+            return false;
+        }
+
+        if ($this->relationLoaded('appointmentServices')) {
+            return $this->appointmentServices->where('is_pending', false)->isEmpty();
+        }
+
+        $svcName = strtolower(trim((string) ($this->attributes['service_name'] ?? '')));
+
+        return in_array($svcName, ['', 'decide in salon', 'choose in salon', 'services tbd in salon'], true);
     }
 
     public function upsells()
@@ -121,31 +213,72 @@ class Appointment extends Model
     }
 
     /**
-     * Recompute the appointment's summary fields (service_name, price,
-     * appointment_datetime, staff_id) from its line items. Call this any
-     * time appointment_services rows are added, edited, or removed so the
-     * calendar block and every place that reads these flat fields stays
-     * accurate. The earliest-starting service's staff is treated as the
-     * "primary" staff for calendar column placement.
+     * Recompute the appointment's summary fields (service_name, combo_name,
+     * price, appointment_datetime, staff_id) from its active line items and
+     * attached Combo packages. Call this any time appointment_services or
+     * combo package selections are added, edited, or removed so the calendar
+     * block and Bookings table stay 100% accurate.
      */
     public function syncFromServices(): void
     {
-        $services = $this->appointmentServices()->get();
+        $allServices = $this->appointmentServices()->get();
+        $activeServices = $allServices->filter(fn (AppointmentService $s) => !$s->is_pending)->values();
+        $attachedPackages = ClientPackage::where('appointment_id', $this->id)->orderBy('id')->get();
 
-        if ($services->isEmpty()) {
+        $comboNames = $attachedPackages->pluck('combo_name')
+            ->merge($allServices->pluck('combo_name'))
+            ->map(fn ($n) => trim((string) $n))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($comboNames->isNotEmpty()) {
+            $this->combo_name = $comboNames->implode(', ');
+            $this->combo_id = $attachedPackages->first()?->combo_id
+                ?? $allServices->whereNotNull('combo_id')->first()?->combo_id
+                ?? $this->combo_id;
+        } elseif ($attachedPackages->isEmpty() && $allServices->whereNotNull('combo_name')->isEmpty()) {
+            // Clear stale combo badge if all combo links were removed
+            if ($allServices->isNotEmpty()) {
+                $this->combo_id = null;
+                $this->combo_name = null;
+            }
+        }
+
+        if ($activeServices->isNotEmpty()) {
+            $first = $activeServices->first();
+            $this->service_name = $activeServices->pluck('name')->implode(', ');
+            $this->decide_in_salon = false;
+            $this->hold_duration = null;
+            if ($first->start_time) {
+                $this->appointment_datetime = $first->start_time;
+                $this->booking_date = $first->start_time->toDateString();
+                $this->start_time = $first->start_time->format('H:i:s');
+            }
+            $this->staff_id = $first->staff_id ?? $this->staff_id;
+        } elseif ($attachedPackages->isNotEmpty() || !empty($this->combo_name)) {
+            $this->service_name = 'Choose in Salon';
+            $this->decide_in_salon = false;
+            $this->hold_duration = null;
+        } elseif ($allServices->isEmpty()) {
+            if ($this->decide_in_salon) {
+                $this->service_name = 'Decide in Salon';
+                $this->hold_duration = $this->effective_hold_duration;
+                if (!$this->sale()->exists()) {
+                    $this->price = 0;
+                }
+                $this->save();
+            }
+
             return;
         }
 
-        $first = $services->first();
-
-        $this->service_name = $services->pluck('name')->implode(', ');
-        $this->price = $services->sum(fn($s) => $s->final_price);
-        if ($first->start_time) {
-            $this->appointment_datetime = $first->start_time;
-            $this->booking_date = $first->start_time->toDateString();
-            $this->start_time = $first->start_time->format('H:i:s');
+        if (!$this->sale()->exists()) {
+            $unpaidPackagesTotal = (float) $attachedPackages->whereNull('sale_id')->sum('price_paid');
+            $activeLinesTotal = (float) $activeServices->sum(fn (AppointmentService $s) => $s->final_price);
+            $this->price = round($activeLinesTotal + $unpaidPackagesTotal, 2);
         }
-        $this->staff_id = $first->staff_id ?? $this->staff_id;
+
         $this->save();
     }
 

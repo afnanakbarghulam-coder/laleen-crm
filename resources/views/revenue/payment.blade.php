@@ -216,7 +216,14 @@
     <div class="checkout-shell">
         <div class="checkout-header d-flex justify-content-between align-items-start flex-wrap gap-2">
             <div>
-                <h5 class="mb-1">Checkout</h5>
+                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                    <h5 class="mb-0">Checkout</h5>
+                    @if ($appointment->display_combo_name)
+                        <span style="display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;color:#f8efe6;background:rgba(212,163,115,0.2);border:1px solid rgba(229,184,168,0.36);">
+                            {{ $appointment->display_combo_name }}
+                        </span>
+                    @endif
+                </div>
                 <div class="text-muted small">
                     {{ $appointment->customer_name }} · {{ $appointment->phone }}<br>
                     {{ $appointment->appointment_datetime->format('D, d M Y · h:i A') }}
@@ -235,10 +242,15 @@
                 <!-- LEFT: services + products review -->
                 <div class="checkout-col-left">
                     <h6>Services</h6>
-                    @foreach ($serviceItems as $item)
+                    @forelse ($serviceItems as $item)
                         <div class="line-item">
                             <span class="item-name">
                                 {{ $item['name'] }} <span class="muted">({{ $item['duration'] }} min)</span>
+                                @if (!empty($item['combo_name']))
+                                    <span style="display:inline-flex;align-items:center;padding:1px 7px;border-radius:999px;font-size:10.5px;font-weight:700;color:#f8efe6;background:rgba(212,163,115,0.18);border:1px solid rgba(229,184,168,0.32);margin-left:4px;">
+                                        {{ $item['combo_name'] }}
+                                    </span>
+                                @endif
                                 @if (!empty($item['is_package_redemption']))
                                     <span class="discount-note">
                                         <i class="bx bx-package"></i> {{ $item['discount_reason'] ?? 'Covered by package' }}
@@ -259,7 +271,15 @@
                                 {{ number_format($item['price'], 2) }} QAR
                             </span>
                         </div>
-                    @endforeach
+                    @empty
+                        <div class="text-muted small py-2">
+                            @if (count($unpaidPackages))
+                                Combo package booked — sub-services remain Pending for future visits (or select services performed today below).
+                            @else
+                                No services attached to this appointment.
+                            @endif
+                        </div>
+                    @endforelse
 
                     @if ($serviceDiscountTotal > 0)
                         <div class="service-discount-banner">

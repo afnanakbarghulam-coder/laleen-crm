@@ -11,8 +11,23 @@ class Combo extends Model
         'price',
         'quantity_included',
         'validity_days',
+        'default_duration',
         'status',
     ];
+
+    protected $casts = [
+        'price' => 'float',
+        'quantity_included' => 'integer',
+        'validity_days' => 'integer',
+        'default_duration' => 'integer',
+    ];
+
+    public function getEffectiveDurationAttribute(): int
+    {
+        $configured = (int) ($this->default_duration ?: 60);
+
+        return $configured > 0 ? $configured : 60;
+    }
 
     public function services()
     {

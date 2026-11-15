@@ -264,6 +264,314 @@
         border-radius: 999px;
         white-space: nowrap;
     }
+
+    .bk-combo-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #f8efe6;
+        background: rgba(212, 163, 115, 0.2);
+        border: 1px solid rgba(229, 184, 168, 0.36);
+        white-space: nowrap;
+    }
+
+    .bk-pending-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 7px;
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: 600;
+        color: #d4a373;
+        background: rgba(212, 163, 115, 0.14);
+    }
+
+    .bk-decide-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #c9a39a;
+        background: rgba(201, 163, 154, 0.12);
+        border: 1px solid rgba(201, 163, 154, 0.28);
+        white-space: nowrap;
+    }
+
+    .bk-decide-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid rgba(201, 163, 154, 0.4);
+        border-radius: 999px;
+        padding: 4px 13px;
+        font-size: 12px;
+        font-weight: 600;
+        background: transparent;
+        color: #c9a39a;
+        transition: all 0.15s ease;
+    }
+
+    .bk-decide-pill:hover {
+        background: rgba(201, 163, 154, 0.1);
+        color: #e79a91;
+    }
+
+    .bk-decide-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        background: rgba(255, 255, 255, 0.025);
+        border: 1px solid rgba(201, 163, 154, 0.25);
+        border-radius: 10px;
+        padding: 10px 13px;
+    }
+
+    .bk-edit-combo-card {
+        background: rgba(255, 255, 255, 0.025);
+        border: 1px solid rgba(229, 184, 168, 0.22);
+        border-radius: 12px;
+        padding: 12px 14px;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .bk-edit-combo-card:hover {
+        background: rgba(229, 184, 168, 0.06);
+        border-color: rgba(229, 184, 168, 0.42);
+    }
+
+    .bk-edit-combo-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .bk-edit-combo-picked-list {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+        font-size: 12.5px;
+        color: #f8efe6;
+    }
+
+    .bk-edit-combo-sub-back {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 1px solid rgba(229, 184, 168, 0.24);
+        background: rgba(255, 255, 255, 0.03);
+        color: #f8efe6;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .bk-edit-combo-sub-back:hover {
+        background: rgba(229, 184, 168, 0.12);
+        border-color: rgba(229, 184, 168, 0.48);
+    }
+
+    .bk-edit-combo-counter-pill {
+        display: inline-flex;
+        align-items: center;
+        font-size: 11px;
+        font-weight: 700;
+        color: #e5b8a8;
+        background: rgba(229, 184, 168, 0.13);
+        border-radius: 999px;
+        padding: 3px 10px;
+        white-space: nowrap;
+    }
+
+    .bk-edit-combo-counter-pill.is-full {
+        color: #6ee7b7;
+        background: rgba(110, 231, 183, 0.14);
+    }
+
+    .bk-edit-combo-search-wrap {
+        position: relative;
+        margin-bottom: 10px;
+    }
+
+    .bk-edit-combo-search-wrap i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9b8882;
+        font-size: 15px;
+        pointer-events: none;
+    }
+
+    .bk-edit-combo-search-input {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(229, 184, 168, 0.2);
+        border-radius: 9px;
+        color: #f8efe6;
+        font-size: 13px;
+        padding: 8px 12px 8px 35px;
+        outline: none;
+    }
+
+    .bk-edit-combo-search-input:focus {
+        border-color: rgba(229, 184, 168, 0.48);
+    }
+
+    .bk-edit-combo-skip-bar {
+        width: 100%;
+        margin-bottom: 10px;
+        padding: 8px 12px;
+        border-radius: 9px;
+        border: 1px dashed rgba(212, 163, 115, 0.34);
+        background: rgba(212, 163, 115, 0.07);
+        color: #e8c7a1;
+        font-size: 12.5px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        cursor: pointer;
+        text-align: left;
+        transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .bk-edit-combo-skip-bar:hover {
+        background: rgba(212, 163, 115, 0.14);
+        border-color: rgba(212, 163, 115, 0.55);
+    }
+
+    .bk-edit-combo-svc-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 2px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        transition: opacity 0.15s ease;
+    }
+
+    .bk-edit-combo-svc-row:last-child {
+        border-bottom: none;
+    }
+
+    .bk-edit-combo-svc-row.is-dimmed {
+        opacity: 0.42;
+    }
+
+    .bk-combo-seg {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 999px;
+        padding: 2px;
+        gap: 2px;
+        flex-shrink: 0;
+    }
+
+    .bk-combo-mode-pill {
+        border: none;
+        border-radius: 999px;
+        background: transparent;
+        color: #b8a29a;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 11px;
+        transition: all 0.15s ease;
+    }
+
+    .bk-combo-mode-pill.is-today {
+        background: rgba(110, 231, 183, 0.18);
+        color: #6ee7b7;
+    }
+
+    .bk-combo-mode-pill.is-pending {
+        background: rgba(212, 163, 115, 0.2);
+        color: #e8c7a1;
+    }
+
+    .bk-combo-mode-pill:disabled {
+        opacity: 0.38;
+        cursor: not-allowed;
+    }
+
+    .bk-conflict-banner {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 11px 20px;
+        background: rgba(168, 82, 74, 0.14);
+        border-top: 1px solid rgba(168, 82, 74, 0.38);
+        color: #f8efe6;
+        font-size: 0.8125rem;
+        line-height: 1.45;
+    }
+
+    .bk-conflict-banner-body {
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+        min-width: 0;
+    }
+
+    .bk-conflict-banner-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: #fda4af;
+        margin-top: 6px;
+        flex-shrink: 0;
+    }
+
+    .bk-conflict-banner-close {
+        background: transparent;
+        border: 0;
+        color: #b8a29a;
+        font-size: 1rem;
+        line-height: 1;
+        padding: 2px 4px;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .bk-conflict-banner-close:hover {
+        color: #f8efe6;
+    }
+
+    .bk-toast-notice {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 2100;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        max-width: 400px;
+        padding: 11px 15px;
+        border-radius: 12px;
+        background: linear-gradient(180deg, rgba(34, 22, 27, 0.96) 0%, rgba(21, 14, 18, 0.98) 100%);
+        border: 1px solid rgba(253, 164, 175, 0.35);
+        color: #f8efe6;
+        font-size: 13px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
+    }
 </style>
 
 @section('content')
@@ -482,8 +790,26 @@
                                 @endif
                             </td>
                             <td>{{ $appointment->phone }}</td>
-                            <td>{{ $appointment->service_name }}</td>
-                            <td>{{ ucwords(str_replace('_', ' ', $appointment->branch)) }}</td>
+                            <td>
+                                @php
+                                    $rowComboName = $appointment->display_combo_name;
+                                    $rowPendingNames = $appointment->appointmentServices->where('is_pending', true)->pluck('name')->values()->all();
+                                @endphp
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    @if ($rowComboName)
+                                        <span class="bk-combo-badge">{{ $rowComboName }}</span>
+                                    @endif
+                                    @if ($appointment->decide_in_salon && !$rowComboName)
+                                        <span class="bk-decide-badge">Decide in Salon</span>
+                                    @else
+                                        <span>{{ $appointment->is_combo_tbd ? 'Choose in Salon' : $appointment->service_name }}</span>
+                                    @endif
+                                    @if (!empty($rowPendingNames))
+                                        <span class="bk-pending-chip">Pending: {{ implode(', ', $rowPendingNames) }}</span>
+                                    @endif
+                                </div>
+                            </td>
+                            <td>{{ $appointment->branch_label ?? ucwords(str_replace('_', ' ', $appointment->branch)) }}</td>
                             <td>{{ $appointment->appointment_datetime->format('d M Y, h:i A') }}</td>
                             <td>{{ number_format($appointment->price, 2) }}</td>
                             <td>{{ $appointment->staff?->name ?? 'N/A' }}</td>
@@ -498,6 +824,20 @@
                                 @if (auth()->user()->canEdit('bookings') || auth()->user()->canEdit('finance'))
                                     @php
                                         $isPaidBooking = (bool) ($appointment->paid_at || $appointment->sale);
+                                        $standaloneSvcNames = $appointment->appointmentServices
+                                            ->where('is_pending', false)
+                                            ->whereNull('client_package_id')
+                                            ->whereNull('combo_id')
+                                            ->pluck('name')
+                                            ->values()
+                                            ->all();
+                                        if (empty($standaloneSvcNames) && !$rowComboName && !$appointment->decide_in_salon) {
+                                            $standaloneSvcNames = array_values(array_filter(
+                                                array_map('trim', explode(',', (string) $appointment->service_name)),
+                                                fn ($n) => $n !== '' && !in_array(strtolower($n), ['decide in salon', 'choose in salon', 'services tbd in salon'], true)
+                                            ));
+                                        }
+                                        $isUnresolvedRowDecide = (bool) $appointment->decide_in_salon && empty($standaloneSvcNames) && !$rowComboName;
                                         $apptData = [
                                             'id' => $appointment->id,
                                             'customer_name' => $appointment->customer_name,
@@ -505,7 +845,11 @@
                                             'branch' => $appointment->branch,
                                             'date' => $appointment->appointment_datetime->format('Y-m-d'),
                                             'time' => $appointment->appointment_datetime->format('H:i'),
-                                            'service_names' => array_values(array_filter(array_map('trim', explode(',', $appointment->service_name)))),
+                                            'service_names' => $standaloneSvcNames,
+                                            'combo_name' => $rowComboName,
+                                            'is_combo_tbd' => $appointment->is_combo_tbd,
+                                            'decide_in_salon' => (bool) $appointment->decide_in_salon,
+                                            'hold_duration' => $appointment->effective_hold_duration,
                                             'staff_id' => $appointment->staff_id,
                                             'staff_name' => $appointment->staff->name ?? null,
                                             'status' => $appointment->status,
@@ -517,6 +861,9 @@
                                     <div class="d-flex gap-2 justify-content-center">
                                         @if (auth()->user()->canEdit('finance') && !$isPaidBooking && !in_array($appointment->status, ['cancelled', 'no_show']))
                                             <a href="{{ route('appointments.revenue.payment', $appointment->id) }}"
+                                                @if ($isUnresolvedRowDecide)
+                                                    onclick="event.preventDefault(); bkShowToast('Please add the service(s) or combo performed before completing checkout.');"
+                                                @endif
                                                 class="btn btn-sm btn-outline-success" title="Checkout &amp; Record Payment">
                                                 💳 Checkout
                                             </a>
@@ -572,15 +919,19 @@
                     <input type="hidden" name="appointment_datetime" id="editDatetimeHidden">
                     <input type="hidden" name="price" id="editPriceHidden" value="0">
 
-                    <div class="modal-header">
+                    <div class="modal-header" id="editModalMainHeader">
                         <h5 class="modal-title">
                             Edit Booking <span class="text-muted" id="editCustomerNameLabel"></span>
                         </h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
-                    <div class="modal-body">
-                        <div id="editModalError" class="alert alert-danger d-none"></div>
-
+                    <div class="modal-header d-none align-items-center gap-2" id="editModalComboSubHeader">
+                        <button type="button" class="bk-edit-combo-sub-back" id="editModalComboBackBtn" title="Back to booking"><i class="bx bx-arrow-back"></i></button>
+                        <h5 class="modal-title mb-0 text-truncate flex-grow-1" id="editModalComboTitle">&nbsp;</h5>
+                        <span class="bk-edit-combo-counter-pill" id="editModalComboCounter">0 / 0 Selected</span>
+                        <button type="button" class="btn-close ms-1" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="editModalMainBody">
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label">Branch</label>
@@ -613,8 +964,28 @@
                                 <input type="time" id="editTime" class="form-control" required>
                             </div>
 
+                            <div class="col-12 d-none" id="editComboPackagesWrap">
+                                <label class="form-label">Combo Package</label>
+                                <div id="editComboPackagesContainer"></div>
+                                <div id="editComboHiddenInputs"></div>
+                            </div>
+
                             <div class="col-12">
-                                <label class="form-label">Services</label>
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <label class="form-label mb-0" id="editStandaloneServicesLabel">Services</label>
+                                    <button type="button" class="bk-decide-pill d-none" id="editDecideSalonPill">Decide in Salon</button>
+                                </div>
+                                <input type="hidden" name="decide_in_salon" id="editDecideInSalonHidden" value="0">
+                                <div id="editDecideInSalonCard" class="bk-decide-card mb-2 d-none">
+                                    <div>
+                                        <div class="fw-semibold" style="color:#f8efe6; font-size:13.5px;">Decide in Salon</div>
+                                        <div class="text-muted" style="font-size:11.5px;">Client will choose services on arrival &middot; <span id="editDecideHoldMin">60</span> min hold</div>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="bk-decide-badge">0.00 QAR</span>
+                                        <button type="button" class="btn btn-sm p-0 border-0 text-muted" id="editDecideInSalonRemove" title="Remove Decide in Salon" style="font-size:18px; line-height:1;">&times;</button>
+                                    </div>
+                                </div>
                                 <div class="mb-2">
                                     <input type="text" id="editServiceSearch" class="form-control form-control-sm" placeholder="Search services..." autocomplete="off">
                                 </div>
@@ -638,16 +1009,43 @@
 
                             <div class="col-md-6">
                                 <label class="form-label">Team Member</label>
-                                <select name="staff_id" id="editStaffSelect" class="form-select" required>
-                                    <option value="">-- Select Staff --</option>
+                                <select name="staff_id" id="editStaffSelect" class="form-select">
+                                    <option value="">-- Select Staff (Unassigned) --</option>
                                 </select>
                                 <small class="text-danger d-none" id="editStaffHelp">No skilled &amp; available staff for this service/time.</small>
                             </div>
                         </div>
                     </div>
-                    <div class="modal-footer">
+                    <div class="modal-body d-none" id="editModalComboSubView">
+                        <div class="bk-edit-combo-search-wrap">
+                            <i class="bx bx-search"></i>
+                            <input type="text"
+                                id="editModalComboSearch"
+                                class="bk-edit-combo-search-input"
+                                placeholder="Search services in this combo..."
+                                autocomplete="off">
+                        </div>
+                        <button type="button" class="bk-edit-combo-skip-bar" id="editModalComboSkipBtn">
+                            <span>Skip selection — Decide services in salon</span>
+                            <span style="opacity:0.75; font-size:15px;">&rsaquo;</span>
+                        </button>
+                        <div class="small mb-2 d-none" id="editModalComboCapHint" style="color:#d4a373; font-weight:500;"></div>
+                        <div id="editModalComboList" style="max-height: 320px; overflow-y: auto;"></div>
+                    </div>
+                    <div id="editModalError" class="bk-conflict-banner d-none" role="alert">
+                        <div class="bk-conflict-banner-body">
+                            <span class="bk-conflict-banner-dot"></span>
+                            <span id="editModalErrorText"></span>
+                        </div>
+                        <button type="button" class="bk-conflict-banner-close" id="editModalErrorDismiss" aria-label="Dismiss">&times;</button>
+                    </div>
+                    <div class="modal-footer" id="editModalMainFooter">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-primary" id="editSaveBtn">Save changes</button>
+                    </div>
+                    <div class="modal-footer d-none justify-content-between" id="editModalComboSubFooter">
+                        <small class="text-muted" id="editModalComboHoldSummary">60m hold &middot; Decide in Salon</small>
+                        <button type="button" class="btn btn-primary" id="editModalComboApplyBtn">Done &middot; Apply to Booking</button>
                     </div>
                 </form>
             </div>
@@ -657,6 +1055,53 @@
 
 @section('scripts')
     <script>
+        const bkAllActiveStaff = @json(($activeStaffs ?? collect())->values());
+
+        function bkNormalizeBranchKey(raw) {
+            const val = String(raw || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+            if (!val) return '';
+            if (val === 'old_airport' || val.includes('airport')) return 'old_airport';
+            if (val === 'wakrah' || val === 'al_wakrah' || val.includes('wakrah')) return 'wakrah';
+            return val;
+        }
+
+        function bkStaffForBranch(branch) {
+            const norm = bkNormalizeBranchKey(branch);
+            return (bkAllActiveStaff || []).filter(s => {
+                if (!norm || !s.branch || s.branch === 'both') return true;
+                return bkNormalizeBranchKey(s.branch) === norm;
+            });
+        }
+
+        function bkShowToast(message) {
+            const existing = document.getElementById('bkToastNotice');
+            if (existing) existing.remove();
+            const toast = document.createElement('div');
+            toast.id = 'bkToastNotice';
+            toast.className = 'bk-toast-notice';
+            toast.innerHTML = `<span class="bk-conflict-banner-dot" style="margin-top:0;"></span><span style="flex:1;">${escHtml(message)}</span><button type="button" class="bk-conflict-banner-close" aria-label="Dismiss">&times;</button>`;
+            toast.querySelector('button').addEventListener('click', () => toast.remove());
+            document.body.appendChild(toast);
+            setTimeout(() => { if (toast.isConnected) toast.remove(); }, 5000);
+        }
+
+        function showEditModalError(message) {
+            const banner = document.getElementById('editModalError');
+            const textEl = document.getElementById('editModalErrorText');
+            if (!banner || !textEl) return;
+            textEl.textContent = message || 'Unable to save changes to this booking.';
+            banner.classList.remove('d-none');
+        }
+
+        function hideEditModalError() {
+            const banner = document.getElementById('editModalError');
+            const textEl = document.getElementById('editModalErrorText');
+            if (textEl) textEl.textContent = '';
+            if (banner) banner.classList.add('d-none');
+        }
+
+        document.getElementById('editModalErrorDismiss')?.addEventListener('click', hideEditModalError);
+
         function showCustomerProfile(phone) {
             if (!phone || !String(phone).trim()) return;
             fetch(`/appointments/customer-profile/${encodeURIComponent(phone)}`)
@@ -691,10 +1136,16 @@
                     let tbody = document.getElementById('profileAppointments');
                     tbody.innerHTML = '';
                     data.appointments.forEach(a => {
+                        const safeCombo = a.combo_name
+                            ? `<span class="bk-combo-badge me-1">${String(a.combo_name).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`
+                            : '';
+                        const svcDisplay = (a.decide_in_salon && !a.combo_name)
+                            ? `<span class="bk-decide-badge">Decide in Salon</span>`
+                            : escHtml(a.is_combo_tbd ? 'Choose in Salon' : a.service_name);
                         tbody.innerHTML += `
                             <tr>
                                 <td>${a.appointment_datetime}</td>
-                                <td>${a.service_name}</td>
+                                <td>${safeCombo}${svcDisplay}</td>
                                 <td>${a.price}</td>
                                 <td>${a.branch}</td>
                                 <td>${a.agent}</td>
@@ -704,7 +1155,7 @@
 
                     new bootstrap.Modal(document.getElementById('customerProfileModal')).show();
                 })
-                .catch(() => alert('No records found'));
+                .catch(() => bkShowToast('No client profile records found.'));
         }
 
         function bkOnPeriodChange(sel) {
@@ -736,11 +1187,307 @@
         /* ---------------- EDIT / RESCHEDULE BOOKING MODAL ---------------- */
         let editCurrentApptId = null;
         let editPendingStaffId = null;
+        let editComboDrafts = [];
+        let activeEditComboSubDraft = null;
+        let editDecideInSalon = false;
+        let editHoldDuration = 60;
+
+        function closeEditModalComboSubView() {
+            activeEditComboSubDraft = null;
+            document.getElementById('editModalMainHeader').classList.remove('d-none');
+            document.getElementById('editModalMainBody').classList.remove('d-none');
+            document.getElementById('editModalMainFooter').classList.remove('d-none');
+            document.getElementById('editModalComboSubHeader').classList.add('d-none');
+            document.getElementById('editModalComboSubView').classList.add('d-none');
+            document.getElementById('editModalComboSubFooter').classList.add('d-none');
+        }
+
+        function openEditModalComboSubView(idx) {
+            const base = editComboDrafts[idx];
+            if (!base) return;
+            hideEditModalError();
+
+            activeEditComboSubDraft = {
+                idx,
+                pkg: base.pkg,
+                todayIds: [...base.todayIds],
+                pendingIds: [...base.pendingIds]
+            };
+
+            const searchEl = document.getElementById('editModalComboSearch');
+            if (searchEl) searchEl.value = '';
+
+            document.getElementById('editModalMainHeader').classList.add('d-none');
+            document.getElementById('editModalMainBody').classList.add('d-none');
+            document.getElementById('editModalMainFooter').classList.add('d-none');
+            document.getElementById('editModalComboSubHeader').classList.remove('d-none');
+            document.getElementById('editModalComboSubView').classList.remove('d-none');
+            document.getElementById('editModalComboSubFooter').classList.remove('d-none');
+
+            renderEditModalComboSubView();
+        }
+
+        function renderEditModalComboSubView() {
+            if (!activeEditComboSubDraft) return;
+            const cfg = activeEditComboSubDraft;
+            const pkg = cfg.pkg;
+            const pool = Array.isArray(pkg.pool_services) ? pkg.pool_services : [];
+            const qtyIncluded = Number(pkg.quantity_included) || 0;
+            const usedEarlier = Number(pkg.redeemed_elsewhere_count) || 0;
+            const maxVisit = Math.max(0, qtyIncluded - usedEarlier);
+            const visitSelected = cfg.todayIds.length + cfg.pendingIds.length;
+            const totalSelected = visitSelected + usedEarlier;
+            const capReached = visitSelected >= maxVisit && maxVisit > 0;
+
+            document.getElementById('editModalComboTitle').textContent = pkg.combo_name || 'Combo Package';
+            const counterEl = document.getElementById('editModalComboCounter');
+            counterEl.textContent = `${totalSelected} / ${qtyIncluded} Selected`;
+            counterEl.classList.toggle('is-full', capReached);
+
+            const capHintEl = document.getElementById('editModalComboCapHint');
+            if (capReached && pool.length > qtyIncluded) {
+                capHintEl.textContent = `Max ${qtyIncluded} of ${pool.length} services selected — tap an active pill to swap`;
+                capHintEl.classList.remove('d-none');
+            } else {
+                capHintEl.textContent = '';
+                capHintEl.classList.add('d-none');
+            }
+
+            const todayDur = pool
+                .filter(s => cfg.todayIds.includes(Number(s.id)))
+                .reduce((sum, s) => sum + (Number(s.duration) || 30), 0);
+            const holdSummaryEl = document.getElementById('editModalComboHoldSummary');
+            if (cfg.todayIds.length > 0) {
+                holdSummaryEl.textContent = `${todayDur}m salon time (${cfg.todayIds.length} Today${cfg.pendingIds.length ? ` · ${cfg.pendingIds.length} Pending` : ''})`;
+            } else if (cfg.pendingIds.length > 0) {
+                holdSummaryEl.textContent = `60m hold · ${cfg.pendingIds.length} Pending`;
+            } else {
+                holdSummaryEl.textContent = '60m hold · Decide in Salon';
+            }
+
+            const query = (document.getElementById('editModalComboSearch').value || '').trim().toLowerCase();
+            const filtered = query
+                ? pool.filter(svc => String(svc.name || '').toLowerCase().includes(query))
+                : pool;
+
+            const listEl = document.getElementById('editModalComboList');
+            if (!filtered.length) {
+                listEl.innerHTML = `<div class="text-muted small py-4 text-center">No matching services in this combo.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = filtered.map(svc => {
+                const sid = Number(svc.id);
+                const dur = Number(svc.duration) || 30;
+                if (svc.state === 'redeemed_elsewhere') {
+                    return `<div class="bk-edit-combo-svc-row is-dimmed">
+                        <div>
+                            <div class="fw-semibold" style="color:#f8efe6; font-size:13px;">${escHtml(svc.name)}</div>
+                            <div class="text-muted" style="font-size:11.5px;">${dur} min</div>
+                        </div>
+                        <span class="bk-combo-mode-pill">Redeemed</span>
+                    </div>`;
+                }
+
+                const isToday = cfg.todayIds.includes(sid);
+                const isPending = !isToday && cfg.pendingIds.includes(sid);
+                const disableNewPick = !isToday && !isPending && (capReached || maxVisit === 0);
+
+                return `<div class="bk-edit-combo-svc-row ${disableNewPick ? 'is-dimmed' : ''}">
+                    <div>
+                        <div class="fw-semibold" style="color:#f8efe6; font-size:13px;">${escHtml(svc.name)}</div>
+                        <div class="text-muted" style="font-size:11.5px;">${dur} min</div>
+                    </div>
+                    <div class="bk-combo-seg">
+                        <button type="button" class="bk-combo-mode-pill bk-edit-sub-today ${isToday ? 'is-today' : ''}"
+                            data-svc="${sid}" ${disableNewPick ? 'disabled' : ''}>Today</button>
+                        <button type="button" class="bk-combo-mode-pill bk-edit-sub-pending ${isPending ? 'is-pending' : ''}"
+                            data-svc="${sid}" ${disableNewPick ? 'disabled' : ''}>Pending</button>
+                    </div>
+                </div>`;
+            }).join('');
+
+            listEl.querySelectorAll('.bk-edit-sub-today').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!activeEditComboSubDraft) return;
+                    const sid = Number(btn.dataset.svc);
+                    if (cfg.todayIds.includes(sid)) {
+                        cfg.todayIds = cfg.todayIds.filter(id => id !== sid);
+                    } else {
+                        if (cfg.pendingIds.includes(sid)) {
+                            cfg.pendingIds = cfg.pendingIds.filter(id => id !== sid);
+                        }
+                        if (cfg.todayIds.length + cfg.pendingIds.length < maxVisit) {
+                            cfg.todayIds.push(sid);
+                        }
+                    }
+                    renderEditModalComboSubView();
+                });
+            });
+
+            listEl.querySelectorAll('.bk-edit-sub-pending').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!activeEditComboSubDraft) return;
+                    const sid = Number(btn.dataset.svc);
+                    if (cfg.pendingIds.includes(sid)) {
+                        cfg.pendingIds = cfg.pendingIds.filter(id => id !== sid);
+                    } else {
+                        if (cfg.todayIds.includes(sid)) {
+                            cfg.todayIds = cfg.todayIds.filter(id => id !== sid);
+                        }
+                        if (cfg.todayIds.length + cfg.pendingIds.length < maxVisit) {
+                            cfg.pendingIds.push(sid);
+                        }
+                    }
+                    renderEditModalComboSubView();
+                });
+            });
+        }
+
+        function commitEditModalComboSubView() {
+            if (!activeEditComboSubDraft) return;
+            const target = editComboDrafts[activeEditComboSubDraft.idx];
+            if (target) {
+                target.todayIds = [...activeEditComboSubDraft.todayIds];
+                target.pendingIds = [...activeEditComboSubDraft.pendingIds];
+            }
+            closeEditModalComboSubView();
+            renderEditModalCombos();
+            updateEditServiceTotals(true);
+            loadEditAvailableStaff();
+        }
+
+        (function initEditModalComboSubEvents() {
+            const backBtn = document.getElementById('editModalComboBackBtn');
+            const searchEl = document.getElementById('editModalComboSearch');
+            const skipBtn = document.getElementById('editModalComboSkipBtn');
+            const applyBtn = document.getElementById('editModalComboApplyBtn');
+
+            if (backBtn) backBtn.addEventListener('click', closeEditModalComboSubView);
+            if (searchEl) searchEl.addEventListener('input', renderEditModalComboSubView);
+            if (skipBtn) {
+                skipBtn.addEventListener('click', () => {
+                    if (!activeEditComboSubDraft) return;
+                    activeEditComboSubDraft.todayIds = [];
+                    activeEditComboSubDraft.pendingIds = [];
+                    commitEditModalComboSubView();
+                });
+            }
+            if (applyBtn) applyBtn.addEventListener('click', commitEditModalComboSubView);
+        })();
+
+        function escHtml(s) {
+            return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function populateEditStaffOptions(availableIdsSet, branch, preferredId) {
+            const staffSelect = document.getElementById('editStaffSelect');
+            const branchStaff = bkStaffForBranch(branch);
+            staffSelect.innerHTML = '<option value="">-- Select Staff (Unassigned) --</option>';
+
+            const availableList = availableIdsSet
+                ? branchStaff.filter(s => availableIdsSet.has(String(s.id)))
+                : branchStaff;
+            const unavailableList = availableIdsSet
+                ? branchStaff.filter(s => !availableIdsSet.has(String(s.id)))
+                : [];
+
+            availableList.forEach(s => {
+                staffSelect.insertAdjacentHTML('beforeend', `<option value="${s.id}">${escHtml(s.name)}</option>`);
+            });
+            unavailableList.forEach(s => {
+                staffSelect.insertAdjacentHTML('beforeend', `<option value="${s.id}">${escHtml(s.name)} · Unavailable</option>`);
+            });
+
+            if (preferredId && [...staffSelect.options].some(o => String(o.value) === String(preferredId))) {
+                staffSelect.value = String(preferredId);
+            }
+        }
+
+        function renderEditModalCombos() {
+            const wrap = document.getElementById('editComboPackagesWrap');
+            const container = document.getElementById('editComboPackagesContainer');
+            const hidden = document.getElementById('editComboHiddenInputs');
+            const standaloneLabel = document.getElementById('editStandaloneServicesLabel');
+
+            if (!editComboDrafts.length) {
+                wrap.classList.add('d-none');
+                container.innerHTML = '';
+                hidden.innerHTML = '';
+                standaloneLabel.textContent = 'Services';
+                return;
+            }
+
+            wrap.classList.remove('d-none');
+            standaloneLabel.textContent = 'Additional Standalone Services (Optional)';
+
+            container.innerHTML = editComboDrafts.map((draft, idx) => {
+                const pkg = draft.pkg;
+                const qtyIncluded = Number(pkg.quantity_included) || 0;
+                const usedEarlier = Number(pkg.redeemed_elsewhere_count) || 0;
+                const pool = Array.isArray(pkg.pool_services) ? pkg.pool_services : [];
+
+                const pickedChips = [];
+                pool.forEach(svc => {
+                    const sid = Number(svc.id);
+                    if (draft.todayIds.includes(sid)) {
+                        pickedChips.push(`<span>${escHtml(svc.name)} <span style="color:#6ee7b7; font-size:11px; font-weight:600;">(Today)</span></span>`);
+                    } else if (draft.pendingIds.includes(sid)) {
+                        pickedChips.push(`<span>${escHtml(svc.name)} <span style="color:#d4a373; font-size:11px; font-weight:600;">(Pending)</span></span>`);
+                    }
+                });
+                if (usedEarlier > 0) {
+                    pickedChips.push(`<span class="text-muted">${usedEarlier} redeemed</span>`);
+                }
+
+                const totalSelected = draft.todayIds.length + draft.pendingIds.length + usedEarlier;
+                const secondRowHtml = totalSelected === 0
+                    ? `<div class="bk-edit-combo-trigger">
+                            <span class="small" style="color:#d4a373; font-weight:500;">0 / ${qtyIncluded} Selected &middot; Decide in Salon &mdash; Click to choose services</span>
+                            <span style="color:#e5b8a8; font-size:16px; line-height:1;">&rsaquo;</span>
+                       </div>`
+                    : `<div class="bk-edit-combo-trigger">
+                            <div class="bk-edit-combo-picked-list">
+                                ${pickedChips.join('<span style="color:rgba(248,239,230,0.28);">&middot;</span>')}
+                            </div>
+                            <span class="small fw-semibold" style="color:#e5b8a8; white-space:nowrap;">Edit services (${totalSelected}/${qtyIncluded}) &rsaquo;</span>
+                       </div>`;
+
+                return `<div class="bk-edit-combo-card mb-2" data-open-edit-combo="${idx}" role="button" tabindex="0">
+                    <div class="d-flex justify-content-between align-items-center gap-2">
+                        <div class="d-flex align-items-center gap-2 min-w-0">
+                            <span class="bk-combo-badge">COMBO</span>
+                            <strong class="text-truncate" style="color:#f8efe6;">${escHtml(pkg.combo_name)}</strong>
+                        </div>
+                        <strong style="color:#e5b8a8; white-space:nowrap;">${Number(pkg.price_paid).toFixed(2)} QAR</strong>
+                    </div>
+                    ${secondRowHtml}
+                </div>`;
+            }).join('');
+
+            hidden.innerHTML = editComboDrafts.map((draft, idx) => `
+                <input type="hidden" name="combo_packages[${idx}][client_package_id]" value="${draft.pkg.client_package_id}">
+                ${draft.todayIds.map(sid => `<input type="hidden" name="combo_packages[${idx}][today_service_ids][]" value="${sid}">`).join('')}
+                ${draft.pendingIds.map(sid => `<input type="hidden" name="combo_packages[${idx}][pending_service_ids][]" value="${sid}">`).join('')}
+            `).join('');
+
+            container.querySelectorAll('[data-open-edit-combo]').forEach(card => {
+                card.addEventListener('click', () => openEditModalComboSubView(Number(card.dataset.openEditCombo)));
+                card.addEventListener('keydown', e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openEditModalComboSubView(Number(card.dataset.openEditCombo));
+                    }
+                });
+            });
+        }
 
         function openBookingEditModal(btn) {
             const appt = JSON.parse(btn.dataset.appt);
             editCurrentApptId = appt.id;
             editPendingStaffId = appt.staff_id;
+            editComboDrafts = [];
+            closeEditModalComboSubView();
 
             document.getElementById('bookingEditForm').action = `/appointments/${appt.id}`;
             document.getElementById('editCustomerName').value = appt.customer_name || '';
@@ -752,22 +1499,44 @@
             document.getElementById('editDate').value = appt.date;
             document.getElementById('editTime').value = appt.time;
             document.getElementById('editPriceHidden').value = appt.price || 0;
-            document.getElementById('editModalError').classList.add('d-none');
+            hideEditModalError();
             document.getElementById('editStaffHelp').classList.add('d-none');
 
             document.querySelectorAll('.edit-service-checkbox').forEach(cb => {
                 cb.checked = appt.service_names.includes(cb.value);
             });
+            editDecideInSalon = Boolean(appt.decide_in_salon) && !appt.service_names.length && !appt.combo_name;
+            editHoldDuration = Number(appt.hold_duration) || 60;
+            renderEditModalCombos();
             updateEditServiceTotals(false);
             document.getElementById('editServiceSearch').value = '';
             document.querySelectorAll('.edit-service-row').forEach(row => row.style.display = '');
             document.getElementById('editServiceNoResults').classList.add('d-none');
 
-            const staffSelect = document.getElementById('editStaffSelect');
-            staffSelect.innerHTML = appt.staff_id
-                ? `<option value="${appt.staff_id}">${appt.staff_name || 'Current staff'}</option>`
-                : '<option value="">-- Select Staff --</option>';
-            loadEditAvailableStaff();
+            populateEditStaffOptions(null, appt.branch, appt.staff_id);
+
+            fetch(`/appointments/${appt.id}`, { headers: { 'Accept': 'application/json' } })
+                .then(r => r.json())
+                .then(detail => {
+                    if (editCurrentApptId !== appt.id) return;
+                    const pkgs = Array.isArray(detail.combo_packages) ? detail.combo_packages : [];
+                    editComboDrafts = pkgs.map(pkg => {
+                        const todayIds = [];
+                        const pendingIds = [];
+                        (pkg.pool_services || []).forEach(svc => {
+                            if (svc.state === 'today') todayIds.push(Number(svc.id));
+                            else if (svc.state === 'pending') pendingIds.push(Number(svc.id));
+                        });
+                        return { pkg, todayIds, pendingIds };
+                    });
+                    if (editComboDrafts.length) {
+                        editDecideInSalon = false;
+                    }
+                    renderEditModalCombos();
+                    updateEditServiceTotals(true);
+                    loadEditAvailableStaff();
+                })
+                .catch(() => loadEditAvailableStaff());
 
             new bootstrap.Modal(document.getElementById('bookingEditModal')).show();
         }
@@ -775,17 +1544,62 @@
 
         function updateEditServiceTotals(recalcPrice = true) {
             const checked = [...document.querySelectorAll('.edit-service-checkbox:checked')];
-            const totalPrice = checked.reduce((sum, cb) => sum + (parseFloat(cb.dataset.price) || 0), 0);
-            const totalMin = checked.reduce((sum, cb) => sum + (parseInt(cb.dataset.duration) || 0), 0);
-            document.getElementById('editServiceTotals').textContent =
-                `${checked.length} service${checked.length === 1 ? '' : 's'} selected · ${totalMin} min · ${totalPrice.toFixed(2)} QAR`;
+            if (checked.length > 0 || editComboDrafts.length > 0) {
+                editDecideInSalon = false;
+            }
+
+            const decideCard = document.getElementById('editDecideInSalonCard');
+            const decidePill = document.getElementById('editDecideSalonPill');
+            const decideHidden = document.getElementById('editDecideInSalonHidden');
+            const decideHoldSpan = document.getElementById('editDecideHoldMin');
+            if (decideHoldSpan) decideHoldSpan.textContent = String(editHoldDuration || 60);
+            if (decideCard) decideCard.classList.toggle('d-none', !(editDecideInSalon && !checked.length && !editComboDrafts.length));
+            if (decidePill) decidePill.classList.toggle('d-none', checked.length > 0 || editComboDrafts.length > 0 || editDecideInSalon);
+            if (decideHidden) decideHidden.value = (editDecideInSalon && !checked.length && !editComboDrafts.length) ? '1' : '0';
+
+            const standalonePrice = checked.reduce((sum, cb) => sum + (parseFloat(cb.dataset.price) || 0), 0);
+            const standaloneMin = checked.reduce((sum, cb) => sum + (parseInt(cb.dataset.duration) || 0), 0);
+            const comboLockedPrice = editComboDrafts.reduce((sum, d) => sum + (Number(d.pkg.price_paid) || 0), 0);
+            const comboMin = editComboDrafts.reduce((sum, d) => {
+                return sum + (d.pkg.pool_services || [])
+                    .filter(s => d.todayIds.includes(Number(s.id)))
+                    .reduce((acc, s) => acc + (Number(s.duration) || 0), 0);
+            }, 0);
+            const totalPrice = standalonePrice + comboLockedPrice;
+            const totalMin = (standaloneMin + comboMin) || (editComboDrafts.length ? 60 : (editDecideInSalon ? (editHoldDuration || 60) : 0));
+
+            if (editComboDrafts.length) {
+                document.getElementById('editServiceTotals').textContent =
+                    `Combo locked + ${checked.length} extra service${checked.length === 1 ? '' : 's'} · ${totalMin} min · ${totalPrice.toFixed(2)} QAR`;
+            } else if (editDecideInSalon && !checked.length) {
+                document.getElementById('editServiceTotals').textContent =
+                    `Decide in Salon · 1h (${totalMin} min hold) · 0.00 QAR`;
+            } else {
+                document.getElementById('editServiceTotals').textContent =
+                    `${checked.length} service${checked.length === 1 ? '' : 's'} selected · ${totalMin} min · ${totalPrice.toFixed(2)} QAR`;
+            }
             if (recalcPrice) {
                 document.getElementById('editPriceHidden').value = totalPrice.toFixed(2);
             }
         }
 
+        document.getElementById('editDecideSalonPill')?.addEventListener('click', () => {
+            if (document.querySelectorAll('.edit-service-checkbox:checked').length || editComboDrafts.length) return;
+            editDecideInSalon = true;
+            hideEditModalError();
+            updateEditServiceTotals(true);
+            loadEditAvailableStaff();
+        });
+
+        document.getElementById('editDecideInSalonRemove')?.addEventListener('click', () => {
+            editDecideInSalon = false;
+            updateEditServiceTotals(true);
+            loadEditAvailableStaff();
+        });
+
         document.querySelectorAll('.edit-service-checkbox').forEach(cb => {
             cb.addEventListener('change', () => {
+                hideEditModalError();
                 updateEditServiceTotals(true);
                 loadEditAvailableStaff();
             });
@@ -808,16 +1622,33 @@
         function loadEditAvailableStaff() {
             const staffSelect = document.getElementById('editStaffSelect');
             const staffHelp = document.getElementById('editStaffHelp');
-            const services = [...document.querySelectorAll('.edit-service-checkbox:checked')].map(cb => cb.value);
+            const standaloneServices = [...document.querySelectorAll('.edit-service-checkbox:checked')].map(cb => cb.value);
+            const comboTodayServices = [];
+            editComboDrafts.forEach(d => {
+                (d.pkg.pool_services || []).forEach(svc => {
+                    if (d.todayIds.includes(Number(svc.id))) {
+                        comboTodayServices.push(svc.name);
+                    }
+                });
+            });
+            const services = [...new Set([...standaloneServices, ...comboTodayServices])];
             const date = document.getElementById('editDate').value;
             const time = document.getElementById('editTime').value;
             const branch = document.getElementById('editBranch').value;
+            const preferredId = editPendingStaffId ?? staffSelect.value;
 
             staffHelp.classList.add('d-none');
-            if (!services.length || !date || !time || !branch) return;
+            if ((!services.length && !editComboDrafts.length && !editDecideInSalon) || !date || !time || !branch) {
+                populateEditStaffOptions(null, branch, preferredId);
+                return;
+            }
 
             const params = new URLSearchParams();
-            services.forEach(s => params.append('services[]', s));
+            if (services.length) {
+                services.forEach(s => params.append('services[]', s));
+            } else {
+                params.append('decide_in_salon', '1');
+            }
             params.append('appointment_datetime', `${date}T${time}`);
             params.append('branch', branch);
             if (editCurrentApptId) params.append('exclude_appointment_id', editCurrentApptId);
@@ -825,49 +1656,90 @@
             fetch(`{{ route('appointments.availableStaff') }}?${params.toString()}`)
                 .then(r => r.json())
                 .then(list => {
-                    const previouslySelected = staffSelect.value;
-                    staffSelect.innerHTML = '<option value="">-- Select Staff --</option>';
-
-                    if (!list.length) {
+                    const currentVal = editPendingStaffId ?? staffSelect.value;
+                    const availableIds = new Set((Array.isArray(list) ? list : []).map(s => String(s.id)));
+                    populateEditStaffOptions(availableIds, branch, currentVal);
+                    if (!availableIds.size) {
                         staffHelp.classList.remove('d-none');
-                        return;
-                    }
-
-                    list.forEach(s => {
-                        staffSelect.insertAdjacentHTML('beforeend', `<option value="${s.id}">${s.name}</option>`);
-                    });
-
-                    const toSelect = editPendingStaffId ?? previouslySelected;
-                    if (toSelect && [...staffSelect.options].some(o => o.value == toSelect)) {
-                        staffSelect.value = toSelect;
                     }
                     editPendingStaffId = null;
                 })
-                .catch(() => staffHelp.classList.remove('d-none'));
+                .catch(() => {
+                    populateEditStaffOptions(null, branch, preferredId);
+                    staffHelp.classList.remove('d-none');
+                });
         }
 
-        document.getElementById('editBranch').addEventListener('change', loadEditAvailableStaff);
-        document.getElementById('editDate').addEventListener('change', loadEditAvailableStaff);
-        document.getElementById('editTime').addEventListener('change', loadEditAvailableStaff);
+        document.getElementById('editBranch').addEventListener('change', () => {
+            hideEditModalError();
+            loadEditAvailableStaff();
+        });
+        document.getElementById('editDate').addEventListener('change', () => {
+            hideEditModalError();
+            loadEditAvailableStaff();
+        });
+        document.getElementById('editTime').addEventListener('change', () => {
+            hideEditModalError();
+            loadEditAvailableStaff();
+        });
+        document.getElementById('editStaffSelect').addEventListener('change', hideEditModalError);
+        document.getElementById('editStatus').addEventListener('change', hideEditModalError);
 
-        document.getElementById('bookingEditForm').addEventListener('submit', function(e) {
+        document.getElementById('bookingEditForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const form = this;
+            const saveBtn = document.getElementById('editSaveBtn');
             const date = document.getElementById('editDate').value;
             const time = document.getElementById('editTime').value;
             document.getElementById('editDatetimeHidden').value = (date && time) ? `${date}T${time}` : '';
 
-            const errorEl = document.getElementById('editModalError');
-            errorEl.classList.add('d-none');
+            hideEditModalError();
 
-            if (!document.querySelectorAll('.edit-service-checkbox:checked').length) {
-                e.preventDefault();
-                errorEl.textContent = 'Select at least one service.';
-                errorEl.classList.remove('d-none');
+            const checkedCount = document.querySelectorAll('.edit-service-checkbox:checked').length;
+            const requestedStatus = document.getElementById('editStatus').value;
+
+            if (!checkedCount && !editComboDrafts.length && !editDecideInSalon && !['cancelled', 'no_show'].includes(requestedStatus)) {
+                showEditModalError('Please select at least one service, combo package, or choose Decide in Salon.');
                 return;
             }
-            if (!document.getElementById('editStaffSelect').value) {
-                e.preventDefault();
-                errorEl.textContent = 'Select a team member for this booking.';
-                errorEl.classList.remove('d-none');
+
+            if (requestedStatus === 'completed' && editDecideInSalon && !checkedCount && !editComboDrafts.length) {
+                showEditModalError('Please add the service(s) or combo performed before completing checkout.');
+                return;
+            }
+
+            const origLabel = saveBtn.textContent;
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving…';
+
+            try {
+                const resp = await fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || form.querySelector('input[name="_token"]')?.value || '',
+                    },
+                    body: new FormData(form),
+                });
+
+                const payload = await resp.json().catch(() => ({}));
+                if (!resp.ok || payload.success === false) {
+                    const firstErr = payload?.errors ? Object.values(payload.errors).flat()[0] : null;
+                    showEditModalError(payload?.message || firstErr || 'Unable to save booking changes.');
+                    return;
+                }
+
+                if (payload.redirect) {
+                    window.location.href = payload.redirect;
+                } else {
+                    window.location.reload();
+                }
+            } catch (err) {
+                showEditModalError('Network error while saving booking. Please try again.');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = origLabel;
             }
         });
 

@@ -462,7 +462,7 @@ class CustomerController extends Controller
         ]);
 
         $appointments = $customer->appointments()
-            ->with(['staff', 'appointmentServices.service.category'])
+            ->with(['staff', 'clientPackages', 'appointmentServices.service.category'])
             ->orderByDesc('appointment_datetime')
             ->get();
 
@@ -477,7 +477,7 @@ class CustomerController extends Controller
 
         $favoriteServices = $completedAppointments
             ->flatMap(fn($a) => array_map('trim', explode(',', (string) $a->service_name)))
-            ->filter(fn($name) => $name !== '' && strcasecmp($name, 'Decide in Salon') !== 0)
+            ->filter(fn($name) => $name !== '' && !in_array(strtolower($name), ['decide in salon', 'choose in salon', 'services tbd in salon'], true))
             ->countBy()
             ->sortDesc()
             ->take(5);
@@ -505,9 +505,12 @@ class CustomerController extends Controller
             $perApptServiceNames = [];
 
             foreach ($appt->appointmentServices as $line) {
+                if ($line->is_pending) {
+                    continue;
+                }
                 $svcModel = $line->service_id ? $catalogById->get((int) $line->service_id) : null;
                 $lineName = trim((string) ($svcModel?->name ?: $line->name));
-                if ($lineName !== '' && strcasecmp($lineName, 'Decide in Salon') !== 0) {
+                if ($lineName !== '' && !in_array(strtolower($lineName), ['decide in salon', 'choose in salon', 'services tbd in salon'], true)) {
                     $perApptServiceNames[strtolower($lineName)] = $lineName;
                 }
                 if (!$svcModel && $lineName !== '') {
@@ -523,7 +526,7 @@ class CustomerController extends Controller
 
             $flatNames = array_filter(array_map('trim', explode(',', (string) $appt->service_name)));
             foreach ($flatNames as $flatName) {
-                if ($flatName === '' || strcasecmp($flatName, 'Decide in Salon') === 0) {
+                if ($flatName === '' || in_array(strtolower($flatName), ['decide in salon', 'choose in salon', 'services tbd in salon'], true)) {
                     continue;
                 }
                 $key = strtolower($flatName);

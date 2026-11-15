@@ -61,6 +61,11 @@ class ClientPackage extends Model
         return $this->services()->where('status', 'redeemed');
     }
 
+    public function pendingServices()
+    {
+        return $this->services()->where('status', 'pending');
+    }
+
     public function getIsExpiredAttribute(): bool
     {
         if ($this->expires_at === null) {

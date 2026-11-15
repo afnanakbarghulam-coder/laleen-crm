@@ -9,12 +9,17 @@ class AppointmentService extends Model
     protected $fillable = [
         'appointment_id',
         'service_id',
+        'combo_id',
+        'combo_name',
+        'client_package_id',
         'staff_id',
         'name',
         'price',
         'original_price',
         'duration',
         'start_time',
+        'status',
+        'is_pending',
         'discount_type',
         'discount_value',
         'discount_amount',
@@ -23,6 +28,7 @@ class AppointmentService extends Model
 
     protected $casts = [
         'start_time' => 'datetime',
+        'is_pending' => 'boolean',
     ];
 
     /**
@@ -48,6 +54,10 @@ class AppointmentService extends Model
 
     public function isPackageRedemptionLine(): bool
     {
+        if ($this->is_pending || $this->client_package_id !== null || $this->combo_id !== null || !empty($this->combo_name)) {
+            return true;
+        }
+
         $reason = trim((string) $this->discount_reason);
         if ($reason !== '' && stripos($reason, 'Redeemed from ') === 0) {
             return true;
@@ -58,6 +68,16 @@ class AppointmentService extends Model
         }
 
         return $this->exists && ClientPackageService::where('appointment_service_id', $this->id)->exists();
+    }
+
+    public function combo()
+    {
+        return $this->belongsTo(Combo::class);
+    }
+
+    public function clientPackage()
+    {
+        return $this->belongsTo(ClientPackage::class);
     }
 
     public function clientPackageService()

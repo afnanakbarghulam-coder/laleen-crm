@@ -501,12 +501,16 @@ class AdLeadEntry extends Model
      */
     public static function appointmentBookedAmount(Appointment $appointment): float
     {
-        $linesSum = (float) $appointment->appointmentServices()->get()->sum(fn ($s) => $s->final_price);
-        $baseServiceTotal = $linesSum > 0 ? $linesSum : (float) $appointment->price;
+        $allLines = $appointment->appointmentServices()->get();
+        $linesSum = (float) $allLines->where('is_pending', false)->sum(fn ($s) => $s->final_price);
 
         $unpaidPackagesTotal = Schema::hasTable('client_packages')
             ? (float) ClientPackage::where('appointment_id', $appointment->id)->whereNull('sale_id')->sum('price_paid')
             : 0.0;
+
+        $baseServiceTotal = ($linesSum > 0 || $allLines->isNotEmpty() || $unpaidPackagesTotal > 0)
+            ? $linesSum
+            : (float) $appointment->price;
 
         $upsellsTotal = Schema::hasTable('appointment_upsells')
             ? (float) $appointment->upsells()->sum('amount')
