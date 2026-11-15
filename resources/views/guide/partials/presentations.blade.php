@@ -42,7 +42,7 @@
             </div>
 
             <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                <span class="gd-slide-counter" id="gdSlideIndicator">Slide 1 of 12</span>
+                <span class="gd-slide-counter" id="gdSlideIndicator">Slide 1 of 6</span>
                 <button type="button" class="gd-ghost-btn" id="gdToggleFullscreenBtn" title="Toggle Fullscreen">
                     <i class="bx bx-fullscreen"></i>
                     <span>Fullscreen</span>

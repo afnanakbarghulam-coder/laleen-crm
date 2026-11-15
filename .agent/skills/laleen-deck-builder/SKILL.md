@@ -2,42 +2,43 @@
 name: laleen-deck-builder
 description: >-
   Team-friendly presentation & strategy deck architect for Laleen Beauty Salon CRM.
-  Transforms raw campaign notes, SOP drafts, or growth ideas into clear, simple
-  8–12 slide decks across 6 visual layouts (cover, big_metric, timeline,
-  comparison, cards, table) for 1-click JSON import into CRM Guides ->
-  Presentations or direct local database seeding—with zero external API bloat.
+  Transforms raw campaign notes, SOP drafts, or growth ideas into ultra-clear
+  5–7 slide decks across 6 visual layouts (cover, big_metric, timeline,
+  comparison, cards, table) with simple QAR potential math for 1-click JSON
+  import into CRM Guides -> Presentations or direct local database seeding.
 ---
 
 # Laleen Deck Builder Skill
 
 Use this skill whenever the user asks to turn raw notes, WhatsApp brainstorms, marketing plans, SOPs, or Laleen Rituals guides into an in-app presentation deck for **`CRM Guides -> Presentations`**.
 
-The Presentations engine runs with **zero external LLM calls inside Laravel**. You act as the deck strategist: synthesize raw text into a clear, easy-to-follow 8–12 slide JSON deck that either pastes directly into **`+ New Presentation -> Paste Deck JSON (Instant Import)`** on live production or seeds directly into `crm_presentations` locally.
+The Presentations engine runs with **zero external LLM calls inside Laravel**. You act as the deck strategist: synthesize raw text into a short, ultra-clear **5–7 slide** JSON deck that either pastes directly into **`+ New Presentation -> Paste Deck JSON (Instant Import)`** on live production or seeds directly into `crm_presentations` locally.
 
 ---
 
-## 1. Plain Team Language, Roster & Density Rules (Mandatory)
+## 1. Plain Team Language, Roster & 5–7 Slide Rules (Mandatory)
 
 1. **Plain, Team-Friendly Language by Default (Zero Agency Jargon):**
    - Write in **simple, friendly everyday English** that every chat agent, branch manager, video editor, and stylist can understand in 5 seconds.
    - Unless the user explicitly asks for marketing-agency terminology, **avoid heavy jargon** like *"self-liquidating ad spend"*, *"omnichannel VSL"*, *"CPL arbitrage"*, or *"ROAS"*. Instead say *"short 45-second Founder video"*, *"under 15 QAR per lead"*, *"bookings that pay for our ads"*, and *"Friday ad sales check"*.
 2. **Current Laleen Team Roster (Use Accurate Names & Roles):**
    - **Co-Owner (Sister):** Giveaway/campaign videos & winner reaction calls.
-   - **Ayan:** Paid ads (Instagram, Facebook, TikTok), sign-up pages & "VIP" Auto-DM setup.
+   - **Ayan:** Paid ads (Instagram, Facebook, TikTok), sign-up pages & Auto-CRM sync (Phone + Email).
    - **Sana:** Reels editing & daily countdown/transformation Stories.
    - **Zoya & Areeba:** WhatsApp chat agents & voucher/appointment booking (`< 5 min` reply).
-   - **Laden:** Follow-up lead sweep & priority phone calls to top referrers.
+   - **Laden:** Follow-up lead sweep & priority phone calls to top inviters.
    - **Ahana & Rhea:** Branch floor leads across **Old Airport** (`Ahana`) & **Al Wakrah** (`Rhea`) (`80%+` show-up, `35%+` chair upgrades).
-   - **Arbab:** Daily CRM Ops Tracker checks & Friday sales vs. ad spend review.
+   - **Arbab:** Daily CRM Ops Tracker checks & Friday sales vs. ad spend report.
    - *(Never use outdated names like `Faye`—always use `Ahana` for Old Airport.)*
-3. **8–12 Slide Arc & Dynamic Layout Variety:**
-   - Default to **8 to 12 slides** unless the user specifies an exact slide count or per-slide layout plan:
-     - **Slide 1 (`cover`):** Clear headline, team/branch eyebrow, and 1-sentence summary.
-     - **Slide 2 (`big_metric`):** Hero QAR offer, prize value, or target goal (`1,000 QAR`, `500 QAR`, `< 5 Mins`) + concise breakdown.
-     - **Middle Slides (`timeline`, `comparison`, `cards`):** Day-by-day schedule, offer comparison, lead channels, and WhatsApp follow-up steps.
-     - **Team Slide (`table`):** Who does what (`TEAM MEMBER | MAIN JOB | TARGET GOAL`).
-     - **Closing Slide (`cover` or `cards`):** First 3 simple steps to launch.
-   - Mix all 6 visual layouts (`cover`, `big_metric`, `timeline`, `comparison`, `cards`, `table`) dynamically so the deck stays visually engaging.
+3. **Default to 5–7 Ultra-Clear Slides + Mandatory QAR Potential Slide:**
+   - Default to **5 to 7 concise slides** (unless the user explicitly asks for a longer or shorter count):
+     - **Slide 1 (`cover`):** Clear headline, team/branch eyebrow, and 2-sentence overview.
+     - **Slide 2 (`comparison` or `big_metric`):** The core offer, prize breakdown, or package value in QAR.
+     - **Slide 3 (`timeline`):** 3–4 simple steps showing how the campaign or SOP works end-to-end (including automatic Phone + Email CRM capture when applicable).
+     - **Slide 4 (`cards` or `big_metric` — MANDATORY POTENTIAL / EXPECTED RESULTS SLIDE):** Always include a **Potential / Expected Results** slide showing simple, transparent QAR math (e.g., *Safe Start*, *Target Goal*, and *Viral Hit* booking scenarios + permanent CRM list growth) so the team immediately sees the upside.
+     - **Slide 5 (`table`):** One clear job and target per team member (`TEAM MEMBER | MAIN JOB | TARGET`).
+     - **Slide 6 (`cover`):** Next 3 simple actions to go live.
+   - Mix layouts (`cover`, `big_metric`, `timeline`, `comparison`, `cards`, `table`) dynamically without repeating the same layout back-to-back.
 4. **Concise Scannability & Doha Context:**
    - Keep slides clean and scannable—short headings (**3–7 words**) and crisp 1-sentence descriptions on cards and timeline steps.
    - Always use **QAR** currency (`1,000 QAR`, `500 QAR`), **Old Airport** & **Al Wakrah** branch names, and **Laleen Rituals** product terminology where relevant.

@@ -24,13 +24,39 @@ class CustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $segments = $this->computeRetentionSegments();
+        $activeBranch = Customer::normalizeBranchFilter($request->query('branch'));
+        $globalSegments = $this->computeRetentionSegments(null);
+        $segments = $activeBranch ? $this->computeRetentionSegments($activeBranch) : $globalSegments;
         $rawSegment = strtolower(trim((string) $request->query('segment', 'all')));
         if ($rawSegment === 'second_visit_zone') {
             $rawSegment = 'due_for_refill';
         }
         $allowedSegments = ['all', 'ltv', 'due_for_refill', 'package_renewal', 'bleeding_vips'];
         $activeSegment = in_array($rawSegment, $allowedSegments, true) ? $rawSegment : 'all';
+
+        // Compute branch pill counts WITHOUT filtering by $activeBranch so all branch totals
+        // remain simultaneously visible side-by-side while respecting active segment/search.
+        $baseBranchCountQuery = Customer::query();
+        if (!in_array($activeSegment, ['all', 'ltv'], true)) {
+            $baseBranchCountQuery->whereIn('customers.id', $globalSegments[$activeSegment] ?? []);
+        }
+        if ($request->filled('search')) {
+            $searchForCount = $request->search;
+            $digitsForCount = preg_replace('/\D/', '', $searchForCount);
+            $baseBranchCountQuery->where(function ($q) use ($searchForCount, $digitsForCount) {
+                $q->where('customers.name', 'like', '%' . $searchForCount . '%');
+                if ($digitsForCount !== '') {
+                    $q->orWhere('customers.phone', 'like', '%' . $digitsForCount . '%');
+                }
+            });
+        }
+
+        $branchCounts = [
+            'all' => (clone $baseBranchCountQuery)->count(),
+            'old_airport' => (clone $baseBranchCountQuery)->forBranch(Customer::BRANCH_OLD_AIRPORT)->count(),
+            'wakrah' => (clone $baseBranchCountQuery)->forBranch(Customer::BRANCH_WAKRAH)->count(),
+            'unassigned' => (clone $baseBranchCountQuery)->unassignedBranch()->count(),
+        ];
 
         $netSaleExpr = 'CASE WHEN (COALESCE(services_total, 0) + COALESCE(products_total, 0) + COALESCE(packages_total, 0) - COALESCE(discount_amount, 0)) > 0 THEN (COALESCE(services_total, 0) + COALESCE(products_total, 0) + COALESCE(packages_total, 0) - COALESCE(discount_amount, 0)) ELSE 0 END';
 
@@ -45,6 +71,10 @@ class CustomerController extends Controller
             ->withCount([
                 'appointments' => fn ($q) => $q->where('status', 'completed'),
             ]);
+
+        if ($activeBranch) {
+            $query->forBranch($activeBranch);
+        }
 
         if (!in_array($activeSegment, ['all', 'ltv'], true)) {
             $query->whereIn('id', $segments[$activeSegment] ?? []);
@@ -87,6 +117,25 @@ class CustomerController extends Controller
             ->get(['id', 'customer_id', 'staff_id', 'branch', 'service_name', 'appointment_datetime'])
             ->groupBy('customer_id')
             ->map(fn ($group) => $group->first());
+
+        $visitedBranchesByCustomer = Appointment::query()
+            ->whereIn('customer_id', $customerIds)
+            ->whereNotNull('branch')
+            ->where('branch', '!=', '')
+            ->where(function ($sq) {
+                $sq->whereNull('status')->orWhere('status', '!=', 'cancelled');
+            })
+            ->orderByDesc('appointment_datetime')
+            ->orderByDesc('id')
+            ->get(['customer_id', 'branch'])
+            ->groupBy('customer_id')
+            ->map(function ($group) {
+                return $group->map(fn ($a) => Customer::normalizeBranch($a->branch))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+            });
 
         $lastVisit = $lastCompletedAppts->map(fn ($appt) => $appt?->appointment_datetime);
 
@@ -177,13 +226,28 @@ class CustomerController extends Controller
                     ? max(0, (int) floor((now()->startOfDay()->timestamp - Carbon::parse($lastAppt->appointment_datetime)->startOfDay()->timestamp) / 86400))
                     : 0);
 
+            $visitedBranches = $visitedBranchesByCustomer->get($cid, []);
+            $primaryBranch = Customer::normalizeBranch($c->branch ?? null)
+                ?: ($visitedBranches[0] ?? Customer::normalizeBranch($lastAppt?->branch ?? null));
+
+            $branchDisplayList = array_values(array_unique(array_filter(array_merge(
+                $primaryBranch ? [$primaryBranch] : [],
+                $visitedBranches
+            ))));
+            $branchBadgeText = implode(' · ', array_filter(array_map(
+                fn (string $b) => Customer::branchLabel($b),
+                $branchDisplayList
+            )));
+
             $customerTiers[$cid] = [
                 'is_vip' => $isVip,
                 'badges' => $badges,
                 'wa_phone' => $rawDigits,
                 'last_service' => $primaryService,
                 'last_staff' => ($dueDetail['last_staff_name'] ?? '') ?: ($lastAppt?->staff?->name ?? ''),
-                'last_branch' => ($dueDetail['branch'] ?? '') ?: ($lastAppt?->branch ?? ''),
+                'last_branch' => ($dueDetail['branch'] ?? '') ?: ($lastAppt?->branch ?: ($primaryBranch ?? '')),
+                'primary_branch' => $primaryBranch,
+                'branch_badge' => $branchBadgeText !== '' ? $branchBadgeText : null,
                 'days_since' => $daysSince,
                 'due_detail' => $dueDetail,
             ];
@@ -195,6 +259,8 @@ class CustomerController extends Controller
             'lastVisit',
             'dueCustomerIds',
             'activeSegment',
+            'activeBranch',
+            'branchCounts',
             'segmentCounts',
             'customerTiers',
             'segments'
@@ -202,7 +268,7 @@ class CustomerController extends Controller
     }
 
     /**
-     * Compute the 3 Zero-Overlap Outreach Tabs across all salon clients:
+     * Compute the 3 Zero-Overlap Outreach Tabs across salon clients (optionally scoped to a branch):
      * 1. due_for_refill (highest priority — includes explicit service intervals + 28-day fallback for 1st-visit retention)
      * 2. package_renewal (excluding due_for_refill)
      * 3. bleeding_vips (excluding due_for_refill & package_renewal)
@@ -210,13 +276,20 @@ class CustomerController extends Controller
      * Excludes clients who have an upcoming active appointment on or after today
      * OR who were contacted within the last 14 days (last_retention_contacted_at).
      */
-    public function computeRetentionSegments(): array
+    public function computeRetentionSegments(?string $branch = null): array
     {
         ClientPackage::expireDue();
 
+        $normalizedBranch = Customer::normalizeBranchFilter($branch);
         $todayStart = now()->startOfDay();
         $cooldownCutoff = now()->subDays(Customer::RETENTION_COOLDOWN_DAYS);
-        $allCustomers = Customer::query()->get(['id', 'loyalty_points', 'last_retention_contacted_at']);
+        $allCustomers = Customer::query()
+            ->when($normalizedBranch, fn ($q) => $q->forBranch($normalizedBranch))
+            ->get(['id', 'loyalty_points', 'last_retention_contacted_at']);
+
+        $branchCustomerLookup = $normalizedBranch
+            ? $allCustomers->pluck('id')->map(fn ($id) => (int) $id)->flip()
+            : null;
 
         $cooldownCustomerIds = $allCustomers
             ->filter(fn (Customer $c) => $c->last_retention_contacted_at !== null && $c->last_retention_contacted_at->gte($cooldownCutoff))
@@ -260,6 +333,9 @@ class CustomerController extends Controller
 
         foreach ($dueQueue as $row) {
             $cid = (int) $row->customer_id;
+            if ($branchCustomerLookup !== null && !$branchCustomerLookup->has($cid)) {
+                continue;
+            }
             if ($upcomingActiveCustomerIds->has($cid) || $cooldownCustomerIds->has($cid)) {
                 continue;
             }
@@ -312,6 +388,9 @@ class CustomerController extends Controller
         $expiryWindowEnd = now()->addDays(21)->endOfDay();
         foreach ($activePackages as $pkg) {
             $cid = (int) $pkg->customer_id;
+            if ($branchCustomerLookup !== null && !$branchCustomerLookup->has($cid)) {
+                continue;
+            }
             if ($upcomingActiveCustomerIds->has($cid) || $cooldownCustomerIds->has($cid) || isset($dueForRefillMap[$cid])) {
                 continue;
             }
@@ -594,12 +673,19 @@ class CustomerController extends Controller
 
         $this->normalizeLegacyRetentionRemarks();
 
+        $activeBranchFilter = Customer::normalizeBranchFilter($request->input('branch'));
+        $activeBranch = Customer::normalizeBranch($request->input('branch'));
+        $branchEligibleLookup = $activeBranchFilter
+            ? Customer::query()->forBranch($activeBranchFilter)->pluck('id')->map(fn ($id) => (int) $id)->flip()
+            : null;
+
         $plannerQueue = (new ClientMaintenancePlanner())->dueQueue();
         $overdueRowsByCustomer = $plannerQueue
             ->where('urgency', 'overdue')
+            ->when($branchEligibleLookup !== null, fn ($col) => $col->filter(fn ($row) => $branchEligibleLookup->has((int) $row->customer_id)))
             ->groupBy('customer_id');
 
-        $segments = $this->computeRetentionSegments();
+        $segments = $this->computeRetentionSegments($activeBranchFilter);
         $dueForRefillIds = array_map('intval', $segments['due_for_refill'] ?? []);
         $packageRenewalIds = array_map('intval', $segments['package_renewal'] ?? []);
         $bleedingVipIds = array_map('intval', $segments['bleeding_vips'] ?? []);
@@ -617,14 +703,16 @@ class CustomerController extends Controller
 
         $targetCustomerIds = array_values(array_filter(
             $targetCustomerIds,
-            fn (int $cid) => !isset($upcomingActiveLookup[$cid]) && !isset($cooldownLookup[$cid])
+            fn (int $cid) => !isset($upcomingActiveLookup[$cid])
+                && !isset($cooldownLookup[$cid])
+                && ($branchEligibleLookup === null || $branchEligibleLookup->has($cid))
         ));
 
         $customers = Customer::whereIn('id', $targetCustomerIds)->get()->keyBy('id');
         $lastCompletedByCustomer = Appointment::whereIn('customer_id', $targetCustomerIds)
             ->where('status', 'completed')
             ->orderByDesc('appointment_datetime')
-            ->get(['customer_id', 'service_name', 'appointment_datetime', 'price'])
+            ->get(['customer_id', 'branch', 'service_name', 'appointment_datetime', 'price'])
             ->groupBy('customer_id');
 
         $salesLtv = Sale::whereIn('customer_id', $targetCustomerIds)
@@ -709,6 +797,12 @@ class CustomerController extends Controller
                     $radarNote = "[Missing VIP] {$daysAway}d away · {$ltvFormatted} QAR";
                 }
 
+                $resolvedLeadBranch = $activeBranch
+                    ?: Customer::normalizeBranch($customer->branch ?? null)
+                    ?: Customer::normalizeBranch($dueDetail['branch'] ?? null)
+                    ?: Customer::normalizeBranch($clientCompleted->first()?->branch ?? null);
+                $leadsHasBranch = Schema::hasColumn('leads', 'branch');
+
                 $openLead = Lead::findOpenLeadByPhone($normalizedPhone, $customer->id);
 
                 if ($openLead) {
@@ -725,7 +819,7 @@ class CustomerController extends Controller
                         ? $openLead->next_followup_date
                         : $today;
 
-                    $openLead->update([
+                    $leadUpdate = [
                         'customer_id' => $openLead->customer_id ?: $customer->id,
                         'phone' => $openLead->phone ?: $normalizedPhone,
                         'category' => Lead::resolvePrimaryCategory($mergedCategories) ?: 'follow_up',
@@ -734,10 +828,14 @@ class CustomerController extends Controller
                         'next_followup_date' => $nextFollowup,
                         'needful_done' => null,
                         'customer_remarks' => $newRemarks,
-                    ]);
+                    ];
+                    if ($leadsHasBranch && $resolvedLeadBranch) {
+                        $leadUpdate['branch'] = $openLead->branch ?: $resolvedLeadBranch;
+                    }
+                    $openLead->update($leadUpdate);
                     $openLead->touch();
                 } else {
-                    Lead::create([
+                    $leadCreate = [
                         'phone' => $normalizedPhone,
                         'customer_id' => $customer->id,
                         'category' => 'follow_up',
@@ -745,7 +843,11 @@ class CustomerController extends Controller
                         'service_interest' => $dueServices,
                         'next_followup_date' => $today,
                         'customer_remarks' => $radarNote,
-                    ]);
+                    ];
+                    if ($leadsHasBranch && $resolvedLeadBranch) {
+                        $leadCreate['branch'] = $resolvedLeadBranch;
+                    }
+                    Lead::create($leadCreate);
                 }
 
                 $customer->update(['last_retention_contacted_at' => now()]);
@@ -862,18 +964,29 @@ class CustomerController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
+            'branch' => ['nullable', 'string', 'max:60'],
         ]);
+
+        $submittedBranch = $request->has('branch') ? Customer::normalizeBranch($request->input('branch')) : null;
+        unset($validated['branch']);
+        if ($submittedBranch && Schema::hasColumn('customers', 'branch')) {
+            $validated['branch'] = $submittedBranch;
+        }
 
         $rawDigits = preg_replace('/\D+/', '', (string) $validated['phone']);
         $phoneCandidates = array_values(array_unique(array_filter([$validated['phone'], $rawDigits])));
 
         $customer = Customer::whereIn('phone', $phoneCandidates)->first();
         if ($customer) {
-            $customer->update([
+            $updateAttrs = [
                 'name' => $validated['name'],
                 'phone' => $validated['phone'],
                 'email' => $validated['email'] ?? $customer->email,
-            ]);
+            ];
+            if ($submittedBranch && Schema::hasColumn('customers', 'branch')) {
+                $updateAttrs['branch'] = $submittedBranch;
+            }
+            $customer->update($updateAttrs);
         } else {
             $customer = Customer::create($validated);
         }
@@ -899,7 +1012,13 @@ class CustomerController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:255', Rule::unique('customers', 'phone')->ignore($customer->id)],
+            'branch' => ['nullable', 'string', 'max:60'],
         ]);
+
+        unset($validated['branch']);
+        if ($request->has('branch') && Schema::hasColumn('customers', 'branch')) {
+            $validated['branch'] = Customer::normalizeBranch($request->input('branch'));
+        }
 
         DB::transaction(function () use ($customer, $validated, $previousPhone) {
             $customer->update($validated);

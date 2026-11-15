@@ -23,6 +23,15 @@ class Sale extends Model
         'notes',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function (self $sale): void {
+            if (!empty($sale->branch) && !empty($sale->customer_id)) {
+                Customer::syncBranchFromActivity((int) $sale->customer_id, null, $sale->branch);
+            }
+        });
+    }
+
     public function appointment()
     {
         return $this->belongsTo(Appointment::class);

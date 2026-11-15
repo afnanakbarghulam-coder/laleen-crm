@@ -299,6 +299,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/customers/{customer}/ai-retention-script', [AiScriptController::class, 'generateForMaintenance'])->middleware('throttle:20,1')->name('customers.ai-retention-script');
         Route::get('/customers/{customer}/pending-packages', [CustomerController::class, 'pendingPackages'])->name('customers.pendingPackages');
         Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
+        Route::get('/clients', [CustomerController::class, 'index'])->name('clients.index');
         Route::get('/customers/beauty-planning', [CustomerController::class, 'beautyPlanning'])->name('customers.beauty-planning');
         Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
     });

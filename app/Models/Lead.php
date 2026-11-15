@@ -82,12 +82,18 @@ class Lead extends Model
         'assigned_agent_id',
         'category',
         'source',
+        'branch',
         'categories',
         'customer_remarks',
         'service_interest',
         'needful_done',
         'next_followup_date',
     ];
+
+    public function setBranchAttribute($value): void
+    {
+        $this->attributes['branch'] = is_string($value) ? Customer::normalizeBranch($value) : null;
+    }
 
     public const PAID_AD_SOURCES = [
         'instagram',
@@ -151,6 +157,20 @@ class Lead extends Model
         static::deleting(function (Lead $lead) {
             if (Schema::hasTable('ad_lead_entries') && Schema::hasColumn('ad_lead_entries', 'lead_id')) {
                 AdLeadEntry::where('lead_id', $lead->id)->update(['lead_id' => null]);
+            }
+        });
+
+        static::saved(function (Lead $lead): void {
+            $branch = ($lead->attributes['branch'] ?? null)
+                ?: Customer::extractBranchFromText($lead->customer_remarks)
+                ?: ($lead->appointment_id ? Appointment::whereKey($lead->appointment_id)->value('branch') : null);
+
+            if ($branch) {
+                Customer::syncBranchFromActivity(
+                    $lead->customer_id ? (int) $lead->customer_id : null,
+                    $lead->phone,
+                    $branch
+                );
             }
         });
     }

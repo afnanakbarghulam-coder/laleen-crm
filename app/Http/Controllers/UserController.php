@@ -13,6 +13,7 @@ use App\Models\Sale;
 use App\Models\SocialContentPlan;
 use App\Models\Staff;
 use App\Models\User;
+use App\Support\DashboardScorecardBuilder;
 use App\Support\StaffSalesAnalytics;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -66,8 +67,9 @@ class UserController extends Controller
         $leadsDueToday = Lead::open()->whereDate('next_followup_date', $todayStr)->count();
         $leadsOverdue = Lead::open()->whereNotNull('next_followup_date')->whereDate('next_followup_date', '<', $todayStr)->count();
         $leadsUnscheduled = Lead::open()->whereNull('next_followup_date')->count();
+        $leadsActionQueue = $leadsDueToday + $leadsOverdue + $leadsUnscheduled;
         $totalLeads = Lead::open()->count();
-        $pendingFollowups = $leadsDueToday + $leadsOverdue;
+        $pendingFollowups = $leadsActionQueue;
 
         $availableStaff = Staff::active()->count();
         $presentStaffCount = Staff::active()->where('availability_status', 'present')->count();
@@ -79,41 +81,67 @@ class UserController extends Controller
             'leads_due_today' => $leadsDueToday,
             'leads_overdue' => $leadsOverdue,
             'leads_unscheduled' => $leadsUnscheduled,
+            'leads_action_queue' => $leadsActionQueue,
             'total_open_leads' => $totalLeads,
             'active_staff' => $availableStaff,
             'present_staff' => $presentStaffCount,
             'total_clients' => $totalClientsCount,
         ];
 
+        // ---- Strict Admin-Only Guard for Branch Revenue & Expenses To-Date ----
+        $isAdmin = $user && $user->isAdmin();
         $branchPnl = null;
-        if ($user->canView('finance')) {
-            $branchPnl = FinanceController::branchBreakdown($dashFrom, $dashTo);
-            foreach ($branchPnl as &$row) {
-                $row['margin_pct'] = $row['sales'] > 0 ? round($row['profit'] / $row['sales'] * 100, 1) : 0.0;
-                $row['color'] = match (true) {
-                    $row['margin_pct'] >= 20 => 'green',
-                    $row['margin_pct'] >= 0 => 'amber',
-                    default => 'red',
-                };
+        $branchCards = [];
+        $combinedPnl = null;
 
-                // Daily net-sales trend this month, for the card's sparkline.
-                $trendQuery = Sale::whereBetween('created_at', [$dashFrom, $dashTo]);
-                if ($row['key'] === 'general') {
-                    $trendQuery->whereNull('branch');
-                } else {
-                    $trendQuery->where('branch', $row['key']);
+        if ($isAdmin) {
+            $rawBreakdown = FinanceController::branchBreakdown($dashFrom, $dashTo);
+            $combinedSales = round((float) collect($rawBreakdown)->sum('sales'), 2);
+            $combinedExpenses = round((float) collect($rawBreakdown)->sum('expenses'), 2);
+            $combinedProfit = round($combinedSales - $combinedExpenses, 2);
+
+            $combinedPnl = [
+                'sales' => $combinedSales,
+                'expenses' => $combinedExpenses,
+                'profit' => $combinedProfit,
+                'has_expenses' => $combinedExpenses > 0,
+                'margin_pct' => ($combinedExpenses > 0 && $combinedSales > 0)
+                    ? round(($combinedProfit / $combinedSales) * 100, 1)
+                    : null,
+            ];
+
+            foreach ($rawBreakdown as $row) {
+                if (!in_array($row['key'], ['old_airport', 'wakrah'], true)) {
+                    continue;
                 }
 
-                $row['trend'] = $trendQuery
-                    ->selectRaw('DATE(created_at) as d, SUM(CASE WHEN (services_total + products_total + packages_total - discount_amount) > 0 THEN (services_total + products_total + packages_total - discount_amount) ELSE 0 END) as total')
-                    ->groupBy('d')
-                    ->orderBy('d')
-                    ->pluck('total')
-                    ->map(fn ($v) => (float) $v)
-                    ->values();
+                $sales = round((float) ($row['sales'] ?? 0), 2);
+                $expenses = round((float) ($row['expenses'] ?? 0), 2);
+                $profit = round((float) ($row['profit'] ?? ($sales - $expenses)), 2);
+                $hasExpenses = $expenses > 0;
+                $marginPct = ($hasExpenses && $sales > 0)
+                    ? round(($profit / $sales) * 100, 1)
+                    : null;
+
+                $branchCards[] = [
+                    'key' => $row['key'],
+                    'label' => $row['label'],
+                    'header_label' => $row['key'] === 'old_airport'
+                        ? 'OLD AIRPORT — TO DATE'
+                        : 'AL WAKRAH — TO DATE',
+                    'sales' => $sales,
+                    'expenses' => $expenses,
+                    'profit' => $profit,
+                    'has_expenses' => $hasExpenses,
+                    'margin_pct' => $marginPct,
+                ];
             }
-            unset($row);
+
+            $branchPnl = $branchCards;
         }
+
+        // ---- Team KPI 2-Column Split Scorecards ----
+        $teamScorecards = (new DashboardScorecardBuilder($dashFrom, $dashTo, $user))->build();
 
         $adsTotals = null;
         $adsColor = null;
@@ -123,7 +151,7 @@ class UserController extends Controller
         $contentMetrics = null;
         $contentColor = null;
 
-        if ($user->canView('kpis')) {
+        if ($user && $user->canView('kpis')) {
             $adsReport = new KpiAdsConversionReport(['date_from' => $dashFrom, 'date_to' => $dashTo]);
             $adsTotals = $adsReport->totals();
             $adsColor = match ($adsReport->statusFor($adsTotals['overall_conversion'])) {
@@ -161,6 +189,7 @@ class UserController extends Controller
         return view('dashboard', compact(
             'dashFrom',
             'dashTo',
+            'isAdmin',
             'operationalPulse',
             'todayAppointments',
             'todayCompletedAppointments',
@@ -169,6 +198,9 @@ class UserController extends Controller
             'availableStaff',
             'totalClientsCount',
             'branchPnl',
+            'branchCards',
+            'combinedPnl',
+            'teamScorecards',
             'adsTotals',
             'adsColor',
             'agentShifts',

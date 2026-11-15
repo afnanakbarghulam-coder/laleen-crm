@@ -161,12 +161,20 @@
     <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
         <div>
             <h4 class="fw-bold mb-1">{{ $customer->name ?? 'Unnamed Client' }}</h4>
-            <div class="text-muted">
-                <i class="bx bx-phone"></i> {{ $customer->phone }}
+            <div class="text-muted d-flex align-items-center flex-wrap gap-2">
+                <span><i class="bx bx-phone"></i> {{ $customer->phone }}</span>
                 @if ($customer->email)
-                    &nbsp;·&nbsp; <i class="bx bx-envelope"></i> {{ $customer->email }}
+                    <span>· <i class="bx bx-envelope"></i> {{ $customer->email }}</span>
                 @endif
-                &nbsp;·&nbsp; Client since {{ $customer->created_at->format('M Y') }}
+                @php
+                    $profileBranchLabel = $customer->branch_label ?: \App\Models\Customer::branchLabel($lastCompletedVisit?->branch ?? null);
+                @endphp
+                @if ($profileBranchLabel)
+                    <span style="display:inline-flex;align-items:center;padding:1px 9px;border-radius:999px;font-size:11.5px;font-weight:500;color:#e5b8a8;background:rgba(229,184,168,0.1);border:1px solid rgba(229,184,168,0.24);">
+                        {{ $profileBranchLabel }}
+                    </span>
+                @endif
+                <span>· Client since {{ $customer->created_at->format('M Y') }}</span>
             </div>
         </div>
         <div class="d-flex gap-2">
@@ -178,7 +186,7 @@
                     <i class="bx bx-edit"></i> Edit Profile
                 </button>
             @endmoduleEdit
-            <a href="{{ route('appointments.calendar', array_filter(['open_booking' => 1, 'customer_id' => $customer->id, 'name' => $customer->name, 'phone' => $customer->phone, 'branch' => $lastCompletedVisit?->branch])) }}" class="btn btn-primary btn-sm">
+            <a href="{{ route('appointments.calendar', array_filter(['open_booking' => 1, 'customer_id' => $customer->id, 'name' => $customer->name, 'phone' => $customer->phone, 'branch' => $customer->branch ?: $lastCompletedVisit?->branch])) }}" class="btn btn-primary btn-sm">
                 <i class="bx bx-plus"></i> Book Appointment
             </a>
         </div>
@@ -581,6 +589,18 @@
                                 <label for="editClientPhone" class="form-label">Phone Number</label>
                                 <input type="text" name="phone" id="editClientPhone" class="form-control"
                                     value="{{ old('phone', $customer->phone) }}" required maxlength="255">
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="editClientBranch" class="form-label">Primary Branch</label>
+                                @php
+                                    $selectedBranch = \App\Models\Customer::normalizeBranch(old('branch', $customer->branch));
+                                @endphp
+                                <select name="branch" id="editClientBranch" class="form-select">
+                                    <option value="" @selected($selectedBranch === null)>Not Set</option>
+                                    <option value="old_airport" @selected($selectedBranch === 'old_airport')>Old Airport</option>
+                                    <option value="wakrah" @selected($selectedBranch === 'wakrah')>Al Wakrah</option>
+                                </select>
                             </div>
 
                             <div class="d-flex justify-content-end gap-2">

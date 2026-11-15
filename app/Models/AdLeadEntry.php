@@ -51,6 +51,19 @@ class AdLeadEntry extends Model
         'wakrah_amount' => 'decimal:2',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function (self $entry): void {
+            if (!empty($entry->branch)) {
+                Customer::syncBranchFromActivity(
+                    $entry->customer_id ? (int) $entry->customer_id : null,
+                    $entry->phone,
+                    $entry->branch
+                );
+            }
+        });
+    }
+
     public function customer()
     {
         return $this->belongsTo(Customer::class);

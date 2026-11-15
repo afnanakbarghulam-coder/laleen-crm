@@ -38,6 +38,19 @@ class Appointment extends Model
         'paid_at' => 'datetime',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function (self $appointment): void {
+            if ($appointment->status !== 'cancelled' && !empty($appointment->branch)) {
+                Customer::syncBranchFromActivity(
+                    $appointment->customer_id ? (int) $appointment->customer_id : null,
+                    $appointment->phone,
+                    $appointment->branch
+                );
+            }
+        });
+    }
+
     public function getAppointmentDateAttribute(): Carbon
     {
         return Carbon::parse($this->appointment_datetime ?: $this->booking_date ?: $this->created_at ?: now());

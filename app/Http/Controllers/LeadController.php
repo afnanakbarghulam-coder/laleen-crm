@@ -215,6 +215,13 @@ class LeadController extends Controller
         if ($request->filled('source') && \Illuminate\Support\Facades\Schema::hasColumn('leads', 'source')) {
             $existingUpdatePayload['source'] = trim((string) $request->source);
         }
+        if ($request->filled('branch') && \Illuminate\Support\Facades\Schema::hasColumn('leads', 'branch')) {
+            $normBranch = Customer::normalizeBranch((string) $request->branch);
+            if ($normBranch) {
+                $existingUpdatePayload['branch'] = $normBranch;
+                Customer::syncBranchFromActivity($customer->id, $normalizedPhone, $normBranch);
+            }
+        }
         $existingLead->update($existingUpdatePayload);
 
             return redirect()->route('leads.index')
@@ -236,6 +243,13 @@ class LeadController extends Controller
         ];
         if ($request->filled('source') && \Illuminate\Support\Facades\Schema::hasColumn('leads', 'source')) {
             $createPayload['source'] = trim((string) $request->source);
+        }
+        if ($request->filled('branch') && \Illuminate\Support\Facades\Schema::hasColumn('leads', 'branch')) {
+            $normBranch = Customer::normalizeBranch((string) $request->branch);
+            if ($normBranch) {
+                $createPayload['branch'] = $normBranch;
+                Customer::syncBranchFromActivity($customer->id, $normalizedPhone, $normBranch);
+            }
         }
 
         Lead::create($createPayload);
@@ -312,6 +326,13 @@ class LeadController extends Controller
         ];
         if ($request->has('source') && \Illuminate\Support\Facades\Schema::hasColumn('leads', 'source')) {
             $data['source'] = $request->filled('source') ? trim((string) $request->source) : null;
+        }
+        if ($request->has('branch') && \Illuminate\Support\Facades\Schema::hasColumn('leads', 'branch')) {
+            $normBranch = Customer::normalizeBranch((string) $request->branch);
+            $data['branch'] = $normBranch;
+            if ($normBranch) {
+                Customer::syncBranchFromActivity($customer->id, $normalizedPhone, $normBranch);
+            }
         }
 
         $existingLead = $this->findDuplicateLead($normalizedPhone, $primaryCategory, $request->service_interest, $lead->id);

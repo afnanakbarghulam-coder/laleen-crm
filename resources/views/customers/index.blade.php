@@ -2,18 +2,35 @@
 @section('title', 'Clients')
 
 <style>
-    /* Unified Toolbar: Segmented Filter Tabs + Integrated Search */
+    /* Unified Toolbar: 2-Zone Hairline Layout (Branch Pills + Search / Segment Tabs) */
     .clients-toolbar {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 14px;
-        flex-wrap: wrap;
-        padding: 8px 10px;
+        flex-direction: column;
+        gap: 0;
+        padding: 9px 12px;
         border-radius: 14px;
         background: rgba(28, 23, 22, 0.72);
         border: 1px solid rgba(217, 143, 131, 0.14);
         margin-bottom: 18px;
+    }
+
+    .clients-toolbar-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .clients-toolbar-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
     }
 
     .clients-tabs {
@@ -27,7 +44,7 @@
         display: inline-flex;
         align-items: center;
         gap: 7px;
-        padding: 7px 13px;
+        padding: 6px 12px;
         border-radius: 9px;
         border: 1px solid transparent;
         background: transparent;
@@ -65,9 +82,49 @@
         color: #d6c3bd;
     }
 
-    .clients-tab.active .clients-tab-count {
+    .clients-tab.active .clients-tab-count,
+    .clients-branch-pill.active .clients-tab-count {
         background: rgba(231, 154, 145, 0.28);
         color: #fff;
+    }
+
+    .clients-branch-switcher {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .clients-branch-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 12px;
+        border-radius: 9px;
+        border: 1px solid transparent;
+        background: transparent;
+        font-size: 12.5px;
+        font-weight: 500;
+        color: #b8a29a;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: all 0.15s ease;
+    }
+
+    .clients-branch-pill:hover {
+        color: #f8efe6;
+        background: rgba(255, 255, 255, 0.04);
+    }
+
+    .clients-branch-pill.active {
+        background: rgba(217, 143, 131, 0.18);
+        border-color: rgba(231, 154, 145, 0.42);
+        color: #fff;
+        font-weight: 600;
+    }
+
+    .clients-branch-pill-unassigned {
+        color: #9e8780;
     }
 
     .clients-search-form {
@@ -75,7 +132,7 @@
         align-items: center;
         gap: 6px;
         margin: 0;
-        min-width: 250px;
+        min-width: 240px;
     }
 
     .clients-search-wrap {
@@ -176,6 +233,33 @@
         font-size: 12px;
         color: #9e8780;
         margin-top: 2px;
+    }
+
+    .client-branch-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 500;
+        color: #cbb5ad;
+        background: rgba(229, 184, 168, 0.08);
+        border: 1px solid rgba(229, 184, 168, 0.18);
+        white-space: nowrap;
+        line-height: 1.35;
+    }
+
+    @media print {
+        .clients-toolbar,
+        .btn-header-subtle,
+        .row-actions-group {
+            display: none !important;
+        }
+        .clients-table-card {
+            background: #ffffff !important;
+            border-color: #dddddd !important;
+            color: #111111 !important;
+        }
     }
 
     /* Compact single-line status pills */
@@ -388,34 +472,21 @@
         </div>
     @endif
 
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
-        <div>
-            <h4 class="fw-bold mb-1">Clients</h4>
-            <div class="text-muted small">Manage client profiles, loyalty points, and repeat bookings</div>
-        </div>
-        <div class="d-flex align-items-center flex-wrap gap-2">
-            <form action="{{ route('customers.sync-retention-leads') }}" method="POST" class="m-0">
-                @csrf
-                <button type="submit" class="btn-header-subtle tooltip-bottom"
-                    data-tooltip="Sends overdue clients to the Leads page for follow-up">
-                    <i class="bx bx-Revision"></i>
-                    <span>Send Overdue to Leads</span>
-                </button>
-            </form>
-            <a href="{{ route('appointments.calendar') }}" class="btn btn-primary">
-                <i class="bx bx-plus me-1"></i> Book Appointment
-            </a>
-        </div>
-    </div>
-
     @php
         $currentSegment = $activeSegment ?? request('segment', 'all');
+        $currentBranch = $activeBranch ?? \App\Models\Customer::normalizeBranchFilter(request('branch'));
         $counts = $segmentCounts ?? [
             'all' => $customers->total(),
             'ltv' => $customers->total(),
             'due_for_refill' => 0,
             'package_renewal' => 0,
             'bleeding_vips' => 0,
+        ];
+        $bCounts = $branchCounts ?? [
+            'all' => $counts['all'],
+            'old_airport' => 0,
+            'wakrah' => 0,
+            'unassigned' => 0,
         ];
         $retentionSegments = ['due_for_refill', 'package_renewal', 'bleeding_vips'];
         $isRetentionSegment = in_array($currentSegment, $retentionSegments, true);
@@ -433,54 +504,114 @@
         $activeBucketLabel = $segmentLabels[$currentSegment] ?? 'Client Retention';
     @endphp
 
-    <!-- Unified Toolbar: Filter Tabs + Integrated Search -->
-    <div class="clients-toolbar" role="navigation" aria-label="Client Filters">
-        <div class="clients-tabs">
-            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'all'])) }}"
-                class="clients-tab {{ $currentSegment === 'all' ? 'active' : '' }} tooltip-bottom tooltip-align-left"
-                data-tooltip="Every client in your database.">
-                <span>All Clients</span>
-                <span class="clients-tab-count">{{ $counts['all'] }}</span>
-            </a>
-            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'ltv'])) }}"
-                class="clients-tab {{ $currentSegment === 'ltv' ? 'active' : '' }} tooltip-bottom"
-                data-tooltip="Clients ranked from highest total spend to lowest.">
-                <span>Top LTV</span>
-                <span class="clients-tab-count">{{ $counts['all'] }}</span>
-            </a>
-            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'due_for_refill'])) }}"
-                class="clients-tab {{ $currentSegment === 'due_for_refill' ? 'active' : '' }} tooltip-bottom"
-                data-tooltip="Due or overdue for roots, nails, or facial maintenance.">
-                <span>Due for Refill</span>
-                <span class="clients-tab-count">{{ $counts['due_for_refill'] }}</span>
-            </a>
-            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'package_renewal'])) }}"
-                class="clients-tab {{ $currentSegment === 'package_renewal' ? 'active' : '' }} tooltip-bottom"
-                data-tooltip="Has 1 package session left or expires within 3 weeks.">
-                <span>Packages Ending</span>
-                <span class="clients-tab-count">{{ $counts['package_renewal'] }}</span>
-            </a>
-            <a href="{{ route('customers.index', array_filter(['search' => request('search'), 'segment' => 'bleeding_vips'])) }}"
-                class="clients-tab {{ $currentSegment === 'bleeding_vips' ? 'active' : '' }} tooltip-bottom"
-                data-tooltip="Regular clients who haven't visited in over 45 days.">
-                <span>Missing VIPs</span>
-                <span class="clients-tab-count">{{ $counts['bleeding_vips'] }}</span>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold mb-1">Clients</h4>
+            <div class="text-muted small">Manage client profiles, loyalty points, and repeat bookings</div>
+        </div>
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <form action="{{ route('customers.sync-retention-leads') }}" method="POST" class="m-0">
+                @csrf
+                @if ($currentBranch)
+                    <input type="hidden" name="branch" value="{{ $currentBranch }}">
+                @endif
+                <button type="submit" class="btn-header-subtle tooltip-bottom"
+                    data-tooltip="Sends overdue clients to the Leads page for follow-up">
+                    <i class="bx bx-Revision"></i>
+                    <span>Send Overdue to Leads</span>
+                </button>
+            </form>
+            <a href="{{ route('appointments.calendar') }}" class="btn btn-primary">
+                <i class="bx bx-plus me-1"></i> Book Appointment
             </a>
         </div>
+    </div>
 
-        <form method="GET" action="{{ route('customers.index') }}" class="clients-search-form">
-            @if ($currentSegment !== 'all')
-                <input type="hidden" name="segment" value="{{ $currentSegment }}">
-            @endif
-            <div class="clients-search-wrap">
-                <i class="bx bx-search"></i>
-                <input type="text" name="search" class="clients-search-input"
-                    placeholder="Search name or phone..." value="{{ request('search') }}">
+    <!-- Unified Toolbar: Branch Scope + Search (Top) / Segment Tabs (Bottom) -->
+    <div class="clients-toolbar" role="navigation" aria-label="Client Filters">
+        <div class="clients-toolbar-top">
+            <div class="clients-branch-switcher" role="group" aria-label="Branch Filter">
+                <a href="{{ route('customers.index', array_filter(['segment' => $currentSegment !== 'all' ? $currentSegment : null, 'search' => request('search')])) }}"
+                    class="clients-branch-pill {{ $currentBranch === null ? 'active' : '' }}"
+                    data-branch-pill="all">
+                    <span>All Branches</span>
+                    <span class="clients-tab-count" data-branch-count="all">{{ $bCounts['all'] }}</span>
+                </a>
+                <a href="{{ route('customers.index', array_filter(['branch' => 'old_airport', 'segment' => $currentSegment !== 'all' ? $currentSegment : null, 'search' => request('search')])) }}"
+                    class="clients-branch-pill {{ $currentBranch === 'old_airport' ? 'active' : '' }}"
+                    data-branch-pill="old_airport">
+                    <span>Old Airport</span>
+                    <span class="clients-tab-count" data-branch-count="old_airport">{{ $bCounts['old_airport'] }}</span>
+                </a>
+                <a href="{{ route('customers.index', array_filter(['branch' => 'wakrah', 'segment' => $currentSegment !== 'all' ? $currentSegment : null, 'search' => request('search')])) }}"
+                    class="clients-branch-pill {{ $currentBranch === 'wakrah' ? 'active' : '' }}"
+                    data-branch-pill="wakrah">
+                    <span>Al Wakrah</span>
+                    <span class="clients-tab-count" data-branch-count="wakrah">{{ $bCounts['wakrah'] }}</span>
+                </a>
+                @if (($bCounts['unassigned'] ?? 0) > 0 || $currentBranch === 'unassigned')
+                    <a href="{{ route('customers.index', array_filter(['branch' => 'unassigned', 'segment' => $currentSegment !== 'all' ? $currentSegment : null, 'search' => request('search')])) }}"
+                        class="clients-branch-pill clients-branch-pill-unassigned {{ $currentBranch === 'unassigned' ? 'active' : '' }} tooltip-bottom"
+                        data-branch-pill="unassigned"
+                        data-tooltip="Clients with no branch set on their profile or bookings yet.">
+                        <span>Unassigned</span>
+                        <span class="clients-tab-count" data-branch-count="unassigned">{{ $bCounts['unassigned'] }}</span>
+                    </a>
+                @endif
             </div>
-            @if (request('search') || $currentSegment !== 'all')
-                <a href="{{ route('customers.index') }}" class="btn btn-sm btn-outline-secondary">Reset</a>
-            @endif
-        </form>
+
+            <form method="GET" action="{{ route('customers.index') }}" class="clients-search-form">
+                @if ($currentBranch)
+                    <input type="hidden" name="branch" value="{{ $currentBranch }}">
+                @endif
+                @if ($currentSegment !== 'all')
+                    <input type="hidden" name="segment" value="{{ $currentSegment }}">
+                @endif
+                <div class="clients-search-wrap">
+                    <i class="bx bx-search"></i>
+                    <input type="text" name="search" class="clients-search-input"
+                        placeholder="Search name or phone..." value="{{ request('search') }}">
+                </div>
+                @if (request('search') || $currentSegment !== 'all' || $currentBranch)
+                    <a href="{{ route('customers.index') }}" class="btn btn-sm btn-outline-secondary">Reset</a>
+                @endif
+            </form>
+        </div>
+
+        <div class="clients-toolbar-bottom">
+            <div class="clients-tabs">
+                <a href="{{ route('customers.index', array_filter(['branch' => $currentBranch, 'search' => request('search'), 'segment' => 'all'])) }}"
+                    class="clients-tab {{ $currentSegment === 'all' ? 'active' : '' }} tooltip-bottom tooltip-align-left"
+                    data-tooltip="Every client in your database.">
+                    <span>All Clients</span>
+                    <span class="clients-tab-count">{{ $counts['all'] }}</span>
+                </a>
+                <a href="{{ route('customers.index', array_filter(['branch' => $currentBranch, 'search' => request('search'), 'segment' => 'ltv'])) }}"
+                    class="clients-tab {{ $currentSegment === 'ltv' ? 'active' : '' }} tooltip-bottom"
+                    data-tooltip="Clients ranked from highest total spend to lowest.">
+                    <span>Top LTV</span>
+                    <span class="clients-tab-count">{{ $counts['all'] }}</span>
+                </a>
+                <a href="{{ route('customers.index', array_filter(['branch' => $currentBranch, 'search' => request('search'), 'segment' => 'due_for_refill'])) }}"
+                    class="clients-tab {{ $currentSegment === 'due_for_refill' ? 'active' : '' }} tooltip-bottom"
+                    data-tooltip="Due or overdue for roots, nails, or facial maintenance.">
+                    <span>Due for Refill</span>
+                    <span class="clients-tab-count">{{ $counts['due_for_refill'] }}</span>
+                </a>
+                <a href="{{ route('customers.index', array_filter(['branch' => $currentBranch, 'search' => request('search'), 'segment' => 'package_renewal'])) }}"
+                    class="clients-tab {{ $currentSegment === 'package_renewal' ? 'active' : '' }} tooltip-bottom"
+                    data-tooltip="Has 1 package session left or expires within 3 weeks.">
+                    <span>Packages Ending</span>
+                    <span class="clients-tab-count">{{ $counts['package_renewal'] }}</span>
+                </a>
+                <a href="{{ route('customers.index', array_filter(['branch' => $currentBranch, 'search' => request('search'), 'segment' => 'bleeding_vips'])) }}"
+                    class="clients-tab {{ $currentSegment === 'bleeding_vips' ? 'active' : '' }} tooltip-bottom"
+                    data-tooltip="Regular clients who haven't visited in over 45 days.">
+                    <span>Missing VIPs</span>
+                    <span class="clients-tab-count">{{ $counts['bleeding_vips'] }}</span>
+                </a>
+            </div>
+        </div>
     </div>
 
     <div class="clients-table-card mb-3">
@@ -517,7 +648,15 @@
                                             <span class="badge bg-warning text-dark ms-1"
                                                 data-tooltip="Due for a service touch-up"><i class="bx bx-bell"></i></span>
                                         @endif
-                                        <div class="client-phone-sub">{{ $customer->phone }}</div>
+                                        <div class="client-phone-sub d-flex align-items-center flex-wrap gap-2">
+                                            <span>{{ $customer->phone }}</span>
+                                            @php
+                                                $rowBranchBadge = $tierInfo['branch_badge'] ?? $customer->branch_label;
+                                            @endphp
+                                            @if ($rowBranchBadge)
+                                                <span class="client-branch-badge">{{ $rowBranchBadge }}</span>
+                                            @endif
+                                        </div>
                                     </div>
                                 </div>
                             </td>

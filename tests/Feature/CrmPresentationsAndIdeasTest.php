@@ -59,7 +59,7 @@ class CrmPresentationsAndIdeasTest extends TestCase
         ]);
     }
 
-    public function test_crm_guides_renders_presentations_and_ideas_tabs_with_preseeded_12_slide_giveaway_playbook(): void
+    public function test_crm_guides_renders_presentations_and_ideas_tabs_with_preseeded_6_slide_giveaway_playbook(): void
     {
         // Re-running seeder is idempotent and never duplicates the pinned deck
         $this->seed(CrmPresentationSeeder::class);
@@ -69,37 +69,33 @@ class CrmPresentationsAndIdeasTest extends TestCase
         $this->assertTrue($playbook->is_pinned);
         $this->assertSame('Growth Playbook', $playbook->category);
         $this->assertSame(
-            'Laleen Beauty Salon — 1,000 QAR VIP Makeover Giveaway Plan (Old Airport & Al Wakrah)',
+            'Laleen Beauty Salon — 1,000 QAR Makeover Giveaway Plan',
             $playbook->title
         );
-        $this->assertCount(12, $playbook->slides);
+        $this->assertCount(6, $playbook->slides);
 
-        // Verify all 6 consulting layouts appear across the 12 slides in the exact specified sequence
+        // Verify the 6-slide layout sequence has zero back-to-back duplicate layouts
         $slideLayouts = array_map(fn (array $s) => $s['layout'] ?? '', $playbook->slides);
-        foreach (array_keys(CrmPresentation::LAYOUTS) as $expectedLayout) {
-            $this->assertContains($expectedLayout, $slideLayouts, "Expected layout [{$expectedLayout}] in seeded 12-slide playbook.");
-        }
         $this->assertSame(
-            ['cover', 'big_metric', 'timeline', 'comparison', 'cards', 'big_metric', 'cards', 'cards', 'timeline', 'comparison', 'table', 'cover'],
+            ['cover', 'comparison', 'timeline', 'cards', 'table', 'cover'],
             $slideLayouts
         );
 
-        // Verify key content across summary and all 12 slides (including Contact Number + Email -> Auto-CRM Sync)
-        $this->assertStringContainsString('Contact Number & Email', (string) $playbook->summary);
-        $this->assertStringContainsString('CRM phone & email database', (string) $playbook->summary);
+        // Verify key content across summary and all 6 slides (including Revenue & Growth Potential + Auto-CRM Sync)
+        $this->assertStringContainsString('Simple 6-slide team guide', (string) $playbook->summary);
+        $this->assertStringContainsString('15,000 to 75,000+ QAR', (string) $playbook->summary);
 
         $slidesJson = json_encode($playbook->slides, JSON_UNESCAPED_UNICODE);
-        $this->assertStringContainsString('1,000 QAR VIP Makeover Giveaway Plan', $slidesJson);
-        $this->assertStringContainsString('1,000 QAR', $slidesJson);
-        $this->assertStringContainsString('500 QAR', $slidesJson);
-        $this->assertStringContainsString('100 QAR', $slidesJson);
-        $this->assertStringContainsString('10,000 QAR', $slidesJson);
-        $this->assertStringContainsString('Auto-Saved to CRM', $slidesJson);
-        $this->assertStringContainsString('Contact Number, Email & Branch', $slidesJson);
-        $this->assertStringContainsString('Automatic CRM Database Sync', $slidesJson);
-        $this->assertStringContainsString('Ads, Form-to-CRM Sync & Auto-DM', $slidesJson);
-        $this->assertStringContainsString('2x Free Makeover', $slidesJson);
+        $this->assertStringContainsString('1,000 QAR Makeover Giveaway Plan', $slidesJson);
+        $this->assertStringContainsString('1st Prize vs. 2nd Prize', $slidesJson);
+        $this->assertStringContainsString('Auto-Save to CRM', $slidesJson);
+        $this->assertStringContainsString('REVENUE & GROWTH POTENTIAL', $slidesJson);
+        $this->assertStringContainsString('Why This Campaign Is Huge for Laleen', $slidesJson);
+        $this->assertStringContainsString('15,000 QAR Cash', $slidesJson);
+        $this->assertStringContainsString('30,000–45,000 QAR Cash', $slidesJson);
+        $this->assertStringContainsString('75,000+ QAR Cash', $slidesJson);
         $this->assertStringContainsString('More than one person can win 2nd Prize', $slidesJson);
+        $this->assertStringContainsString('100% Phone + Email in CRM', $slidesJson);
         $this->assertStringContainsString('Zoya & Areeba', $slidesJson);
         $this->assertStringContainsString('Ahana & Rhea', $slidesJson);
         $this->assertStringContainsString('Arbab', $slidesJson);
@@ -111,8 +107,8 @@ class CrmPresentationsAndIdeasTest extends TestCase
         $guideResp->assertSee('Role &amp; SOP Guides', false);
         $guideResp->assertSee('Presentations');
         $guideResp->assertSee('Brainstorm &amp; Ideas', false);
-        $guideResp->assertSee('1,000 QAR VIP Makeover Giveaway Plan');
-        $guideResp->assertSee('12 Slides');
+        $guideResp->assertSee('1,000 QAR Makeover Giveaway Plan');
+        $guideResp->assertSee('6 Slides');
         $guideResp->assertSee('Present Deck');
         $guideResp->assertDontSee('Faye');
 
@@ -131,7 +127,7 @@ class CrmPresentationsAndIdeasTest extends TestCase
         $outsideGridHtml = $gridMatch[0];
         $this->assertStringContainsString('Pinned', $outsideGridHtml);
         $this->assertStringContainsString('Growth Playbook', $outsideGridHtml);
-        $this->assertStringContainsString('12 Slides', $outsideGridHtml);
+        $this->assertStringContainsString('6 Slides', $outsideGridHtml);
         $this->assertStringContainsString('Present Deck', $outsideGridHtml);
         $this->assertStringNotContainsString('Big Metric', $outsideGridHtml);
         $this->assertStringNotContainsString('Big metric', $outsideGridHtml);
@@ -143,7 +139,7 @@ class CrmPresentationsAndIdeasTest extends TestCase
 
         $presResp = $this->actingAs($this->agent)->get(route('guide.presentations.index'));
         $presResp->assertOk();
-        $presResp->assertSee('Laleen Beauty Salon — 1,000 QAR VIP Makeover Giveaway Plan (Old Airport & Al Wakrah)');
+        $presResp->assertSee('Laleen Beauty Salon — 1,000 QAR Makeover Giveaway Plan');
 
         $ideasResp = $this->actingAs($this->agent)->get(route('guide.ideas.index'));
         $ideasResp->assertOk();
