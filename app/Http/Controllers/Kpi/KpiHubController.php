@@ -1040,9 +1040,6 @@ class KpiHubController extends Controller
             ->where(function ($q) {
                 $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
             })
-            ->where(function ($q) {
-                $q->whereNull('category')->orWhere('category', '!=', 'cancel');
-            })
             ->get(['id', 'assigned_agent_id', 'next_followup_date']);
 
         $unassignedLeadsCount = $openPipelineLeads->whereNull('assigned_agent_id')->count();
@@ -1051,9 +1048,6 @@ class KpiHubController extends Controller
             ->whereDate('next_followup_date', '<', today())
             ->where(function ($q) {
                 $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
-            })
-            ->where(function ($q) {
-                $q->whereNull('category')->orWhere('category', '!=', 'cancel');
             })
             ->count();
 

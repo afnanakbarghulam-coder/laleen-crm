@@ -464,7 +464,7 @@ class Customer extends Model
     public function activeClientPackages(?int $forAppointmentId = null)
     {
         return $this->clientPackages()
-            ->where('status', '!=', 'expired')
+            ->whereNotIn('status', ['expired', 'cancelled'])
             ->where(function ($q) {
                 $q->whereNull('expires_at')
                     ->orWhere('expires_at', '>=', now());

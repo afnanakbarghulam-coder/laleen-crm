@@ -33,12 +33,17 @@ class StaffSalesAnalytics
 
     public function daysElapsed(): int
     {
-        return max($this->dateFrom->diffInDays($this->dateTo) + 1, 1);
+        return max((int) $this->dateFrom->copy()->startOfDay()->diffInDays($this->dateTo->copy()->startOfDay()) + 1, 1);
+    }
+
+    public function daysInTargetMonth(): int
+    {
+        return max(1, (int) $this->dateFrom->daysInMonth);
     }
 
     public function proratedTarget(): float
     {
-        return round($this->monthlyTargetPerStaff * $this->daysElapsed() / self::DAYS_IN_MONTH, 2);
+        return round($this->monthlyTargetPerStaff * $this->daysElapsed() / $this->daysInTargetMonth(), 2);
     }
 
     /**

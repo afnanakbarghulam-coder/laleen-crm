@@ -197,12 +197,16 @@ class ClientsModuleWave4Test extends TestCase
         $this->assertCount(0, $customer->redeemablePackageServices());
         $this->assertSame(0, $customer->pending_package_service_count);
 
-        // 2. Cancelling booking1 via updateStatus cleans up the unpaid ClientPackage
+        // 2. Cancelling booking1 via updateStatus marks the unpaid ClientPackage 'cancelled' (unredeemable, preserved for potential reschedule)
         $this->actingAs($this->admin)->patchJson(route('appointments.updateStatus', $booking1), [
             'status' => 'cancelled',
         ])->assertOk();
 
-        $this->assertDatabaseMissing('client_packages', ['id' => $unpaidPackage->id]);
+        $this->assertDatabaseHas('client_packages', [
+            'id' => $unpaidPackage->id,
+            'status' => 'cancelled',
+        ]);
+        $this->assertFalse($unpaidPackage->fresh()->canRedeem($booking1->id));
     }
 
     public function test_customer_update_normalizes_phone_and_propagates_to_appointments_leads_and_complaints(): void

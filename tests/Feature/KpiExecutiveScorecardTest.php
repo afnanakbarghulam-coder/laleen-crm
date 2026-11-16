@@ -692,13 +692,20 @@ class KpiExecutiveScorecardTest extends TestCase
         $this->assertSame('wakrah', $autoEntry->branch);
         $this->assertSame(500.0, (float) $autoEntry->ticket_amount);
 
-        // Fix #7: Overdue follow-up lead with category = 'cancel' is excluded from Laden's overdue_followups_count
+        // Fix #7: Open overdue follow-up lead with category = 'cancel' IS counted in Laden's overdue_followups_count (P0-8), while closed ('no') cancelled lead is excluded
         Lead::create([
             'phone' => '55990011',
             'category' => 'cancel',
             'categories' => ['cancel'],
             'next_followup_date' => $now->copy()->subDays(2)->toDateString(),
             'needful_done' => null,
+        ]);
+        Lead::create([
+            'phone' => '55990033',
+            'category' => 'cancel',
+            'categories' => ['cancel'],
+            'next_followup_date' => $now->copy()->subDays(2)->toDateString(),
+            'needful_done' => 'no',
         ]);
         Lead::create([
             'phone' => '55990022',
@@ -729,7 +736,7 @@ class KpiExecutiveScorecardTest extends TestCase
             ->get(route('kpi.hub', ['month' => $now->format('Y-m')]))
             ->viewData('scorecard');
 
-        $this->assertSame(1, $scorecard['laden']['overdue_followups_count'], 'Cancelled lead must be excluded from overdue follow-ups count');
+        $this->assertSame(2, $scorecard['laden']['overdue_followups_count'], 'Open cancelled lead with overdue follow-up date must be counted while closed lead is excluded');
         $this->assertSame(1, $scorecard['laden']['resolved_within_48h_count'], 'resolved_at must protect complaint 48h SLA from later note edits');
         $this->assertTrue($scorecard['laden']['complaint_passing']);
     }

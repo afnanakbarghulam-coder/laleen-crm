@@ -22,8 +22,8 @@ class Lead extends Model
      */
     const CATEGORY_PRIORITY = [
         'no_show',
-        'cancel',
         'follow_up',
+        'cancel',
         'combos_packages',
         'inquiry',
     ];
@@ -345,7 +345,8 @@ class Lead extends Model
     }
 
     /**
-     * Role-scoped query of open, non-cancelled leads with a follow-up due today or overdue.
+     * Role-scoped query of open leads with a follow-up due today or overdue
+     * (including cancelled-booking reschedules that still need follow-up).
      */
     public static function pendingFollowUpsQuery(?User $user = null)
     {
@@ -354,9 +355,6 @@ class Lead extends Model
             ->whereDate('next_followup_date', '<=', today())
             ->where(function ($q) {
                 $q->whereNull('needful_done')->orWhereNotIn('needful_done', self::CLOSED_STATUSES);
-            })
-            ->where(function ($q) {
-                $q->whereNull('category')->orWhere('category', '!=', 'cancel');
             });
 
         if (static::shouldScopeFollowUpsToAssignedAgent($user)) {

@@ -347,7 +347,7 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
         $line2->refresh();
         $lead->refresh();
 
-        $this->assertSame('confirmed', $appointment->status);
+        $this->assertSame('pending', $appointment->status);
         $this->assertSame($this->replacementStylist->id, (int) $appointment->staff_id);
         $this->assertSame($this->replacementStylist->id, (int) $line1->staff_id);
         $this->assertSame($this->secondaryStylist->id, (int) $line2->staff_id, 'Secondary stylist on line 2 must be preserved!');

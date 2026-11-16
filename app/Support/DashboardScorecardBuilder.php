@@ -269,8 +269,8 @@ class DashboardScorecardBuilder
         $lastMondayStr = $this->to->copy()->startOfWeek(Carbon::MONDAY)->toDateString();
 
         $inRangePlans = SocialContentPlan::query()
-            ->where('week_start_date', '>=', $firstMondayStr)
-            ->where('week_start_date', '<=', $lastMondayStr)
+            ->whereDate('week_start_date', '>=', $firstMondayStr)
+            ->whereDate('week_start_date', '<=', $lastMondayStr)
             ->get()
             ->filter(function (SocialContentPlan $plan) use ($minDateStr, $maxDateStr): bool {
                 $exact = $plan->exactDate()->toDateString();
@@ -384,7 +384,7 @@ class DashboardScorecardBuilder
         }
 
         $adLeads = AdLeadEntry::query()
-            ->whereBetween('date', [$this->from->toDateString(), $this->to->toDateString()])
+            ->whereBetween('date', [$this->from->copy()->startOfDay(), $this->to->copy()->endOfDay()])
             ->get($adLeadColumns);
 
         $oaRevenue = round((float) $adLeads->sum(fn (AdLeadEntry $e) => $e->branchRevenue('old_airport')), 0);
@@ -489,7 +489,7 @@ class DashboardScorecardBuilder
         $chatEvals = $agentUserIds->isNotEmpty()
             ? KpiChatEvaluation::query()
                 ->whereIn('agent_id', $agentUserIds)
-                ->whereBetween('evaluation_date', [$this->from->toDateString(), $this->to->toDateString()])
+                ->whereBetween('evaluation_date', [$this->from->copy()->startOfDay(), $this->to->copy()->endOfDay()])
                 ->get(['id', 'percentage'])
             : collect();
 
@@ -623,7 +623,7 @@ class DashboardScorecardBuilder
         $analytics = new StaffSalesAnalytics($this->from, $this->to);
         $upsellTotals = $analytics->totals($branch);
         $upsellActual = round((float) ($upsellTotals['team_total'] ?? 0.0), 0);
-        $upsellTarget = round((float) ($upsellTotals['prorated_team_target'] ?? 0.0), 0);
+        $upsellTarget = round((float) ($upsellTotals['team_target'] ?? 0.0), 0);
         if ($upsellTarget <= 0) {
             $upsellTarget = max(1.0, round((StaffSalesAnalytics::DEFAULT_MONTHLY_TARGET / $daysInMonth) * $periodDays, 0));
             $upsellPct = min(100.0, round(($upsellActual / $upsellTarget) * 100, 1));

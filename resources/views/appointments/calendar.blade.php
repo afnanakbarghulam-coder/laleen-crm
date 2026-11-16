@@ -2017,9 +2017,14 @@
                         <h6 class="text-uppercase small fw-bold text-muted mb-2">Services &amp; Combos</h6>
                         <div id="drawerComboPackagesList"></div>
                         <div id="drawerServices"></div>
-                        <button type="button" class="drawer-add-pill" id="drawerAddServiceBtn">
-                            <i class="bx bx-plus"></i> Add service
-                        </button>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="drawer-add-pill" id="drawerAddServiceBtn">
+                                <i class="bx bx-plus"></i> Add service
+                            </button>
+                            <button type="button" class="drawer-add-pill d-none" id="drawerRedeemPkgBtn" style="border-color: rgba(212, 163, 115, 0.42); color: #e5b8a8;">
+                                <i class="bx bx-gift"></i> Redeem Package
+                            </button>
+                        </div>
                         <div class="svc-row small d-none" id="drawerDiscountRow" style="color:#8ea88a;">
                             <span>Total discount</span>
                             <span id="drawerDiscountTotal"></span>
@@ -2038,6 +2043,16 @@
                         </div>
                         <input type="text" id="drawerServiceSearch" class="form-control form-control-sm mb-2" placeholder="Search by service name">
                         <div id="drawerServiceResults" style="max-height:240px; overflow-y:auto;"></div>
+                    </div>
+
+                    <!-- REDEEM PACKAGE VIEW -->
+                    <div id="drawerServicesRedeemView" class="d-none">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <button type="button" class="drawer-back-btn" id="drawerRedeemPkgBack"><i class="bx bx-arrow-back"></i></button>
+                            <h6 class="mb-0 text-uppercase small fw-bold text-muted">Redeem Active Package</h6>
+                        </div>
+                        <div id="drawerRedeemPkgList" style="max-height:240px; overflow-y:auto;" class="mb-2"></div>
+                        <button type="button" class="btn btn-sm btn-primary w-100" id="drawerApplyRedeemPkgBtn">Redeem Selected (0.00 QAR)</button>
                     </div>
 
                     <!-- EDIT SERVICE VIEW -->
@@ -2271,6 +2286,25 @@
                         <button type="submit" class="btn btn-primary">Block Time</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    {{-- Minimalist Confirmation Modal for Cancel / No Show in Drawer --}}
+    <div class="modal fade" id="drawerStatusConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content" style="background: linear-gradient(180deg, #23191d 0%, #171114 100%); border: 1px solid rgba(217, 143, 131, 0.28); border-radius: 14px; color: #f8efe6;">
+                <div class="modal-header py-2 px-3" style="border-color: rgba(217, 143, 131, 0.14);">
+                    <h6 class="modal-title mb-0" id="drawerStatusConfirmTitle" style="color: #f8efe6; font-weight: 600;">Confirm Action</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-3 px-3">
+                    <p class="mb-0" id="drawerStatusConfirmBody" style="font-size: 13px; line-height: 1.55; color: #ead8d2;">Are you sure?</p>
+                </div>
+                <div class="modal-footer py-2 px-3" style="border-color: rgba(217, 143, 131, 0.14);">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Keep Booking</button>
+                    <button type="button" class="btn btn-sm btn-danger" id="drawerStatusConfirmAcceptBtn">Confirm</button>
+                </div>
             </div>
         </div>
     </div>
@@ -3089,6 +3123,8 @@
             renderDrawerServiceList(a, isFinal);
             showDrawerServicesView('list');
             document.getElementById('drawerAddServiceBtn').classList.toggle('d-none', isFinal || !CAN_EDIT_BOOKINGS);
+            const hasRedeemablePkgs = Array.isArray(a.redeemable_package_services) && a.redeemable_package_services.length > 0;
+            document.getElementById('drawerRedeemPkgBtn')?.classList.toggle('d-none', isFinal || !CAN_EDIT_BOOKINGS || !hasRedeemablePkgs);
 
             renderDrawerUpsellList(a, isFinal);
             showDrawerUpsellsView('list');
@@ -3229,6 +3265,7 @@
             document.getElementById('drawerServicesListView').classList.toggle('d-none', view !== 'list');
             document.getElementById('drawerServicesAddView').classList.toggle('d-none', view !== 'add');
             document.getElementById('drawerServicesEditView').classList.toggle('d-none', view !== 'edit');
+            document.getElementById('drawerServicesRedeemView')?.classList.toggle('d-none', view !== 'redeem');
         }
 
         let drawerComboDrafts = {};
@@ -3703,6 +3740,86 @@
             showDrawerServicesView('add');
             renderDrawerServiceCatalog('');
         });
+        document.getElementById('drawerRedeemPkgBtn')?.addEventListener('click', () => {
+            clearDrawerConflict();
+            renderDrawerRedeemPkgList();
+            showDrawerServicesView('redeem');
+        });
+        document.getElementById('drawerRedeemPkgBack')?.addEventListener('click', () => showDrawerServicesView('list'));
+
+        function renderDrawerRedeemPkgList() {
+            const box = document.getElementById('drawerRedeemPkgList');
+            if (!box) return;
+            const items = (lastDrawerData && Array.isArray(lastDrawerData.redeemable_package_services))
+                ? lastDrawerData.redeemable_package_services
+                : [];
+            if (!items.length) {
+                box.innerHTML = '<div class="text-muted small py-2">No active package credits available.</div>';
+                return;
+            }
+            box.innerHTML = items.map(svc => `
+                <label class="d-flex align-items-center justify-content-between gap-2 py-2 px-2 rounded mb-1" style="background:rgba(255,255,255,0.03); border:1px solid rgba(229,184,168,0.18); cursor:pointer; font-size:12.5px;">
+                    <span class="d-inline-flex align-items-center gap-2">
+                        <input type="checkbox" class="form-check-input m-0 drawer-redeem-pkg-cb"
+                            value="${escapeHtml(String(svc.id))}"
+                            data-package-id="${escapeHtml(String(svc.client_package_id))}"
+                            data-remaining="${Number(svc.remaining_count) || 1}">
+                        <span>
+                            <span class="fw-semibold d-block" style="color:#f8efe6;">${escapeHtml(svc.service_name)} <span class="text-muted fw-normal">(${svc.duration || 30}m)</span></span>
+                            <span class="text-muted" style="font-size:11px;">${escapeHtml(svc.combo_name)} &middot; ${svc.remaining_count} slot(s) left</span>
+                        </span>
+                    </span>
+                    <span style="color:#a7c7a2; font-weight:600; font-size:11.5px;">0.00 QAR</span>
+                </label>
+            `).join('');
+
+            const syncCaps = () => {
+                const cbs = [...box.querySelectorAll('.drawer-redeem-pkg-cb')];
+                const counts = {};
+                cbs.forEach(cb => {
+                    if (cb.checked) counts[cb.dataset.packageId] = (counts[cb.dataset.packageId] || 0) + 1;
+                });
+                cbs.forEach(cb => {
+                    const cap = parseInt(cb.dataset.remaining || '1', 10) || 1;
+                    cb.disabled = !cb.checked && (counts[cb.dataset.packageId] || 0) >= cap;
+                });
+            };
+            box.querySelectorAll('.drawer-redeem-pkg-cb').forEach(cb => cb.addEventListener('change', syncCaps));
+        }
+
+        document.getElementById('drawerApplyRedeemPkgBtn')?.addEventListener('click', function () {
+            const box = document.getElementById('drawerRedeemPkgList');
+            const selected = box ? [...box.querySelectorAll('.drawer-redeem-pkg-cb:checked')].map(cb => cb.value) : [];
+            if (!selected.length) {
+                showDrawerConflict('Select at least one package service to redeem.', 'validation');
+                return;
+            }
+            const btn = this;
+            btn.disabled = true;
+            clearDrawerConflict();
+
+            fetch(`/appointments/${selectedAppointmentId}/redeem-package`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ redeem_service_ids: selected })
+            })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (ok && data.success) {
+                    showCalToast(data.message || 'Package redeemed');
+                    loadCalendar();
+                    showDrawerServicesView('list');
+                    fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
+                } else {
+                    showDrawerConflict(extractApiErrorMessage(data, 'Could not redeem package.'), data && data.reason);
+                }
+            })
+            .finally(() => { btn.disabled = false; });
+        });
         document.getElementById('drawerCheckoutBtn')?.addEventListener('click', function(e) {
             if (!lastDrawerData) return;
             const hasRealServices = Array.isArray(lastDrawerData.services) && lastDrawerData.services.length > 0;
@@ -4058,15 +4175,52 @@
                 });
         }
 
+        let pendingDrawerConfirmStatus = null;
+        function promptDrawerDestructiveStatus(status) {
+            pendingDrawerConfirmStatus = status;
+            const modalEl = document.getElementById('drawerStatusConfirmModal');
+            const titleEl = document.getElementById('drawerStatusConfirmTitle');
+            const bodyEl = document.getElementById('drawerStatusConfirmBody');
+            const acceptBtn = document.getElementById('drawerStatusConfirmAcceptBtn');
+            const clientLabel = (lastDrawerData && lastDrawerData.customer_name) ? lastDrawerData.customer_name : 'this client';
+            const isNoShow = status === 'no_show';
+
+            if (titleEl) titleEl.textContent = isNoShow ? 'Mark as No Show' : 'Cancel Booking';
+            if (bodyEl) {
+                bodyEl.textContent = isNoShow
+                    ? `Mark ${clientLabel}'s appointment as No Show? This frees the slot and moves the client to follow-ups.`
+                    : `Cancel ${clientLabel}'s appointment? Any unpaid combo hold stays preserved if rescheduled later.`;
+            }
+            if (acceptBtn) acceptBtn.textContent = isNoShow ? 'Mark No Show' : 'Cancel Booking';
+
+            if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+                window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            } else {
+                updateDrawerStatus(status);
+            }
+        }
+
+        document.getElementById('drawerStatusConfirmAcceptBtn')?.addEventListener('click', function () {
+            const targetStatus = pendingDrawerConfirmStatus;
+            pendingDrawerConfirmStatus = null;
+            const modalEl = document.getElementById('drawerStatusConfirmModal');
+            if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+                window.bootstrap.Modal.getInstance(modalEl)?.hide();
+            }
+            if (targetStatus) {
+                updateDrawerStatus(targetStatus);
+            }
+        });
+
         document.getElementById('drawerNoShowBtn').addEventListener('click', function(e) {
             e.preventDefault();
             if (this.classList.contains('disabled')) return;
-            updateDrawerStatus('no_show');
+            promptDrawerDestructiveStatus('no_show');
         });
         document.getElementById('drawerCancelBtn').addEventListener('click', function(e) {
             e.preventDefault();
             if (this.classList.contains('disabled')) return;
-            updateDrawerStatus('cancelled');
+            promptDrawerDestructiveStatus('cancelled');
         });
 
         /* ---------------- RESCHEDULE (drawer form + drag-and-drop + duration resize) ---------------- */

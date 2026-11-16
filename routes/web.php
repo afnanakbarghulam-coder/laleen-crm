@@ -175,6 +175,7 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('/appointments/{appointment}/services/{appointmentService}', [AppointmentController::class, 'updateService'])->name('appointments.services.update');
         Route::delete('/appointments/{appointment}/services/{appointmentService}', [AppointmentController::class, 'destroyService'])->name('appointments.services.destroy');
         Route::match(['put', 'patch'], '/appointments/{appointment}/combo-services', [AppointmentController::class, 'updateComboServices'])->name('appointments.comboServices.update');
+        Route::post('/appointments/{appointment}/redeem-package', [AppointmentController::class, 'redeemPackageServices'])->name('appointments.redeemPackage');
         Route::post('/appointments/{appointment}/upsells', [AppointmentController::class, 'addUpsell'])->name('appointments.upsells.store');
         Route::patch('/appointments/{appointment}/upsells/{appointmentUpsell}', [AppointmentController::class, 'updateUpsell'])->name('appointments.upsells.update');
         Route::delete('/appointments/{appointment}/upsells/{appointmentUpsell}', [AppointmentController::class, 'destroyUpsell'])->name('appointments.upsells.destroy');

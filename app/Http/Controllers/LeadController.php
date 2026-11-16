@@ -36,9 +36,6 @@ class LeadController extends Controller
                 ->whereDate('next_followup_date', '<=', today())
                 ->where(function ($q) {
                     $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
-                })
-                ->where(function ($q) {
-                    $q->whereNull('category')->orWhere('category', '!=', 'cancel');
                 });
 
             if (!$request->filled('agent_id') && Lead::shouldScopeFollowUpsToAssignedAgent($request->user())) {
@@ -49,9 +46,6 @@ class LeadController extends Controller
                 ->whereDate('next_followup_date', '<', today())
                 ->where(function ($q) {
                     $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
-                })
-                ->where(function ($q) {
-                    $q->whereNull('category')->orWhere('category', '!=', 'cancel');
                 });
         } elseif ($alertFilter === 'unscheduled') {
             $query->whereHasCategory(['no_show', 'cancel'])
@@ -947,8 +941,8 @@ class LeadController extends Controller
     }
 
     /**
-     * Leads whose next follow-up date has passed, haven't been closed
-     * (Booked or Not Interested/Lost), and aren't already a cancelled lead.
+     * Leads whose next follow-up date has passed and haven't been closed
+     * (Booked or Not Interested/Lost), including cancelled reschedules.
      */
     private function overdueLeadsQuery()
     {
@@ -957,9 +951,6 @@ class LeadController extends Controller
             ->whereDate('next_followup_date', '<', today())
             ->where(function ($q) {
                 $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
-            })
-            ->where(function ($q) {
-                $q->whereNull('category')->orWhere('category', '!=', 'cancel');
             });
     }
 
@@ -1007,11 +998,30 @@ class LeadController extends Controller
     private function resolveOrCreateCustomer(string $normalizedPhone, ?int $requestedCustomerId, ?string $name): Customer
     {
         $canonicalPhone = Customer::normalizePhone($normalizedPhone) ?: $normalizedPhone;
-        $candidates = array_values(array_unique(array_filter([$canonicalPhone, $normalizedPhone])));
+        [, $exactVariants, $strippedDigits] = \App\Models\AdLeadEntry::buildPhoneLookupSets([$normalizedPhone, $canonicalPhone]);
 
-        $customer = $requestedCustomerId ? Customer::find($requestedCustomerId) : null;
-        if (!$customer && !empty($candidates)) {
-            $customer = Customer::whereIn('phone', $candidates)->first();
+        $customer = null;
+        if ($requestedCustomerId) {
+            $candidate = Customer::find($requestedCustomerId);
+            if ($candidate) {
+                $candNorm = Customer::normalizePhone((string) $candidate->phone);
+                $candDigits = preg_replace('/\D+/', '', (string) $candidate->phone);
+                $phoneMatches = ($candNorm !== '' && $candNorm === $canonicalPhone)
+                    || in_array((string) $candidate->phone, $exactVariants, true)
+                    || ($candDigits !== '' && in_array($candDigits, $strippedDigits, true));
+
+                if ($phoneMatches) {
+                    $customer = $candidate;
+                }
+            }
+        }
+
+        if (!$customer && (!empty($exactVariants) || !empty($strippedDigits))) {
+            $customer = Customer::query()
+                ->where(function ($q) use ($exactVariants, $strippedDigits) {
+                    \App\Models\AdLeadEntry::applyPhoneCohortClause($q, $exactVariants, $strippedDigits, 'and', 'phone');
+                })
+                ->first();
         }
 
         $trimmedName = trim((string) $name);

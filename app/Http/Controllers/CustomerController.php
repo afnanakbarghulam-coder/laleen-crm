@@ -1323,9 +1323,15 @@ class CustomerController extends Controller
             return response()->json(['found' => false]);
         }
 
-        $exactCandidates = array_values(array_unique(array_filter([$normalized, $digits])));
-        $customer = Customer::whereIn('phone', $exactCandidates)->first()
-            ?: Customer::where('phone', 'like', '%' . $searchPhone . '%')->first();
+        [, $exactVariants, $strippedDigits] = AdLeadEntry::buildPhoneLookupSets([$rawQuery, $normalized, $digits]);
+
+        $customer = (!empty($exactVariants) || !empty($strippedDigits))
+            ? Customer::query()
+                ->where(function ($q) use ($exactVariants, $strippedDigits) {
+                    AdLeadEntry::applyPhoneCohortClause($q, $exactVariants, $strippedDigits, 'and', 'phone');
+                })
+                ->first()
+            : null;
 
         if (!$customer) {
             return response()->json(['found' => false]);

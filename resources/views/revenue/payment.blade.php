@@ -238,12 +238,41 @@
         <form method="POST" action="{{ route('appointments.revenue.storePayment', $appointment->id) }}" id="checkoutForm">
             @csrf
 
+            @if (session('error'))
+                <div class="alert mb-3" style="background: rgba(168, 82, 74, 0.18); border: 1px solid rgba(224, 147, 138, 0.42); color: #f8deda; border-radius: 12px; font-size: 13px;">
+                    <i class="bx bx-error-circle me-1"></i> {{ session('error') }}
+                </div>
+            @endif
+
+            @if (!empty($hasUnpickedOriginatingCombo))
+                <div id="unpickedComboWarningBanner" class="mb-3 p-3" style="background: rgba(201, 166, 107, 0.12); border: 1px solid rgba(229, 184, 168, 0.36); border-radius: 12px; color: #f8efe6;">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                        <div>
+                            <div class="fw-semibold" style="font-size: 13.5px; color: #f8efe6;">
+                                <i class="bx bx-info-circle me-1" style="color: #e5b8a8;"></i> 0 Combo Services Selected for Today
+                            </div>
+                            <div class="small" style="color: #d7beb6;">
+                                Select the combo service(s) performed today so slots &amp; stylist credit are recorded accurately, or confirm pre-purchase below.
+                            </div>
+                        </div>
+                        <a href="{{ route('appointments.calendar', ['date' => $appointment->appointment_datetime->toDateString(), 'branch' => $appointment->branch]) }}"
+                            class="btn btn-sm btn-outline-light" style="border-color: rgba(229, 184, 168, 0.38); font-size: 12px;">
+                            &larr; Select Today&rsquo;s Combo Services
+                        </a>
+                    </div>
+                    <label class="d-flex align-items-center gap-2 mb-0 pt-2" style="border-top: 1px solid rgba(229, 184, 168, 0.16); cursor: pointer; font-size: 12.5px; color: #f8efe6;">
+                        <input type="checkbox" class="form-check-input m-0" name="package_prepurchase_only" id="packagePrepurchaseOnly" value="1" {{ old('package_prepurchase_only') ? 'checked' : '' }}>
+                        <span>Package Pre-Purchase Only &mdash; client is buying the combo now and performing 0 services today</span>
+                    </label>
+                </div>
+            @endif
+
             <div class="checkout-split">
                 <!-- LEFT: services + products review -->
                 <div class="checkout-col-left">
                     <h6>Services</h6>
                     @forelse ($serviceItems as $item)
-                        <div class="line-item">
+                        <div class="line-item" data-svc-line-idx="{{ $loop->index }}">
                             <span class="item-name">
                                 {{ $item['name'] }} <span class="muted">({{ $item['duration'] }} min)</span>
                                 @if (!empty($item['combo_name']))
@@ -263,8 +292,11 @@
                                         @endif
                                     </span>
                                 @endif
+                                <span class="discount-note d-none" data-svc-covered-badge="{{ $loop->index }}">
+                                    <i class="bx bx-package"></i> Covered by package redemption
+                                </span>
                             </span>
-                            <span class="price-col">
+                            <span class="price-col" data-svc-price-idx="{{ $loop->index }}" data-orig-html="{{ e(number_format($item['price'], 2) . ' QAR') }}">
                                 @if (empty($item['is_package_redemption']) && ($item['discount_amount'] ?? 0) > 0)
                                     <span class="original-price">{{ number_format($item['original_price'], 2) }} QAR</span>
                                 @endif
@@ -317,11 +349,20 @@
                         <h6 class="mt-4">Redeem Package Services <span class="text-muted">(no extra charge)</span></h6>
                         @foreach ($pendingPackageServices as $svc)
                             <div class="redeem-row">
-                                <input type="checkbox" class="form-check-input redeem-checkbox" name="redeem_service_ids[]" value="{{ $svc['id'] }}" id="redeem-{{ $svc['id'] }}" data-duration="{{ $svc['duration'] }}">
+                                <input type="checkbox"
+                                    class="form-check-input redeem-checkbox"
+                                    name="redeem_service_ids[]"
+                                    value="{{ $svc['id'] }}"
+                                    id="redeem-{{ $svc['id'] }}"
+                                    data-duration="{{ $svc['duration'] }}"
+                                    data-package-id="{{ $svc['client_package_id'] }}"
+                                    data-service-id="{{ $svc['service_id'] }}"
+                                    data-service-name="{{ $svc['service_name'] }}"
+                                    data-remaining="{{ $svc['remaining_count'] }}">
                                 <label for="redeem-{{ $svc['id'] }}" class="flex-grow-1 mb-0">
                                     {{ $svc['service_name'] }} <span class="muted">({{ $svc['duration'] }} min)</span>
                                     <div class="redeem-meta">
-                                        from {{ $svc['combo_name'] }} ·
+                                        from {{ $svc['combo_name'] }} ({{ $svc['remaining_count'] }} left) ·
                                         @if ($svc['expires_at'] === null)
                                             <span class="redeem-expiry ok">starts at Visit 1 checkout</span>
                                         @else
@@ -445,6 +486,7 @@
         const servicesTotal = {{ $servicesTotal }};
         const servicesDuration = {{ $servicesDuration }};
         const upsellsTotal = {{ $upsellsTotal }};
+        const BOOKED_SERVICE_ITEMS = @json($serviceItems);
         // A combo already sold at booking time still needs to be paid for -
         // it's not something this page's own "sell a package" picker knows
         // about, so it's added to the packages total as a fixed base amount.
@@ -593,19 +635,90 @@
             renderProductRows();
         });
 
+        function syncRedeemPackageCaps() {
+            const allRedeem = Array.from(document.querySelectorAll('.redeem-checkbox'));
+            const countsByPkg = {};
+            allRedeem.forEach(cb => {
+                const pkgId = cb.dataset.packageId;
+                if (pkgId && cb.checked) {
+                    countsByPkg[pkgId] = (countsByPkg[pkgId] || 0) + 1;
+                }
+            });
+            allRedeem.forEach(cb => {
+                const pkgId = cb.dataset.packageId;
+                const cap = parseInt(cb.dataset.remaining || '0', 10) || 0;
+                if (pkgId && cap > 0) {
+                    cb.disabled = !cb.checked && (countsByPkg[pkgId] || 0) >= cap;
+                }
+            });
+        }
+
         function recalc() {
+            syncRedeemPackageCaps();
+
+            // Smart Coverage (P1-1): match checked package redemptions against unpaid standalone lines
+            const coverableIndices = [];
+            (BOOKED_SERVICE_ITEMS || []).forEach((item, idx) => {
+                if (!item.is_package_redemption && !item.combo_name && Number(item.price) > 0) {
+                    coverableIndices.push(idx);
+                }
+            });
+
+            const coveredSet = new Set();
+            let coveredAmount = 0;
+            let extraRedeemMinutes = 0;
+
+            Array.from(document.querySelectorAll('.redeem-checkbox:checked')).forEach(cb => {
+                const svcId = Number(cb.dataset.serviceId || 0);
+                const svcName = String(cb.dataset.serviceName || '').trim().toLowerCase();
+                let matchedPos = -1;
+
+                for (let p = 0; p < coverableIndices.length; p++) {
+                    const itemIdx = coverableIndices[p];
+                    const cand = BOOKED_SERVICE_ITEMS[itemIdx];
+                    const idMatch = svcId > 0 && Number(cand.service_id || 0) === svcId;
+                    const nameMatch = svcName && String(cand.name || '').trim().toLowerCase() === svcName;
+                    if (idMatch || nameMatch) {
+                        matchedPos = p;
+                        coveredSet.add(itemIdx);
+                        coveredAmount += Number(cand.price || 0);
+                        break;
+                    }
+                }
+
+                if (matchedPos >= 0) {
+                    coverableIndices.splice(matchedPos, 1);
+                } else {
+                    extraRedeemMinutes += (parseInt(cb.dataset.duration, 10) || 0);
+                }
+            });
+
+            (BOOKED_SERVICE_ITEMS || []).forEach((item, idx) => {
+                const badgeEl = document.querySelector(`[data-svc-covered-badge="${idx}"]`);
+                const priceEl = document.querySelector(`[data-svc-price-idx="${idx}"]`);
+                if (!priceEl) return;
+                if (coveredSet.has(idx)) {
+                    if (badgeEl) badgeEl.classList.remove('d-none');
+                    priceEl.innerHTML = `<span class="original-price">${Number(item.price).toFixed(2)} QAR</span> 0.00 QAR`;
+                } else {
+                    if (badgeEl) badgeEl.classList.add('d-none');
+                    if (priceEl.dataset.origHtml && !item.is_package_redemption && !(Number(item.discount_amount) > 0)) {
+                        priceEl.textContent = priceEl.dataset.origHtml;
+                    }
+                }
+            });
+
+            const effectiveServicesTotal = Math.max(0, servicesTotal - coveredAmount);
             const productsTotal = productRows.reduce((s, r) => s + r.price * r.qty, 0);
             const packagesTotal = existingPackagesTotal + packageRows.reduce((s, r) => s + r.combo.price, 0);
-            const subtotal = servicesTotal + upsellsTotal + productsTotal + packagesTotal;
+            const subtotal = effectiveServicesTotal + upsellsTotal + productsTotal + packagesTotal;
 
             // Total time this visit actually takes: what's already booked,
             // plus only the package services being performed today (pending
             // ones don't occupy any of today's calendar slot) and any
             // previously-purchased pending service just checked off to redeem.
             const packageImmediateMinutes = packageRows.reduce((s, r) => s + packageImmediateDuration(r), 0);
-            const redeemMinutes = Array.from(document.querySelectorAll('.redeem-checkbox:checked'))
-                .reduce((s, cb) => s + (parseInt(cb.dataset.duration, 10) || 0), 0);
-            const totalDuration = servicesDuration + packageImmediateMinutes + redeemMinutes;
+            const totalDuration = servicesDuration + packageImmediateMinutes + extraRedeemMinutes;
             document.getElementById('sumDuration').textContent = totalDuration + ' min';
 
             const discountType = document.getElementById('discountType').value;
@@ -625,7 +738,7 @@
             const tip = parseFloat(document.getElementById('tipAmount').value || 0);
             const total = Math.max(0, subtotal - discountAmount) + tip;
 
-            document.getElementById('sumServices').textContent = servicesTotal.toFixed(2);
+            document.getElementById('sumServices').textContent = effectiveServicesTotal.toFixed(2);
             document.getElementById('sumProducts').textContent = productsTotal.toFixed(2);
             document.getElementById('sumPackages').textContent = packagesTotal.toFixed(2);
             document.getElementById('sumDiscount').textContent = '−' + discountAmount.toFixed(2);

@@ -870,21 +870,39 @@
                                         @endif
 
                                         @if (auth()->user()->canEdit('bookings'))
-                                            <button type="button" class="btn btn-sm btn-outline-primary"
-                                                data-appt="{{ json_encode($apptData) }}"
-                                                onclick="openBookingEditModal(this)">
-                                                <i class="bx bx-edit-alt"></i>
-                                                {{ in_array($appointment->status, ['cancelled', 'no_show']) ? 'Reschedule' : 'Edit' }}
-                                            </button>
-
-                                            <form action="{{ route('appointments.destroy', $appointment->id) }}" method="POST"
-                                                onsubmit="return confirm('Are you sure you want to delete this booking? This action cannot be undone.');">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Booking">
-                                                    <i class="bx bx-trash"></i>
+                                            @if ($isPaidBooking)
+                                                <span class="badge d-inline-flex align-items-center gap-1 px-2 py-1"
+                                                    style="background: rgba(142, 168, 138, 0.14); border: 1px solid rgba(142, 168, 138, 0.36); color: #a7c7a2; font-weight: 600; font-size: 11.5px;"
+                                                    title="Paid and closed — only Finance editors can reverse">
+                                                    <i class="bx bx-lock-alt"></i> Paid
+                                                </span>
+                                                @if (auth()->user()->canEdit('finance'))
+                                                    <form action="{{ route('appointments.destroy', $appointment->id) }}" method="POST"
+                                                        onsubmit="return confirm('Reverse paid sale and delete this booking? This action cannot be undone.');">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Reverse Paid Sale &amp; Delete Booking">
+                                                            <i class="bx bx-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            @else
+                                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                                    data-appt="{{ json_encode($apptData) }}"
+                                                    onclick="openBookingEditModal(this)">
+                                                    <i class="bx bx-edit-alt"></i>
+                                                    {{ in_array($appointment->status, ['cancelled', 'no_show']) ? 'Reschedule' : 'Edit' }}
                                                 </button>
-                                            </form>
+
+                                                <form action="{{ route('appointments.destroy', $appointment->id) }}" method="POST"
+                                                    onsubmit="return confirm('Are you sure you want to delete this booking? This action cannot be undone.');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Booking">
+                                                        <i class="bx bx-trash"></i>
+                                                    </button>
+                                                </form>
+                                            @endif
                                         @endif
                                     </div>
                                 @endif
@@ -968,6 +986,11 @@
                                 <label class="form-label">Combo Package</label>
                                 <div id="editComboPackagesContainer"></div>
                                 <div id="editComboHiddenInputs"></div>
+                            </div>
+
+                            <div class="col-12 d-none" id="editRedeemPackagesWrap">
+                                <label class="form-label">Redeem Package <span class="text-muted fw-normal">(0.00 QAR &middot; active balance)</span></label>
+                                <div id="editRedeemPackagesContainer" class="p-2 rounded" style="background: rgba(212, 163, 115, 0.08); border: 1px solid rgba(229, 184, 168, 0.24);"></div>
                             </div>
 
                             <div class="col-12">
@@ -1515,6 +1538,12 @@
 
             populateEditStaffOptions(null, appt.branch, appt.staff_id);
 
+            let editRedeemableItems = [];
+            const resetRedeemWrap = document.getElementById('editRedeemPackagesWrap');
+            const resetRedeemContainer = document.getElementById('editRedeemPackagesContainer');
+            if (resetRedeemWrap) resetRedeemWrap.classList.add('d-none');
+            if (resetRedeemContainer) resetRedeemContainer.innerHTML = '';
+
             fetch(`/appointments/${appt.id}`, { headers: { 'Accept': 'application/json' } })
                 .then(r => r.json())
                 .then(detail => {
@@ -1529,6 +1558,48 @@
                         });
                         return { pkg, todayIds, pendingIds };
                     });
+
+                    editRedeemableItems = Array.isArray(detail.redeemable_package_services) ? detail.redeemable_package_services : [];
+                    if (editRedeemableItems.length && resetRedeemWrap && resetRedeemContainer) {
+                        resetRedeemWrap.classList.remove('d-none');
+                        resetRedeemContainer.innerHTML = editRedeemableItems.map(item => `
+                            <label class="d-flex align-items-center justify-content-between gap-2 py-1 px-1 mb-0" style="cursor:pointer; font-size:13px;">
+                                <span class="d-inline-flex align-items-center gap-2">
+                                    <input type="checkbox" class="form-check-input m-0 edit-redeem-checkbox"
+                                        name="redeem_service_ids[]"
+                                        value="${item.id}"
+                                        data-package-id="${item.client_package_id}"
+                                        data-service-name="${item.service_name}"
+                                        data-duration="${item.duration || 30}"
+                                        data-remaining="${item.remaining_count || 1}">
+                                    <span>${item.service_name} <span class="text-muted">(${item.duration || 30} min &middot; ${item.combo_name}, ${item.remaining_count} left)</span></span>
+                                </span>
+                                <span style="color:#a7c7a2; font-weight:600; font-size:12px;">0.00 QAR</span>
+                            </label>
+                        `).join('');
+
+                        const syncEditRedeemCaps = () => {
+                            const cbs = [...resetRedeemContainer.querySelectorAll('.edit-redeem-checkbox')];
+                            const counts = {};
+                            cbs.forEach(cb => {
+                                if (cb.checked) counts[cb.dataset.packageId] = (counts[cb.dataset.packageId] || 0) + 1;
+                            });
+                            cbs.forEach(cb => {
+                                const cap = parseInt(cb.dataset.remaining || '1', 10) || 1;
+                                cb.disabled = !cb.checked && (counts[cb.dataset.packageId] || 0) >= cap;
+                            });
+                        };
+
+                        resetRedeemContainer.querySelectorAll('.edit-redeem-checkbox').forEach(cb => {
+                            cb.addEventListener('change', () => {
+                                syncEditRedeemCaps();
+                                hideEditModalError();
+                                updateEditServiceTotals(true);
+                                loadEditAvailableStaff();
+                            });
+                        });
+                    }
+
                     if (editComboDrafts.length) {
                         editDecideInSalon = false;
                     }
@@ -1544,7 +1615,8 @@
 
         function updateEditServiceTotals(recalcPrice = true) {
             const checked = [...document.querySelectorAll('.edit-service-checkbox:checked')];
-            if (checked.length > 0 || editComboDrafts.length > 0) {
+            const checkedRedeems = [...document.querySelectorAll('.edit-redeem-checkbox:checked')];
+            if (checked.length > 0 || editComboDrafts.length > 0 || checkedRedeems.length > 0) {
                 editDecideInSalon = false;
             }
 
@@ -1553,12 +1625,26 @@
             const decideHidden = document.getElementById('editDecideInSalonHidden');
             const decideHoldSpan = document.getElementById('editDecideHoldMin');
             if (decideHoldSpan) decideHoldSpan.textContent = String(editHoldDuration || 60);
-            if (decideCard) decideCard.classList.toggle('d-none', !(editDecideInSalon && !checked.length && !editComboDrafts.length));
-            if (decidePill) decidePill.classList.toggle('d-none', checked.length > 0 || editComboDrafts.length > 0 || editDecideInSalon);
-            if (decideHidden) decideHidden.value = (editDecideInSalon && !checked.length && !editComboDrafts.length) ? '1' : '0';
+            if (decideCard) decideCard.classList.toggle('d-none', !(editDecideInSalon && !checked.length && !editComboDrafts.length && !checkedRedeems.length));
+            if (decidePill) decidePill.classList.toggle('d-none', checked.length > 0 || editComboDrafts.length > 0 || checkedRedeems.length > 0 || editDecideInSalon);
+            if (decideHidden) decideHidden.value = (editDecideInSalon && !checked.length && !editComboDrafts.length && !checkedRedeems.length) ? '1' : '0';
 
-            const standalonePrice = checked.reduce((sum, cb) => sum + (parseFloat(cb.dataset.price) || 0), 0);
+            const remainingRedeems = checkedRedeems.map(cb => String(cb.dataset.serviceName || '').trim().toLowerCase());
+            let standalonePrice = 0;
+            checked.forEach(cb => {
+                const nameLower = String(cb.value || '').trim().toLowerCase();
+                const matchIdx = remainingRedeems.indexOf(nameLower);
+                if (matchIdx >= 0) {
+                    remainingRedeems.splice(matchIdx, 1);
+                } else {
+                    standalonePrice += (parseFloat(cb.dataset.price) || 0);
+                }
+            });
             const standaloneMin = checked.reduce((sum, cb) => sum + (parseInt(cb.dataset.duration) || 0), 0);
+            const extraRedeemMin = checkedRedeems.reduce((sum, cb) => {
+                const isAlreadyChecked = checked.some(sc => String(sc.value || '').trim().toLowerCase() === String(cb.dataset.serviceName || '').trim().toLowerCase());
+                return sum + (isAlreadyChecked ? 0 : (parseInt(cb.dataset.duration) || 0));
+            }, 0);
             const comboLockedPrice = editComboDrafts.reduce((sum, d) => sum + (Number(d.pkg.price_paid) || 0), 0);
             const comboMin = editComboDrafts.reduce((sum, d) => {
                 return sum + (d.pkg.pool_services || [])
@@ -1566,7 +1652,7 @@
                     .reduce((acc, s) => acc + (Number(s.duration) || 0), 0);
             }, 0);
             const totalPrice = standalonePrice + comboLockedPrice;
-            const totalMin = (standaloneMin + comboMin) || (editComboDrafts.length ? 60 : (editDecideInSalon ? (editHoldDuration || 60) : 0));
+            const totalMin = (standaloneMin + extraRedeemMin + comboMin) || (editComboDrafts.length ? 60 : (editDecideInSalon ? (editHoldDuration || 60) : 0));
 
             if (editComboDrafts.length) {
                 document.getElementById('editServiceTotals').textContent =

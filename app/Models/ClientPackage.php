@@ -129,7 +129,7 @@ class ClientPackage extends Model
             || ($forAppointmentId !== null && (int) $this->appointment_id === (int) $forAppointmentId);
 
         return $isPaidOrOriginatingAppointment
-            && $this->status !== 'expired'
+            && !in_array($this->status, ['expired', 'cancelled'], true)
             && !$this->is_expired
             && $this->remaining_count > 0;
     }
@@ -143,7 +143,7 @@ class ClientPackage extends Model
      */
     public static function expireDue(?int $customerId = null): int
     {
-        $query = static::where('status', '!=', 'expired')
+        $query = static::whereNotIn('status', ['expired', 'cancelled'])
             ->whereNotNull('sale_id')
             ->whereNotNull('expires_at')
             ->where('expires_at', '<', now());
@@ -168,6 +168,10 @@ class ClientPackage extends Model
      */
     public function refreshStatus(): void
     {
+        if ($this->status === 'cancelled') {
+            return;
+        }
+
         if ($this->is_expired) {
             $this->services()->where('status', 'pending')->update(['status' => 'expired']);
             if ($this->status !== 'expired') {
