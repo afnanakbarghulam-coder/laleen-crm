@@ -323,6 +323,123 @@ class Lead extends Model
         });
     }
 
+    /**
+     * Determine whether Pending Follow-ups should be scoped strictly to
+     * assigned_agent_id (individual Chat Agents) vs full queue (Admin,
+     * Customer Service Lead / Sales Lead / Ops Lead, Managers, etc.).
+     */
+    public static function shouldScopeFollowUpsToAssignedAgent(?User $user): bool
+    {
+        if (!$user || $user->isAdmin()) {
+            return false;
+        }
+
+        $role = strtolower(trim((string) $user->role));
+        $identity = strtolower(trim($user->name . ' ' . $user->email));
+
+        if (preg_match('/\b(laden|arbab|customer[\s_-]*service[\s_-]*lead|sales[\s_-]*lead|ops[\s_-]*lead)\b/i', $identity)) {
+            return false;
+        }
+
+        return $role === 'agent';
+    }
+
+    /**
+     * Role-scoped query of open, non-cancelled leads with a follow-up due today or overdue.
+     */
+    public static function pendingFollowUpsQuery(?User $user = null)
+    {
+        $query = static::query()
+            ->whereNotNull('next_followup_date')
+            ->whereDate('next_followup_date', '<=', today())
+            ->where(function ($q) {
+                $q->whereNull('needful_done')->orWhereNotIn('needful_done', self::CLOSED_STATUSES);
+            })
+            ->where(function ($q) {
+                $q->whereNull('category')->orWhere('category', '!=', 'cancel');
+            });
+
+        if (static::shouldScopeFollowUpsToAssignedAgent($user)) {
+            $query->where('assigned_agent_id', $user->id);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Build structured Pending Follow-ups summary (counts + compact dropdown items)
+     * scoped to the viewing user's role visibility.
+     *
+     * @return array{
+     *     total_count: int,
+     *     due_today_count: int,
+     *     overdue_count: int,
+     *     items: list<array<string, mixed>>,
+     *     models: \Illuminate\Support\Collection<int, self>
+     * }
+     */
+    public static function pendingFollowUpsSummary(?User $user = null): array
+    {
+        $today = today();
+        $models = static::pendingFollowUpsQuery($user)
+            ->with(['customer:id,name,phone', 'agent:id,name'])
+            ->orderBy('next_followup_date', 'asc')
+            ->orderByDesc('id')
+            ->get();
+
+        $dueTodayCount = 0;
+        $overdueCount = 0;
+        $items = [];
+
+        foreach ($models as $lead) {
+            $isOverdue = $lead->next_followup_date && $lead->next_followup_date->lt($today);
+            if ($isOverdue) {
+                $overdueCount++;
+            } else {
+                $dueTodayCount++;
+            }
+
+            $rawName = trim((string) ($lead->customer?->name ?? $lead->customer_name ?? ''));
+            $isPlaceholder = $rawName === '' || in_array(strtolower($rawName), ['guest', 'unnamed', 'unnamed client', '-', '—', 'walk-in'], true);
+            $customerName = !$isPlaceholder ? $rawName : 'Client Inquiry';
+
+            $rawPhone = trim((string) $lead->phone);
+            $formattedPhone = $rawPhone !== ''
+                ? (str_starts_with($rawPhone, '+') ? $rawPhone : (strlen(preg_replace('/\D+/', '', $rawPhone)) === 8 ? '+974 ' . $rawPhone : '+' . ltrim($rawPhone, '+')))
+                : '—';
+
+            $servicesList = is_array($lead->service_interest) ? array_values(array_filter(array_map('trim', $lead->service_interest))) : [];
+            if (!empty($servicesList)) {
+                $visible = array_slice($servicesList, 0, 2);
+                $extra = count($servicesList) - count($visible);
+                $serviceLabel = implode(', ', $visible) . ($extra > 0 ? " +{$extra}" : '');
+            } else {
+                $primaryCat = $lead->category ?: ($lead->categories_list[0] ?? 'inquiry');
+                $serviceLabel = self::CATEGORIES[$primaryCat] ?? 'General Inquiry';
+            }
+
+            $items[] = [
+                'id' => (int) $lead->id,
+                'customer_name' => $customerName,
+                'phone' => $formattedPhone,
+                'raw_phone' => $rawPhone,
+                'service_interest' => $serviceLabel,
+                'urgency' => $isOverdue ? 'overdue' : 'due_today',
+                'urgency_label' => $isOverdue ? 'Overdue' : 'Due Today',
+                'followup_date_label' => $lead->next_followup_date ? $lead->next_followup_date->format('d M') : '',
+                'agent_name' => $lead->agent?->name,
+            ];
+        }
+
+        return [
+            'total_count' => $dueTodayCount + $overdueCount,
+            'due_today_count' => $dueTodayCount,
+            'overdue_count' => $overdueCount,
+            'items' => $items,
+            'models' => $models,
+        ];
+    }
+
     public function agent()
     {
         return $this->belongsTo(User::class, 'assigned_agent_id');
@@ -471,6 +588,114 @@ class Lead extends Model
     }
 
     /**
+     * Sanitize a submitted country dial code (e.g. "+974", "00974", "962") into bare digits ("974", "962").
+     */
+    public static function sanitizeDialCode(?string $countryCode): string
+    {
+        $clean = preg_replace('/\D+/', '', (string) $countryCode);
+
+        return preg_replace('/^00+/', '', $clean);
+    }
+
+    /**
+     * Return all valid numeric dial codes from config('countries.list') sorted longest-first.
+     *
+     * @return list<string>
+     */
+    public static function validDialCodes(): array
+    {
+        $list = config('countries.list', []);
+        $codes = [];
+
+        if (is_array($list) && !empty($list)) {
+            foreach ($list as $entry) {
+                $code = self::sanitizeDialCode((string) ($entry['dial_code'] ?? ''));
+                if ($code !== '') {
+                    $codes[$code] = true;
+                }
+            }
+        }
+
+        foreach (array_keys(self::COUNTRY_CODES) as $legacyCode) {
+            $codes[(string) $legacyCode] = true;
+        }
+
+        $unique = array_keys($codes);
+        usort($unique, fn ($a, $b) => strlen((string) $b) - strlen((string) $a));
+
+        return array_values(array_map('strval', $unique));
+    }
+
+    /**
+     * Shared country_code + phone_number validation rules for Leads and Ad Leads.
+     * Enforces 8-digit numbers for Qatar (+974) and 6-15 digits for international codes.
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    public static function phoneValidationRules(?string $rawCountryCodeInput = null): array
+    {
+        return [
+            'country_code' => [
+                'required',
+                'string',
+                'max:8',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $cleanCode = self::sanitizeDialCode((string) $value);
+                    if ($cleanCode === '' || !in_array($cleanCode, self::validDialCodes(), true)) {
+                        $fail('Selected country dial code is invalid.');
+                    }
+                },
+            ],
+            'phone_number' => [
+                'required',
+                'string',
+                'max:25',
+                function (string $attribute, mixed $value, \Closure $fail) use ($rawCountryCodeInput): void {
+                    $codeSource = $rawCountryCodeInput ?? request('country_code', '974');
+                    $cleanCode = self::sanitizeDialCode((string) $codeSource) ?: '974';
+                    $digits = preg_replace('/\D+/', '', (string) $value);
+
+                    if ($digits === '') {
+                        $fail('Please enter a valid phone number.');
+                        return;
+                    }
+
+                    if ($cleanCode === '974') {
+                        if (preg_match('/^(?:00974|974)0*(\d{8})$/', $digits, $m)) {
+                            $local = $m[1];
+                        } else {
+                            $local = ltrim($digits, '0');
+                        }
+
+                        if (strlen($local) !== 8) {
+                            $fail('Qatar (+974) phone numbers must be 8 digits.');
+                        }
+                        return;
+                    }
+
+                    if (str_starts_with($digits, '00')) {
+                        $digits = preg_replace('/^00+/', '', $digits);
+                    }
+
+                    if (str_starts_with($digits, $cleanCode) && strlen($digits) >= strlen($cleanCode) + 6) {
+                        $local = ltrim(substr($digits, strlen($cleanCode)), '0');
+                    } else {
+                        $local = ltrim($digits, '0');
+                        if ($local === '') {
+                            $local = $digits;
+                        }
+                    }
+
+                    $combinedLen = strlen($cleanCode . $local);
+                    if (strlen($local) < 6 || strlen($local) > 15 || $combinedLen > 15) {
+                        $fail('International phone numbers must contain 6 to 15 digits.');
+                    }
+                },
+            ],
+        ];
+    }
+
+    /**
      * Combine a country code + local number into the digits-only phone format
      * used everywhere else in the app (Customers, Appointments, Calendar all
      * store bare local numbers with no country code - e.g. "55532347", not
@@ -481,8 +706,7 @@ class Lead extends Model
      */
     public static function normalizePhone(?string $countryCode, ?string $number): string
     {
-        $cleanCountryCode = preg_replace('/\D+/', '', (string) $countryCode);
-        $cleanCountryCode = preg_replace('/^00+/', '', $cleanCountryCode);
+        $cleanCountryCode = self::sanitizeDialCode($countryCode);
 
         $digits = preg_replace('/\D+/', '', (string) $number);
         if (preg_match('/^009740*(\d{8})$/', $digits, $m)) {
@@ -502,7 +726,7 @@ class Lead extends Model
                 $digits = $stripped;
             }
         } elseif ($cleanCountryCode !== '') {
-            if (str_starts_with($digits, $cleanCountryCode) && strlen($digits) >= strlen($cleanCountryCode) + 7) {
+            if (str_starts_with($digits, $cleanCountryCode) && strlen($digits) >= strlen($cleanCountryCode) + 6) {
                 $localPart = ltrim(substr($digits, strlen($cleanCountryCode)), '0');
                 $digits = $cleanCountryCode . $localPart;
             } else {
@@ -532,18 +756,18 @@ class Lead extends Model
             return ['974', $m[1]];
         }
 
-        // Bare 8-digit numbers in Qatar CRM (including Doha landlines 44xxxxxx) are local Qatar numbers
-        if (strlen($digits) <= 9) {
-            $local = preg_match('/^0+(\d{8})$/', $digits, $m) ? $m[1] : $digits;
-
-            return ['974', $local];
+        if (preg_match('/^0+(\d{8})$/', $digits, $m)) {
+            return ['974', $m[1]];
         }
 
-        $codes = array_keys(self::COUNTRY_CODES);
-        usort($codes, fn($a, $b) => strlen($b) - strlen($a));
+        // Bare 8-digit numbers in Qatar CRM (including Doha landlines 44xxxxxx) are local Qatar numbers
+        if (strlen($digits) <= 8) {
+            return ['974', $digits];
+        }
 
-        foreach ($codes as $code) {
-            $codeStr = (string) $code;
+        $codes = self::validDialCodes();
+
+        foreach ($codes as $codeStr) {
             if (!str_starts_with($digits, $codeStr)) {
                 continue;
             }
@@ -559,7 +783,7 @@ class Lead extends Model
                 continue;
             }
 
-            if (strlen($restStripped) >= 7) {
+            if (strlen($restStripped) >= 6 && strlen($restStripped) <= 12) {
                 return [$codeStr, $restStripped];
             }
         }

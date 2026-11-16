@@ -23,14 +23,10 @@
                             <input type="text" name="customer_name" id="adLeadCustomerName" class="form-control" placeholder="Customer name" required maxlength="255">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Contact / Phone Number</label>
+                            <label class="form-label" for="adLeadPhoneNumber">Contact / Phone Number</label>
                             <div class="input-group">
-                                <select name="country_code" id="adLeadCountryCode" class="form-select" style="max-width: 110px; flex: 0 0 110px;">
-                                    @foreach (\App\Models\Lead::COUNTRY_CODES as $code => $label)
-                                        <option value="{{ $code }}" title="{{ $label }}" {{ $code === '974' ? 'selected' : '' }}>+{{ $code }}</option>
-                                    @endforeach
-                                </select>
-                                <input type="text" name="phone_number" id="adLeadPhoneNumber" class="form-control" placeholder="e.g. WhatsApp number" required maxlength="20">
+                                <x-country-code-picker name="country_code" id="adLeadCountryCode" value="974" inputClass="" />
+                                <input type="text" name="phone_number" id="adLeadPhoneNumber" class="form-control" placeholder="e.g. WhatsApp number" required maxlength="25">
                             </div>
                         </div>
                         <div class="col-md-6" x-data="{ selectedCategory: '{{ $categories[0] ?? '' }}' }">

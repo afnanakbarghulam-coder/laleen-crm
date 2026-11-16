@@ -27,8 +27,24 @@ class LeadController extends Controller
     {
         $query = Lead::query()->with(['agent', 'customer', 'appointment:id,status']);
         $alertFilter = $request->input('alert_filter');
+        if (!$alertFilter && $request->input('followup_filter') === 'pending') {
+            $alertFilter = 'pending_followups';
+        }
 
-        if ($alertFilter === 'overdue') {
+        if ($alertFilter === 'pending_followups') {
+            $query->whereNotNull('next_followup_date')
+                ->whereDate('next_followup_date', '<=', today())
+                ->where(function ($q) {
+                    $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
+                })
+                ->where(function ($q) {
+                    $q->whereNull('category')->orWhere('category', '!=', 'cancel');
+                });
+
+            if (!$request->filled('agent_id') && Lead::shouldScopeFollowUpsToAssignedAgent($request->user())) {
+                $query->where('assigned_agent_id', $request->user()->id);
+            }
+        } elseif ($alertFilter === 'overdue') {
             $query->whereNotNull('next_followup_date')
                 ->whereDate('next_followup_date', '<', today())
                 ->where(function ($q) {
@@ -82,7 +98,7 @@ class LeadController extends Controller
         }
 
         // With no filters at all, keep the table to recent or recently synced/scheduled leads rather than ancient history.
-        if (!$request->hasAny(['category', 'followup_date', 'phone_number', 'start_date', 'end_date', 'agent_id', 'alert_filter'])) {
+        if (empty($alertFilter) && !$request->hasAny(['category', 'followup_date', 'phone_number', 'start_date', 'end_date', 'agent_id', 'alert_filter'])) {
             $query->where(function ($q) {
                 $q->where('created_at', '>=', now()->subMonth())
                     ->orWhere('updated_at', '>=', now()->subMonth())
@@ -90,7 +106,13 @@ class LeadController extends Controller
             });
         }
 
-        $leads = $query->orderBy('created_at', 'desc')->get();
+        if ($alertFilter === 'pending_followups') {
+            $query->orderBy('next_followup_date', 'asc')->orderByDesc('id');
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
+
+        $leads = $query->get();
         $agents = User::where('role', 'agent')->get();
         $services = Service::orderBy('name')->pluck('name');
         $serviceCombos = Combo::with('services:id,name')
@@ -117,6 +139,13 @@ class LeadController extends Controller
         $topThreePotentialQar = $morningBrief['top_three_potential_qar'];
         $morningBriefText = $morningBrief['brief_text'];
 
+        $pendingFollowupsSummary = Lead::pendingFollowUpsSummary($request->user());
+        $pendingFollowupsCount = $pendingFollowupsSummary['total_count'];
+        $pendingDueTodayCount = $pendingFollowupsSummary['due_today_count'];
+        $pendingOverdueCount = $pendingFollowupsSummary['overdue_count'];
+        $pendingFollowupItems = $pendingFollowupsSummary['items'];
+        $pendingFollowupModels = $pendingFollowupsSummary['models'];
+
         return view('leads.index', compact(
             'leads',
             'agents',
@@ -132,27 +161,25 @@ class LeadController extends Controller
             'morningBriefText',
             'morningBrief',
             'bookedCount',
-            'alertFilter'
+            'alertFilter',
+            'pendingFollowupsCount',
+            'pendingDueTodayCount',
+            'pendingOverdueCount',
+            'pendingFollowupItems',
+            'pendingFollowupModels'
         ));
     }
 
     public function checkTodaysFollowUps(Request $request)
     {
-        $today = today()->format('Y-m-d');
-
-        $dueLeads = Lead::whereDate('next_followup_date', $today)
-            ->where(function ($q) {
-                $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
-            })
-            ->where(function ($q) {
-                $q->whereNull('category')->orWhere('category', '!=', 'cancel');
-            })
-            ->get(['id', 'phone', 'next_followup_date']);
+        $summary = Lead::pendingFollowUpsSummary($request->user());
 
         return response()->json([
-            'count' => $dueLeads->count(),
-            'today' => $today,
-            'leads' => $dueLeads,
+            'count' => $summary['total_count'],
+            'due_today_count' => $summary['due_today_count'],
+            'overdue_count' => $summary['overdue_count'],
+            'today' => today()->format('Y-m-d'),
+            'leads' => $summary['items'],
         ]);
     }
 
@@ -168,9 +195,7 @@ class LeadController extends Controller
             $request->merge(['category' => $normalizedCat]);
         }
 
-        $request->validate([
-            'country_code' => 'required|string|max:5',
-            'phone_number' => 'required|string|max:20',
+        $request->validate(array_merge(Lead::phoneValidationRules($request->input('country_code')), [
             'customer_name' => 'required|string|max:255',
             'assigned_agent_id' => 'nullable|exists:users,id',
             'category' => 'required|in:' . implode(',', array_keys(Lead::MANUAL_CATEGORIES)),
@@ -179,7 +204,7 @@ class LeadController extends Controller
             'next_followup_date' => 'required|date',
             'customer_id' => 'nullable|exists:customers,id',
             'needful_done' => 'nullable|in:' . implode(',', array_keys(Lead::MANUAL_NEEDFUL_STATUSES)),
-        ], [
+        ]), [
             'needful_done.in' => 'Leads can only be marked as Booked automatically by creating a Calendar appointment.',
         ]);
 
@@ -283,9 +308,7 @@ class LeadController extends Controller
             $lead->categories_list
         ));
 
-        $request->validate([
-            'country_code' => 'required|string|max:5',
-            'phone_number' => 'required|string|max:20',
+        $request->validate(array_merge(Lead::phoneValidationRules($request->input('country_code')), [
             'customer_name' => 'required|string|max:255',
             'assigned_agent_id' => 'nullable|exists:users,id',
             'category' => 'required_without:categories|nullable|in:' . implode(',', $allowedCategories),
@@ -296,7 +319,7 @@ class LeadController extends Controller
             'next_followup_date' => 'required|date',
             'customer_id' => 'nullable|exists:customers,id',
             'needful_done' => 'nullable|in:' . implode(',', array_keys(Lead::MANUAL_NEEDFUL_STATUSES)),
-        ], [
+        ]), [
             'needful_done.in' => 'Leads can only be marked as Booked automatically by creating a Calendar appointment.',
         ]);
 

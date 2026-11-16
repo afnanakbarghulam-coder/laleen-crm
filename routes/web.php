@@ -439,6 +439,7 @@ Route::middleware(['auth'])->group(function () {
         });
         Route::middleware('module:ecommerce,edit')->group(function () {
             Route::post('/partners', [EcommercePartnerController::class, 'storePartner'])->name('partners.store');
+            Route::post('/partners/categories', [EcommercePartnerController::class, 'storeCategory'])->name('partners.categories.store');
             Route::delete('/partners/{partner}', [EcommercePartnerController::class, 'destroyPartner'])->name('partners.destroy');
             Route::post('/partners/{partner}/transactions', [EcommercePartnerController::class, 'storeTransaction'])->name('partners.transactions.store');
             Route::delete('/transactions/{transaction}', [EcommercePartnerController::class, 'destroyTransaction'])->name('transactions.destroy');

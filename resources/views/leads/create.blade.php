@@ -12,14 +12,10 @@
                  <div class="modal-body">
                      <div class="row g-3">
                          <div class="col-md-6">
-                             <label class="form-label">Contact (WhatsApp Number)</label>
+                             <label class="form-label" for="addLeadPhoneNumber">Contact (WhatsApp Number)</label>
                              <div class="input-group">
-                                 <select name="country_code" class="form-select lead-country-code" style="width: 110px; flex: 0 0 110px;">
-                                     @foreach (\App\Models\Lead::COUNTRY_CODES as $code => $label)
-                                         <option value="{{ $code }}" title="{{ $label }}" {{ $code === '974' ? 'selected' : '' }}>+{{ $code }} ({{ $label }})</option>
-                                     @endforeach
-                                 </select>
-                                 <input type="text" name="phone_number" class="form-control lead-phone-number" placeholder="XXXXXXXX" required>
+                                 <x-country-code-picker name="country_code" value="974" inputClass="lead-country-code" />
+                                 <input type="text" name="phone_number" id="addLeadPhoneNumber" class="form-control lead-phone-number" placeholder="XXXXXXXX" required>
                              </div>
                              <input type="hidden" name="customer_id" class="lead-customer-id-input" value="">
                              <div class="lead-client-match alert alert-success py-2 px-3 mt-2 mb-0 d-none" style="font-size:12.5px;">

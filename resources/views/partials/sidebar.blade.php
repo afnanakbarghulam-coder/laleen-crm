@@ -273,7 +273,15 @@
              <li class="menu-item {{ request()->routeIs('leads.*') ? 'active' : '' }}">
                  <a href="{{ route('leads.index') }}" class="menu-link">
                      <i class="bx bx-user-plus me-2"></i>
-                     <div>Leads</div>
+                     <div class="d-flex align-items-center justify-content-between w-100">
+                         <span>Leads</span>
+                         @if (($sidebarPendingFollowupsCount ?? 0) > 0)
+                             <span id="sidebarLeadsFollowupBadge"
+                                 style="font-size: 10.5px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: 999px; background: rgba(212, 163, 115, 0.16); color: #f3d9a4; border: 1px solid rgba(212, 163, 115, 0.36);">
+                                 {{ $sidebarPendingFollowupsCount }}
+                             </span>
+                         @endif
+                     </div>
                  </a>
              </li>
          @endmoduleView

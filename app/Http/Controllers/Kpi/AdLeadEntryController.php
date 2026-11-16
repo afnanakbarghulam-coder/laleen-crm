@@ -90,18 +90,17 @@ class AdLeadEntryController extends Controller
         $isCreateNew = $request->input('category') === 'create_new'
             || $request->input('ad_category') === 'create_new';
 
-        $rules = [
+        $rules = array_merge([
             'date' => 'required|date',
             'customer_name' => 'required|string|max:255',
-            'country_code' => 'required|string|max:5',
-            'phone_number' => 'required|string|max:20',
+        ], Lead::phoneValidationRules($request->input('country_code')), [
             'category' => $isCreateNew
                 ? ['required', 'string']
                 : ['required', 'string', 'max:255', Rule::in(AdLeadEntry::availableCategories())],
             'ticket_amount' => 'nullable|numeric|min:0',
             'branch' => ['nullable', Rule::in(array_keys(AdLeadEntry::BRANCHES))],
             'remarks' => 'nullable|string|max:255',
-        ];
+        ]);
 
         if ($isCreateNew) {
             $rules['new_category'] = 'required|string|max:255';

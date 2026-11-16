@@ -3,64 +3,246 @@
 @section('title', 'Lead Management')
 
 <style>
-    .popup-box {
-        position: fixed;
-        bottom: 25px;
-        right: 25px;
-        width: 310px;
-        background: #241e1c;
-        border-radius: 12px;
-        padding: 20px 18px;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
-        border-left: 6px solid #c9a66b;
-        animation: popupFade 0.35s ease-out;
-        display: none;
-        z-index: 9999;
+    [x-cloak] {
+        display: none !important;
     }
 
-    .popup-content h4 {
-        font-size: 18px;
+    .followup-bell-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 13px;
+        border-radius: 10px;
+        font-size: 13px;
         font-weight: 600;
-        color: #c97b4a;
-        margin-bottom: 10px;
-        padding-left: 5px;
-    }
-
-    .popup-content ul {
-        margin: 0;
-        padding-left: 18px;
-    }
-
-    .popup-content ul li {
-        margin-bottom: 6px;
-        font-size: 14px;
-    }
-
-    .close-icon {
-        position: absolute;
-        top: 8px;
-        right: 12px;
-        font-size: 22px;
-        font-weight: bold;
+        background: rgba(34, 22, 27, 0.88);
+        border: 1px solid rgba(229, 184, 168, 0.22);
+        color: #f8efe6;
         cursor: pointer;
-        color: #c9a39a;
-        transition: 0.2s ease;
+        transition: all 0.18s ease;
+        white-space: nowrap;
+        line-height: 1.3;
     }
 
-    .close-icon:hover {
-        color: #e79a91;
-        transform: scale(1.1);
+    .followup-bell-trigger:hover {
+        border-color: rgba(229, 184, 168, 0.45);
+        background: rgba(45, 30, 35, 0.95);
     }
 
-    @keyframes popupFade {
-        from {
-            opacity: 0;
-            transform: translateY(20px) scale(0.95);
-        }
+    .followup-bell-trigger.is-clear {
+        color: #b8a29a;
+        border-color: rgba(255, 255, 255, 0.12);
+    }
 
-        to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
+    .followup-bell-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    .followup-bell-badge.has-pending {
+        background: rgba(212, 163, 115, 0.22);
+        color: #f3d9a4;
+        border: 1px solid rgba(212, 163, 115, 0.42);
+    }
+
+    .followup-bell-badge.is-clear {
+        background: rgba(255, 255, 255, 0.06);
+        color: #8f7e77;
+    }
+
+    .followup-bell-dropdown {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        width: 356px;
+        max-width: calc(100vw - 24px);
+        background: linear-gradient(180deg, rgba(34, 22, 27, 0.98) 0%, rgba(21, 14, 18, 0.99) 100%);
+        border: 1px solid rgba(229, 184, 168, 0.18);
+        border-radius: 16px;
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46);
+        z-index: 1060;
+        overflow: hidden;
+    }
+
+    .followup-bell-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 12px 15px 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .followup-bell-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: #f8efe6;
+        letter-spacing: 0.01em;
+    }
+
+    .followup-bell-summary {
+        font-size: 11px;
+        font-weight: 600;
+        color: #d4a373;
+        white-space: nowrap;
+    }
+
+    .followup-bell-list {
+        max-height: 290px;
+        overflow-y: auto;
+    }
+
+    .followup-bell-row {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+        width: 100%;
+        padding: 10px 15px;
+        background: transparent;
+        border: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        text-align: left;
+        cursor: pointer;
+        transition: background 0.15s ease;
+    }
+
+    .followup-bell-row:last-child {
+        border-bottom: 0;
+    }
+
+    .followup-bell-row:hover {
+        background: rgba(229, 184, 168, 0.07);
+    }
+
+    .followup-row-name {
+        font-size: 12.5px;
+        font-weight: 700;
+        color: #f8efe6;
+        max-width: 215px;
+    }
+
+    .followup-row-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .followup-status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .followup-row-status.is-due-today {
+        color: #fcd34d;
+    }
+
+    .followup-row-status.is-due-today .followup-status-dot {
+        background: #f59e0b;
+        box-shadow: 0 0 6px rgba(245, 158, 11, 0.45);
+    }
+
+    .followup-row-status.is-overdue {
+        color: #fda4af;
+    }
+
+    .followup-row-status.is-overdue .followup-status-dot {
+        background: #fb7185;
+        box-shadow: 0 0 6px rgba(251, 113, 133, 0.45);
+    }
+
+    .followup-row-meta {
+        font-size: 11.5px;
+        color: #b8a29a;
+        max-width: 100%;
+    }
+
+    .followup-row-phone {
+        color: #e5b8a8;
+        font-weight: 600;
+    }
+
+    .followup-row-sep {
+        margin: 0 4px;
+        opacity: 0.5;
+    }
+
+    .followup-bell-empty {
+        padding: 20px 15px;
+        text-align: center;
+        font-size: 12px;
+        color: #b8a29a;
+    }
+
+    .followup-bell-footer {
+        padding: 9px 14px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(21, 14, 18, 0.95);
+    }
+
+    .followup-bell-footer-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #e5b8a8;
+        text-decoration: none;
+        transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .followup-bell-footer-btn:hover {
+        background: rgba(229, 184, 168, 0.1);
+        color: #f8efe6;
+    }
+
+    .lead-clear-filter-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 11px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: #e5b8a8;
+        background: rgba(229, 184, 168, 0.1);
+        border: 1px solid rgba(229, 184, 168, 0.3);
+        text-decoration: none;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+    }
+
+    .lead-clear-filter-pill:hover {
+        background: rgba(229, 184, 168, 0.18);
+        color: #f8efe6;
+    }
+
+    .lead-row-highlight {
+        background: rgba(229, 184, 168, 0.14) !important;
+        transition: background 0.4s ease;
+    }
+
+    @media print {
+        #pendingFollowupsBellWrap,
+        #leadQuickFilterBar {
+            display: none !important;
         }
     }
 
@@ -544,10 +726,77 @@
     }
 </style>
 @section('content')
-    <!-- Page Navbar with Add Button -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <!-- Page Navbar with On-Demand Follow-ups Bell & Action Buttons -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <h4 class="fw-bold mb-0">Lead Management</h4>
-        <div class="d-flex gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="position-relative" id="pendingFollowupsBellWrap"
+                data-pending-ids='@json(collect($pendingFollowupItems ?? [])->pluck("id")->values())'
+                x-data="{ followupOpen: false }"
+                @click.outside="followupOpen = false"
+                @keydown.escape.window="followupOpen = false">
+                <button type="button"
+                    id="pendingFollowupsBellBtn"
+                    class="followup-bell-trigger {{ ($pendingFollowupsCount ?? 0) > 0 ? 'has-pending' : 'is-clear' }}"
+                    @click="followupOpen = !followupOpen"
+                    :aria-expanded="followupOpen ? 'true' : 'false'"
+                    aria-haspopup="true">
+                    <span aria-hidden="true">🔔</span>
+                    <span>Follow-ups</span>
+                    <span id="pendingFollowupsBellCount"
+                        class="followup-bell-badge {{ ($pendingFollowupsCount ?? 0) > 0 ? 'has-pending' : 'is-clear' }}">{{ $pendingFollowupsCount ?? 0 }}</span>
+                </button>
+
+                <div id="pendingFollowupsDropdown"
+                    class="followup-bell-dropdown"
+                    x-show="followupOpen"
+                    x-transition.opacity.duration.150ms
+                    x-cloak
+                    style="display: none;">
+                    <div class="followup-bell-header">
+                        <span class="followup-bell-title">Pending Follow-ups</span>
+                        <span class="followup-bell-summary" id="pendingFollowupsSummaryTag">
+                            {{ $pendingDueTodayCount ?? 0 }} due today &middot; {{ $pendingOverdueCount ?? 0 }} overdue
+                        </span>
+                    </div>
+
+                    <div class="followup-bell-list">
+                        @forelse ($pendingFollowupItems ?? [] as $fItem)
+                            <button type="button"
+                                class="followup-bell-row"
+                                data-lead-id="{{ $fItem['id'] }}"
+                                @click="followupOpen = false; window.openPendingFollowupLead({{ $fItem['id'] }})">
+                                <div class="d-flex align-items-center justify-content-between gap-2 w-100">
+                                    <span class="followup-row-name text-truncate">{{ $fItem['customer_name'] }}</span>
+                                    <span class="followup-row-status {{ $fItem['urgency'] === 'overdue' ? 'is-overdue' : 'is-due-today' }}">
+                                        <span class="followup-status-dot"></span>
+                                        <span>{{ $fItem['urgency_label'] }}</span>
+                                    </span>
+                                </div>
+                                <div class="followup-row-meta text-truncate">
+                                    <span class="followup-row-phone">{{ $fItem['phone'] }}</span>
+                                    <span class="followup-row-sep">&middot;</span>
+                                    <span>{{ $fItem['service_interest'] }}</span>
+                                </div>
+                            </button>
+                        @empty
+                            <div class="followup-bell-empty">
+                                All caught up &mdash; 0 pending follow-ups right now.
+                            </div>
+                        @endforelse
+                    </div>
+
+                    <div class="followup-bell-footer">
+                        <a href="{{ route('leads.index', ['alert_filter' => 'pending_followups']) }}"
+                            id="filterPendingFollowupsBtn"
+                            class="followup-bell-footer-btn">
+                            <span>Filter Table to Pending Follow-ups</span>
+                            <span aria-hidden="true">&rarr;</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
             <a href="{{ route('leads.analytics') }}" class="btn btn-outline-secondary">
                 <i class="bx bx-bar-chart-alt-2 me-1"></i> Analytics
             </a>
@@ -655,6 +904,15 @@
                     <span>🟢 Booked</span>
                     <span class="lead-pill-count" id="bookedLeadsPillCount">{{ $bookedCount ?? 0 }}</span>
                 </a>
+                @if (($alertFilter ?? null) === 'pending_followups')
+                    <span class="lead-quick-pill is-active" id="activePendingFollowupsPill">
+                        <span>🔔 Pending Follow-ups</span>
+                        <span class="lead-pill-count">{{ $leads->count() }}</span>
+                    </span>
+                    <a href="{{ route('leads.index') }}" class="lead-clear-filter-pill" id="clearPendingFollowupsFilterPill">
+                        <span>&times; Clear filter</span>
+                    </a>
+                @endif
             </div>
 
             <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -714,14 +972,10 @@
                         </div>
 
                         <div class="leads-filter-grid-span-2">
-                            <label class="form-label">Contact (WhatsApp Number)</label>
+                            <label class="form-label" for="filterLeadPhoneNumber">Contact (WhatsApp Number)</label>
                             <div class="input-group">
-                                <select name="country_code" class="form-select" style="width: 110px; flex: 0 0 110px;">
-                                    @foreach (\App\Models\Lead::COUNTRY_CODES as $code => $label)
-                                        <option value="{{ $code }}" title="{{ $label }}" {{ request('country_code', '974') === $code ? 'selected' : '' }}>+{{ $code }} ({{ $label }})</option>
-                                    @endforeach
-                                </select>
-                                <input type="text" name="phone_number" class="form-control" placeholder="XXXXXXXX"
+                                <x-country-code-picker name="country_code" :value="request('country_code', '974')" inputClass="" />
+                                <input type="text" name="phone_number" id="filterLeadPhoneNumber" class="form-control" placeholder="XXXXXXXX"
                                     value="{{ request('phone_number') }}">
                             </div>
                         </div>
@@ -758,7 +1012,17 @@
 
     <!-- Lead Table -->
     <div class="card">
-        <h5 class="card-header">All Leads</h5>
+        <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <h5 class="mb-0">{{ ($alertFilter ?? null) === 'pending_followups' ? 'Pending Follow-ups' : 'All Leads' }}</h5>
+            @if (($alertFilter ?? null) === 'pending_followups')
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small">{{ $leads->count() }} due today / overdue</span>
+                    <a href="{{ route('leads.index') }}" class="lead-clear-filter-pill">
+                        <span>&times; Clear filter</span>
+                    </a>
+                </div>
+            @endif
+        </div>
         <div class="table-responsive">
             <table class="table leads-compact-table w-full table-auto">
                 <thead>
@@ -918,7 +1182,7 @@
                             });
                         }
                     }" style="border-top: none;">
-                        <tr @if (!$isBookedOrClosed) @click="if (!isClosed) showAiPanel = !showAiPanel" style="cursor: pointer;" @endif>
+                        <tr id="leadRow{{ $lead->id }}" @if (!$isBookedOrClosed) @click="if (!isClosed) showAiPanel = !showAiPanel" style="cursor: pointer;" @endif>
                             <!-- 1. DATE -->
                             <td class="px-2.5 py-2.5 whitespace-nowrap">
                                 <div class="d-inline-flex align-items-center gap-1 whitespace-nowrap">
@@ -1220,29 +1484,26 @@
     </div>
     <!--/ Basic Bootstrap Table -->
 
-    <div id="followupPopup" class="popup-box">
-        <span class="close-icon" onclick="closePopup()">×</span>
-
-        <div class="popup-content">
-            <h4>🔔 Pending Follow-ups</h4>
-            <p id="followupMessage"></p>
-        </div>
-    </div>
-
-
     {{-- Edit modals render here rather than inside the table body above: a <form>
          placed directly in <tbody> (before any <tr>) gets corrupted by the browser's
          table foster-parenting rules, which silently drops any hidden input added to
          it by JavaScript after page load. --}}
     @moduleEdit('leads')
+        @php
+            $renderedEditLeadIds = $leads->pluck('id')->all();
+        @endphp
         @foreach ($leads as $lead)
             @include('leads.edit', ['lead' => $lead])
         @endforeach
 
-        {{-- The unscheduled-leads banner above can link to leads outside the table's own
-             filter/pagination, so their edit modals need rendering here too (skipping any
-             already in $leads to avoid duplicate modal IDs). --}}
-        @foreach ($unscheduledLeads->whereNotIn('id', $leads->pluck('id')) as $lead)
+        {{-- Render edit modals for unscheduled & pending-followup leads outside current filter so 1-click jump always works --}}
+        @foreach ($unscheduledLeads->whereNotIn('id', $renderedEditLeadIds) as $lead)
+            @php $renderedEditLeadIds[] = $lead->id; @endphp
+            @include('leads.edit', ['lead' => $lead])
+        @endforeach
+
+        @foreach (($pendingFollowupModels ?? collect())->whereNotIn('id', $renderedEditLeadIds) as $lead)
+            @php $renderedEditLeadIds[] = $lead->id; @endphp
             @include('leads.edit', ['lead' => $lead])
         @endforeach
 
@@ -1355,6 +1616,31 @@
                     bookedEl.textContent = cur;
                 }
             }
+
+            const bellWrap = document.getElementById('pendingFollowupsBellWrap');
+            if (bellWrap && wasClosed !== isNowClosed) {
+                let pendingIds = [];
+                try { pendingIds = JSON.parse(bellWrap.dataset.pendingIds || '[]'); } catch (e) {}
+                if (pendingIds.includes(idNum)) {
+                    const bellCountEl = document.getElementById('pendingFollowupsBellCount');
+                    const bellBtnEl = document.getElementById('pendingFollowupsBellBtn');
+                    if (bellCountEl) {
+                        const nextCount = Math.max(0, (parseInt(bellCountEl.textContent, 10) || 0) + (isNowClosed ? -1 : 1));
+                        bellCountEl.textContent = nextCount;
+                        bellCountEl.classList.toggle('has-pending', nextCount > 0);
+                        bellCountEl.classList.toggle('is-clear', nextCount === 0);
+                        if (bellBtnEl) {
+                            bellBtnEl.classList.toggle('has-pending', nextCount > 0);
+                            bellBtnEl.classList.toggle('is-clear', nextCount === 0);
+                        }
+                        const sidebarBadge = document.getElementById('sidebarLeadsFollowupBadge');
+                        if (sidebarBadge) {
+                            sidebarBadge.textContent = nextCount;
+                            sidebarBadge.style.display = nextCount > 0 ? '' : 'none';
+                        }
+                    }
+                }
+            }
         };
 
         // Inline "Needful Done" toggle straight from the leads table.
@@ -1389,36 +1675,33 @@
                 });
         });
 
-        document.addEventListener("DOMContentLoaded", function() {
+        window.openPendingFollowupLead = function(leadId) {
+            const rowEl = document.getElementById('leadRow' + leadId);
+            const modalEl = document.getElementById('editLeadModal' + leadId);
 
-            fetch("{{ route('leads.check.followups') }}")
-                .then(response => response.json())
-                .then(data => {
-                    if (data.count > 0) {
-                        showFollowupNotification(data.leads);
-                    }
-                })
-                .catch(error => console.log(error));
+            if (rowEl) {
+                rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                rowEl.classList.add('lead-row-highlight');
+                setTimeout(() => rowEl.classList.remove('lead-row-highlight'), 2400);
+            }
+
+            if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                return;
+            }
+
+            if (!rowEl) {
+                window.location.href = "{{ route('leads.index', ['alert_filter' => 'pending_followups']) }}&focus_lead=" + encodeURIComponent(leadId);
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const params = new URLSearchParams(window.location.search);
+            const focusId = params.get('focus_lead');
+            if (focusId) {
+                window.openPendingFollowupLead(focusId);
+            }
         });
-
-        function showFollowupNotification(leads) {
-            let popup = document.getElementById("followupPopup");
-
-            let listHTML = "<ul>";
-            leads.forEach(lead => {
-                listHTML += `<li><strong>${lead.phone}</strong></li>`;
-            });
-            listHTML += "</ul>";
-
-            document.getElementById("followupMessage").innerHTML =
-                `You have <strong>${leads.length}</strong> lead(s) due for follow-up today:<br><br>${listHTML}`;
-
-            popup.style.display = "block";
-        }
-
-        function closePopup() {
-            document.getElementById("followupPopup").style.display = "none";
-        }
 
         function toggleLeadAlertAccordion(headerEl) {
             const body = headerEl.nextElementSibling;

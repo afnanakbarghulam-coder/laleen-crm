@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class PartnerTransaction extends Model
 {
@@ -40,5 +41,75 @@ class PartnerTransaction extends Model
         $currency = EcommerceSale::currencyForRegion($region);
 
         return $query->where('currency', $currency);
+    }
+
+    /**
+     * Returns the 5 default categories merged with all persisted custom categories
+     * (case-insensitively deduplicated, preserving canonical casing).
+     *
+     * @return list<string>
+     */
+    public static function allCategories(): array
+    {
+        $seen = [];
+        $merged = [];
+
+        $push = static function (?string $raw) use (&$seen, &$merged): void {
+            $clean = trim((string) $raw);
+            if ($clean === '') {
+                return;
+            }
+            $key = mb_strtolower($clean);
+            if (! isset($seen[$key])) {
+                $seen[$key] = true;
+                $merged[] = $clean;
+            }
+        };
+
+        foreach (self::CATEGORIES as $defaultCategory) {
+            $push($defaultCategory);
+        }
+
+        if (Schema::hasTable('ecommerce_transaction_categories')) {
+            foreach (EcommerceTransactionCategory::orderBy('id')->pluck('name') as $savedName) {
+                $push($savedName);
+            }
+        }
+
+        if (Schema::hasTable('partner_transactions')) {
+            foreach (static::query()->whereNotNull('category')->where('category', '!=', '')->distinct()->pluck('category') as $usedCategory) {
+                $push($usedCategory);
+            }
+        }
+
+        return $merged;
+    }
+
+    /**
+     * Ensures a custom category is persisted in `ecommerce_transaction_categories`
+     * if it is not already among the default or saved categories, returning its canonical name.
+     */
+    public static function ensureCategoryPersisted(string $rawCategory, ?int $userId = null): string
+    {
+        $trimmed = trim($rawCategory);
+        if ($trimmed === '') {
+            return '';
+        }
+
+        $existing = static::allCategories();
+        foreach ($existing as $cat) {
+            if (mb_strtolower($cat) === mb_strtolower($trimmed)) {
+                return $cat;
+            }
+        }
+
+        if (Schema::hasTable('ecommerce_transaction_categories')) {
+            EcommerceTransactionCategory::firstOrCreate(
+                ['name' => $trimmed],
+                ['created_by' => $userId]
+            );
+        }
+
+        return $trimmed;
     }
 }

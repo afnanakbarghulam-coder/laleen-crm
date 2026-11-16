@@ -124,37 +124,44 @@ class EcommerceCustomer extends Model
         $otherChannels = $regionUpper === 'QA'
             ? EcommerceSale::PAKISTAN_CHANNELS
             : EcommerceSale::QATAR_CHANNELS;
+        $hasRegionColumn = \Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), 'region');
 
-        return $query->where(function (Builder $q) use ($regionUpper, $regionChannels, $otherChannels) {
+        $fallbackMatch = function (Builder $match) use ($regionUpper, $regionChannels, $otherChannels) {
+            $match->whereHas('sales', function (Builder $sq) use ($regionChannels) {
+                $sq->whereIn('channel', $regionChannels);
+            })->orWhere(function (Builder $noSales) use ($regionUpper, $otherChannels) {
+                $noSales->whereDoesntHave('sales', function (Builder $sq) use ($otherChannels) {
+                    $sq->whereIn('channel', $otherChannels);
+                });
+
+                if ($regionUpper === 'QA') {
+                    $noSales->where(function (Builder $ph) {
+                        $ph->where('phone', 'like', '974%')
+                            ->orWhere('phone', 'like', '+974%');
+                    });
+                } else {
+                    $noSales->where(function (Builder $ph) {
+                        $ph->whereNull('phone')
+                            ->orWhere('phone', '')
+                            ->orWhere(function (Builder $nonQa) {
+                                $nonQa->where('phone', 'not like', '974%')
+                                    ->where('phone', 'not like', '+974%');
+                            });
+                    });
+                }
+            });
+        };
+
+        if (!$hasRegionColumn) {
+            return $query->where($fallbackMatch);
+        }
+
+        return $query->where(function (Builder $q) use ($regionUpper, $fallbackMatch) {
             $q->whereRaw('UPPER(region) = ?', [$regionUpper])
-                ->orWhere(function (Builder $untagged) use ($regionUpper, $regionChannels, $otherChannels) {
+                ->orWhere(function (Builder $untagged) use ($fallbackMatch) {
                     $untagged->where(function (Builder $nullRegion) {
                         $nullRegion->whereNull('region')->orWhere('region', '');
-                    })->where(function (Builder $match) use ($regionUpper, $regionChannels, $otherChannels) {
-                        $match->whereHas('sales', function (Builder $sq) use ($regionChannels) {
-                            $sq->whereIn('channel', $regionChannels);
-                        })->orWhere(function (Builder $noSales) use ($regionUpper, $otherChannels) {
-                            $noSales->whereDoesntHave('sales', function (Builder $sq) use ($otherChannels) {
-                                $sq->whereIn('channel', $otherChannels);
-                            });
-
-                            if ($regionUpper === 'QA') {
-                                $noSales->where(function (Builder $ph) {
-                                    $ph->where('phone', 'like', '974%')
-                                        ->orWhere('phone', 'like', '+974%');
-                                });
-                            } else {
-                                $noSales->where(function (Builder $ph) {
-                                    $ph->whereNull('phone')
-                                        ->orWhere('phone', '')
-                                        ->orWhere(function (Builder $nonQa) {
-                                            $nonQa->where('phone', 'not like', '974%')
-                                                ->where('phone', 'not like', '+974%');
-                                        });
-                                });
-                            }
-                        });
-                    });
+                    })->where($fallbackMatch);
                 });
         });
     }
