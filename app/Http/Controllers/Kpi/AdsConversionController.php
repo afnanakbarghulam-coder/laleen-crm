@@ -3,18 +3,25 @@
 namespace App\Http\Controllers\Kpi;
 
 use App\Http\Controllers\Controller;
+use App\Models\AdCampaignMetric;
 use App\Models\AdLeadEntry;
 use App\Models\KpiAdsConversionReport;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 class AdsConversionController extends Controller
 {
+    public const FIXED_MARKETING_FEE_QAR = 1530.00;
     public function index(Request $request)
     {
-        $activeTab = in_array($request->query('tab'), ['analytics', 'reports'], true)
-            ? 'analytics'
-            : 'leads';
+        $requestedTab = (string) $request->query('tab', '');
+        $activeTab = match ($requestedTab) {
+            'analytics', 'reports' => 'analytics',
+            'metrics' => 'metrics',
+            default => 'leads',
+        };
 
         $rawMonth = trim((string) $request->query('month', ''));
         if ($rawMonth !== '' && preg_match('/^\d{4}-\d{2}$/', $rawMonth)) {
@@ -50,28 +57,162 @@ class AdsConversionController extends Controller
         $categories = AdLeadEntry::availableCategories();
         $branches = AdLeadEntry::BRANCHES;
 
-        // Ads Analytics: defaults to current month MTD (or selected ?month) when no explicit range is passed.
-        $analyticsFrom = $request->date('analytics_from') ?? $defaultFrom->copy();
-        $analyticsTo = $request->date('analytics_to') ?? $defaultTo->copy();
+        // Ads Analytics: when opened without explicit ?analytics_from/?from or ?month filters,
+        // automatically align to the active Salon `ad_campaign_metrics` snapshot date range if one exists.
+        $explicitFrom = $request->date('analytics_from') ?? $request->date('from');
+        $explicitTo = $request->date('analytics_to') ?? $request->date('to');
+
+        $latestSalonSnapshot = Schema::hasTable('ad_campaign_metrics')
+            ? AdCampaignMetric::query()
+                ->where('workspace', 'salon')
+                ->whereNotNull('date_from')
+                ->whereNotNull('date_to')
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id')
+                ->first()
+            : null;
+
+        if ($explicitFrom !== null || $explicitTo !== null) {
+            $analyticsFrom = ($explicitFrom ?? $defaultFrom)->copy()->startOfDay();
+            $analyticsTo = ($explicitTo ?? $defaultTo)->copy()->endOfDay();
+        } elseif ($rawMonth === '' && $latestSalonSnapshot !== null) {
+            $analyticsFrom = Carbon::parse($latestSalonSnapshot->date_from->toDateString())->startOfDay();
+            $analyticsTo = Carbon::parse($latestSalonSnapshot->date_to->toDateString())->endOfDay();
+        } else {
+            $analyticsFrom = $defaultFrom->copy();
+            $analyticsTo = $defaultTo->copy();
+        }
 
         $analyticsReport = new KpiAdsConversionReport([
             'date_from' => $analyticsFrom,
             'date_to' => $analyticsTo,
         ]);
 
+        $analyticsTotalsForFin = $analyticsReport->totals();
+        $matchedAdMetrics = Schema::hasTable('ad_campaign_metrics')
+            ? AdCampaignMetric::query()
+                ->where('workspace', 'salon')
+                ->where(function ($q) use ($analyticsFrom, $analyticsTo) {
+                    $q->where(function ($dated) use ($analyticsFrom, $analyticsTo) {
+                        $dated->whereNotNull('date_from')
+                            ->whereNotNull('date_to')
+                            ->whereDate('date_from', '<=', $analyticsTo->toDateString())
+                            ->whereDate('date_to', '>=', $analyticsFrom->toDateString());
+                    })->orWhere(function ($undated) {
+                        $undated->whereNull('date_from')->whereNull('date_to');
+                    });
+                })
+                ->get()
+            : collect();
+
+        $analyticsFinancials = self::computeAnalyticsFinancials(
+            $matchedAdMetrics,
+            (float) ($analyticsTotalsForFin['total_revenue'] ?? 0.0),
+            $analyticsFrom,
+            $analyticsTo
+        );
+
         $reports = KpiAdsConversionReport::orderByDesc('date_to')->orderByDesc('id')
             ->paginate(15, ['*'], 'reports_page')
             ->appends(array_filter([
-                'analytics_from' => $request->filled('analytics_from') ? $analyticsFrom->format('Y-m-d') : null,
-                'analytics_to' => $request->filled('analytics_to') ? $analyticsTo->format('Y-m-d') : null,
+                'analytics_from' => ($explicitFrom !== null) ? $analyticsFrom->format('Y-m-d') : null,
+                'analytics_to' => ($explicitTo !== null) ? $analyticsTo->format('Y-m-d') : null,
                 'month' => $rawMonth !== '' ? $rawMonth : null,
                 'tab' => 'analytics',
             ]));
 
-        return view('kpi.ads.index', compact(
+        $trackerViewData = $activeTab === 'metrics'
+            ? AdCampaignMetricsController::buildTrackerViewData($request, 'salon')
+            : [];
+
+        return view('kpi.ads.index', array_merge(compact(
             'reports', 'adLeadEntries', 'categories', 'branches', 'entriesFrom', 'entriesTo',
-            'analyticsReport', 'analyticsFrom', 'analyticsTo', 'activeTab'
-        ));
+            'analyticsReport', 'analyticsFrom', 'analyticsTo', 'activeTab', 'analyticsFinancials'
+        ), $trackerViewData));
+    }
+
+    /**
+     * Compute QAR Ad Spend (from `ad_campaign_metrics` actual or CPM-derived spend),
+     * Fixed Marketing Fee (`1,530 QAR`), Total Marketing Cost, Net Profit, ROAS, and ROI.
+     */
+    public static function computeAnalyticsFinancials(
+        Collection $matchedMetrics,
+        float $adRevenueQar,
+        Carbon $analyticsFrom,
+        Carbon $analyticsTo
+    ): array {
+        $adSpendQar = 0.0;
+        $adSpendUsd = 0.0;
+        $hasActualSpend = false;
+        $hasEstSpend = false;
+
+        foreach ($matchedMetrics as $row) {
+            /** @var AdCampaignMetric $row */
+            $fxToQar = $row->resolvedFxRateToQar();
+
+            if ($row->amount_spent !== null) {
+                $hasActualSpend = true;
+                $adSpendUsd += (float) $row->amount_spent;
+                $adSpendQar += (float) ($row->amount_spent_qar ?? round((float) $row->amount_spent * $fxToQar, 2));
+            } elseif ($row->est_amount_spent !== null) {
+                $hasEstSpend = true;
+                $adSpendUsd += (float) $row->est_amount_spent;
+                $adSpendQar += (float) ($row->est_amount_spent_qar ?? round((float) $row->est_amount_spent * $fxToQar, 2));
+            }
+        }
+
+        $adRevenueQar = round($adRevenueQar, 2);
+        $adSpendQar = round($adSpendQar, 2);
+        $adSpendUsd = round($adSpendUsd, 2);
+        $marketingFeeQar = self::FIXED_MARKETING_FEE_QAR;
+        $totalMarketingCostQar = round($adSpendQar + $marketingFeeQar, 2);
+        $netProfitQar = round($adRevenueQar - $totalMarketingCostQar, 2);
+
+        $roas = $adSpendQar > 0
+            ? round($adRevenueQar / $adSpendQar, 2)
+            : null;
+
+        $roiPercent = ($totalMarketingCostQar > 0 && ($adSpendQar > 0 || $adRevenueQar > 0))
+            ? round(($netProfitQar / $totalMarketingCostQar) * 100.0, 1)
+            : null;
+
+        $datedRows = $matchedMetrics->filter(fn (AdCampaignMetric $r) => $r->date_from !== null && $r->date_to !== null);
+        $snapMinFrom = $datedRows->isNotEmpty()
+            ? $datedRows->map(fn (AdCampaignMetric $r) => $r->date_from->toDateString())->min()
+            : null;
+        $snapMaxTo = $datedRows->isNotEmpty()
+            ? $datedRows->map(fn (AdCampaignMetric $r) => $r->date_to->toDateString())->max()
+            : null;
+
+        $snapshotDiffers = ($snapMinFrom !== null && $snapMaxTo !== null)
+            && ($snapMinFrom !== $analyticsFrom->toDateString() || $snapMaxTo !== $analyticsTo->toDateString());
+
+        $snapshotRangeShort = ($snapMinFrom && $snapMaxTo)
+            ? (Carbon::parse($snapMinFrom)->format('d M') . ' – ' . Carbon::parse($snapMaxTo)->format('d M'))
+            : null;
+        $snapshotRangeFull = ($snapMinFrom && $snapMaxTo)
+            ? (Carbon::parse($snapMinFrom)->format('d M') . ' – ' . Carbon::parse($snapMaxTo)->format('d M Y'))
+            : null;
+
+        return [
+            'campaigns_count' => $matchedMetrics->count(),
+            'ad_revenue_qar' => $adRevenueQar,
+            'ad_spend_qar' => $adSpendQar,
+            'ad_spend_usd' => $adSpendUsd,
+            'has_actual_spend' => $hasActualSpend,
+            'has_est_spend' => $hasEstSpend,
+            'is_spend_estimated' => !$hasActualSpend && $hasEstSpend,
+            'marketing_fee_qar' => $marketingFeeQar,
+            'total_marketing_cost_qar' => $totalMarketingCostQar,
+            'net_profit_qar' => $netProfitQar,
+            'roas' => $roas,
+            'roi_percent' => $roiPercent,
+            'snapshot_from' => $snapMinFrom,
+            'snapshot_to' => $snapMaxTo,
+            'snapshot_differs' => $snapshotDiffers,
+            'snapshot_range_short' => $snapshotRangeShort,
+            'snapshot_range_full' => $snapshotRangeFull,
+        ];
     }
 
     public function store(Request $request)
@@ -87,7 +228,12 @@ class AdsConversionController extends Controller
             'created_by' => auth()->id(),
         ]);
 
-        return redirect()->route('kpi.ads.index', ['tab' => 'analytics'])->with('success', 'Ads conversion report generated from the lead log.');
+        return redirect()->route('kpi.ads.index', [
+            'tab' => 'analytics',
+            'analytics_from' => $validated['date_from'],
+            'analytics_to' => $validated['date_to'],
+            'open' => 'snapshots',
+        ])->with('success', 'Snapshot saved.');
     }
 
     public function show(KpiAdsConversionReport $report)
@@ -99,6 +245,9 @@ class AdsConversionController extends Controller
     {
         $report->delete();
 
-        return redirect()->route('kpi.ads.index', ['tab' => 'analytics'])->with('success', 'Report deleted.');
+        return redirect()->route('kpi.ads.index', [
+            'tab' => 'analytics',
+            'open' => 'snapshots',
+        ])->with('success', 'Snapshot deleted.');
     }
 }

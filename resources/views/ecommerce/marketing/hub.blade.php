@@ -32,8 +32,8 @@
     </div>
 
     <div class="row g-4">
-        <div class="col-md-6">
-            <a href="{{ route('ecommerce.marketing.ads-plan.index') }}" class="kpi-hub-card kpi-master-card">
+        <div class="col-md-4">
+            <a href="{{ route('ecommerce.marketing.ads-plan.index', ['region' => $region]) }}" class="kpi-hub-card kpi-master-card">
                 <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-rocket"></i></div>
                 <h5 class="mb-1">Monthly Ads Plan</h5>
                 <p class="text-muted mb-2">Kanban board tracking every ad through Planning, Production, Testing, and Scaling.</p>
@@ -43,8 +43,19 @@
             </a>
         </div>
 
-        <div class="col-md-6">
-            <a href="{{ route('ecommerce.marketing.content.index') }}" class="kpi-hub-card kpi-master-card">
+        <div class="col-md-4">
+            <a href="{{ route('ecommerce.marketing.ad-metrics', ['region' => $region]) }}" class="kpi-hub-card kpi-master-card">
+                <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-bar-chart-alt-2"></i></div>
+                <h5 class="mb-1">Ad Metrics</h5>
+                <p class="text-muted mb-2">Campaign performance tracker with screenshot import and live currency conversion.</p>
+                <span class="ec-hub-stat">
+                    Campaign Metrics
+                </span>
+            </a>
+        </div>
+
+        <div class="col-md-4">
+            <a href="{{ route('ecommerce.marketing.content.index', ['region' => $region]) }}" class="kpi-hub-card kpi-master-card">
                 <div class="kpi-hub-icon kpi-hub-icon-lg"><i class="bx bx-calendar"></i></div>
                 <h5 class="mb-1">Weekly Content Calendar</h5>
                 <p class="text-muted mb-2">Monday&ndash;Sunday pillar rotation with inline status and staff assignment.</p>

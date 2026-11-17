@@ -41,6 +41,7 @@ return [
         'model' => env('GEMINI_MODEL', 'gemini-3.5-flash-lite'),
         'command_model' => env('GEMINI_COMMAND_MODEL', 'gemini-2.5-flash'),
         'thinking_model' => env('GEMINI_THINKING_MODEL', 'gemini-3.5-flash'),
+        'vision_model' => env('GEMINI_VISION_MODEL', 'gemini-2.5-flash'),
         'tts_model' => env('GEMINI_TTS_MODEL', 'gemini-3.8-flash-tts'),
         'verify_ssl' => env('GEMINI_VERIFY_SSL', true),
     ],

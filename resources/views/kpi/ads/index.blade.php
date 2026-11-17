@@ -2,9 +2,19 @@
 @section('title', 'Ads Conversion Reports')
 
 @section('content')
-    <div class="d-flex gap-2 mb-4">
-        <button type="button" class="ads-tab-btn btn btn-sm {{ $activeTab === 'leads' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="leads">Ad Leads Log</button>
-        <button type="button" class="ads-tab-btn btn btn-sm {{ $activeTab === 'analytics' ? 'btn-dark' : 'btn-outline-secondary' }}" data-tab="analytics">Ads Analytics</button>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ route('kpi.ads.index', ['tab' => 'leads']) }}" class="btn btn-sm {{ $activeTab === 'leads' ? 'btn-dark' : 'btn-outline-secondary' }}">Ad Leads Log</a>
+            <a href="{{ route('kpi.ads.index', ['tab' => 'analytics']) }}" class="btn btn-sm {{ $activeTab === 'analytics' ? 'btn-dark' : 'btn-outline-secondary' }}">Ads Analytics</a>
+            <a href="{{ route('kpi.ads.index', ['tab' => 'metrics']) }}" class="btn btn-sm {{ $activeTab === 'metrics' ? 'btn-dark' : 'btn-outline-secondary' }}">Ad Metrics</a>
+        </div>
+        @if ($activeTab === 'metrics')
+            @moduleEdit('kpis')
+                <button type="button" class="btn btn-sm laleen-rose-btn" data-bs-toggle="modal" data-bs-target="#adScreenshotImportModal">
+                    Upload Screenshot
+                </button>
+            @endmoduleEdit
+        @endif
     </div>
 
     {{-- ================= AD LEADS LOG ================= --}}
@@ -265,268 +275,26 @@
     </div>
 
     {{-- ================= ADS ANALYTICS ================= --}}
-    <div id="ads-pane-analytics" class="ads-tab-pane {{ $activeTab === 'analytics' ? '' : 'd-none' }}">
-        @php
-            $analyticsCategories = $analyticsReport->computedCategories();
-            $analyticsTotals = $analyticsReport->totals();
-            $branchComparison = $analyticsReport->branchComparison();
-            $insights = $analyticsReport->actionableInsights();
-        @endphp
+    @if ($activeTab === 'analytics')
+        <div id="ads-pane-analytics" class="ads-tab-pane">
+            @include('kpi.ads._analytics-pane')
+        </div>
+    @endif
 
-        <div class="kpi-header">
-            <div>
-                <h4>Ads Analytics</h4>
-                <p>Live performance breakdown computed straight from the Ad Leads Log — nothing needs to be saved first.</p>
-            </div>
-            <span class="kpi-badge {{ $analyticsTotals['overall_met_target'] ? 'kpi-badge-green' : 'kpi-badge-red' }}">
-                Overall Conversion: {{ $analyticsTotals['overall_conversion'] }}% {{ $analyticsTotals['overall_met_target'] ? '(Target met)' : '(Below 20% target)' }}
-            </span>
+    @if ($activeTab === 'metrics')
+        {{-- ================= AD METRICS TRACKER ================= --}}
+        <div id="ads-pane-metrics" class="ads-tab-pane">
+            @include('kpi.ads._campaign-metrics-tracker', [
+                'filterActionUrl' => route('kpi.ads.index'),
+                'isStandaloneEcommerce' => false,
+                'stayInKpis' => true,
+            ])
         </div>
 
-        <div class="kpi-panel mb-3">
-            <form method="GET" action="{{ route('kpi.ads.index') }}" class="row g-3 align-items-end">
-                <input type="hidden" name="tab" value="analytics">
-                <div class="col-md-3">
-                    <label class="form-label">From</label>
-                    <input type="date" name="analytics_from" class="form-control" value="{{ $analyticsFrom->format('Y-m-d') }}">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">To</label>
-                    <input type="date" name="analytics_to" class="form-control" value="{{ $analyticsTo->format('Y-m-d') }}">
-                </div>
-                <div class="col-md-3 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary">Filter</button>
-                    <a href="{{ route('kpi.ads.index', ['tab' => 'analytics']) }}" class="btn btn-outline-secondary">Reset</a>
-                </div>
-            </form>
-        </div>
-
-        <div class="row g-3 mb-3">
-            <div class="col-md-6 col-xl-3">
-                <div class="kpi-stat-card">
-                    <div class="kpi-stat-label">Overall Conversion</div>
-                    <div class="kpi-stat-value">{{ $analyticsTotals['overall_conversion'] }}%</div>
-                    <div class="kpi-stat-sub">Target: 20%</div>
-                </div>
-            </div>
-            <div class="col-md-6 col-xl-3">
-                <div class="kpi-stat-card">
-                    <div class="kpi-stat-label">Total Leads</div>
-                    <div class="kpi-stat-value">{{ $analyticsTotals['total_leads'] }}</div>
-                </div>
-            </div>
-            <div class="col-md-6 col-xl-3">
-                <div class="kpi-stat-card">
-                    <div class="kpi-stat-label">Total Bookings</div>
-                    <div class="kpi-stat-value">{{ $analyticsTotals['total_bookings'] }}</div>
-                </div>
-            </div>
-            <div class="col-md-6 col-xl-3">
-                <div class="kpi-stat-card">
-                    <div class="kpi-stat-label">Total Revenue</div>
-                    <div class="kpi-stat-value">{{ number_format($analyticsTotals['total_revenue'], 0) }} <small class="fs-6">QAR</small></div>
-                </div>
-            </div>
-        </div>
-
-        <div class="kpi-panel mb-3">
-            <h6>Category Conversion Breakdown</h6>
-            <div class="table-responsive">
-                <table class="table kpi-table align-middle">
-                    <thead>
-                        <tr>
-                            <th>Category</th>
-                            <th>Leads</th>
-                            <th>Bookings</th>
-                            <th style="min-width:140px;">Conversion</th>
-                            <th>Avg Ticket</th>
-                            <th>Revenue</th>
-                            <th>vs 20% Target</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($analyticsCategories as $c)
-                            @php
-                                $barColor = match($c['status']) { 'Above' => 'green', 'Near' => 'amber', 'Below' => 'amber', default => 'red' };
-                                $badge = $analyticsReport->categoryBadge($c);
-                            @endphp
-                            <tr>
-                                <td class="fw-semibold">{{ $c['name'] }}</td>
-                                <td>{{ $c['leads'] }}</td>
-                                <td>{{ $c['bookings'] }}</td>
-                                <td>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <div class="kpi-progress-track" style="width:80px;">
-                                            <div class="kpi-progress-fill {{ $barColor }}" style="width:{{ min($c['conversion'] / 20 * 100, 100) }}%"></div>
-                                        </div>
-                                        <span class="small fw-semibold">{{ $c['conversion'] }}%</span>
-                                    </div>
-                                </td>
-                                <td>{{ number_format($c['avg_ticket'], 2) }}</td>
-                                <td>{{ number_format($c['revenue'], 2) }}</td>
-                                <td>{{ $c['pct_of_target'] }}%</td>
-                                <td><span class="kpi-badge {{ $badge['class'] }}">{{ $badge['label'] }}</span></td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="8" class="text-center text-muted py-4">No ad leads logged for this period.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="kpi-panel mb-3">
-            <h6>Branch Performance Comparison</h6>
-            <p class="text-muted small mb-3">Old Airport vs. Al Wakrah — bookings, revenue, and the gap between them.</p>
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <div class="kpi-stat-card h-100 {{ $branchComparison['leading_branch'] === 'Old Airport' ? 'border border-success' : '' }}">
-                        <div class="kpi-stat-label">Old Airport {{ $branchComparison['leading_branch'] === 'Old Airport' ? '👑' : '' }}</div>
-                        <div class="kpi-stat-value">{{ $branchComparison['old_airport']['bookings'] }} <small class="fs-6">bookings</small></div>
-                        <div class="kpi-stat-sub">
-                            {{ number_format($branchComparison['old_airport']['revenue'], 2) }} QAR
-                            &middot; {{ $branchComparison['old_airport']['booking_share'] }}% of bookings
-                            &middot; {{ $branchComparison['old_airport']['revenue_share'] }}% of revenue
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="kpi-stat-card h-100 {{ $branchComparison['leading_branch'] === 'Al Wakrah' ? 'border border-success' : '' }}">
-                        <div class="kpi-stat-label">Al Wakrah {{ $branchComparison['leading_branch'] === 'Al Wakrah' ? '👑' : '' }}</div>
-                        <div class="kpi-stat-value">{{ $branchComparison['wakrah']['bookings'] }} <small class="fs-6">bookings</small></div>
-                        <div class="kpi-stat-sub">
-                            {{ number_format($branchComparison['wakrah']['revenue'], 2) }} QAR
-                            &middot; {{ $branchComparison['wakrah']['booking_share'] }}% of bookings
-                            &middot; {{ $branchComparison['wakrah']['revenue_share'] }}% of revenue
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="mt-3 small text-muted">
-                @if ($branchComparison['total_bookings'] === 0)
-                    No bookings logged for either branch in this period.
-                @elseif ($branchComparison['leading_branch'])
-                    <strong>{{ $branchComparison['leading_branch'] }}</strong> is ahead by
-                    {{ $branchComparison['booking_gap'] }} {{ Str::plural('booking', $branchComparison['booking_gap']) }}
-                    and {{ number_format($branchComparison['revenue_gap'], 2) }} QAR in revenue.
-                @else
-                    Both branches are performing evenly.
-                @endif
-            </div>
-        </div>
-
-        <div class="kpi-panel mb-4">
-            <h6>Actionable Insights</h6>
-            <p class="text-muted small mb-3">Rule-based recommendations — which campaigns to scale, fix, or pause — based on conversion vs. the 20% target.</p>
-            @forelse ($insights as $insight)
-                @php
-                    $actionBadge = match ($insight['action']) {
-                        'scale' => ['label' => 'Scale', 'class' => 'kpi-badge-green'],
-                        'fix' => ['label' => 'Fix', 'class' => 'kpi-badge-amber'],
-                        default => ['label' => 'Pause', 'class' => 'kpi-badge-red'],
-                    };
-                @endphp
-                <div class="d-flex align-items-start gap-3 py-2 {{ !$loop->last ? 'border-bottom' : '' }}">
-                    <span class="kpi-badge {{ $actionBadge['class'] }}" style="min-width:64px; text-align:center; flex-shrink:0;">{{ $actionBadge['label'] }}</span>
-                    <div>
-                        <span class="fw-semibold">{{ $insight['name'] }}</span>
-                        @if ($insight['low_sample'])
-                            <span class="text-muted small">(small sample — keep monitoring)</span>
-                        @endif
-                        <div class="text-muted small">{{ $insight['reason'] }}</div>
-                    </div>
-                </div>
-            @empty
-                <p class="text-muted small mb-0">No ad leads logged for this period.</p>
-            @endforelse
-        </div>
-
-        <div class="kpi-header mt-4">
-            <div>
-                <h4>Ads Conversion Reports</h4>
-                <p>Pick a date range and generate a saved snapshot — leads, bookings, conversion %, revenue, and branch split are calculated automatically from the Ad Leads Log.</p>
-            </div>
-        </div>
-
-        @moduleEdit('kpis')
-            <div class="kpi-panel mb-3">
-                <form method="POST" action="{{ route('kpi.ads.store') }}" class="row g-3 align-items-end">
-                    @csrf
-                    <div class="col-md-3">
-                        <label class="form-label">From</label>
-                        <input type="date" name="date_from" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">To</label>
-                        <input type="date" name="date_to" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <button type="submit" class="btn btn-primary"><i class="bx bx-plus me-1"></i> Generate Report</button>
-                    </div>
-                </form>
-            </div>
-        @endmoduleEdit
-
-        <div class="kpi-panel p-0" style="overflow:hidden;">
-            <div class="table-responsive">
-                <table class="table kpi-table mb-0">
-                    <thead>
-                        <tr>
-                            <th>Period</th>
-                            <th>Categories</th>
-                            <th class="text-end">Total Leads</th>
-                            <th class="text-end">Total Bookings</th>
-                            <th class="text-end">Overall Conversion</th>
-                            <th class="text-end">Total Revenue (QAR)</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($reports as $report)
-                            @php $totals = $report->totals(); @endphp
-                            <tr>
-                                <td><a href="{{ route('kpi.ads.show', $report) }}">{{ $report->date_from->format('d M Y') }} – {{ $report->date_to->format('d M Y') }}</a></td>
-                                <td>{{ count($report->computedCategories()) }}</td>
-                                <td class="text-end">{{ $totals['total_leads'] }}</td>
-                                <td class="text-end">{{ $totals['total_bookings'] }}</td>
-                                <td class="text-end">
-                                    <span class="kpi-badge {{ $totals['overall_met_target'] ? 'kpi-badge-green' : 'kpi-badge-red' }}">{{ $totals['overall_conversion'] }}%</span>
-                                </td>
-                                <td class="text-end">{{ number_format($totals['total_revenue'], 2) }}</td>
-                                <td class="text-end">
-                                    @moduleEdit('kpis')
-                                        <form action="{{ route('kpi.ads.destroy', $report) }}" method="POST" onsubmit="return confirm('Delete this report?')">
-                                            @csrf @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bx bx-trash"></i></button>
-                                        </form>
-                                    @endmoduleEdit
-                                </td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="7" class="text-center text-muted py-4">No reports saved yet.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="d-flex justify-content-end align-items-center mt-2 mb-0">{{ $reports->links() }}</div>
-    </div>
-
-    <script>
-        document.querySelectorAll('.ads-tab-btn').forEach(btn => {
-            btn.addEventListener('click', function () {
-                document.querySelectorAll('.ads-tab-btn').forEach(b => {
-                    b.classList.remove('btn-dark');
-                    b.classList.add('btn-outline-secondary');
-                });
-                this.classList.remove('btn-outline-secondary');
-                this.classList.add('btn-dark');
-
-                document.querySelectorAll('.ads-tab-pane').forEach(p => p.classList.add('d-none'));
-                document.getElementById('ads-pane-' + this.dataset.tab).classList.remove('d-none');
-            });
-        });
-    </script>
+        @if (auth()->check() && (auth()->user()->canEdit('kpis') || auth()->user()->canEdit('ecommerce')))
+            @include('kpi.ads._screenshot-import-modal', [
+                'stayInKpis' => true,
+            ])
+        @endif
+    @endif
 @endsection

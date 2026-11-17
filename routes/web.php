@@ -25,6 +25,7 @@ use App\Http\Controllers\Ecommerce\EcommerceSeoAgentController;
 use App\Http\Controllers\Ecommerce\EcommerceStockController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\GuideController;
+use App\Http\Controllers\Kpi\AdCampaignMetricsController;
 use App\Http\Controllers\Kpi\AdLeadEntryController;
 use App\Http\Controllers\Kpi\AdsConversionController;
 use App\Http\Controllers\Kpi\AgentShiftLogController;
@@ -343,6 +344,10 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis')->get('/ads/{report}', [AdsConversionController::class, 'show'])->name('ads.show');
         Route::middleware('module:kpis,edit')->delete('/ads/{report}', [AdsConversionController::class, 'destroy'])->name('ads.destroy');
 
+        Route::middleware('throttle:30,1')->post('/ad-metrics/extract', [AdCampaignMetricsController::class, 'extractPreview'])->name('ad-metrics.extract');
+        Route::post('/ad-metrics/confirm', [AdCampaignMetricsController::class, 'confirmImport'])->name('ad-metrics.confirm');
+        Route::delete('/ad-metrics/{adCampaignMetric}', [AdCampaignMetricsController::class, 'destroy'])->name('ad-metrics.destroy');
+
         Route::middleware('module:kpis')->get('/ads-plan', [MonthlyAdController::class, 'index'])->name('ads-plan.index');
         Route::middleware('module:kpis,edit')->post('/ads-plan', [MonthlyAdController::class, 'store'])->name('ads-plan.store');
         Route::middleware('module:kpis,edit')->put('/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'update'])->name('ads-plan.update');
@@ -410,6 +415,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/dashboard', [EcommerceController::class, 'dashboard'])->name('dashboard');
             Route::get('/financials', [EcommerceController::class, 'financials'])->name('financials');
             Route::get('/marketing', [EcommerceController::class, 'marketing'])->name('marketing');
+            Route::get('/marketing/ad-metrics', [AdCampaignMetricsController::class, 'ecommerceIndex'])->name('marketing.ad-metrics');
             Route::get('/marketing/ads-plan', [EcommerceMonthlyAdsController::class, 'index'])->name('marketing.ads-plan.index');
             Route::get('/marketing/content-calendar', [EcommerceContentCalendarController::class, 'index'])->name('marketing.content.index');
 
