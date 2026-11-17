@@ -1191,6 +1191,12 @@
         'id' => $s->id,
         'name' => $s->name,
         'branch' => $s->branch ?: 'both',
+        'skill_ids' => $s->relationLoaded('services')
+            ? $s->services->pluck('id')->map(fn($id) => (int) $id)->values()
+            : [],
+        'skills' => $s->relationLoaded('services')
+            ? $s->services->pluck('name')->values()
+            : [],
     ])->values();
 @endphp
 
@@ -1288,8 +1294,203 @@
         let clientPendingPackages = []; // this client's redeemable package services, fetched once picked
         let selectedRedemptions = []; // subset of the above actually being applied to this booking
         let redeemStaffMap = {}; // { "pkgId:svcId": staffId }
+        let redeemParallelMap = {}; // { "pkgId:svcId": boolean }
         let redeemStaffOptionsMap = {}; // { "pkgId:svcId": { sig, options } }
         let redeemStaffRequestSeq = 0;
+
+        function fbCurrentBaseTimeHHMM() {
+            const isUnscheduled = document.getElementById('bookUnscheduledToggle').checked;
+            const timeVal = document.getElementById('bookTimeInput').value || '';
+            return (!isUnscheduled && timeVal) ? timeVal : '';
+        }
+
+        function fbCurrentDaySnapshot() {
+            if (!window.LaleenSliceEngine) return null;
+            const branch = fbNormalizeBranch(document.getElementById('bookBranch').value) || fbResolveActiveCalendarBranch();
+            const dateVal = document.getElementById('bookDateInput').value;
+            return dateVal ? window.LaleenSliceEngine.getCachedDaySnapshot(branch, dateVal) : null;
+        }
+
+        function fbHasAnyActiveTodaySlices() {
+            if (selectedServices.length > 0) return true;
+            if (selectedRedemptions.length > 0) return true;
+            return selectedCombos.some(r => Array.isArray(r.immediateIds) && r.immediateIds.length > 0);
+        }
+
+        function fbComputeUnifiedTimeline() {
+            const baseTime = fbCurrentBaseTimeHHMM();
+            const rawItems = [];
+
+            selectedServices.forEach((s, idx) => {
+                rawItems.push({
+                    uid: `svc:${idx}`,
+                    kind: 'standalone',
+                    idx,
+                    service_id: s.id || null,
+                    name: s.name,
+                    duration: Number(s.duration) || 30,
+                    staff_id: s.staff_id || '',
+                    is_parallel: Boolean(s.is_parallel)
+                });
+            });
+
+            selectedRedemptions.forEach((r, idx) => {
+                rawItems.push({
+                    uid: `redeem:${r.id}`,
+                    kind: 'redemption',
+                    idx,
+                    token: r.id,
+                    service_id: r.service_id || null,
+                    name: r.service_name,
+                    duration: Number(r.duration) || 30,
+                    staff_id: redeemStaffMap[r.id] || '',
+                    is_parallel: Boolean(redeemParallelMap[r.id])
+                });
+            });
+
+            selectedCombos.forEach(row => {
+                const poolById = new Map((row.combo.services || []).map(cs => [Number(cs.id), cs]));
+                (row.immediateIds || []).forEach((sid, idx) => {
+                    const cs = poolById.get(Number(sid));
+                    if (!cs) return;
+                    rawItems.push({
+                        uid: `combo:${row.id}:${sid}`,
+                        kind: 'combo',
+                        rowId: row.id,
+                        sid: Number(sid),
+                        idx,
+                        service_id: Number(sid),
+                        name: cs.name,
+                        duration: Number(cs.duration) || 30,
+                        staff_id: (row.serviceStaff && row.serviceStaff[sid]) ? String(row.serviceStaff[sid]) : '',
+                        is_parallel: Boolean(row.serviceParallel && row.serviceParallel[sid])
+                    });
+                });
+            });
+
+            const tl = window.LaleenSliceEngine
+                ? window.LaleenSliceEngine.computeTimeline(baseTime, rawItems.map((it, pos) => Object.assign({}, it, { sort_order: pos })))
+                : { slices: rawItems, spanMinutes: rawItems.reduce((a, b) => a + b.duration, 0) };
+
+            const byUid = new Map();
+            tl.slices.forEach(sl => {
+                byUid.set(sl.uid, sl);
+                if (sl.kind === 'standalone' && selectedServices[sl.idx]) {
+                    selectedServices[sl.idx].is_parallel = Boolean(sl.is_parallel);
+                } else if (sl.kind === 'redemption') {
+                    redeemParallelMap[sl.token] = Boolean(sl.is_parallel);
+                } else if (sl.kind === 'combo') {
+                    const targetRow = selectedCombos.find(r => Number(r.id) === Number(sl.rowId));
+                    if (targetRow) {
+                        targetRow.serviceParallel = targetRow.serviceParallel || {};
+                        targetRow.serviceParallel[sl.sid] = Boolean(sl.is_parallel);
+                    }
+                }
+            });
+
+            return { timeline: tl, byUid };
+        }
+
+        function fbAutoAssignUnpickedTodaySlices() {
+            if (!window.LaleenSliceEngine) return false;
+            const branch = fbNormalizeBranch(document.getElementById('bookBranch').value) || fbResolveActiveCalendarBranch();
+            const daySnap = fbCurrentDaySnapshot();
+            let changed = false;
+
+            const pass = fbComputeUnifiedTimeline();
+            pass.timeline.slices.forEach((sl, pos) => {
+                const prior = pass.timeline.slices.slice(0, pos);
+                if (sl.kind === 'standalone') {
+                    const item = selectedServices[sl.idx];
+                    if (item && !item.manualStaff && !item.staff_id) {
+                        const picked = window.LaleenSliceEngine.pickAutoSpecialist({
+                            branch,
+                            serviceId: item.id,
+                            serviceName: item.name,
+                            startMin: sl.startMin,
+                            endMin: sl.endMin,
+                            clickedStaffId: pendingStaffId,
+                            daySnapshot: daySnap,
+                            excludeApptId: null,
+                            priorSlices: prior,
+                            allStaffs: ALL_STAFFS
+                        });
+                        if (picked) {
+                            item.staff_id = String(picked);
+                            sl.staff_id = String(picked);
+                            changed = true;
+                        }
+                    }
+                } else if (sl.kind === 'redemption') {
+                    if (!redeemStaffMap[sl.token]) {
+                        const picked = window.LaleenSliceEngine.pickAutoSpecialist({
+                            branch,
+                            serviceId: sl.service_id,
+                            serviceName: sl.name,
+                            startMin: sl.startMin,
+                            endMin: sl.endMin,
+                            clickedStaffId: pendingStaffId,
+                            daySnapshot: daySnap,
+                            excludeApptId: null,
+                            priorSlices: prior,
+                            allStaffs: ALL_STAFFS
+                        });
+                        if (picked) {
+                            redeemStaffMap[sl.token] = String(picked);
+                            sl.staff_id = String(picked);
+                            changed = true;
+                        }
+                    }
+                } else if (sl.kind === 'combo') {
+                    const row = selectedCombos.find(r => Number(r.id) === Number(sl.rowId));
+                    if (row && !(row.serviceStaff && row.serviceStaff[sl.sid])) {
+                        const picked = window.LaleenSliceEngine.pickAutoSpecialist({
+                            branch,
+                            serviceId: sl.sid,
+                            serviceName: sl.name,
+                            startMin: sl.startMin,
+                            endMin: sl.endMin,
+                            clickedStaffId: pendingStaffId,
+                            daySnapshot: daySnap,
+                            excludeApptId: null,
+                            priorSlices: prior,
+                            allStaffs: ALL_STAFFS
+                        });
+                        if (picked) {
+                            row.serviceStaff = row.serviceStaff || {};
+                            row.serviceStaff[sl.sid] = String(picked);
+                            sl.staff_id = String(picked);
+                            changed = true;
+                        }
+                    }
+                }
+            });
+
+            return changed;
+        }
+
+        function fbEnsureDaySnapshotAndRefresh() {
+            if (!window.LaleenSliceEngine) return;
+            const branch = fbNormalizeBranch(document.getElementById('bookBranch').value) || fbResolveActiveCalendarBranch();
+            const dateVal = document.getElementById('bookDateInput').value;
+            if (!dateVal) return;
+
+            window.LaleenSliceEngine.ensureDaySnapshot(branch, dateVal).then(() => {
+                fbAutoAssignUnpickedTodaySlices();
+                fbRenderAllListsWithoutRecursion();
+                if (fbActiveComboDraft) {
+                    fbRenderComboConfigPanel();
+                }
+            });
+        }
+
+        function fbRenderAllListsWithoutRecursion() {
+            fbRenderServices(true);
+            fbRenderCombos(true);
+            fbRenderRedemptions(true);
+            fbUpdateTeamMemberVisibility();
+            fbSyncHiddenAndTotals();
+        }
 
         window.openCalendarBookModal = function(prefill) {
             prefill = prefill || {};
@@ -1303,6 +1504,7 @@
             clientPendingPackages = [];
             selectedRedemptions = [];
             redeemStaffMap = {};
+            redeemParallelMap = {};
             redeemStaffOptionsMap = {};
             pendingStaffId = prefill.staffId || null;
             fbClearBookingError();
@@ -1351,7 +1553,13 @@
                     const matchId = svc.id && wantedIds.includes(Number(svc.id));
                     const matchName = svc.name && wantedNames.includes(svc.name.trim().toLowerCase());
                     if ((matchId || matchName) && !selectedServices.some(s => s.name === svc.name)) {
-                        selectedServices.push(Object.assign({}, svc, { original_price: svc.price, discount_reason: '' }));
+                        selectedServices.push(Object.assign({}, svc, {
+                            original_price: svc.price,
+                            discount_reason: '',
+                            staff_id: '',
+                            is_parallel: false,
+                            manualStaff: false
+                        }));
                     }
                 });
             }
@@ -1383,10 +1591,9 @@
             const resolvedBranch = fbNormalizeBranch(prefill.branch) || fbResolveActiveCalendarBranch();
             document.getElementById('bookBranch').value = resolvedBranch;
 
+            fbAutoAssignUnpickedTodaySlices();
             fbUpdateRail();
-            fbRenderServices();
-            fbRenderCombos();
-            fbRenderRedemptions();
+            fbRenderAllListsWithoutRecursion();
             fbUpdateRedeemButton();
             if (selectedClient && selectedClient.id) {
                 fbLoadClientPendingPackages();
@@ -1394,13 +1601,13 @@
                 fbResolveClientByPhone(selectedClient.phone);
             }
             fbUpdateDateLabel();
-            fbUpdateTeamMemberVisibility();
             fbShowPanel('main');
 
             const modalEl = document.getElementById('calendarBookModal');
             const drawer = bootstrap.Offcanvas.getOrCreateInstance(modalEl);
             drawer.show();
 
+            fbEnsureDaySnapshotAndRefresh();
             loadAvailableStaff();
         };
 
@@ -1469,14 +1676,24 @@
             fbUpdateDateLabel();
             const modalEl = document.getElementById('calendarBookModal');
             if (modalEl && modalEl.classList.contains('show')) {
+                fbEnsureDaySnapshotAndRefresh();
                 loadAvailableStaff();
-                fbRefreshComboStaffOptions();
-                fbRefreshRedeemStaffOptions();
             }
         };
 
-        document.getElementById('bookDateInput').addEventListener('change', () => { fbClearBookingError(); fbUpdateDateLabel(); loadAvailableStaff(); fbRefreshComboStaffOptions(); fbRefreshRedeemStaffOptions(); });
-        document.getElementById('bookTimeInput').addEventListener('change', () => { fbClearBookingError(); fbUpdateDateLabel(); loadAvailableStaff(); fbRefreshComboStaffOptions(); fbRefreshRedeemStaffOptions(); });
+        document.getElementById('bookDateInput').addEventListener('change', () => {
+            fbClearBookingError();
+            fbUpdateDateLabel();
+            fbEnsureDaySnapshotAndRefresh();
+            loadAvailableStaff();
+        });
+        document.getElementById('bookTimeInput').addEventListener('change', () => {
+            fbClearBookingError();
+            fbUpdateDateLabel();
+            fbRenderAllListsWithoutRecursion();
+            if (fbActiveComboDraft) fbRenderComboConfigPanel();
+            loadAvailableStaff();
+        });
         document.getElementById('bookUnscheduledToggle').addEventListener('change', function() {
             fbClearBookingError();
             const timeInput = document.getElementById('bookTimeInput');
@@ -1488,7 +1705,7 @@
                 timeInput.value = `${String(now.getHours()).padStart(2, '0')}:00`;
             }
             fbUpdateDateLabel();
-            fbUpdateTeamMemberVisibility();
+            fbRenderAllListsWithoutRecursion();
             loadAvailableStaff();
         });
         document.getElementById('bookStaffSelect').addEventListener('change', function() {
@@ -1861,8 +2078,8 @@
                     if (!item || fbPackageRemainingSlots(item.client_package_id) <= 0) return;
                     decideInSalon = false;
                     selectedRedemptions.push(item);
-                    fbRenderServices();
-                    fbRenderRedemptions();
+                    fbAutoAssignUnpickedTodaySlices();
+                    fbRenderAllListsWithoutRecursion();
                     fbUpdateRedeemButton();
                     loadAvailableStaff();
                     fbShowPanel('main');
@@ -1870,93 +2087,101 @@
             });
         }
 
-        function fbFetchRedeemServiceStaff(redemption) {
-            const dateVal = document.getElementById('bookDateInput').value;
-            const timeVal = document.getElementById('bookTimeInput').value;
-            const branch = document.getElementById('bookBranch').value;
-            const datetime = (dateVal && timeVal) ? `${dateVal}T${timeVal}` : '';
-            if (!datetime || !branch) return;
-
-            const token = redemption.id;
-            const sig = fbComboStaffSignature();
-            const requestId = ++redeemStaffRequestSeq;
-
-            const params = new URLSearchParams();
-            params.append('services[]', redemption.service_name);
-            params.append('appointment_datetime', datetime);
-            params.append('branch', branch);
-
-            fetch("{{ route('appointments.availableStaff') }}?" + params.toString())
-                .then(res => res.json())
-                .then(data => {
-                    redeemStaffOptionsMap[token] = { sig, options: data };
-
-                    const select = document.querySelector(`.fb-redeem-staff-select[data-token="${token}"]`);
-                    if (!select) return;
-                    const current = redeemStaffMap[token] || '';
-                    select.innerHTML = '<option value="">-- Same as main staff --</option>' +
-                        data.map(st => `<option value="${st.id}">${st.name}</option>`).join('');
-                    if (current && data.some(st => st.id == current)) {
-                        select.value = current;
-                    } else if (current) {
-                        delete redeemStaffMap[token];
-                        fbUpdateTeamMemberVisibility();
-                        fbSyncHiddenAndTotals();
-                        loadAvailableStaff();
-                    }
-                })
-                .catch(err => console.error('Fetch error:', err));
-        }
-
         function fbRefreshRedeemStaffOptions() {
-            selectedRedemptions.forEach(r => {
-                const entry = redeemStaffOptionsMap[r.id];
-                if (!entry || entry.sig !== fbComboStaffSignature()) {
-                    fbFetchRedeemServiceStaff(r);
-                }
-            });
+            fbRenderRedemptions(true);
         }
 
-        function fbRenderRedemptions() {
+        function fbRenderRedemptions(skipSync = false) {
             const list = document.getElementById('fbRedeemList');
+            const branch = fbNormalizeBranch(document.getElementById('bookBranch').value) || fbResolveActiveCalendarBranch();
+            const daySnap = fbCurrentDaySnapshot();
+            const { timeline, byUid } = fbComputeUnifiedTimeline();
 
             list.innerHTML = selectedRedemptions.map((r, i) => {
-                const staffEntry = redeemStaffOptionsMap[r.id];
-                const staffOpts = staffEntry ? staffEntry.options : [];
-                const currentStaff = redeemStaffMap[r.id] || '';
+                const sl = byUid.get(`redeem:${r.id}`);
+                const slicePos = sl ? timeline.slices.indexOf(sl) : 0;
+                const priorSlices = slicePos > 0 ? timeline.slices.slice(0, slicePos) : [];
+                const meta = window.LaleenSliceEngine
+                    ? window.LaleenSliceEngine.buildSpecialistSelectMeta({
+                        branch,
+                        serviceId: r.service_id || null,
+                        serviceName: r.service_name,
+                        startMin: sl ? sl.startMin : null,
+                        endMin: sl ? sl.endMin : null,
+                        selectedStaffId: redeemStaffMap[r.id] || '',
+                        daySnapshot: daySnap,
+                        excludeApptId: null,
+                        priorSlices,
+                        allStaffs: ALL_STAFFS
+                    })
+                    : { html: '', unmappedFallback: false, hasConflict: false, needsSelection: false };
+
+                const reorderBtns = selectedRedemptions.length > 1 ? `
+                    <div class="laleen-reorder-group me-1">
+                        <button type="button" class="laleen-reorder-btn fb-redeem-move-btn" data-idx="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} title="Move earlier">↑</button>
+                        <button type="button" class="laleen-reorder-btn fb-redeem-move-btn" data-idx="${i}" data-dir="1" ${i === selectedRedemptions.length - 1 ? 'disabled' : ''} title="Move later">↓</button>
+                    </div>` : '';
+
+                const parallelBtn = (sl && sl.can_parallel) ? `
+                    <button type="button" class="laleen-parallel-pill fb-redeem-parallel-btn ${sl.is_parallel ? 'is-active' : ''}" data-token="${fbEscHtml(r.id)}">
+                        ${sl.is_parallel ? '⇉ Same time' : 'Same time'}
+                    </button>` : '';
+
                 return `
                 <div class="fb-svc-row">
                     <div class="fb-svc-row-main">
-                        <div>
-                            <div class="name">${r.service_name} <span class="fb-decide-tag">free · package</span></div>
-                            <div class="meta">${r.duration} min · from ${r.combo_name}</div>
+                        <div class="d-flex align-items-center gap-1 min-w-0">
+                            ${reorderBtns}
+                            <div class="min-w-0">
+                                <div class="name">${fbEscHtml(r.service_name)} <span class="fb-decide-tag">free · package</span></div>
+                                <div class="laleen-slice-sub mt-1">
+                                    <span class="laleen-time-pill">${fbEscHtml(sl ? sl.timeBadge : `${r.duration}m`)}</span>
+                                    <span class="meta">from ${fbEscHtml(r.combo_name)}</span>
+                                    ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
+                                </div>
+                            </div>
                         </div>
                         <button type="button" class="remove-btn fb-redeem-remove-btn" data-idx="${i}"><i class="bx bx-x"></i></button>
                     </div>
-                    <div class="d-flex align-items-center justify-content-between gap-2 pt-1">
-                        <span class="meta">Stylist for this service:</span>
-                        <select class="form-select form-select-sm fb-redeem-staff-select" data-token="${r.id}">
-                            <option value="">-- Same as main staff --</option>
-                            ${(staffOpts || []).map(st => `<option value="${st.id}" ${currentStaff == st.id ? 'selected' : ''}>${st.name}</option>`).join('')}
+                    <div class="d-flex align-items-center justify-content-end gap-2 pt-1">
+                        ${parallelBtn}
+                        <select class="form-select form-select-sm laleen-specialist-pill fb-redeem-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-token="${fbEscHtml(r.id)}">
+                            ${meta.html}
                         </select>
                     </div>
                 </div>
             `;
             }).join('');
 
-            fbUpdateTeamMemberVisibility();
-
             list.querySelectorAll('.fb-redeem-remove-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const removed = selectedRedemptions.splice(Number(btn.dataset.idx), 1)[0];
                     if (removed) {
                         delete redeemStaffMap[removed.id];
+                        delete redeemParallelMap[removed.id];
                         delete redeemStaffOptionsMap[removed.id];
                     }
-                    fbRenderRedemptions();
+                    fbRenderAllListsWithoutRecursion();
                     fbUpdateRedeemButton();
-                    fbSyncHiddenAndTotals();
                     loadAvailableStaff();
+                });
+            });
+
+            list.querySelectorAll('.fb-redeem-move-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = Number(btn.dataset.idx);
+                    const nextIdx = idx + Number(btn.dataset.dir);
+                    if (idx < 0 || nextIdx < 0 || nextIdx >= selectedRedemptions.length) return;
+                    [selectedRedemptions[idx], selectedRedemptions[nextIdx]] = [selectedRedemptions[nextIdx], selectedRedemptions[idx]];
+                    fbRenderAllListsWithoutRecursion();
+                });
+            });
+
+            list.querySelectorAll('.fb-redeem-parallel-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const token = btn.dataset.token;
+                    redeemParallelMap[token] = !redeemParallelMap[token];
+                    fbRenderAllListsWithoutRecursion();
                 });
             });
 
@@ -1968,14 +2193,15 @@
                     } else {
                         delete redeemStaffMap[token];
                     }
-                    fbUpdateTeamMemberVisibility();
-                    fbSyncHiddenAndTotals();
+                    fbRenderAllListsWithoutRecursion();
                     loadAvailableStaff();
                 });
             });
 
-            fbSyncHiddenAndTotals();
-            fbRefreshRedeemStaffOptions();
+            if (!skipSync) {
+                fbUpdateTeamMemberVisibility();
+                fbSyncHiddenAndTotals();
+            }
         }
 
         document.getElementById('fbOpenRedeemPanel').addEventListener('click', () => fbShowPanel('redeem'));
@@ -2121,7 +2347,7 @@
             return Math.max(0, (Number(s.original_price) || 0) - (Number(s.price) || 0));
         }
 
-        function fbRenderServices() {
+        function fbRenderServices(skipSync = false) {
             const list = document.getElementById('fbSvcList');
             const hasRealItems = selectedServices.length > 0 || selectedCombos.length > 0 || selectedRedemptions.length > 0;
             if (hasRealItems) {
@@ -2145,29 +2371,78 @@
                 `;
                 document.getElementById('fbDecideInSalonRemove').addEventListener('click', () => {
                     decideInSalon = false;
-                    fbRenderServices();
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
                 });
-                fbSyncHiddenAndTotals();
-                loadAvailableStaff();
+                if (!skipSync) {
+                    fbUpdateTeamMemberVisibility();
+                    fbSyncHiddenAndTotals();
+                    loadAvailableStaff();
+                }
                 return;
             }
 
+            const branch = fbNormalizeBranch(document.getElementById('bookBranch').value) || fbResolveActiveCalendarBranch();
+            const daySnap = fbCurrentDaySnapshot();
+            const { timeline, byUid } = fbComputeUnifiedTimeline();
+
             list.innerHTML = selectedServices.map((s, i) => {
                 const discount = fbServiceDiscount(s);
+                const sl = byUid.get(`svc:${i}`);
+                const slicePos = sl ? timeline.slices.indexOf(sl) : 0;
+                const priorSlices = slicePos > 0 ? timeline.slices.slice(0, slicePos) : [];
+                const meta = window.LaleenSliceEngine
+                    ? window.LaleenSliceEngine.buildSpecialistSelectMeta({
+                        branch,
+                        serviceId: s.id || null,
+                        serviceName: s.name,
+                        startMin: sl ? sl.startMin : null,
+                        endMin: sl ? sl.endMin : null,
+                        selectedStaffId: s.staff_id || '',
+                        daySnapshot: daySnap,
+                        excludeApptId: null,
+                        priorSlices,
+                        allStaffs: ALL_STAFFS
+                    })
+                    : { html: '', unmappedFallback: false, hasConflict: false, needsSelection: false };
+
+                const reorderBtns = selectedServices.length > 1 ? `
+                    <div class="laleen-reorder-group me-1">
+                        <button type="button" class="laleen-reorder-btn fb-svc-move-btn" data-idx="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} title="Move earlier">↑</button>
+                        <button type="button" class="laleen-reorder-btn fb-svc-move-btn" data-idx="${i}" data-dir="1" ${i === selectedServices.length - 1 ? 'disabled' : ''} title="Move later">↓</button>
+                    </div>` : '';
+
+                const parallelBtn = (sl && sl.can_parallel) ? `
+                    <button type="button" class="laleen-parallel-pill fb-svc-parallel-btn ${sl.is_parallel ? 'is-active' : ''}" data-idx="${i}">
+                        ${sl.is_parallel ? '⇉ Same time' : 'Same time'}
+                    </button>` : '';
+
                 return `
                 <div class="fb-svc-row">
                     <div class="fb-svc-row-main">
-                        <div>
-                            <div class="name">${s.name}</div>
-                            <div class="meta">${s.duration} min</div>
+                        <div class="d-flex align-items-center gap-1 min-w-0">
+                            ${reorderBtns}
+                            <div class="min-w-0">
+                                <div class="name">${fbEscHtml(s.name)}</div>
+                                <div class="laleen-slice-sub mt-1">
+                                    <span class="laleen-time-pill">${fbEscHtml(sl ? sl.timeBadge : `${s.duration}m`)}</span>
+                                    ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
+                                </div>
+                            </div>
                         </div>
                         <div class="d-flex align-items-center gap-2">
                             <div class="fb-price-edit">
                                 <span class="currency">QAR</span>
                                 <input type="number" step="0.01" min="0" inputmode="decimal" class="price-input" data-idx="${i}" value="${s.price.toFixed(2)}">
                             </div>
-                            <button type="button" class="remove-btn" data-idx="${i}"><i class="bx bx-x"></i></button>
+                            <button type="button" class="remove-btn fb-svc-remove-btn" data-idx="${i}"><i class="bx bx-x"></i></button>
                         </div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-end gap-2 pt-1">
+                        ${parallelBtn}
+                        <select class="form-select form-select-sm laleen-specialist-pill fb-svc-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-idx="${i}">
+                            ${meta.html}
+                        </select>
                     </div>
                     ${discount > 0 ? `
                     <div class="fb-discount-row">
@@ -2178,19 +2453,42 @@
             `;
             }).join('');
 
-            list.querySelectorAll('.remove-btn').forEach(btn => {
+            list.querySelectorAll('.fb-svc-remove-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     selectedServices.splice(Number(btn.dataset.idx), 1);
-                    fbRenderServices();
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
                 });
             });
 
-            // Manual price override: staff can type a custom price for this
-            // specific booking without touching the service's master price.
-            // The discount badge/reason row and footer total/hidden inputs
-            // resync on each keystroke; the price list itself only fully
-            // re-renders when a discount note needs to appear/disappear, so
-            // typing doesn't steal focus.
+            list.querySelectorAll('.fb-svc-move-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = Number(btn.dataset.idx);
+                    const nextIdx = idx + Number(btn.dataset.dir);
+                    if (idx < 0 || nextIdx < 0 || nextIdx >= selectedServices.length) return;
+                    [selectedServices[idx], selectedServices[nextIdx]] = [selectedServices[nextIdx], selectedServices[idx]];
+                    fbRenderAllListsWithoutRecursion();
+                });
+            });
+
+            list.querySelectorAll('.fb-svc-parallel-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = Number(btn.dataset.idx);
+                    selectedServices[idx].is_parallel = !selectedServices[idx].is_parallel;
+                    fbRenderAllListsWithoutRecursion();
+                });
+            });
+
+            list.querySelectorAll('.fb-svc-staff-select').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    const idx = Number(sel.dataset.idx);
+                    selectedServices[idx].staff_id = sel.value || '';
+                    selectedServices[idx].manualStaff = true;
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                });
+            });
+
             list.querySelectorAll('.price-input').forEach(input => {
                 input.addEventListener('input', () => {
                     const idx = Number(input.dataset.idx);
@@ -2200,7 +2498,7 @@
                     const hasDiscount = fbServiceDiscount(selectedServices[idx]) > 0;
 
                     if (hadDiscount !== hasDiscount) {
-                        fbRenderServices();
+                        fbRenderServices(true);
                         list.querySelector(`.price-input[data-idx="${idx}"]`)?.focus();
                     } else if (hasDiscount) {
                         const badge = list.querySelector(`.fb-svc-row:nth-child(${idx + 1}) .fb-discount-badge`);
@@ -2218,8 +2516,11 @@
                 });
             });
 
-            fbSyncHiddenAndTotals();
-            loadAvailableStaff();
+            if (!skipSync) {
+                fbUpdateTeamMemberVisibility();
+                fbSyncHiddenAndTotals();
+                loadAvailableStaff();
+            }
         }
 
         function fbSyncHiddenAndTotals() {
@@ -2236,40 +2537,79 @@
             document.getElementById('bookDecideInSalonHidden').value =
                 (decideInSalon && !hasRealItems) ? '1' : '0';
 
+            const { timeline, byUid } = fbComputeUnifiedTimeline();
+
             const hidden = document.getElementById('svcHiddenInputs');
-            hidden.innerHTML = selectedServices.map(s => `
+            hidden.innerHTML = selectedServices.map((s, idx) => {
+                const sl = byUid.get(`svc:${idx}`);
+                const sortOrd = sl ? sl.sort_order : idx;
+                const isPar = sl && sl.is_parallel ? '1' : '0';
+                return `
                 <input type="hidden" name="service_name[]" value="${s.name.replace(/"/g,'&quot;')}">
                 <input type="hidden" name="service_price[]" value="${s.price}">
                 <input type="hidden" name="service_discount_reason[]" value="${(s.discount_reason || '').replace(/"/g,'&quot;')}">
-            `).join('');
-
-            const comboHidden = document.getElementById('fbComboHiddenInputs');
-            comboHidden.innerHTML = selectedCombos.map(row => `
-                <input type="hidden" name="packages[${row.id}][combo_id]" value="${row.combo.id}">
-                ${row.immediateIds.map(id => `<input type="hidden" name="packages[${row.id}][immediate_service_ids][]" value="${id}">`).join('')}
-                ${(row.pendingIds || []).map(id => `<input type="hidden" name="packages[${row.id}][pending_service_ids][]" value="${id}">`).join('')}
-                ${Object.entries(row.serviceStaff || {}).filter(([, staffId]) => staffId).map(([sid, staffId]) => `<input type="hidden" name="packages[${row.id}][service_staff][${sid}]" value="${staffId}">`).join('')}
-            `).join('');
-
-            const redeemHidden = document.getElementById('fbRedeemHiddenInputs');
-            redeemHidden.innerHTML = selectedRedemptions.map(r => {
-                const assignedStaff = redeemStaffMap[r.id] || '';
-                return `
-                <input type="hidden" name="redeem_service_ids[]" value="${r.id}">
-                ${assignedStaff ? `<input type="hidden" name="redeem_service_staff[${r.id}]" value="${assignedStaff}">` : ''}
+                <input type="hidden" name="service_staff[]" value="${s.staff_id || ''}">
+                <input type="hidden" name="service_sort_order[]" value="${sortOrd}">
+                <input type="hidden" name="service_is_parallel[]" value="${isPar}">
             `;
             }).join('');
 
-            // Redeemed package services are already covered (0 QAR), while newly
-            // added Combo packages lock in the Combo QAR price immediately (even
-            // when 0 sub-services are chosen upfront — "Choose in Salon").
-            const comboImmediateMinutes = selectedCombos.reduce((sum, r) => sum + fbComboImmediateDuration(r), 0);
-            const redeemMinutes = selectedRedemptions.reduce((sum, r) => sum + (r.duration || 0), 0);
-            const comboPackagesPrice = selectedCombos.reduce((sum, r) => sum + (Number(r.combo.price) || 0), 0);
+            const comboHidden = document.getElementById('fbComboHiddenInputs');
+            comboHidden.innerHTML = selectedCombos.map(row => {
+                const staffInputs = Object.entries(row.serviceStaff || {})
+                    .filter(([, staffId]) => staffId)
+                    .map(([sid, staffId]) => `<input type="hidden" name="packages[${row.id}][service_staff][${sid}]" value="${staffId}">`)
+                    .join('');
+                const sortAndParallelInputs = (row.immediateIds || []).map((sid, sIdx) => {
+                    const sl = byUid.get(`combo:${row.id}:${sid}`);
+                    const sortOrd = sl ? sl.sort_order : sIdx;
+                    const isPar = sl && sl.is_parallel ? '1' : '0';
+                    return `
+                        <input type="hidden" name="packages[${row.id}][service_sort_order][${sid}]" value="${sortOrd}">
+                        <input type="hidden" name="packages[${row.id}][service_parallel][${sid}]" value="${isPar}">
+                    `;
+                }).join('');
+                return `
+                <input type="hidden" name="packages[${row.id}][combo_id]" value="${row.combo.id}">
+                ${row.immediateIds.map(id => `<input type="hidden" name="packages[${row.id}][immediate_service_ids][]" value="${id}">`).join('')}
+                ${(row.pendingIds || []).map(id => `<input type="hidden" name="packages[${row.id}][pending_service_ids][]" value="${id}">`).join('')}
+                ${staffInputs}
+                ${sortAndParallelInputs}
+            `;
+            }).join('');
 
+            const redeemHidden = document.getElementById('fbRedeemHiddenInputs');
+            redeemHidden.innerHTML = selectedRedemptions.map((r, rIdx) => {
+                const assignedStaff = redeemStaffMap[r.id] || '';
+                const sl = byUid.get(`redeem:${r.id}`);
+                const sortOrd = sl ? sl.sort_order : rIdx;
+                const isPar = sl && sl.is_parallel ? '1' : '0';
+                return `
+                <input type="hidden" name="redeem_service_ids[]" value="${r.id}">
+                ${assignedStaff ? `<input type="hidden" name="redeem_service_staff[${r.id}]" value="${assignedStaff}">` : ''}
+                <input type="hidden" name="redeem_service_sort_order[${r.id}]" value="${sortOrd}">
+                <input type="hidden" name="redeem_service_parallel[${r.id}]" value="${isPar}">
+            `;
+            }).join('');
+
+            // Sync hidden Team Member select to first Today slice's specialist when per-service pickers are active
+            if (timeline.slices.length > 0) {
+                const firstStaff = timeline.slices[0].staff_id || '';
+                const staffSelect = document.getElementById('bookStaffSelect');
+                if (staffSelect) {
+                    if (firstStaff && [...staffSelect.options].some(o => String(o.value) === String(firstStaff))) {
+                        staffSelect.value = String(firstStaff);
+                    } else if (!firstStaff) {
+                        staffSelect.value = '';
+                    }
+                }
+            }
+
+            const comboPackagesPrice = selectedCombos.reduce((sum, r) => sum + (Number(r.combo.price) || 0), 0);
             const totalPrice = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0) + comboPackagesPrice;
             const totalDiscount = selectedServices.reduce((sum, s) => sum + fbServiceDiscount(s), 0);
-            let totalMin = selectedServices.reduce((sum, s) => sum + s.duration, 0) + comboImmediateMinutes + redeemMinutes;
+
+            let totalMin = timeline.spanMinutes || 0;
             if (totalMin === 0 && selectedCombos.length > 0) {
                 totalMin = Math.max(...selectedCombos.map(r => Number(r.combo.default_duration) || 60));
             } else if (totalMin === 0 && decideInSalon && !hasRealItems) {
@@ -2312,64 +2652,131 @@
             const pendingIds = row.pendingIds || [];
             const pickedCount = immediateIds.length + pendingIds.length;
             const qty = Number(combo.quantity_included) || 0;
+            const branch = fbNormalizeBranch(document.getElementById('bookBranch').value) || fbResolveActiveCalendarBranch();
+            const daySnap = fbCurrentDaySnapshot();
+            const { timeline, byUid } = fbComputeUnifiedTimeline();
+            const poolById = new Map((combo.services || []).map(cs => [Number(cs.id), cs]));
 
-            let secondRowHtml = '';
             if (pickedCount === 0) {
-                secondRowHtml = `
-                    <div class="fb-combo-trigger-row">
-                        <span>0 / ${qty} Selected &middot; Decide in Salon &mdash; Click to choose services</span>
-                        <span class="fb-combo-edit-cta">&rsaquo;</span>
-                    </div>`;
-            } else {
-                const pickedChips = [];
-                (combo.services || []).forEach(s => {
-                    if (immediateIds.includes(s.id)) {
-                        pickedChips.push(`<span class="fb-combo-picked-chip">${fbEscHtml(s.name)} <span class="mode-today">(Today)</span></span>`);
-                    } else if (pendingIds.includes(s.id)) {
-                        pickedChips.push(`<span class="fb-combo-picked-chip">${fbEscHtml(s.name)} <span class="mode-pending">(Pending)</span></span>`);
-                    }
-                });
-
-                secondRowHtml = `
-                    <div class="fb-combo-trigger-row">
-                        <div class="fb-combo-picked-chips">${pickedChips.join('<span style="color:rgba(255,255,255,0.2);">&middot;</span>')}</div>
-                        <span class="fb-combo-edit-cta">Edit services (${pickedCount}/${qty}) &rsaquo;</span>
+                return `
+                    <div class="fb-svc-row fb-combo-card" data-row-id="${row.id}" role="button" tabindex="0" aria-label="Configure ${fbEscHtml(combo.name)}">
+                        <div class="fb-svc-row-main">
+                            <div class="d-flex align-items-center gap-2 flex-wrap min-w-0">
+                                <span class="fb-combo-header-pill">Combo</span>
+                                <span class="name">${fbEscHtml(combo.name)}</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fb-combo-price-lock">${Number(combo.price).toFixed(2)} QAR</span>
+                                <button type="button" class="remove-btn fb-combo-remove-btn" data-row="${row.id}" title="Remove combo"><i class="bx bx-x"></i></button>
+                            </div>
+                        </div>
+                        <div class="fb-combo-trigger-row">
+                            <span>0 / ${qty} Selected &middot; Decide in Salon &mdash; Click to choose services</span>
+                            <span class="fb-combo-edit-cta">&rsaquo;</span>
+                        </div>
                     </div>`;
             }
 
+            const todayRowsHtml = immediateIds.map((sid, idx) => {
+                const cs = poolById.get(Number(sid));
+                if (!cs) return '';
+                const sl = byUid.get(`combo:${row.id}:${sid}`);
+                const slicePos = sl ? timeline.slices.indexOf(sl) : 0;
+                const priorSlices = slicePos > 0 ? timeline.slices.slice(0, slicePos) : [];
+                const meta = window.LaleenSliceEngine
+                    ? window.LaleenSliceEngine.buildSpecialistSelectMeta({
+                        branch,
+                        serviceId: Number(sid),
+                        serviceName: cs.name,
+                        startMin: sl ? sl.startMin : null,
+                        endMin: sl ? sl.endMin : null,
+                        selectedStaffId: (row.serviceStaff && row.serviceStaff[sid]) ? row.serviceStaff[sid] : '',
+                        daySnapshot: daySnap,
+                        excludeApptId: null,
+                        priorSlices,
+                        allStaffs: ALL_STAFFS
+                    })
+                    : { html: '', unmappedFallback: false, hasConflict: false, needsSelection: false };
+
+                const reorderBtns = immediateIds.length > 1 ? `
+                    <div class="laleen-reorder-group">
+                        <button type="button" class="laleen-reorder-btn fb-combo-inline-move" data-row="${row.id}" data-svc="${sid}" data-dir="-1" ${idx === 0 ? 'disabled' : ''} title="Move earlier">↑</button>
+                        <button type="button" class="laleen-reorder-btn fb-combo-inline-move" data-row="${row.id}" data-svc="${sid}" data-dir="1" ${idx === immediateIds.length - 1 ? 'disabled' : ''} title="Move later">↓</button>
+                    </div>` : '';
+
+                const parallelBtn = (sl && sl.can_parallel) ? `
+                    <button type="button" class="laleen-parallel-pill fb-combo-inline-parallel ${sl.is_parallel ? 'is-active' : ''}" data-row="${row.id}" data-svc="${sid}">
+                        ${sl.is_parallel ? '⇉ Same time' : 'Same time'}
+                    </button>` : '';
+
+                return `
+                    <div class="laleen-slice-row" onclick="event.stopPropagation()">
+                        <div class="laleen-slice-left">
+                            ${reorderBtns}
+                            <div class="laleen-slice-title-wrap">
+                                <span class="laleen-slice-title">${fbEscHtml(cs.name)}</span>
+                                <span class="laleen-slice-sub">
+                                    <span class="laleen-time-pill">${fbEscHtml(sl ? sl.timeBadge : `${cs.duration}m`)}</span>
+                                    ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="laleen-slice-right">
+                            ${parallelBtn}
+                            <select class="form-select form-select-sm laleen-specialist-pill fb-combo-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}"
+                                data-row="${row.id}" data-svc="${sid}">
+                                ${meta.html}
+                            </select>
+                        </div>
+                    </div>`;
+            }).join('');
+
+            const pendingNames = pendingIds.map(id => poolById.get(Number(id))?.name).filter(Boolean);
+            const pendingHtml = pendingNames.length > 0
+                ? `<div class="laleen-pending-summary" onclick="event.stopPropagation()"><span>Pending next visit: ${fbEscHtml(pendingNames.join(', '))} (0 min today)</span></div>`
+                : '';
+
             return `
-                <div class="fb-svc-row fb-combo-card" data-row-id="${row.id}" role="button" tabindex="0" aria-label="Configure ${fbEscHtml(combo.name)}">
+                <div class="fb-svc-row fb-combo-card" data-row-id="${row.id}">
                     <div class="fb-svc-row-main">
                         <div class="d-flex align-items-center gap-2 flex-wrap min-w-0">
                             <span class="fb-combo-header-pill">Combo</span>
                             <span class="name">${fbEscHtml(combo.name)}</span>
                         </div>
                         <div class="d-flex align-items-center gap-2">
+                            <button type="button" class="btn btn-link btn-sm p-0 fb-combo-edit-cta text-decoration-none fb-combo-open-cfg-btn" data-row="${row.id}">
+                                Edit (${pickedCount}/${qty}) &rsaquo;
+                            </button>
                             <span class="fb-combo-price-lock">${Number(combo.price).toFixed(2)} QAR</span>
                             <button type="button" class="remove-btn fb-combo-remove-btn" data-row="${row.id}" title="Remove combo"><i class="bx bx-x"></i></button>
                         </div>
                     </div>
-                    ${secondRowHtml}
+                    ${todayRowsHtml ? `<div class="laleen-slice-track">${todayRowsHtml}</div>` : ''}
+                    ${pendingHtml}
                 </div>`;
         }
 
-        function fbRenderCombos() {
+        function fbRenderCombos(skipSync = false) {
             const container = document.getElementById('fbComboList');
             container.innerHTML = selectedCombos.map(fbComboCardHtml).join('');
-
-            fbUpdateTeamMemberVisibility();
 
             container.querySelectorAll('.fb-combo-remove-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     selectedCombos = selectedCombos.filter(r => r.id != btn.dataset.row);
-                    fbRenderCombos();
-                    fbSyncHiddenAndTotals();
+                    fbRenderAllListsWithoutRecursion();
                     loadAvailableStaff();
                 });
             });
 
-            container.querySelectorAll('.fb-combo-card').forEach(card => {
+            container.querySelectorAll('.fb-combo-open-cfg-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    fbOpenComboConfigForRow(Number(btn.dataset.row));
+                });
+            });
+
+            container.querySelectorAll('.fb-combo-card[role="button"]').forEach(card => {
                 card.addEventListener('click', (e) => {
                     if (e.target.closest('.fb-combo-remove-btn')) return;
                     fbOpenComboConfigForRow(Number(card.dataset.rowId));
@@ -2383,8 +2790,78 @@
                 });
             });
 
-            fbSyncHiddenAndTotals();
-            fbRefreshComboStaffOptions();
+            container.querySelectorAll('.fb-combo-inline-move').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const row = selectedCombos.find(r => Number(r.id) === Number(btn.dataset.row));
+                    if (!row) return;
+                    const sid = Number(btn.dataset.svc);
+                    const idx = row.immediateIds.indexOf(sid);
+                    const nextIdx = idx + Number(btn.dataset.dir);
+                    if (idx < 0 || nextIdx < 0 || nextIdx >= row.immediateIds.length) return;
+                    [row.immediateIds[idx], row.immediateIds[nextIdx]] = [row.immediateIds[nextIdx], row.immediateIds[idx]];
+                    fbRenderAllListsWithoutRecursion();
+                });
+            });
+
+            container.querySelectorAll('.fb-combo-inline-parallel').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const row = selectedCombos.find(r => Number(r.id) === Number(btn.dataset.row));
+                    if (!row) return;
+                    const sid = Number(btn.dataset.svc);
+                    row.serviceParallel = row.serviceParallel || {};
+                    row.serviceParallel[sid] = !row.serviceParallel[sid];
+                    fbRenderAllListsWithoutRecursion();
+                });
+            });
+
+            container.querySelectorAll('.fb-combo-staff-select[data-row]').forEach(sel => {
+                sel.addEventListener('change', (e) => {
+                    e.stopPropagation();
+                    const row = selectedCombos.find(r => Number(r.id) === Number(sel.dataset.row));
+                    if (!row) return;
+                    const sid = Number(sel.dataset.svc);
+                    row.serviceStaff = row.serviceStaff || {};
+                    if (sel.value) {
+                        row.serviceStaff[sid] = sel.value;
+                    } else {
+                        delete row.serviceStaff[sid];
+                    }
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                });
+            });
+
+            if (!skipSync) {
+                fbUpdateTeamMemberVisibility();
+                fbSyncHiddenAndTotals();
+            }
+        }
+
+        function fbComputeDraftComboTimeline(draft) {
+            const baseTime = fbCurrentBaseTimeHHMM();
+            const poolById = new Map((draft.combo.services || []).map(cs => [Number(cs.id), cs]));
+            const items = (draft.immediateIds || []).map((sid, idx) => {
+                const cs = poolById.get(Number(sid));
+                return {
+                    service_id: Number(sid),
+                    name: cs ? cs.name : 'Service',
+                    duration: cs ? (Number(cs.duration) || 30) : 30,
+                    staff_id: (draft.serviceStaff && draft.serviceStaff[sid]) ? String(draft.serviceStaff[sid]) : '',
+                    sort_order: idx,
+                    is_parallel: Boolean(draft.serviceParallel && draft.serviceParallel[sid])
+                };
+            });
+            if (!window.LaleenSliceEngine) {
+                return { slices: items, spanMinutes: items.reduce((a, b) => a + b.duration, 0) };
+            }
+            const tl = window.LaleenSliceEngine.computeTimeline(baseTime, items);
+            tl.slices.forEach(sl => {
+                draft.serviceParallel = draft.serviceParallel || {};
+                draft.serviceParallel[sl.service_id] = Boolean(sl.is_parallel);
+            });
+            return tl;
         }
 
         function fbOpenComboConfigForNew(combo) {
@@ -2395,6 +2872,7 @@
                 immediateIds: [],
                 pendingIds: [],
                 serviceStaff: {},
+                serviceParallel: {},
                 serviceStaffOptions: {},
             };
             const searchInput = document.getElementById('fbComboServiceSearch');
@@ -2413,13 +2891,13 @@
                 immediateIds: [...(existing.immediateIds || [])],
                 pendingIds: [...(existing.pendingIds || [])],
                 serviceStaff: Object.assign({}, existing.serviceStaff || {}),
+                serviceParallel: Object.assign({}, existing.serviceParallel || {}),
                 serviceStaffOptions: Object.assign({}, existing.serviceStaffOptions || {}),
             };
             const searchInput = document.getElementById('fbComboServiceSearch');
             if (searchInput) searchInput.value = '';
             fbShowPanel('comboconfig');
             fbRenderComboConfigPanel();
-            fbRefreshDraftComboStaffOptions();
         }
 
         function fbCommitActiveComboDraft(forceDecideInSalon = false) {
@@ -2429,6 +2907,7 @@
                 draft.immediateIds = [];
                 draft.pendingIds = [];
                 draft.serviceStaff = {};
+                draft.serviceParallel = {};
                 draft.serviceStaffOptions = {};
             }
 
@@ -2439,6 +2918,7 @@
                     immediateIds: [...draft.immediateIds],
                     pendingIds: [...draft.pendingIds],
                     serviceStaff: Object.assign({}, draft.serviceStaff),
+                    serviceParallel: Object.assign({}, draft.serviceParallel || {}),
                     serviceStaffOptions: Object.assign({}, draft.serviceStaffOptions),
                 });
             } else {
@@ -2447,15 +2927,15 @@
                     target.immediateIds = [...draft.immediateIds];
                     target.pendingIds = [...draft.pendingIds];
                     target.serviceStaff = Object.assign({}, draft.serviceStaff);
+                    target.serviceParallel = Object.assign({}, draft.serviceParallel || {});
                     target.serviceStaffOptions = Object.assign({}, draft.serviceStaffOptions);
                 }
             }
 
             fbActiveComboDraft = null;
             decideInSalon = false;
-            fbRenderServices();
-            fbRenderCombos();
-            fbSyncHiddenAndTotals();
+            fbAutoAssignUnpickedTodaySlices();
+            fbRenderAllListsWithoutRecursion();
             loadAvailableStaff();
             fbShowPanel('main');
         }
@@ -2469,7 +2949,11 @@
             const selectedCount = draft.immediateIds.length + draft.pendingIds.length;
             const capReached = selectedCount >= qty;
             const defaultHold = Number(combo.default_duration) || 60;
-            const todayMin = fbComboImmediateDuration(draft);
+            const draftTl = fbComputeDraftComboTimeline(draft);
+            const sliceBySvcId = new Map(draftTl.slices.map(sl => [Number(sl.service_id), sl]));
+            const todaySpanText = window.LaleenSliceEngine
+                ? window.LaleenSliceEngine.formatSpanDuration(draftTl.spanMinutes)
+                : `${draftTl.spanMinutes} min`;
 
             document.getElementById('fbComboConfigTitle').textContent = combo.name;
             const counterEl = document.getElementById('fbComboConfigCounter');
@@ -2488,7 +2972,7 @@
             const holdLabelEl = document.getElementById('fbComboFooterHoldLabel');
             if (holdLabelEl) {
                 holdLabelEl.textContent = draft.immediateIds.length > 0
-                    ? `Today's services: ${todayMin} min`
+                    ? `Today's visit: ${todaySpanText}`
                     : `Calendar hold: ${defaultHold} min · Decide in salon`;
             }
             const priceLabelEl = document.getElementById('fbComboFooterPriceLabel');
@@ -2497,7 +2981,11 @@
             }
 
             const query = (document.getElementById('fbComboServiceSearch')?.value || '').trim().toLowerCase();
-            const filteredServices = (combo.services || []).filter(s => !query || s.name.toLowerCase().includes(query));
+            const orderedServices = [
+                ...draft.immediateIds.map(id => (combo.services || []).find(s => Number(s.id) === Number(id))).filter(Boolean),
+                ...(combo.services || []).filter(s => !draft.immediateIds.includes(Number(s.id)))
+            ];
+            const filteredServices = orderedServices.filter(s => !query || s.name.toLowerCase().includes(query));
             const listEl = document.getElementById('fbComboConfigServiceList');
 
             if (!filteredServices.length) {
@@ -2505,40 +2993,82 @@
                 return;
             }
 
+            const branch = fbNormalizeBranch(document.getElementById('bookBranch').value) || fbResolveActiveCalendarBranch();
+            const daySnap = fbCurrentDaySnapshot();
+
             listEl.innerHTML = filteredServices.map(s => {
-                const isToday = draft.immediateIds.includes(s.id);
-                const isPending = !isToday && draft.pendingIds.includes(s.id);
+                const sid = Number(s.id);
+                const isToday = draft.immediateIds.includes(sid);
+                const isPending = !isToday && draft.pendingIds.includes(sid);
                 const isSelected = isToday || isPending;
                 const isRowDimmed = !isSelected && capReached;
                 const disablePills = !isSelected && capReached;
 
-                const staffEntry = draft.serviceStaffOptions[s.id];
-                const staffOpts = staffEntry ? staffEntry.options : null;
-                const currentStaff = draft.serviceStaff[s.id] || '';
-                const staffSelectHtml = isToday ? `
-                    <select class="form-select form-select-sm fb-combo-staff-select mt-1" data-draft-svc="${s.id}" style="max-width:190px; font-size:11.5px;">
-                        <option value="">-- Same as main staff --</option>
-                        ${(staffOpts || []).map(st => `<option value="${st.id}" ${String(currentStaff) === String(st.id) ? 'selected' : ''}>${fbEscHtml(st.name)}</option>`).join('')}
-                    </select>` : '';
+                let reorderHtml = '';
+                let timeHtml = `<div class="fb-combo-svc-meta">${s.duration} min</div>`;
+                let staffAndParallelHtml = '';
+
+                if (isToday) {
+                    const sl = sliceBySvcId.get(sid);
+                    const tIdx = draft.immediateIds.indexOf(sid);
+                    const priorSlices = draftTl.slices.slice(0, tIdx);
+                    const meta = window.LaleenSliceEngine
+                        ? window.LaleenSliceEngine.buildSpecialistSelectMeta({
+                            branch,
+                            serviceId: sid,
+                            serviceName: s.name,
+                            startMin: sl ? sl.startMin : null,
+                            endMin: sl ? sl.endMin : null,
+                            selectedStaffId: draft.serviceStaff[sid] || '',
+                            daySnapshot: daySnap,
+                            excludeApptId: null,
+                            priorSlices,
+                            allStaffs: ALL_STAFFS
+                        })
+                        : { html: '', unmappedFallback: false, hasConflict: false, needsSelection: false };
+
+                    timeHtml = `<div class="laleen-slice-sub mt-1"><span class="laleen-time-pill">${fbEscHtml(sl ? sl.timeBadge : `${s.duration}m`)}</span>${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}</div>`;
+                    reorderHtml = draft.immediateIds.length > 1 ? `
+                        <div class="laleen-reorder-group me-1">
+                            <button type="button" class="laleen-reorder-btn fb-draft-move-btn" data-svc="${sid}" data-dir="-1" ${tIdx === 0 ? 'disabled' : ''} title="Move earlier">↑</button>
+                            <button type="button" class="laleen-reorder-btn fb-draft-move-btn" data-svc="${sid}" data-dir="1" ${tIdx === draft.immediateIds.length - 1 ? 'disabled' : ''} title="Move later">↓</button>
+                        </div>` : '';
+
+                    const parallelHtml = (sl && sl.can_parallel) ? `
+                        <button type="button" class="laleen-parallel-pill fb-draft-parallel-btn ${sl.is_parallel ? 'is-active' : ''}" data-svc="${sid}">
+                            ${sl.is_parallel ? '⇉ Same time' : 'Same time'}
+                        </button>` : '';
+
+                    staffAndParallelHtml = `
+                        <div class="d-flex align-items-center gap-2 mt-1 flex-wrap justify-content-end">
+                            ${parallelHtml}
+                            <select class="form-select form-select-sm laleen-specialist-pill fb-combo-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-draft-svc="${sid}">
+                                ${meta.html}
+                            </select>
+                        </div>`;
+                }
 
                 return `
-                    <div class="fb-combo-svc-row ${isRowDimmed ? 'is-dimmed' : ''}" data-svc-id="${s.id}">
-                        <div>
-                            <div class="fb-combo-svc-title">${fbEscHtml(s.name)}</div>
-                            <div class="fb-combo-svc-meta">${s.duration} min</div>
+                    <div class="fb-combo-svc-row ${isRowDimmed ? 'is-dimmed' : ''}" data-svc-id="${sid}">
+                        <div class="d-flex align-items-center gap-1 min-w-0">
+                            ${reorderHtml}
+                            <div class="min-w-0">
+                                <div class="fb-combo-svc-title">${fbEscHtml(s.name)}</div>
+                                ${timeHtml}
+                            </div>
                         </div>
                         <div class="d-flex flex-column align-items-end ms-auto">
                             <div class="fb-combo-mode-group">
                                 <button type="button"
                                     class="fb-combo-mode-btn fb-draft-today-btn ${isToday ? 'is-today' : ''}"
-                                    data-svc="${s.id}"
+                                    data-svc="${sid}"
                                     ${disablePills ? 'disabled' : ''}>Today</button>
                                 <button type="button"
                                     class="fb-combo-mode-btn fb-draft-pending-btn ${isPending ? 'is-pending' : ''}"
-                                    data-svc="${s.id}"
+                                    data-svc="${sid}"
                                     ${disablePills ? 'disabled' : ''}>Pending</button>
                             </div>
-                            ${staffSelectHtml}
+                            ${staffAndParallelHtml}
                         </div>
                     </div>`;
             }).join('');
@@ -2555,15 +3085,30 @@
                     if (wasToday) {
                         fbActiveComboDraft.immediateIds = fbActiveComboDraft.immediateIds.filter(id => id !== svcId);
                         delete fbActiveComboDraft.serviceStaff[svcId];
-                    } else if (wasPending) {
-                        fbActiveComboDraft.pendingIds = fbActiveComboDraft.pendingIds.filter(id => id !== svcId);
+                        if (fbActiveComboDraft.serviceParallel) delete fbActiveComboDraft.serviceParallel[svcId];
+                    } else if (wasPending || currentPicked < totalAllowed) {
+                        if (wasPending) {
+                            fbActiveComboDraft.pendingIds = fbActiveComboDraft.pendingIds.filter(id => id !== svcId);
+                        }
                         fbActiveComboDraft.immediateIds.push(svcId);
-                        const svcObj = (fbActiveComboDraft.combo.services || []).find(item => item.id === svcId);
-                        if (svcObj) fbFetchComboServiceStaff(fbActiveComboDraft, svcId, svcObj.name);
-                    } else if (currentPicked < totalAllowed) {
-                        fbActiveComboDraft.immediateIds.push(svcId);
-                        const svcObj = (fbActiveComboDraft.combo.services || []).find(item => item.id === svcId);
-                        if (svcObj) fbFetchComboServiceStaff(fbActiveComboDraft, svcId, svcObj.name);
+                        const svcObj = (fbActiveComboDraft.combo.services || []).find(item => Number(item.id) === svcId);
+                        if (svcObj && window.LaleenSliceEngine) {
+                            const previewTl = fbComputeDraftComboTimeline(fbActiveComboDraft);
+                            const sl = previewTl.slices.find(x => Number(x.service_id) === svcId);
+                            const autoId = window.LaleenSliceEngine.pickAutoSpecialist({
+                                branch,
+                                serviceId: svcId,
+                                serviceName: svcObj.name,
+                                startMin: sl ? sl.startMin : null,
+                                endMin: sl ? sl.endMin : null,
+                                clickedStaffId: pendingStaffId,
+                                daySnapshot: daySnap,
+                                excludeApptId: null,
+                                priorSlices: previewTl.slices.slice(0, fbActiveComboDraft.immediateIds.length - 1),
+                                allStaffs: ALL_STAFFS
+                            });
+                            if (autoId) fbActiveComboDraft.serviceStaff[svcId] = String(autoId);
+                        }
                     }
                     fbRenderComboConfigPanel();
                 });
@@ -2583,10 +3128,33 @@
                     } else if (wasToday) {
                         fbActiveComboDraft.immediateIds = fbActiveComboDraft.immediateIds.filter(id => id !== svcId);
                         delete fbActiveComboDraft.serviceStaff[svcId];
+                        if (fbActiveComboDraft.serviceParallel) delete fbActiveComboDraft.serviceParallel[svcId];
                         fbActiveComboDraft.pendingIds.push(svcId);
                     } else if (currentPicked < totalAllowed) {
                         fbActiveComboDraft.pendingIds.push(svcId);
                     }
+                    fbRenderComboConfigPanel();
+                });
+            });
+
+            listEl.querySelectorAll('.fb-draft-move-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!fbActiveComboDraft) return;
+                    const svcId = Number(btn.dataset.svc);
+                    const idx = fbActiveComboDraft.immediateIds.indexOf(svcId);
+                    const nextIdx = idx + Number(btn.dataset.dir);
+                    if (idx < 0 || nextIdx < 0 || nextIdx >= fbActiveComboDraft.immediateIds.length) return;
+                    [fbActiveComboDraft.immediateIds[idx], fbActiveComboDraft.immediateIds[nextIdx]] = [fbActiveComboDraft.immediateIds[nextIdx], fbActiveComboDraft.immediateIds[idx]];
+                    fbRenderComboConfigPanel();
+                });
+            });
+
+            listEl.querySelectorAll('.fb-draft-parallel-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!fbActiveComboDraft) return;
+                    const svcId = Number(btn.dataset.svc);
+                    fbActiveComboDraft.serviceParallel = fbActiveComboDraft.serviceParallel || {};
+                    fbActiveComboDraft.serviceParallel[svcId] = !fbActiveComboDraft.serviceParallel[svcId];
                     fbRenderComboConfigPanel();
                 });
             });
@@ -2600,19 +3168,13 @@
                     } else {
                         delete fbActiveComboDraft.serviceStaff[svcId];
                     }
+                    fbRenderComboConfigPanel();
                 });
             });
         }
 
         function fbRefreshDraftComboStaffOptions() {
-            if (!fbActiveComboDraft) return;
-            fbActiveComboDraft.immediateIds.forEach(svcId => {
-                const entry = fbActiveComboDraft.serviceStaffOptions[svcId];
-                if (!entry || entry.sig !== fbComboStaffSignature()) {
-                    const svc = (fbActiveComboDraft.combo.services || []).find(s => s.id === svcId);
-                    if (svc) fbFetchComboServiceStaff(fbActiveComboDraft, svcId, svc.name);
-                }
-            });
+            if (fbActiveComboDraft) fbRenderComboConfigPanel();
         }
 
         document.getElementById('fbComboConfigBackBtn').addEventListener('click', () => {
@@ -2624,114 +3186,30 @@
         document.getElementById('fbComboSkipSalonBtn').addEventListener('click', () => fbCommitActiveComboDraft(true));
         document.getElementById('fbComboConfigApplyBtn').addEventListener('click', () => fbCommitActiveComboDraft(false));
 
-        /* Keep Team Member visible on the main drawer unless the booking is
-           unscheduled or every active service already has an explicit per-line
-           stylist override. */
+        /* Hide the bottom TEAM MEMBER field whenever >= 1 active (Today) service
+           row with per-service specialist pickers is present (or when unscheduled).
+           Show TEAM MEMBER ONLY for 0/N "Decide in Salon" combo holds or bare Decide in Salon holds! */
         function fbUpdateTeamMemberVisibility() {
             const isUnscheduled = document.getElementById('bookUnscheduledToggle').checked;
-            const allComboImmediateOverridden = selectedCombos.length > 0
-                && selectedServices.length === 0
-                && !selectedRedemptions.length
-                && selectedCombos.every(r => r.immediateIds.length > 0 && r.immediateIds.every(sid => Boolean(r.serviceStaff && r.serviceStaff[sid])));
-            const allRedemptionsAssignedInline = selectedRedemptions.length > 0
-                && selectedServices.length === 0
-                && !selectedCombos.length
-                && selectedRedemptions.every(r => Boolean(redeemStaffMap[r.id]));
-            const hide = isUnscheduled || allComboImmediateOverridden || allRedemptionsAssignedInline;
+            const hasTodaySlices = fbHasAnyActiveTodaySlices();
+            const hide = isUnscheduled || hasTodaySlices;
             document.getElementById('fbTeamMemberSection').classList.toggle('d-none', hide);
             document.getElementById('bookStaffSelect').required = false;
         }
 
-        /* With the Team Member field hidden behind a multi-stylist combo or
-           redemption, adopt the first explicitly chosen inline stylist if any;
-           otherwise leave unassigned so unassigned bypass rules work cleanly. */
         function fbAutoAssignMainStaffForCombo() {
-            if (!selectedCombos.length && !selectedRedemptions.length) return;
-
+            const { timeline } = fbComputeUnifiedTimeline();
+            if (!timeline.slices.length) return;
             const staffSelect = document.getElementById('bookStaffSelect');
-            if (!staffSelect || staffSelect.disabled || !staffSelect.options.length || staffSelect.value) return;
-
-            let preferred = null;
-            for (const row of selectedCombos) {
-                for (const sid of row.immediateIds) {
-                    if (row.serviceStaff[sid]) { preferred = row.serviceStaff[sid]; break; }
-                }
-                if (preferred) break;
+            if (!staffSelect || staffSelect.disabled || !staffSelect.options.length) return;
+            const firstStaff = timeline.slices[0].staff_id || '';
+            if (firstStaff && [...staffSelect.options].some(o => String(o.value) === String(firstStaff))) {
+                staffSelect.value = String(firstStaff);
             }
-            if (!preferred) {
-                for (const r of selectedRedemptions) {
-                    if (redeemStaffMap[r.id]) { preferred = redeemStaffMap[r.id]; break; }
-                }
-            }
-
-            if (preferred && [...staffSelect.options].some(o => o.value == preferred)) {
-                staffSelect.value = preferred;
-            }
-        }
-
-        /* Per-service staff picker for combo services marked "Today" -
-           each fetches independently from the main staff dropdown, since a
-           combo can split its services across different team members. */
-        function fbComboStaffSignature() {
-            const dateVal = document.getElementById('bookDateInput').value;
-            const timeVal = document.getElementById('bookTimeInput').value;
-            const branch = document.getElementById('bookBranch').value;
-            return `${dateVal}T${timeVal}|${branch}`;
-        }
-
-        let comboStaffRequestSeq = 0;
-
-        function fbFetchComboServiceStaff(row, svcId, svcName) {
-            const dateVal = document.getElementById('bookDateInput').value;
-            const timeVal = document.getElementById('bookTimeInput').value;
-            const branch = fbNormalizeBranch(document.getElementById('bookBranch').value) || fbResolveActiveCalendarBranch();
-            const datetime = (dateVal && timeVal) ? `${dateVal}T${timeVal}` : '';
-            if (!datetime || !branch) return;
-
-            const sig = fbComboStaffSignature();
-            const requestId = ++comboStaffRequestSeq;
-
-            const params = new URLSearchParams();
-            params.append('services[]', svcName);
-            params.append('appointment_datetime', datetime);
-            params.append('branch', branch);
-
-            fetch("{{ route('appointments.availableStaff') }}?" + params.toString())
-                .then(res => res.json())
-                .then(data => {
-                    if (requestId !== comboStaffRequestSeq) return;
-                    const availSet = new Set((Array.isArray(data) ? data : []).map(st => String(st.id)));
-                    const branchStaff = ALL_STAFFS.filter(s => !s.branch || s.branch === 'both' || s.branch === branch);
-                    const mergedOptions = [
-                        ...branchStaff.filter(s => availSet.has(String(s.id))).map(s => ({ id: s.id, name: s.name })),
-                        ...branchStaff.filter(s => !availSet.has(String(s.id))).map(s => ({ id: s.id, name: `${s.name} · Unavailable` })),
-                    ];
-                    row.serviceStaffOptions[svcId] = { sig, options: mergedOptions };
-
-                    const select = row === fbActiveComboDraft
-                        ? document.querySelector(`.fb-combo-staff-select[data-draft-svc="${svcId}"]`)
-                        : document.querySelector(`.fb-combo-staff-select[data-row="${row.id}"][data-svc="${svcId}"]`);
-                    if (!select) return;
-                    const current = row.serviceStaff[svcId] || '';
-                    select.innerHTML = '<option value="">-- Same as main staff --</option>' +
-                        mergedOptions.map(st => `<option value="${st.id}">${fbEscHtml(st.name)}</option>`).join('');
-                    if (current && mergedOptions.some(st => String(st.id) === String(current))) {
-                        select.value = String(current);
-                    }
-                })
-                .catch(err => console.error('Fetch error:', err));
         }
 
         function fbRefreshComboStaffOptions() {
-            selectedCombos.forEach(row => {
-                row.immediateIds.forEach(svcId => {
-                    const entry = row.serviceStaffOptions[svcId];
-                    if (!entry || entry.sig !== fbComboStaffSignature()) {
-                        const svc = row.combo.services.find(s => s.id === svcId);
-                        if (svc) fbFetchComboServiceStaff(row, svcId, svc.name);
-                    }
-                });
-            });
+            fbRenderCombos(true);
             fbRefreshDraftComboStaffOptions();
         }
 
@@ -2811,8 +3289,16 @@
                         return;
                     }
                     decideInSalon = false;
-                    selectedServices.push(Object.assign({}, svc, { original_price: svc.price, discount_reason: '' }));
-                    fbRenderServices();
+                    selectedServices.push(Object.assign({}, svc, {
+                        original_price: svc.price,
+                        discount_reason: '',
+                        staff_id: '',
+                        is_parallel: false,
+                        manualStaff: false
+                    }));
+                    fbAutoAssignUnpickedTodaySlices();
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
                     fbShowPanel('main');
                 });
             });

@@ -516,6 +516,210 @@
         text-overflow: ellipsis;
     }
 
+    .cal-combo-badge.is-split-slice {
+        background: rgba(229, 184, 168, 0.16);
+        border-color: rgba(229, 184, 168, 0.42);
+    }
+
+    /* ---------------- LALEEN MINIMAL UI PER-SLICE CONTROLS ---------------- */
+    .laleen-slice-track {
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .laleen-slice-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 6px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .laleen-slice-row:last-child {
+        border-bottom: none;
+        padding-bottom: 2px;
+    }
+
+    .laleen-slice-left {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .laleen-reorder-group {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 1px;
+        flex-shrink: 0;
+    }
+
+    .laleen-reorder-btn {
+        border: none;
+        background: transparent;
+        color: #b8a29a;
+        font-size: 10px;
+        line-height: 1;
+        padding: 1px 3px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: color 0.14s ease, background 0.14s ease;
+    }
+
+    .laleen-reorder-btn:hover:not(:disabled) {
+        color: #e5b8a8;
+        background: rgba(229, 184, 168, 0.12);
+    }
+
+    .laleen-reorder-btn:disabled {
+        opacity: 0.25;
+        cursor: default;
+    }
+
+    .laleen-slice-title-wrap {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .laleen-slice-title {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: #f8efe6;
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .laleen-slice-sub {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+
+    .laleen-time-pill {
+        display: inline-flex;
+        align-items: center;
+        font-size: 10.5px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: #b8a29a;
+        background: rgba(255, 255, 255, 0.045);
+        border-radius: 999px;
+        padding: 1px 7px;
+        white-space: nowrap;
+    }
+
+    .laleen-unmapped-hint {
+        font-size: 10px;
+        color: #d4a373;
+        font-weight: 500;
+    }
+
+    .laleen-slice-right {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .laleen-parallel-pill {
+        border: 1px solid rgba(229, 184, 168, 0.24);
+        border-radius: 999px;
+        background: transparent;
+        color: #b8a29a;
+        font-size: 10.5px;
+        font-weight: 700;
+        padding: 3px 8px;
+        line-height: 1.2;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: all 0.14s ease;
+    }
+
+    .laleen-parallel-pill:hover {
+        border-color: rgba(229, 184, 168, 0.48);
+        color: #f8efe6;
+    }
+
+    .laleen-parallel-pill.is-active {
+        background: rgba(110, 231, 183, 0.15);
+        border-color: rgba(110, 231, 183, 0.48);
+        color: #6ee7b7;
+    }
+
+    .laleen-specialist-pill {
+        appearance: auto;
+        border-radius: 999px !important;
+        background-color: #21181b !important;
+        border: 1px solid rgba(229, 184, 168, 0.26) !important;
+        color: #f8efe6 !important;
+        font-size: 11.5px !important;
+        font-weight: 600 !important;
+        padding: 3px 24px 3px 10px !important;
+        max-width: 168px;
+        min-width: 118px;
+        line-height: 1.3 !important;
+        cursor: pointer;
+        transition: border-color 0.14s ease, color 0.14s ease;
+    }
+
+    .laleen-specialist-pill:focus {
+        outline: none !important;
+        border-color: #e5b8a8 !important;
+        box-shadow: 0 0 0 2px rgba(229, 184, 168, 0.14) !important;
+    }
+
+    .laleen-specialist-pill.is-needs-specialist {
+        border-color: rgba(212, 163, 115, 0.72) !important;
+        color: #e8c7a1 !important;
+    }
+
+    .laleen-specialist-pill.is-conflict {
+        border-color: rgba(253, 164, 175, 0.62) !important;
+        color: #fda4af !important;
+    }
+
+    .laleen-pending-summary {
+        padding-top: 6px;
+        margin-top: 4px;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        font-size: 11px;
+        color: #d4a373;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    @media print {
+        .cal-toolbar-card,
+        .cal-unscheduled-sidebar,
+        .offcanvas,
+        .cal-toast-container,
+        .cal-slot-popover {
+            display: none !important;
+        }
+        body, .cal-scroll, .cal-day-grid, .cal-staff-header, .cal-time-col {
+            background: #ffffff !important;
+            color: #111111 !important;
+            box-shadow: none !important;
+        }
+        .cal-appt {
+            background: #f8f8f8 !important;
+            color: #111111 !important;
+            border: 1px solid #444444 !important;
+        }
+    }
+
     #apptDrawer .drawer-combo-card {
         background: rgba(255, 255, 255, 0.025);
         border: 1px solid rgba(229, 184, 168, 0.22);
@@ -2309,6 +2513,386 @@
         </div>
     </div>
 
+    <script>
+        (function initLaleenSliceEngine() {
+            const snapshotCache = new Map();
+
+            function normBranch(raw) {
+                if (!raw) return 'old_airport';
+                const slug = String(raw).trim().toLowerCase().replace(/[\s\-]+/g, '_');
+                if (slug === 'wakrah' || slug === 'al_wakrah' || slug === 'alwakrah') return 'wakrah';
+                return 'old_airport';
+            }
+
+            function parseHHMM(str) {
+                if (!str || typeof str !== 'string' || !str.includes(':')) return null;
+                const [h, m] = str.split(':').map(Number);
+                if (Number.isNaN(h) || Number.isNaN(m)) return null;
+                return h * 60 + m;
+            }
+
+            function formatHHMM(totalMin) {
+                if (totalMin === null || totalMin === undefined || Number.isNaN(totalMin)) return '';
+                const wrapped = ((Math.round(totalMin) % 1440) + 1440) % 1440;
+                const hh = String(Math.floor(wrapped / 60)).padStart(2, '0');
+                const mm = String(wrapped % 60).padStart(2, '0');
+                return `${hh}:${mm}`;
+            }
+
+            function formatSpanDuration(totalMin) {
+                const mins = Math.max(0, Math.round(Number(totalMin) || 0));
+                if (!mins) return '0min';
+                const h = Math.floor(mins / 60);
+                const m = mins % 60;
+                if (h && m) return `${h}h ${m}min`;
+                if (h) return `${h}h`;
+                return `${m}min`;
+            }
+
+            function esc(str) {
+                return String(str ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+            }
+
+            function staffHasServiceSkill(staff, serviceId, serviceName) {
+                if (!staff) return false;
+                if (serviceId && Array.isArray(staff.skill_ids) && staff.skill_ids.some(id => Number(id) === Number(serviceId))) {
+                    return true;
+                }
+                const targetName = String(serviceName || '').trim().toLowerCase();
+                if (targetName && Array.isArray(staff.skills)) {
+                    return staff.skills.some(n => String(n || '').trim().toLowerCase() === targetName);
+                }
+                return false;
+            }
+
+            function getEligibleStaff(branch, serviceId, serviceName, allStaffs) {
+                const b = normBranch(branch);
+                const roster = (Array.isArray(allStaffs) ? allStaffs : []).filter(s => {
+                    const sb = s.branch ? normBranch(s.branch) : 'both';
+                    return !s.branch || s.branch === 'both' || sb === b;
+                });
+                const skilled = roster.filter(s => staffHasServiceSkill(s, serviceId, serviceName));
+                if (skilled.length > 0) {
+                    return { candidates: skilled, unmappedFallback: false };
+                }
+                return { candidates: roster, unmappedFallback: true };
+            }
+
+            function computeTimeline(startHHMM, items) {
+                const baseMin = parseHHMM(startHHMM);
+                if (!Array.isArray(items) || !items.length) {
+                    return { slices: [], spanMinutes: 0, minStartMin: baseMin, maxEndMin: baseMin };
+                }
+
+                const indexed = items.map((item, origIdx) => ({
+                    origIdx,
+                    sortKey: (item.sort_order !== undefined && item.sort_order !== null && item.sort_order !== '')
+                        ? Number(item.sort_order)
+                        : origIdx,
+                    item
+                })).sort((a, b) => (a.sortKey !== b.sortKey ? a.sortKey - b.sortKey : a.origIdx - b.origIdx));
+
+                const slices = [];
+                let groupStartOffset = 0;
+                let runningMaxEndOffset = 0;
+
+                indexed.forEach((entry, idx) => {
+                    const raw = entry.item;
+                    const dur = Math.max(5, Number(raw.duration) || 30);
+                    const curStaff = raw.staff_id ? String(raw.staff_id) : '';
+                    const prevStaff = idx > 0 && slices[idx - 1].staff_id ? String(slices[idx - 1].staff_id) : '';
+                    const canParallel = idx > 0 && curStaff !== '' && prevStaff !== '' && curStaff !== prevStaff;
+                    const effectiveParallel = canParallel && Boolean(raw.is_parallel);
+
+                    let offsetStart = 0;
+                    let offsetEnd = dur;
+                    if (idx === 0) {
+                        offsetStart = 0;
+                        offsetEnd = dur;
+                        groupStartOffset = 0;
+                        runningMaxEndOffset = dur;
+                    } else if (effectiveParallel) {
+                        offsetStart = groupStartOffset;
+                        offsetEnd = offsetStart + dur;
+                        if (offsetEnd > runningMaxEndOffset) {
+                            runningMaxEndOffset = offsetEnd;
+                        }
+                    } else {
+                        offsetStart = runningMaxEndOffset;
+                        offsetEnd = offsetStart + dur;
+                        groupStartOffset = offsetStart;
+                        runningMaxEndOffset = offsetEnd;
+                    }
+
+                    const startMin = baseMin !== null ? baseMin + offsetStart : null;
+                    const endMin = baseMin !== null ? baseMin + offsetEnd : null;
+                    const timeBadge = (startMin !== null && endMin !== null)
+                        ? `${formatHHMM(startMin)}–${formatHHMM(endMin)}`
+                        : `${dur}m`;
+
+                    slices.push(Object.assign({}, raw, {
+                        sort_order: idx,
+                        duration: dur,
+                        staff_id: curStaff,
+                        can_parallel: canParallel,
+                        is_parallel: effectiveParallel,
+                        startMin,
+                        endMin,
+                        startHHMM: startMin !== null ? formatHHMM(startMin) : '',
+                        endHHMM: endMin !== null ? formatHHMM(endMin) : '',
+                        timeBadge
+                    }));
+                });
+
+                return {
+                    slices,
+                    spanMinutes: runningMaxEndOffset,
+                    minStartMin: baseMin,
+                    maxEndMin: baseMin !== null ? baseMin + runningMaxEndOffset : null
+                };
+            }
+
+            function evaluateStaffAvailability(staff, startMin, endMin, daySnapshot, excludeApptId, priorSameBookingSlices) {
+                if (!staff) return { state: 'off', suffix: ' (Unavailable)' };
+                const sid = String(staff.id);
+                const offMap = (daySnapshot && daySnapshot.off) || {};
+                if (offMap[sid] || offMap[staff.id]) {
+                    return { state: 'off', suffix: ' (Off shift)' };
+                }
+
+                if (startMin === null || endMin === null) {
+                    return { state: 'available', suffix: '' };
+                }
+
+                if (daySnapshot && daySnapshot.working_hours) {
+                    const bStart = parseHHMM(daySnapshot.working_hours.start);
+                    const bEnd = parseHHMM(daySnapshot.working_hours.end);
+                    if (bStart !== null && bEnd !== null && (startMin < bStart || endMin > bEnd)) {
+                        return { state: 'off', suffix: ' (Off shift)' };
+                    }
+                }
+
+                const dayStaffMeta = daySnapshot && Array.isArray(daySnapshot.staffs)
+                    ? daySnapshot.staffs.find(st => String(st.id) === sid)
+                    : null;
+                const shiftWindows = (dayStaffMeta && dayStaffMeta.shift_windows !== undefined)
+                    ? dayStaffMeta.shift_windows
+                    : staff.shift_windows;
+                if (Array.isArray(shiftWindows)) {
+                    if (shiftWindows.length === 0) {
+                        return { state: 'off', suffix: ' (Off shift)' };
+                    }
+                    const fitsShift = shiftWindows.some(w => startMin >= Number(w.start_minutes) && endMin <= Number(w.end_minutes));
+                    if (!fitsShift) {
+                        return { state: 'off', suffix: ' (Off shift)' };
+                    }
+                }
+
+                const blocks = (daySnapshot && daySnapshot.blocks && (daySnapshot.blocks[sid] || daySnapshot.blocks[staff.id])) || [];
+                const hitBlock = blocks.find(b => startMin < Number(b.end_minutes) && endMin > Number(b.start_minutes));
+                if (hitBlock) {
+                    return { state: 'off', suffix: ' (Off shift)' };
+                }
+
+                if (Array.isArray(priorSameBookingSlices)) {
+                    const selfHit = priorSameBookingSlices.find(ps =>
+                        ps && String(ps.staff_id || '') === sid
+                        && ps.startMin !== null && ps.endMin !== null
+                        && startMin < ps.endMin && endMin > ps.startMin
+                    );
+                    if (selfHit) {
+                        return { state: 'busy', suffix: ` (Busy ${formatHHMM(selfHit.startMin)}–${formatHHMM(selfHit.endMin)})` };
+                    }
+                }
+
+                const appts = (daySnapshot && daySnapshot.appointments && (daySnapshot.appointments[sid] || daySnapshot.appointments[staff.id])) || [];
+                const hitAppt = appts.find(a => {
+                    if (excludeApptId && Number(a.id) === Number(excludeApptId)) return false;
+                    return startMin < Number(a.end_minutes) && endMin > Number(a.start_minutes);
+                });
+                if (hitAppt) {
+                    return { state: 'busy', suffix: ` (Busy ${hitAppt.start}–${hitAppt.end})` };
+                }
+
+                return { state: 'available', suffix: '' };
+            }
+
+            function buildSpecialistSelectMeta(opts) {
+                const {
+                    branch,
+                    serviceId,
+                    serviceName,
+                    startMin,
+                    endMin,
+                    selectedStaffId,
+                    daySnapshot,
+                    excludeApptId,
+                    priorSlices,
+                    allStaffs
+                } = opts;
+
+                const { candidates, unmappedFallback } = getEligibleStaff(branch, serviceId, serviceName, allStaffs);
+                const orderRank = { available: 0, busy: 1, off: 2 };
+                const evaluated = candidates.map(staff => {
+                    const avail = evaluateStaffAvailability(staff, startMin, endMin, daySnapshot, excludeApptId, priorSlices);
+                    return { staff, state: avail.state, suffix: avail.suffix };
+                }).sort((a, b) => {
+                    if (orderRank[a.state] !== orderRank[b.state]) {
+                        return orderRank[a.state] - orderRank[b.state];
+                    }
+                    return String(a.staff.name).localeCompare(String(b.staff.name));
+                });
+
+                const selStr = selectedStaffId ? String(selectedStaffId) : '';
+                let selectedEntry = evaluated.find(e => String(e.staff.id) === selStr) || null;
+
+                let optionsInner = evaluated.map(e => {
+                    const isSel = String(e.staff.id) === selStr ? 'selected' : '';
+                    return `<option value="${e.staff.id}" ${isSel}>${esc(e.staff.name)}${esc(e.suffix)}</option>`;
+                }).join('');
+
+                if (selStr && !selectedEntry) {
+                    const rawStaff = (Array.isArray(allStaffs) ? allStaffs : []).find(s => String(s.id) === selStr);
+                    if (rawStaff) {
+                        optionsInner = `<option value="${rawStaff.id}" selected>${esc(rawStaff.name)} (Unskilled)</option>` + optionsInner;
+                        selectedEntry = { staff: rawStaff, state: 'conflict', suffix: ' (Unskilled)' };
+                    }
+                }
+
+                const wrappedOptions = unmappedFallback
+                    ? `<optgroup label="Unmapped Skill — All Branch Staff">${optionsInner}</optgroup>`
+                    : optionsInner;
+
+                const html = `<option value="" ${!selStr ? 'selected' : ''}>Select specialist</option>${wrappedOptions}`;
+                const hasConflict = Boolean(selStr && selectedEntry && selectedEntry.state !== 'available');
+
+                return {
+                    html,
+                    unmappedFallback,
+                    hasConflict,
+                    needsSelection: !selStr,
+                    availableIds: evaluated.filter(e => e.state === 'available').map(e => String(e.staff.id)),
+                    evaluated
+                };
+            }
+
+            function pickAutoSpecialist(opts) {
+                const {
+                    branch,
+                    serviceId,
+                    serviceName,
+                    startMin,
+                    endMin,
+                    clickedStaffId,
+                    daySnapshot,
+                    excludeApptId,
+                    priorSlices,
+                    allStaffs
+                } = opts;
+
+                const meta = buildSpecialistSelectMeta({
+                    branch,
+                    serviceId,
+                    serviceName,
+                    startMin,
+                    endMin,
+                    selectedStaffId: '',
+                    daySnapshot,
+                    excludeApptId,
+                    priorSlices,
+                    allStaffs
+                });
+
+                if (clickedStaffId) {
+                    const clickedStr = String(clickedStaffId);
+                    if (meta.availableIds.includes(clickedStr)) {
+                        return clickedStr;
+                    }
+                }
+
+                if (meta.availableIds.length > 0) {
+                    return meta.availableIds[0];
+                }
+
+                return '';
+            }
+
+            function storeDaySnapshot(branch, dateStr, data) {
+                if (!dateStr || !data || data.view !== 'day') return;
+                const key = `${normBranch(branch)}|${dateStr}`;
+                snapshotCache.set(key, data);
+            }
+
+            function invalidateSnapshots() {
+                snapshotCache.clear();
+            }
+
+            async function ensureDaySnapshot(branch, dateStr) {
+                if (!dateStr) return null;
+                const b = normBranch(branch);
+                const key = `${b}|${dateStr}`;
+                if (snapshotCache.has(key)) {
+                    return snapshotCache.get(key);
+                }
+                try {
+                    const qs = new URLSearchParams({
+                        view: 'day',
+                        date: dateStr,
+                        branch: b,
+                        all_branch_staff: '1'
+                    });
+                    const res = await fetch(`{{ route('appointments.calendar_data') }}?${qs.toString()}`);
+                    if (!res.ok) return null;
+                    const data = await res.json();
+                    snapshotCache.set(key, data);
+                    return data;
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            function getCachedDaySnapshot(branch, dateStr) {
+                if (!dateStr) return null;
+                return snapshotCache.get(`${normBranch(branch)}|${dateStr}`) || null;
+            }
+
+            window.LaleenSliceEngine = {
+                normBranch,
+                parseHHMM,
+                formatHHMM,
+                formatSpanDuration,
+                staffHasServiceSkill,
+                getEligibleStaff,
+                computeTimeline,
+                evaluateStaffAvailability,
+                buildSpecialistSelectMeta,
+                pickAutoSpecialist,
+                storeDaySnapshot,
+                invalidateSnapshots,
+                ensureDaySnapshot,
+                getCachedDaySnapshot
+            };
+        })();
+    </script>
+
+    @php
+        $drawerStaffsCatalog = collect($activeStaffs ?? $staffs ?? [])->map(fn($s) => [
+            'id' => $s->id,
+            'name' => $s->name,
+            'branch' => $s->branch ?: 'both',
+            'skill_ids' => $s->relationLoaded('services')
+                ? $s->services->pluck('id')->map(fn($id) => (int) $id)->values()
+                : [],
+            'skills' => $s->relationLoaded('services')
+                ? $s->services->pluck('name')->values()
+                : [],
+        ])->values();
+    @endphp
+
     @moduleEdit('bookings')
         @include('appointments.calendar_book')
     @endmoduleEdit
@@ -2399,7 +2983,7 @@
         let nowLineTimer = null;
         const DRAWER_SERVICES_CATALOG = @json($servicesCatalog);
         const DRAWER_PRODUCTS_CATALOG = @json($productsCatalog);
-        const DRAWER_STAFFS_CATALOG = @json($activeStaffs->map(fn($s) => ['id' => $s->id, 'name' => $s->name, 'branch' => $s->branch ?: 'both'])->values());
+        const DRAWER_STAFFS_CATALOG = @json($drawerStaffsCatalog);
 
         // Hide every mutating "Add" entry point up front for view-only users.
         (function applyCalendarPermissionGates() {
@@ -2551,26 +3135,28 @@
                     apts.forEach(a => {
                         const color = data.status_colors[a.status] || '#c9a39a';
                         const diffMinutes = a.start_minutes - dayStartMinutes;
-                        // Same reasoning as .cal-block above: .cal-slots already sits
-                        // below the header, so this must not add HEADER_H again.
                         const top = diffMinutes * PPM;
                         const height = Math.max(a.duration * PPM, a.combo_name ? 58 : 46);
                         const displaySvcLabel = a.is_combo_tbd ? 'Services TBD in Salon' : (a.decide_in_salon ? 'Decide in Salon' : a.service_name);
                         const canDragOrResize = CAN_EDIT_BOOKINGS && a.status !== 'completed' && a.status !== 'cancelled';
+                        const sliceServiceLineId = (a.is_split_booking && a.appointment_service_id) ? Number(a.appointment_service_id) : 'null';
+                        const comboBadgeLabel = a.combo_name
+                            ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
+                            : '';
 
-                        html += `<div class="cal-appt status-${a.status}" data-id="${a.id}" data-staff-id="${staff.id}" data-start="${a.start}" data-duration="${a.duration}"
+                        html += `<div class="cal-appt status-${a.status}" data-id="${a.id}" data-service-line-id="${a.appointment_service_id || ''}" data-is-split="${a.is_split_booking ? '1' : '0'}" data-staff-id="${staff.id}" data-start="${a.start}" data-duration="${a.duration}"
                                 draggable="${canDragOrResize ? 'true' : 'false'}"
-                                ondragstart="onApptDragStart(event, ${a.id}, ${a.start_minutes})" ondragend="onApptDragEnd(event)"
+                                ondragstart="onApptDragStart(event, ${a.id}, ${a.start_minutes}, false, ${sliceServiceLineId})" ondragend="onApptDragEnd(event)"
                                 ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
                                 ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${a.start}')"
                                 onclick="event.stopPropagation(); openDrawer(${a.id})"
                                 style="top:${top}px;height:${height}px;background:${tint(color, .14)};border-left-color:${color};color:${color};">
                                 <span class="cust">${escapeHtml(a.customer_name || 'Walk-in')}</span>
-                                ${a.combo_name ? `<span class="cal-combo-badge">${escapeHtml(a.combo_name)}</span>` : ''}
+                                ${a.combo_name ? `<span class="cal-combo-badge ${a.is_split_booking ? 'is-split-slice' : ''}">${comboBadgeLabel}</span>` : ''}
                                 <span class="svc">${escapeHtml(displaySvcLabel)}</span>
                                 <span class="svc cal-appt-time-label">${to12Hour(a.start)} - ${to12Hour(a.end)}</span>
                                 ${a.has_upsell ? `<span class="upsell-flag" title="Upsell by ${escapeHtml(a.upsell_staff_names)}">⬆ Upsell${a.upsell_staff_names ? ' · ' + escapeHtml(a.upsell_staff_names) : ''}</span>` : ''}
-                                ${canDragOrResize ? `<div class="cal-appt-resize-handle" title="Drag to resize duration" onmousedown="onApptResizeStart(event, ${a.id}, ${staff.id}, '${data.date}', '${a.start}', ${a.duration}, ${PPM})"></div>` : ''}
+                                ${canDragOrResize ? `<div class="cal-appt-resize-handle" title="Drag to resize duration" onmousedown="onApptResizeStart(event, ${a.id}, ${staff.id}, '${data.date}', '${a.start}', ${a.duration}, ${PPM}, ${sliceServiceLineId})"></div>` : ''}
                             </div>`;
                     });
                 }
@@ -2709,14 +3295,18 @@
                         dayAppts.forEach(a => {
                             const color = data.status_colors[a.status] || '#c9a39a';
                             const displaySvcLabel = a.is_combo_tbd ? 'Services TBD in Salon' : (a.decide_in_salon ? 'Decide in Salon' : a.service_name);
-                            html += `<div class="cal-chip status-${a.status}" data-id="${a.id}"
+                            const sliceServiceLineId = (a.is_split_booking && a.appointment_service_id) ? Number(a.appointment_service_id) : 'null';
+                            const comboBadgeLabel = a.combo_name
+                                ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
+                                : '';
+                            html += `<div class="cal-chip status-${a.status}" data-id="${a.id}" data-service-line-id="${a.appointment_service_id || ''}"
                                 draggable="${(!CAN_EDIT_BOOKINGS || a.status === 'completed' || a.status === 'cancelled') ? 'false' : 'true'}"
-                                ondragstart="event.stopPropagation(); onApptDragStart(event, ${a.id}, ${a.start_minutes})"
+                                ondragstart="event.stopPropagation(); onApptDragStart(event, ${a.id}, ${a.start_minutes}, false, ${sliceServiceLineId})"
                                 ondragend="onApptDragEnd(event)"
                                 onclick="event.stopPropagation(); openDrawer(${a.id})"
                                 style="background:${tint(color, .14)};border-left-color:${color};color:${color};">
                                 <strong>${a.time} · ${escapeHtml(a.customer_name || 'Walk-in')}</strong>
-                                ${a.combo_name ? `<div><span class="cal-combo-badge">${escapeHtml(a.combo_name)}</span></div>` : ''}
+                                ${a.combo_name ? `<div><span class="cal-combo-badge ${a.is_split_booking ? 'is-split-slice' : ''}">${comboBadgeLabel}</span></div>` : ''}
                                 ${escapeHtml(displaySvcLabel)}
                                 ${a.has_upsell ? `<span class="upsell-flag">⬆ Upsell</span>` : ''}
                             </div>`;
@@ -2847,10 +3437,17 @@
             if (state.branch) params.append('branch', state.branch);
             if (state.staff_id) params.append('staff_id', state.staff_id);
 
+            if (window.LaleenSliceEngine) {
+                window.LaleenSliceEngine.invalidateSnapshots();
+            }
+
             fetch(`{{ route('appointments.calendar_data') }}?${params.toString()}`)
                 .then(r => r.json())
                 .then(data => {
                     latestData = data;
+                    if (window.LaleenSliceEngine && data.view === 'day' && !state.staff_id) {
+                        window.LaleenSliceEngine.storeDaySnapshot(state.branch, data.date, data);
+                    }
                     renderLegend(data.status_colors);
                     renderUnscheduledQueue(data.pending_time_bookings || data.pendingTimeBookings || []);
 
@@ -3089,9 +3686,27 @@
             document.getElementById('drawerCustomerEditWrap').classList.remove('d-flex');
             document.getElementById('drawerCustomerNameRow').classList.remove('d-none');
             document.getElementById('drawerPhone').textContent = a.phone;
-            document.getElementById('drawerDatetime').textContent = a.appointment_datetime;
+            const activeSpecialistNames = [...new Set((a.services || []).map(s => s.staff_name).filter(Boolean))];
+            const visitSpanSuffix = (!a.is_unscheduled && Number(a.visit_span_minutes) > 0 && window.LaleenSliceEngine)
+                ? ` · ${window.LaleenSliceEngine.formatSpanDuration(a.visit_span_minutes)}`
+                : '';
+            document.getElementById('drawerDatetime').textContent = (a.appointment_datetime || '') + visitSpanSuffix;
             document.getElementById('drawerBranch').textContent = a.branch;
-            document.getElementById('drawerStaff').textContent = a.staff_name;
+            document.getElementById('drawerStaff').textContent = activeSpecialistNames.length > 0
+                ? activeSpecialistNames.join(', ')
+                : a.staff_name;
+
+            if (window.LaleenSliceEngine && a.date) {
+                const dBranch = normalizeCalendarBranch(a.branch_raw) || state.branch;
+                if (!window.LaleenSliceEngine.getCachedDaySnapshot(dBranch, a.date)) {
+                    window.LaleenSliceEngine.ensureDaySnapshot(dBranch, a.date).then(() => {
+                        if (selectedAppointmentId === a.id && lastDrawerData && lastDrawerData.id === a.id) {
+                            renderDrawerServiceList(lastDrawerData, isFinal);
+                            if (activeDrawerComboConfig) renderDrawerComboSubView();
+                        }
+                    });
+                }
+            }
 
             const pill = document.getElementById('drawerStatusPill');
             pill.textContent = STATUS_LABELS[a.status] || a.status;
@@ -3292,6 +3907,8 @@
                 todayIds: [...base.todayIds],
                 pendingIds: [...base.pendingIds],
                 staffMap: { ...base.staffMap },
+                parallelMap: { ...(base.parallelMap || {}) },
+                branchKey: base.branchKey || state.branch,
                 branchStaffs: base.branchStaffs || []
             };
 
@@ -3306,6 +3923,33 @@
             document.getElementById('drawerComboSubFooter').classList.remove('d-none');
 
             renderDrawerComboSubView();
+        }
+
+        function computeDrawerComboTimeline(cfg) {
+            const pool = Array.isArray(cfg.pkg?.pool_services) ? cfg.pkg.pool_services : [];
+            const poolById = new Map(pool.map(s => [Number(s.id), s]));
+            const baseTime = (lastDrawerData && !lastDrawerData.is_unscheduled) ? (lastDrawerData.time || '') : '';
+            const items = cfg.todayIds.map((sid, idx) => {
+                const svc = poolById.get(Number(sid));
+                return {
+                    service_id: Number(sid),
+                    name: svc ? svc.name : 'Service',
+                    duration: svc ? (Number(svc.duration) || 30) : 30,
+                    staff_id: cfg.staffMap[sid] || '',
+                    sort_order: idx,
+                    is_parallel: Boolean(cfg.parallelMap && cfg.parallelMap[sid])
+                };
+            });
+            if (!window.LaleenSliceEngine) {
+                return { slices: items, spanMinutes: items.reduce((s, r) => s + r.duration, 0) };
+            }
+            const tl = window.LaleenSliceEngine.computeTimeline(baseTime, items);
+            tl.slices.forEach(sl => {
+                if (cfg.parallelMap) {
+                    cfg.parallelMap[sl.service_id] = Boolean(sl.is_parallel);
+                }
+            });
+            return tl;
         }
 
         function renderDrawerComboSubView() {
@@ -3334,14 +3978,16 @@
                 capHintEl.classList.add('d-none');
             }
 
-            const todayDuration = pool
-                .filter(s => cfg.todayIds.includes(Number(s.id)))
-                .reduce((sum, s) => sum + (Number(s.duration) || 30), 0);
+            const tl = computeDrawerComboTimeline(cfg);
+            const sliceBySvcId = new Map(tl.slices.map(s => [Number(s.service_id), s]));
+            const todaySpanLabel = window.LaleenSliceEngine
+                ? window.LaleenSliceEngine.formatSpanDuration(tl.spanMinutes)
+                : `${tl.spanMinutes}m`;
 
             const holdSummaryEl = document.getElementById('drawerComboSubHoldSummary');
             if (cfg.todayIds.length > 0) {
                 const pendingPart = cfg.pendingIds.length > 0 ? ` · ${cfg.pendingIds.length} Pending` : '';
-                holdSummaryEl.textContent = `${todayDuration}m salon time (${cfg.todayIds.length} Today${pendingPart})`;
+                holdSummaryEl.textContent = `${todaySpanLabel} salon visit (${cfg.todayIds.length} Today${pendingPart})`;
             } else if (cfg.pendingIds.length > 0) {
                 holdSummaryEl.textContent = `60m hold · ${cfg.pendingIds.length} Pending`;
             } else {
@@ -3350,15 +3996,24 @@
             document.getElementById('drawerComboSubPriceSummary').textContent = `${Number(pkg.price_paid).toFixed(2)} QAR locked package`;
 
             const query = (document.getElementById('drawerComboSubSearch').value || '').trim().toLowerCase();
+            // Render Today rows first in exact sort_order, followed by Pending and Unselected pool rows
+            const orderedPool = [
+                ...cfg.todayIds.map(id => pool.find(s => Number(s.id) === Number(id))).filter(Boolean),
+                ...pool.filter(s => !cfg.todayIds.includes(Number(s.id)))
+            ];
             const filtered = query
-                ? pool.filter(svc => String(svc.name || '').toLowerCase().includes(query))
-                : pool;
+                ? orderedPool.filter(svc => String(svc.name || '').toLowerCase().includes(query))
+                : orderedPool;
 
             const listEl = document.getElementById('drawerComboSubList');
             if (!filtered.length) {
                 listEl.innerHTML = `<div class="text-muted small py-4 text-center">No matching services in this combo.</div>`;
                 return;
             }
+
+            const daySnap = (window.LaleenSliceEngine && lastDrawerData && lastDrawerData.date)
+                ? window.LaleenSliceEngine.getCachedDaySnapshot(cfg.branchKey, lastDrawerData.date)
+                : null;
 
             listEl.innerHTML = filtered.map(svc => {
                 const sid = Number(svc.id);
@@ -3379,21 +4034,60 @@
                 const isUnselected = !isToday && !isPending;
                 const disableNewPick = isUnselected && (capReached || maxForThisVisit === 0);
 
-                const currentStaff = cfg.staffMap[sid] || '';
-                const staffSelectHtml = isToday && cfg.branchStaffs.length ? `
-                    <select class="form-select form-select-sm drawer-combo-staff-sel mt-1"
-                        data-svc="${sid}"
-                        style="max-width: 156px; font-size: 11px; padding: 2px 24px 2px 8px;">
-                        <option value="">Main stylist</option>
-                        ${cfg.branchStaffs.map(st => `<option value="${st.id}" ${String(currentStaff) === String(st.id) ? 'selected' : ''}>${escapeHtml(st.name)}</option>`).join('')}
-                    </select>` : '';
+                let todayControlsHtml = '';
+                let reorderHtml = '';
+                let timeBadgeHtml = `<span class="drawer-combo-svc-dur">${dur} min</span>`;
+
+                if (isToday) {
+                    const sl = sliceBySvcId.get(sid);
+                    const todayIdx = cfg.todayIds.indexOf(sid);
+                    const priorSlices = tl.slices.slice(0, todayIdx);
+                    const meta = window.LaleenSliceEngine
+                        ? window.LaleenSliceEngine.buildSpecialistSelectMeta({
+                            branch: cfg.branchKey,
+                            serviceId: sid,
+                            serviceName: svc.name,
+                            startMin: sl ? sl.startMin : null,
+                            endMin: sl ? sl.endMin : null,
+                            selectedStaffId: cfg.staffMap[sid] || '',
+                            daySnapshot: daySnap,
+                            excludeApptId: selectedAppointmentId,
+                            priorSlices,
+                            allStaffs: DRAWER_STAFFS_CATALOG
+                        })
+                        : { html: '', unmappedFallback: false, hasConflict: false, needsSelection: false };
+
+                    timeBadgeHtml = `<span class="laleen-time-pill">${escapeHtml(sl ? sl.timeBadge : `${dur}m`)}</span>${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill · branch staff</span>' : ''}`;
+                    reorderHtml = cfg.todayIds.length > 1 ? `
+                        <div class="laleen-reorder-group">
+                            <button type="button" class="laleen-reorder-btn drawer-sub-move-btn" data-svc="${sid}" data-dir="-1" ${todayIdx === 0 ? 'disabled' : ''} title="Move earlier">↑</button>
+                            <button type="button" class="laleen-reorder-btn drawer-sub-move-btn" data-svc="${sid}" data-dir="1" ${todayIdx === cfg.todayIds.length - 1 ? 'disabled' : ''} title="Move later">↓</button>
+                        </div>` : '';
+
+                    const parallelHtml = (sl && sl.can_parallel) ? `
+                        <button type="button" class="laleen-parallel-pill drawer-sub-parallel-btn ${sl.is_parallel ? 'is-active' : ''}" data-svc="${sid}">
+                            ${sl.is_parallel ? '⇉ Same time' : 'Same time'}
+                        </button>` : '';
+
+                    todayControlsHtml = `
+                        <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
+                            ${parallelHtml}
+                            <select class="form-select form-select-sm laleen-specialist-pill drawer-combo-staff-sel ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}"
+                                data-svc="${sid}">
+                                ${meta.html}
+                            </select>
+                        </div>`;
+                }
 
                 return `
                     <div class="drawer-combo-svc-row ${disableNewPick ? 'is-dimmed' : ''}">
-                        <div class="me-2">
-                            <div class="drawer-combo-svc-name">${escapeHtml(svc.name)}</div>
-                            <div class="drawer-combo-svc-dur">${dur} min</div>
-                            ${staffSelectHtml}
+                        <div class="d-flex align-items-start gap-2 me-2 min-w-0">
+                            ${reorderHtml}
+                            <div class="min-w-0">
+                                <div class="drawer-combo-svc-name">${escapeHtml(svc.name)}</div>
+                                <div class="laleen-slice-sub mt-1">${timeBadgeHtml}</div>
+                                ${todayControlsHtml}
+                            </div>
                         </div>
                         <div class="drawer-combo-seg">
                             <button type="button"
@@ -3416,6 +4110,7 @@
                     if (cfg.todayIds.includes(sid)) {
                         cfg.todayIds = cfg.todayIds.filter(id => id !== sid);
                         delete cfg.staffMap[sid];
+                        delete cfg.parallelMap[sid];
                     } else {
                         const wasPending = cfg.pendingIds.includes(sid);
                         if (wasPending) {
@@ -3423,6 +4118,24 @@
                         }
                         if (cfg.todayIds.length + cfg.pendingIds.length < maxForThisVisit) {
                             cfg.todayIds.push(sid);
+                            const svc = pool.find(s => Number(s.id) === sid);
+                            if (svc && window.LaleenSliceEngine) {
+                                const previewTl = computeDrawerComboTimeline(cfg);
+                                const sl = previewTl.slices.find(x => Number(x.service_id) === sid);
+                                const autoId = window.LaleenSliceEngine.pickAutoSpecialist({
+                                    branch: cfg.branchKey,
+                                    serviceId: sid,
+                                    serviceName: svc.name,
+                                    startMin: sl ? sl.startMin : null,
+                                    endMin: sl ? sl.endMin : null,
+                                    clickedStaffId: lastDrawerData ? lastDrawerData.staff_id : null,
+                                    daySnapshot: daySnap,
+                                    excludeApptId: selectedAppointmentId,
+                                    priorSlices: previewTl.slices.slice(0, cfg.todayIds.length - 1),
+                                    allStaffs: DRAWER_STAFFS_CATALOG
+                                });
+                                if (autoId) cfg.staffMap[sid] = Number(autoId);
+                            }
                         }
                     }
                     renderDrawerComboSubView();
@@ -3441,11 +4154,38 @@
                         if (wasToday) {
                             cfg.todayIds = cfg.todayIds.filter(id => id !== sid);
                             delete cfg.staffMap[sid];
+                            delete cfg.parallelMap[sid];
                         }
                         if (cfg.todayIds.length + cfg.pendingIds.length < maxForThisVisit) {
                             cfg.pendingIds.push(sid);
                         }
                     }
+                    renderDrawerComboSubView();
+                });
+            });
+
+            listEl.querySelectorAll('.drawer-sub-move-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!activeDrawerComboConfig) return;
+                    clearDrawerConflict();
+                    const sid = Number(btn.dataset.svc);
+                    const dir = Number(btn.dataset.dir);
+                    const idx = cfg.todayIds.indexOf(sid);
+                    const targetIdx = idx + dir;
+                    if (idx < 0 || targetIdx < 0 || targetIdx >= cfg.todayIds.length) return;
+                    const swapped = [...cfg.todayIds];
+                    [swapped[idx], swapped[targetIdx]] = [swapped[targetIdx], swapped[idx]];
+                    cfg.todayIds = swapped;
+                    renderDrawerComboSubView();
+                });
+            });
+
+            listEl.querySelectorAll('.drawer-sub-parallel-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!activeDrawerComboConfig) return;
+                    clearDrawerConflict();
+                    const sid = Number(btn.dataset.svc);
+                    cfg.parallelMap[sid] = !cfg.parallelMap[sid];
                     renderDrawerComboSubView();
                 });
             });
@@ -3460,11 +4200,12 @@
                     } else {
                         delete cfg.staffMap[sid];
                     }
+                    renderDrawerComboSubView();
                 });
             });
         }
 
-        function persistDrawerComboConfig(cfg, btnEl) {
+        function persistDrawerComboConfig(cfg, btnEl, stayOnMain = false) {
             if (!cfg || !selectedAppointmentId) return;
 
             clearDrawerConflict();
@@ -3473,6 +4214,13 @@
             if (btnEl) btnEl.disabled = true;
             if (applyBtn) applyBtn.disabled = true;
             if (skipBtn) skipBtn.disabled = true;
+
+            const sortOrderMap = {};
+            const parallelPayload = {};
+            cfg.todayIds.forEach((sid, idx) => {
+                sortOrderMap[sid] = idx;
+                parallelPayload[sid] = idx > 0 && Boolean(cfg.parallelMap && cfg.parallelMap[sid]);
+            });
 
             fetch(`/appointments/${selectedAppointmentId}/combo-services`, {
                     method: 'PATCH',
@@ -3485,7 +4233,9 @@
                         client_package_id: cfg.clientPackageId,
                         today_service_ids: cfg.todayIds,
                         pending_service_ids: cfg.pendingIds,
-                        service_staff: cfg.staffMap
+                        service_staff: cfg.staffMap,
+                        service_sort_order: sortOrderMap,
+                        service_parallel: parallelPayload
                     })
                 })
                 .then(r => r.json().then(data => ({ ok: r.ok, data })))
@@ -3493,11 +4243,16 @@
                     if (ok && data.success) {
                         clearDrawerConflict();
                         showCalToast(data.message || 'Combo services updated');
-                        closeDrawerComboSubView();
+                        if (!stayOnMain) {
+                            closeDrawerComboSubView();
+                        }
                         loadCalendar();
                         fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
                     } else {
                         showDrawerConflict(extractApiErrorMessage(data, 'Could not update combo services.'), data && data.reason);
+                        if (stayOnMain && selectedAppointmentId) {
+                            fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
+                        }
                     }
                 })
                 .catch(() => showDrawerConflict('Could not update combo services.', 'network'))
@@ -3529,6 +4284,7 @@
                     activeDrawerComboConfig.todayIds = [];
                     activeDrawerComboConfig.pendingIds = [];
                     activeDrawerComboConfig.staffMap = {};
+                    activeDrawerComboConfig.parallelMap = {};
                     persistDrawerComboConfig(activeDrawerComboConfig, skipBtn);
                 });
             }
@@ -3554,22 +4310,34 @@
 
             drawerComboDrafts = {};
             pkgs.forEach(pkg => {
-                const todayIds = [];
                 const pendingIds = [];
                 const staffMap = {};
-                (pkg.pool_services || []).forEach(svc => {
+                const parallelMap = {};
+                const rawTodayRows = [];
+                (pkg.pool_services || []).forEach((svc, pIdx) => {
                     if (svc.state === 'today') {
-                        todayIds.push(Number(svc.id));
+                        rawTodayRows.push({
+                            sid: Number(svc.id),
+                            sort_order: svc.sort_order !== null && svc.sort_order !== undefined ? Number(svc.sort_order) : pIdx
+                        });
                         if (svc.staff_id) staffMap[svc.id] = Number(svc.staff_id);
+                        if (svc.is_parallel) parallelMap[svc.id] = true;
                     } else if (svc.state === 'pending') {
                         pendingIds.push(Number(svc.id));
                     }
                 });
+                const todayIds = Array.isArray(pkg.ordered_today_ids) && pkg.ordered_today_ids.length
+                    ? pkg.ordered_today_ids.map(Number)
+                    : rawTodayRows.sort((x, y) => x.sort_order - y.sort_order).map(r => r.sid);
+
                 drawerComboDrafts[pkg.client_package_id] = {
+                    clientPackageId: Number(pkg.client_package_id),
                     pkg,
                     todayIds,
                     pendingIds,
                     staffMap,
+                    parallelMap,
+                    branchKey: drawerBranchKey,
                     branchStaffs
                 };
             });
@@ -3586,78 +4354,212 @@
             }
 
             const canEditCombo = !isFinal && CAN_EDIT_BOOKINGS;
+            const daySnap = (window.LaleenSliceEngine && lastDrawerData && lastDrawerData.date)
+                ? window.LaleenSliceEngine.getCachedDaySnapshot(drafts[0].branchKey, lastDrawerData.date)
+                : null;
 
             comboWrap.innerHTML = drafts.map(draft => {
                 const pkg = draft.pkg;
                 const qtyIncluded = Number(pkg.quantity_included) || 0;
                 const usedEarlier = Number(pkg.redeemed_elsewhere_count) || 0;
                 const pool = Array.isArray(pkg.pool_services) ? pkg.pool_services : [];
-
-                const pickedChips = [];
-                pool.forEach(svc => {
-                    const sid = Number(svc.id);
-                    if (draft.todayIds.includes(sid)) {
-                        pickedChips.push(`<span class="drawer-combo-picked-item">${escapeHtml(svc.name)} <span class="state-today">(Today)</span></span>`);
-                    } else if (draft.pendingIds.includes(sid)) {
-                        pickedChips.push(`<span class="drawer-combo-picked-item">${escapeHtml(svc.name)} <span class="state-pending">(Pending)</span></span>`);
-                    }
-                });
-                if (usedEarlier > 0) {
-                    pickedChips.push(`<span class="drawer-combo-picked-item" style="color:#9f8c86;">${usedEarlier} redeemed</span>`);
-                }
-
+                const poolById = new Map(pool.map(s => [Number(s.id), s]));
                 const totalSelected = draft.todayIds.length + draft.pendingIds.length + usedEarlier;
-                let secondRowHtml = '';
 
                 if (totalSelected === 0) {
-                    secondRowHtml = `
-                        <div class="drawer-combo-trigger">
-                            <span class="drawer-combo-empty-hint">
-                                0 / ${qtyIncluded} Selected &middot; Decide in Salon${canEditCombo ? ' &mdash; Click to choose services' : ''}
-                            </span>
-                            ${canEditCombo ? `<span class="drawer-combo-chevron" aria-hidden="true">&rsaquo;</span>` : ''}
-                        </div>`;
-                } else {
-                    secondRowHtml = `
-                        <div class="drawer-combo-trigger">
-                            <div class="drawer-combo-picked-list">
-                                ${pickedChips.join('<span class="drawer-combo-picked-sep">&middot;</span>')}
+                    return `
+                        <div class="drawer-combo-card ${canEditCombo ? 'is-clickable' : ''}"
+                            data-pkg-id="${pkg.client_package_id}"
+                            ${canEditCombo ? `data-open-combo-pkg="${pkg.client_package_id}" role="button" tabindex="0"` : ''}>
+                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                <div class="d-flex align-items-center gap-2 min-w-0">
+                                    <span class="drawer-combo-eyebrow">COMBO</span>
+                                    <span class="drawer-combo-title text-truncate">${escapeHtml(pkg.combo_name)}</span>
+                                </div>
+                                <span class="drawer-combo-price">${Number(pkg.price_paid).toFixed(2)} QAR</span>
                             </div>
-                            ${canEditCombo ? `
-                                <span class="drawer-combo-edit-cta">
-                                    Edit services (${totalSelected}/${qtyIncluded}) <span class="drawer-combo-chevron" aria-hidden="true">&rsaquo;</span>
-                                </span>` : ''}
+                            <div class="drawer-combo-trigger">
+                                <span class="drawer-combo-empty-hint">
+                                    0 / ${qtyIncluded} Selected &middot; Decide in Salon${canEditCombo ? ' &mdash; Click to choose services' : ''}
+                                </span>
+                                ${canEditCombo ? `<span class="drawer-combo-chevron" aria-hidden="true">&rsaquo;</span>` : ''}
+                            </div>
                         </div>`;
                 }
 
+                const tl = computeDrawerComboTimeline(draft);
+                const todayRowsHtml = tl.slices.map((sl, idx) => {
+                    const sid = Number(sl.service_id);
+                    const priorSlices = tl.slices.slice(0, idx);
+                    const meta = window.LaleenSliceEngine
+                        ? window.LaleenSliceEngine.buildSpecialistSelectMeta({
+                            branch: draft.branchKey,
+                            serviceId: sid,
+                            serviceName: sl.name,
+                            startMin: sl.startMin,
+                            endMin: sl.endMin,
+                            selectedStaffId: draft.staffMap[sid] || '',
+                            daySnapshot: daySnap,
+                            excludeApptId: selectedAppointmentId,
+                            priorSlices,
+                            allStaffs: DRAWER_STAFFS_CATALOG
+                        })
+                        : { html: '', unmappedFallback: false, hasConflict: false, needsSelection: false };
+
+                    const reorderBtns = (canEditCombo && tl.slices.length > 1) ? `
+                        <div class="laleen-reorder-group">
+                            <button type="button" class="laleen-reorder-btn drawer-inline-combo-move" data-pkg="${pkg.client_package_id}" data-svc="${sid}" data-dir="-1" ${idx === 0 ? 'disabled' : ''} title="Move earlier">↑</button>
+                            <button type="button" class="laleen-reorder-btn drawer-inline-combo-move" data-pkg="${pkg.client_package_id}" data-svc="${sid}" data-dir="1" ${idx === tl.slices.length - 1 ? 'disabled' : ''} title="Move later">↓</button>
+                        </div>` : '';
+
+                    const parallelToggle = (canEditCombo && sl.can_parallel) ? `
+                        <button type="button" class="laleen-parallel-pill drawer-inline-combo-parallel ${sl.is_parallel ? 'is-active' : ''}" data-pkg="${pkg.client_package_id}" data-svc="${sid}">
+                            ${sl.is_parallel ? '⇉ Same time' : 'Same time'}
+                        </button>` : (sl.is_parallel ? `<span class="laleen-time-pill" style="color:#6ee7b7;">⇉ Same time</span>` : '');
+
+                    const specialistControl = canEditCombo ? `
+                        <select class="form-select form-select-sm laleen-specialist-pill drawer-inline-combo-staff ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}"
+                            data-pkg="${pkg.client_package_id}" data-svc="${sid}">
+                            ${meta.html}
+                        </select>` : `<span class="laleen-time-pill">${escapeHtml((poolById.get(sid)?.staff_name) || 'Unassigned')}</span>`;
+
+                    return `
+                        <div class="laleen-slice-row">
+                            <div class="laleen-slice-left">
+                                ${reorderBtns}
+                                <div class="laleen-slice-title-wrap">
+                                    <span class="laleen-slice-title">${escapeHtml(sl.name)}</span>
+                                    <span class="laleen-slice-sub">
+                                        <span class="laleen-time-pill">${escapeHtml(sl.timeBadge)}</span>
+                                        ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="laleen-slice-right">
+                                ${parallelToggle}
+                                ${specialistControl}
+                            </div>
+                        </div>`;
+                }).join('');
+
+                const pendingNames = draft.pendingIds.map(id => poolById.get(Number(id))?.name).filter(Boolean);
+                const pendingSummaryHtml = (pendingNames.length > 0 || usedEarlier > 0) ? `
+                    <div class="laleen-pending-summary">
+                        <span>${pendingNames.length > 0 ? `Pending next visit: ${escapeHtml(pendingNames.join(', '))}` : ''}${usedEarlier > 0 ? `${pendingNames.length > 0 ? ' · ' : ''}${usedEarlier} redeemed earlier` : ''}</span>
+                    </div>` : '';
+
                 return `
-                    <div class="drawer-combo-card ${canEditCombo ? 'is-clickable' : ''}"
-                        data-pkg-id="${pkg.client_package_id}"
-                        ${canEditCombo ? `data-open-combo-pkg="${pkg.client_package_id}" role="button" tabindex="0"` : ''}>
+                    <div class="drawer-combo-card" data-pkg-id="${pkg.client_package_id}">
                         <div class="d-flex align-items-center justify-content-between gap-2">
                             <div class="d-flex align-items-center gap-2 min-w-0">
                                 <span class="drawer-combo-eyebrow">COMBO</span>
                                 <span class="drawer-combo-title text-truncate">${escapeHtml(pkg.combo_name)}</span>
                             </div>
-                            <span class="drawer-combo-price">${Number(pkg.price_paid).toFixed(2)} QAR</span>
+                            <div class="d-flex align-items-center gap-2">
+                                ${canEditCombo ? `
+                                    <button type="button" class="btn btn-link btn-sm p-0 drawer-combo-edit-cta text-decoration-none" data-open-combo-pkg="${pkg.client_package_id}">
+                                        Edit (${totalSelected}/${qtyIncluded}) &rsaquo;
+                                    </button>` : ''}
+                                <span class="drawer-combo-price">${Number(pkg.price_paid).toFixed(2)} QAR</span>
+                            </div>
                         </div>
-                        ${secondRowHtml}
+                        ${todayRowsHtml ? `<div class="laleen-slice-track">${todayRowsHtml}</div>` : ''}
+                        ${pendingSummaryHtml}
                     </div>`;
             }).join('');
 
             if (canEditCombo) {
-                comboWrap.querySelectorAll('[data-open-combo-pkg]').forEach(card => {
-                    card.addEventListener('click', () => {
-                        openDrawerComboSubView(Number(card.dataset.openComboPkg));
+                comboWrap.querySelectorAll('[data-open-combo-pkg]').forEach(el => {
+                    el.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openDrawerComboSubView(Number(el.dataset.openComboPkg));
                     });
-                    card.addEventListener('keydown', e => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            openDrawerComboSubView(Number(card.dataset.openComboPkg));
+                });
+
+                comboWrap.querySelectorAll('.drawer-inline-combo-move').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const draft = drawerComboDrafts[Number(btn.dataset.pkg)];
+                        if (!draft) return;
+                        const sid = Number(btn.dataset.svc);
+                        const idx = draft.todayIds.indexOf(sid);
+                        const nextIdx = idx + Number(btn.dataset.dir);
+                        if (idx < 0 || nextIdx < 0 || nextIdx >= draft.todayIds.length) return;
+                        [draft.todayIds[idx], draft.todayIds[nextIdx]] = [draft.todayIds[nextIdx], draft.todayIds[idx]];
+                        computeDrawerComboTimeline(draft);
+                        persistDrawerComboConfig(draft, btn, true);
+                    });
+                });
+
+                comboWrap.querySelectorAll('.drawer-inline-combo-parallel').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const draft = drawerComboDrafts[Number(btn.dataset.pkg)];
+                        if (!draft) return;
+                        const sid = Number(btn.dataset.svc);
+                        draft.parallelMap[sid] = !draft.parallelMap[sid];
+                        computeDrawerComboTimeline(draft);
+                        persistDrawerComboConfig(draft, btn, true);
+                    });
+                });
+
+                comboWrap.querySelectorAll('.drawer-inline-combo-staff').forEach(sel => {
+                    sel.addEventListener('click', e => e.stopPropagation());
+                    sel.addEventListener('change', (e) => {
+                        e.stopPropagation();
+                        const draft = drawerComboDrafts[Number(sel.dataset.pkg)];
+                        if (!draft) return;
+                        const sid = Number(sel.dataset.svc);
+                        if (sel.value) {
+                            draft.staffMap[sid] = Number(sel.value);
+                        } else {
+                            delete draft.staffMap[sid];
                         }
+                        computeDrawerComboTimeline(draft);
+                        persistDrawerComboConfig(draft, sel, true);
                     });
                 });
             }
+        }
+
+        function persistDrawerSlices(updatedStandaloneList) {
+            if (!selectedAppointmentId || !lastDrawerData) return;
+            clearDrawerConflict();
+
+            const allActive = [...(lastDrawerData.services || [])];
+            const standaloneIds = new Set(updatedStandaloneList.map(s => Number(s.id)));
+            const nonStandalone = allActive.filter(s => !standaloneIds.has(Number(s.id)));
+            const combined = [...updatedStandaloneList, ...nonStandalone];
+
+            const payloadSlices = combined.map((s, idx) => ({
+                id: Number(s.id),
+                staff_id: s.staff_id ? Number(s.staff_id) : null,
+                sort_order: idx,
+                is_parallel: idx > 0 && Boolean(s.is_parallel)
+            }));
+
+            fetch(`/appointments/${selectedAppointmentId}/slices`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ slices: payloadSlices })
+            })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (ok && data.success) {
+                    clearDrawerConflict();
+                    showCalToast(data.message || 'Service schedule updated');
+                    loadCalendar();
+                    fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
+                } else {
+                    showDrawerConflict(extractApiErrorMessage(data, 'Could not update service schedule.'), data && data.reason);
+                    fetch(`/appointments/${selectedAppointmentId}`).then(r => r.json()).then(renderDrawer);
+                }
+            })
+            .catch(() => showDrawerConflict('Could not update service schedule.', 'network'));
         }
 
         function renderDrawerServiceList(a, isFinal) {
@@ -3666,15 +4568,17 @@
             const hasComboCards = Array.isArray(a.combo_packages) && a.combo_packages.length > 0;
             const comboPkgIds = new Set((a.combo_packages || []).map(p => Number(p.client_package_id)));
 
-            // Exclude lines already managed inside a parent Combo card above so
-            // services are never shown twice in the drawer; standalone services
-            // (or redemptions from an older visit's package not rendered as a
-            // combo card) still render cleanly with a subtle Combo Name pill.
             const standaloneServices = (a.services || []).filter(s => {
                 if (!hasComboCards) return true;
                 if (s.client_package_id && comboPkgIds.has(Number(s.client_package_id))) return false;
                 return true;
             });
+
+            const canEditSvc = !isFinal && CAN_EDIT_BOOKINGS;
+            const drawerBranchKey = normalizeCalendarBranch(a.branch_raw) || state.branch;
+            const daySnap = (window.LaleenSliceEngine && a.date)
+                ? window.LaleenSliceEngine.getCachedDaySnapshot(drawerBranchKey, a.date)
+                : null;
 
             const el = document.getElementById('drawerServices');
             if (!hasComboCards && standaloneServices.length === 0 && a.decide_in_salon) {
@@ -3691,32 +4595,92 @@
                     </div>
                 `;
             } else {
-                el.innerHTML = standaloneServices.map(s => {
+                const baseTime = !a.is_unscheduled ? (a.time || '') : '';
+                const tl = window.LaleenSliceEngine
+                    ? window.LaleenSliceEngine.computeTimeline(baseTime, standaloneServices.map((s, idx) => ({
+                        id: s.id,
+                        service_id: s.service_id,
+                        name: s.name,
+                        duration: s.duration,
+                        staff_id: s.staff_id || '',
+                        sort_order: idx,
+                        is_parallel: Boolean(s.is_parallel)
+                    })))
+                    : { slices: [] };
+
+                el.innerHTML = standaloneServices.map((s, idx) => {
+                    const sl = tl.slices[idx] || null;
+                    const priorSlices = tl.slices.slice(0, idx);
                     const hasDiscount = Number(s.discount_amount) > 0;
                     const comboBadge = s.combo_name
                         ? `<span class="cal-combo-badge ms-1">${escapeHtml(s.combo_name)}</span>`
                         : '';
+                    const timeBadgeText = s.time_range_label || (sl ? sl.timeBadge : `${s.duration}min`);
+
+                    const meta = window.LaleenSliceEngine
+                        ? window.LaleenSliceEngine.buildSpecialistSelectMeta({
+                            branch: drawerBranchKey,
+                            serviceId: s.service_id,
+                            serviceName: s.name,
+                            startMin: sl ? sl.startMin : null,
+                            endMin: sl ? sl.endMin : null,
+                            selectedStaffId: s.staff_id || '',
+                            daySnapshot: daySnap,
+                            excludeApptId: a.id,
+                            priorSlices,
+                            allStaffs: DRAWER_STAFFS_CATALOG
+                        })
+                        : { html: '', unmappedFallback: false, hasConflict: false, needsSelection: false };
+
+                    const reorderBtns = (canEditSvc && standaloneServices.length > 1) ? `
+                        <div class="laleen-reorder-group me-1">
+                            <button type="button" class="laleen-reorder-btn drawer-svc-move" data-idx="${idx}" data-dir="-1" ${idx === 0 ? 'disabled' : ''} title="Move earlier">↑</button>
+                            <button type="button" class="laleen-reorder-btn drawer-svc-move" data-idx="${idx}" data-dir="1" ${idx === standaloneServices.length - 1 ? 'disabled' : ''} title="Move later">↓</button>
+                        </div>` : '';
+
+                    const parallelBtn = (canEditSvc && sl && sl.can_parallel) ? `
+                        <button type="button" class="laleen-parallel-pill drawer-svc-parallel ${sl.is_parallel ? 'is-active' : ''}" data-idx="${idx}">
+                            ${sl.is_parallel ? '⇉ Same time' : 'Same time'}
+                        </button>` : (s.is_parallel ? `<span class="laleen-time-pill" style="color:#6ee7b7;">⇉ Same time</span>` : '');
+
+                    const specialistPill = canEditSvc ? `
+                        <select class="form-select form-select-sm laleen-specialist-pill drawer-svc-staff-sel ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-idx="${idx}">
+                            ${meta.html}
+                        </select>` : (s.staff_name ? `<span class="laleen-time-pill">${escapeHtml(s.staff_name)}</span>` : '');
+
                     return `
-                    <div class="svc-item" data-line-id="${s.id}">
-                        <div>
-                            <div class="name">${escapeHtml(s.name)}${comboBadge}</div>
-                            <div class="meta">${s.start_time_label} · ${s.duration}min${s.staff_name ? ' · ' + escapeHtml(s.staff_name) : ''}</div>
-                            ${hasDiscount ? `
-                                <div class="meta" style="color:#8ea88a;" title="${s.discount_reason ? escapeHtml(s.discount_reason) : ''}">
-                                    <i class="bx bx-purchase-tag"></i> −${Number(s.discount_amount).toFixed(2)} QAR off ${Number(s.original_price).toFixed(2)}
-                                    ${s.discount_reason ? ` · ${escapeHtml(s.discount_reason)}` : ''}
+                    <div class="svc-item flex-column align-items-stretch" data-line-id="${s.id}">
+                        <div class="d-flex justify-content-between align-items-center gap-2">
+                            <div class="d-flex align-items-center gap-1 min-w-0">
+                                ${reorderBtns}
+                                <div class="min-w-0">
+                                    <div class="name text-truncate">${escapeHtml(s.name)}${comboBadge}</div>
+                                    <div class="laleen-slice-sub mt-1">
+                                        <span class="laleen-time-pill">${escapeHtml(timeBadgeText)}</span>
+                                        ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
+                                    </div>
                                 </div>
-                            ` : ''}
+                            </div>
+                            <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                                <span class="price">
+                                    ${hasDiscount ? `<span class="strike">${Number(s.original_price).toFixed(2)}</span>` : ''}
+                                    ${Number(s.final_price).toFixed(2)} QAR
+                                </span>
+                                ${!canEditSvc ? '' : `
+                                    <button type="button" class="icon-btn" data-edit="${s.id}"><i class="bx bx-pencil"></i></button>
+                                    <button type="button" class="icon-btn danger" data-delete="${s.id}"><i class="bx bx-trash"></i></button>
+                                `}
+                            </div>
                         </div>
-                        <div class="d-flex align-items-center gap-1">
-                            <span class="price">
-                                ${hasDiscount ? `<span class="strike">${Number(s.original_price).toFixed(2)}</span>` : ''}
-                                ${Number(s.final_price).toFixed(2)} QAR
-                            </span>
-                            ${(isFinal || !CAN_EDIT_BOOKINGS) ? '' : `
-                                <button type="button" class="icon-btn" data-edit="${s.id}"><i class="bx bx-pencil"></i></button>
-                                <button type="button" class="icon-btn danger" data-delete="${s.id}"><i class="bx bx-trash"></i></button>
-                            `}
+                        ${hasDiscount ? `
+                            <div class="meta mt-1" style="color:#8ea88a;" title="${s.discount_reason ? escapeHtml(s.discount_reason) : ''}">
+                                <i class="bx bx-purchase-tag"></i> −${Number(s.discount_amount).toFixed(2)} QAR off ${Number(s.original_price).toFixed(2)}
+                                ${s.discount_reason ? ` · ${escapeHtml(s.discount_reason)}` : ''}
+                            </div>
+                        ` : ''}
+                        <div class="d-flex align-items-center justify-content-end gap-2 mt-1">
+                            ${parallelBtn}
+                            ${specialistPill}
                         </div>
                     </div>
                 `;
@@ -3733,6 +4697,36 @@
             });
             el.querySelectorAll('[data-delete]').forEach(btn => {
                 btn.addEventListener('click', () => deleteServiceLine(Number(btn.dataset.delete)));
+            });
+            el.querySelectorAll('.drawer-svc-move').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = Number(btn.dataset.idx);
+                    const nextIdx = idx + Number(btn.dataset.dir);
+                    if (idx < 0 || nextIdx < 0 || nextIdx >= standaloneServices.length) return;
+                    const cloned = standaloneServices.map(x => ({ ...x }));
+                    [cloned[idx], cloned[nextIdx]] = [cloned[nextIdx], cloned[idx]];
+                    persistDrawerSlices(cloned);
+                });
+            });
+            el.querySelectorAll('.drawer-svc-parallel').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = Number(btn.dataset.idx);
+                    const cloned = standaloneServices.map((x, i) => ({
+                        ...x,
+                        is_parallel: i === idx ? !x.is_parallel : Boolean(x.is_parallel)
+                    }));
+                    persistDrawerSlices(cloned);
+                });
+            });
+            el.querySelectorAll('.drawer-svc-staff-sel').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    const idx = Number(sel.dataset.idx);
+                    const cloned = standaloneServices.map((x, i) => ({
+                        ...x,
+                        staff_id: i === idx ? (sel.value ? Number(sel.value) : null) : x.staff_id
+                    }));
+                    persistDrawerSlices(cloned);
+                });
             });
         }
 
@@ -4270,6 +5264,9 @@
             if (opts.duration) {
                 payload.duration = Number(opts.duration);
             }
+            if (opts.appointmentServiceId) {
+                payload.appointment_service_id = Number(opts.appointmentServiceId);
+            }
 
             fetch(`/appointments/${appointmentId}/reschedule`, {
                     method: 'PATCH',
@@ -4310,17 +5307,19 @@
 
         /* ---------------- DRAG-AND-DROP & DURATION RESIZE ---------------- */
         let draggedAppointmentId = null;
+        let draggedServiceLineId = null;
         let draggedApptMinutes = null;
         let draggedFromUnscheduled = false;
         let draggedSourceSnapshot = null;
         let isResizingAppt = false;
 
-        function onApptDragStart(e, id, startMinutes, isUnscheduled = false) {
+        function onApptDragStart(e, id, startMinutes, isUnscheduled = false, serviceLineId = null) {
             if (isResizingAppt) {
                 e.preventDefault();
                 return;
             }
             draggedAppointmentId = id;
+            draggedServiceLineId = serviceLineId ? Number(serviceLineId) : null;
             draggedApptMinutes = startMinutes;
             draggedFromUnscheduled = !!isUnscheduled;
             const cardEl = e.currentTarget;
@@ -4391,16 +5390,17 @@
             if (!draggedAppointmentId) return;
 
             const id = draggedAppointmentId;
+            const serviceLineId = draggedServiceLineId;
             const fromUnscheduled = draggedFromUnscheduled;
             const snapshot = draggedSourceSnapshot;
             draggedAppointmentId = null;
+            draggedServiceLineId = null;
             draggedFromUnscheduled = false;
             draggedSourceSnapshot = null;
 
             if (fromUnscheduled) {
                 removeCardFromUnscheduledSidebar(id);
             } else if (snapshot && snapshot.el && latestData && latestData.ui_start) {
-                // Optimistically position card onto the target slot so any 422 revert animates smoothly back
                 const targetColSlots = document.querySelector(`.cal-staff-col[data-staff-id="${staffId}"] .cal-slots`);
                 const [sh, sm] = latestData.ui_start.split(':').map(Number);
                 const [th, tm] = time.split(':').map(Number);
@@ -4423,7 +5423,7 @@
                         revertDraggedCardSmoothly(snapshot);
                     }
                 }
-            }, state.branch, { source: 'drag' });
+            }, state.branch, { source: 'drag', appointmentServiceId: serviceLineId });
         }
 
         function onWeekCellDrop(e, staffId, date) {
@@ -4432,10 +5432,12 @@
             if (!draggedAppointmentId) return;
 
             const id = draggedAppointmentId;
+            const serviceLineId = draggedServiceLineId;
             const fromUnscheduled = draggedFromUnscheduled;
             const snapshot = draggedSourceSnapshot;
             const minutes = draggedApptMinutes ?? 600;
             draggedAppointmentId = null;
+            draggedServiceLineId = null;
             draggedFromUnscheduled = false;
             draggedSourceSnapshot = null;
 
@@ -4455,10 +5457,10 @@
                         revertDraggedCardSmoothly(snapshot);
                     }
                 }
-            }, state.branch, { source: 'drag' });
+            }, state.branch, { source: 'drag', appointmentServiceId: serviceLineId });
         }
 
-        function onApptResizeStart(e, appointmentId, staffId, date, startStr, origDuration, ppm) {
+        function onApptResizeStart(e, appointmentId, staffId, date, startStr, origDuration, ppm, serviceLineId = null) {
             if (!CAN_EDIT_BOOKINGS) return;
             e.preventDefault();
             e.stopPropagation();
@@ -4514,7 +5516,7 @@
                         if (timeLabelEl) timeLabelEl.textContent = origTimeText;
                         setTimeout(() => cardEl.classList.remove('is-reverting'), 240);
                     }
-                }, state.branch, { duration: candidateDuration, source: 'drag' });
+                }, state.branch, { duration: candidateDuration, source: 'drag', appointmentServiceId: serviceLineId });
             }
 
             document.addEventListener('mousemove', onMouseMove);

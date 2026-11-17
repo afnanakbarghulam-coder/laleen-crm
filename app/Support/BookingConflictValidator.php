@@ -197,15 +197,181 @@ class BookingConflictValidator
     }
 
     /**
+     * Return concrete active shift windows on $date for $staff, or null when unrestricted beyond branch hours.
+     *
+     * @return array<int, array{start: string, end: string, start_minutes: int, end_minutes: int}>|null
+     */
+    public function staffShiftWindowsForDate(Staff $staff, Carbon $date): ?array
+    {
+        if (!$staff->relationLoaded('shiftPatterns')) {
+            $staff->load('shiftPatterns.blocks');
+        }
+
+        $pattern = $staff->activePatternFor($date);
+        if ($pattern) {
+            if (!$pattern->relationLoaded('blocks')) {
+                $pattern->load('blocks');
+            }
+            $dayBlocks = $pattern->blocks->where('day_of_week', $date->dayOfWeek)->sortBy('start_time')->values();
+            if ($dayBlocks->isEmpty()) {
+                return [];
+            }
+
+            return $dayBlocks->map(function ($b) {
+                $s = substr((string) $b->start_time, 0, 5);
+                $e = substr((string) $b->end_time, 0, 5);
+                [$sh, $sm] = array_map('intval', explode(':', $s));
+                [$eh, $em] = array_map('intval', explode(':', $e));
+
+                return [
+                    'start' => $s,
+                    'end' => $e,
+                    'start_minutes' => $sh * 60 + $sm,
+                    'end_minutes' => $eh * 60 + $em,
+                ];
+            })->all();
+        }
+
+        if (is_array($staff->working_hours) && !empty($staff->working_hours['start']) && !empty($staff->working_hours['end'])) {
+            $s = substr((string) $staff->working_hours['start'], 0, 5);
+            $e = substr((string) $staff->working_hours['end'], 0, 5);
+            [$sh, $sm] = array_map('intval', explode(':', $s));
+            [$eh, $em] = array_map('intval', explode(':', $e));
+            $endMins = $eh * 60 + $em;
+            if ($endMins <= ($sh * 60 + $sm)) {
+                $endMins += 1440;
+            }
+
+            return [[
+                'start' => $s,
+                'end' => $e,
+                'start_minutes' => $sh * 60 + $sm,
+                'end_minutes' => $endMins,
+            ]];
+        }
+
+        return null;
+    }
+
+    /**
+     * Deterministic slice timeline calculator from booking start time, sort_order, duration, and is_parallel.
+     *
+     * @param  array<int, array<string, mixed>>  $items
+     * @return array{slices: array<int, array<string, mixed>>, min_start: ?Carbon, max_end: ?Carbon, span_minutes: int}
+     */
+    public static function computeSliceTimeline(?Carbon $bookingStart, array $items): array
+    {
+        if (empty($items)) {
+            return [
+                'slices' => [],
+                'min_start' => $bookingStart ? $bookingStart->copy() : null,
+                'max_end' => $bookingStart ? $bookingStart->copy() : null,
+                'span_minutes' => 0,
+            ];
+        }
+
+        $indexed = [];
+        foreach (array_values($items) as $origIdx => $item) {
+            $hasExplicitSort = array_key_exists('sort_order', $item)
+                && $item['sort_order'] !== null
+                && $item['sort_order'] !== '';
+            $indexed[] = [
+                '_orig_idx' => $origIdx,
+                '_sort_key' => $hasExplicitSort ? (int) $item['sort_order'] : $origIdx,
+                'item' => $item,
+            ];
+        }
+
+        usort($indexed, static function (array $a, array $b): int {
+            if ($a['_sort_key'] !== $b['_sort_key']) {
+                return $a['_sort_key'] <=> $b['_sort_key'];
+            }
+
+            return $a['_orig_idx'] <=> $b['_orig_idx'];
+        });
+
+        $computed = [];
+        $groupStartOffset = 0;
+        $runningMaxEndOffset = 0;
+
+        foreach ($indexed as $normalizedIdx => $wrapped) {
+            $row = $wrapped['item'];
+            $duration = max(1, (int) ($row['duration'] ?? 30));
+            $isParallel = $normalizedIdx > 0 && !empty($row['is_parallel']);
+
+            if ($normalizedIdx === 0) {
+                $offsetStart = 0;
+                $offsetEnd = $duration;
+                $groupStartOffset = 0;
+                $runningMaxEndOffset = $duration;
+            } elseif ($isParallel) {
+                $offsetStart = $groupStartOffset;
+                $offsetEnd = $offsetStart + $duration;
+                if ($offsetEnd > $runningMaxEndOffset) {
+                    $runningMaxEndOffset = $offsetEnd;
+                }
+            } else {
+                $offsetStart = $runningMaxEndOffset;
+                $offsetEnd = $offsetStart + $duration;
+                $groupStartOffset = $offsetStart;
+                $runningMaxEndOffset = $offsetEnd;
+            }
+
+            $sliceStart = $bookingStart ? $bookingStart->copy()->addMinutes($offsetStart) : null;
+            $sliceEnd = $bookingStart ? $bookingStart->copy()->addMinutes($offsetEnd) : null;
+
+            $row['sort_order'] = $normalizedIdx;
+            $row['is_parallel'] = $isParallel;
+            $row['duration'] = $duration;
+            $row['start'] = $sliceStart;
+            $row['end'] = $sliceEnd;
+            $row['offset_start_minutes'] = $offsetStart;
+            $row['offset_end_minutes'] = $offsetEnd;
+
+            $computed[] = $row;
+        }
+
+        return [
+            'slices' => $computed,
+            'min_start' => $bookingStart ? $bookingStart->copy() : null,
+            'max_end' => $bookingStart ? $bookingStart->copy()->addMinutes($runningMaxEndOffset) : null,
+            'span_minutes' => $runningMaxEndOffset,
+        ];
+    }
+
+    /**
+     * Check if at least 1 active staff member in $branch holds the skill for $serviceId.
+     */
+    public function branchHasMappedSkillForService(string $branch, int $serviceId): bool
+    {
+        $canonicalBranch = Customer::normalizeBranch($branch) ?? 'old_airport';
+        $branchVariants = array_values(array_unique(array_merge(
+            Customer::branchMatchValues($canonicalBranch),
+            ['both']
+        )));
+
+        return Staff::active()
+            ->whereIn('branch', $branchVariants)
+            ->whereHas('services', fn ($q) => $q->where('services.id', $serviceId))
+            ->exists();
+    }
+
+    /**
      * Return concrete service names from $serviceNames that $staffId is NOT trained for.
      * Placeholder names ("Decide in Salon", "Choose in Salon", "Services TBD in Salon") are skipped.
+     * When $branch is provided and a catalog service has 0 skilled active staff mapped in that branch,
+     * the graceful unmapped-skill safety fallback permits active branch staff so reception is never dead-ended.
      */
-    public function unskilledServices(int $staffId, array $serviceNames): array
+    public function unskilledServices(int $staffId, array $serviceNames, ?string $branch = null): array
     {
         $concrete = $this->filterConcreteServiceNames($serviceNames);
         if (empty($concrete)) {
             return [];
         }
+
+        $catalogByLower = Service::whereIn('name', $concrete)
+            ->get()
+            ->keyBy(static fn (Service $s) => strtolower(trim((string) $s->name)));
 
         $qualified = Service::whereIn('name', $concrete)
             ->whereHas('staff', fn ($q) => $q->where('staff.id', $staffId))
@@ -216,7 +382,22 @@ class BookingConflictValidator
 
         return array_values(array_filter(
             $concrete,
-            static fn ($name) => !in_array(strtolower(trim($name)), $qualifiedLower, true)
+            function ($name) use ($qualifiedLower, $branch, $catalogByLower): bool {
+                $lower = strtolower(trim((string) $name));
+                if (in_array($lower, $qualifiedLower, true)) {
+                    return false;
+                }
+
+                if ($branch !== null && $catalogByLower->has($lower)) {
+                    /** @var Service $svcModel */
+                    $svcModel = $catalogByLower->get($lower);
+                    if (!$this->branchHasMappedSkillForService($branch, (int) $svcModel->id)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
         ));
     }
 
@@ -436,7 +617,10 @@ class BookingConflictValidator
         }
 
         // 2. Per-slice staff checks (skipped whenever a slice's staff_id is null/unassigned)
-        foreach ($slices as $slice) {
+        $seenSlicesByStaff = [];
+        $normalizedSlices = array_values($slices);
+
+        foreach ($normalizedSlices as $sliceIdx => $slice) {
             $staffId = !empty($slice['staff_id']) ? (int) $slice['staff_id'] : null;
             if (!$staffId) {
                 continue;
@@ -461,6 +645,40 @@ class BookingConflictValidator
             $sliceStart = $slice['start'] ?? null;
             $duration = max((int) ($slice['duration'] ?? 30), 1);
             $effectiveMoment = $sliceStart ?: ($bookingDate ? $bookingDate->copy()->startOfDay() : now()->startOfDay());
+
+            // 2a-ii. Intra-booking parallel / self-overlap guard on the same specialist
+            if ($sliceIdx > 0 && !empty($slice['is_parallel'])) {
+                $prevStaffId = !empty($normalizedSlices[$sliceIdx - 1]['staff_id'])
+                    ? (int) $normalizedSlices[$sliceIdx - 1]['staff_id']
+                    : null;
+                if ($prevStaffId === $staffId) {
+                    $windowSuffix = $sliceStart !== null
+                        ? ' (' . $sliceStart->format('g:i A') . ' – ' . $sliceStart->copy()->addMinutes($duration)->format('g:i A') . ')'
+                        : '';
+                    return [
+                        'reason' => self::REASON_STAFF_BUSY,
+                        'field' => 'staff_id',
+                        'message' => "{$prefix}: {$staff->name} cannot perform multiple services at the same time{$windowSuffix}.",
+                    ];
+                }
+            }
+
+            if (!$isUnscheduled && $sliceStart !== null) {
+                $sliceEnd = $sliceStart->copy()->addMinutes($duration);
+                foreach ($seenSlicesByStaff[$staffId] ?? [] as $earlierWindow) {
+                    if ($sliceStart->lt($earlierWindow['end']) && $sliceEnd->gt($earlierWindow['start'])) {
+                        return [
+                            'reason' => self::REASON_STAFF_BUSY,
+                            'field' => 'staff_id',
+                            'message' => "{$prefix}: {$staff->name} cannot perform overlapping services at the same time ({$earlierWindow['start']->format('g:i A')} – {$earlierWindow['end']->format('g:i A')}).",
+                        ];
+                    }
+                }
+                $seenSlicesByStaff[$staffId][] = [
+                    'start' => $sliceStart->copy(),
+                    'end' => $sliceEnd->copy(),
+                ];
+            }
 
             // 2b. Staff Off / Shift Hours / Blocked Slot (`staff_off`)
             $offInfo = $this->staffOffInfo($staff, $effectiveMoment, $duration, !$isUnscheduled && $sliceStart !== null);
@@ -495,7 +713,7 @@ class BookingConflictValidator
             // 2c. Staff Service Skill Eligibility (`missing_skill`)
             // Automatically skipped when service_names is empty or placeholder (e.g. Combo "Choose Services in Salon")
             $serviceNames = (array) ($slice['service_names'] ?? []);
-            $unskilled = $this->unskilledServices($staffId, $serviceNames);
+            $unskilled = $this->unskilledServices($staffId, $serviceNames, $canonicalBranch);
             if (!empty($unskilled)) {
                 $missingLabel = implode(', ', $unskilled);
                 $eligibleNames = $this->eligibleBranchStaffNames($canonicalBranch, $unskilled, $staffId);

@@ -126,13 +126,17 @@ class Appointment extends Model
 
     public function appointmentServices()
     {
-        return $this->hasMany(AppointmentService::class)->orderBy('start_time')->orderBy('id');
+        return $this->hasMany(AppointmentService::class)
+            ->orderBy('sort_order')
+            ->orderBy('start_time')
+            ->orderBy('id');
     }
 
     public function activeAppointmentServices()
     {
         return $this->hasMany(AppointmentService::class)
             ->where('is_pending', false)
+            ->orderBy('sort_order')
             ->orderBy('start_time')
             ->orderBy('id');
     }
@@ -181,6 +185,45 @@ class Appointment extends Model
         $dur = (int) ($this->attributes['hold_duration'] ?? 0);
 
         return $dur > 0 ? $dur : 60;
+    }
+
+    /**
+     * Total salon visit span in minutes (`max(slice_end) - min(slice_start)`),
+     * naturally shortening when consecutive slices run in parallel (`is_parallel = true`).
+     */
+    public function getVisitSpanMinutesAttribute(): int
+    {
+        $lines = $this->relationLoaded('appointmentServices')
+            ? $this->appointmentServices->where('is_pending', false)->values()
+            : $this->activeAppointmentServices()->get();
+
+        if ($lines->isEmpty()) {
+            if ($this->is_combo_tbd) {
+                return (int) ($this->hold_duration ?: ($this->combo?->effective_duration ?? 60));
+            }
+
+            return $this->effective_hold_duration;
+        }
+
+        $scheduled = $lines->filter(fn (AppointmentService $s) => $s->start_time !== null);
+        if ($scheduled->isNotEmpty()) {
+            $minStart = $scheduled->min(fn (AppointmentService $s) => $s->start_time->getTimestamp());
+            $maxEnd = $scheduled->max(fn (AppointmentService $s) => ($s->end_time ?? $s->start_time->copy()->addMinutes((int) ($s->duration ?: 30)))->getTimestamp());
+
+            return max(5, (int) round(($maxEnd - $minStart) / 60));
+        }
+
+        $timeline = \App\Support\BookingConflictValidator::computeSliceTimeline(
+            now()->startOfHour(),
+            $lines->map(fn (AppointmentService $s, int $idx) => [
+                'duration' => (int) ($s->duration ?: 30),
+                'staff_id' => $s->staff_id,
+                'sort_order' => (int) ($s->sort_order ?? $idx),
+                'is_parallel' => (bool) $s->is_parallel,
+            ])->all()
+        );
+
+        return max(5, (int) ($timeline['span_minutes'] ?? 30));
     }
 
     public function getIsComboTbdAttribute(): bool
@@ -247,15 +290,21 @@ class Appointment extends Model
 
         if ($activeServices->isNotEmpty()) {
             $first = $activeServices->first();
+            $scheduledSlices = $activeServices
+                ->filter(fn (AppointmentService $s) => $s->start_time !== null)
+                ->sortBy(fn (AppointmentService $s) => sprintf('%015d_%05d_%010d', $s->start_time->getTimestamp(), (int) $s->sort_order, (int) $s->id))
+                ->values();
+            $earliestSlice = $scheduledSlices->first() ?? $first;
+
             $this->service_name = $activeServices->pluck('name')->implode(', ');
             $this->decide_in_salon = false;
             $this->hold_duration = null;
-            if ($first->start_time) {
-                $this->appointment_datetime = $first->start_time;
-                $this->booking_date = $first->start_time->toDateString();
-                $this->start_time = $first->start_time->format('H:i:s');
+            if ($earliestSlice && $earliestSlice->start_time) {
+                $this->appointment_datetime = $earliestSlice->start_time;
+                $this->booking_date = $earliestSlice->start_time->toDateString();
+                $this->start_time = $earliestSlice->start_time->format('H:i:s');
             }
-            $this->staff_id = $first->staff_id ?? $this->staff_id;
+            $this->staff_id = $first->staff_id ?? $earliestSlice?->staff_id ?? $this->staff_id;
         } elseif ($attachedPackages->isNotEmpty() || !empty($this->combo_name)) {
             $this->service_name = 'Choose in Salon';
             $this->decide_in_salon = false;

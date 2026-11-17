@@ -13,11 +13,14 @@ class AppointmentService extends Model
         'combo_name',
         'client_package_id',
         'staff_id',
+        'sort_order',
+        'is_parallel',
         'name',
         'price',
         'original_price',
         'duration',
         'start_time',
+        'slice_end_at',
         'status',
         'is_pending',
         'discount_type',
@@ -27,19 +30,32 @@ class AppointmentService extends Model
     ];
 
     protected $casts = [
+        'sort_order' => 'integer',
+        'is_parallel' => 'boolean',
         'start_time' => 'datetime',
+        'slice_end_at' => 'datetime',
         'is_pending' => 'boolean',
     ];
 
     /**
-     * Keeps discount_amount in lockstep with original_price vs. the actually
-     * charged final_price (raw price override + any flat/percent discount
-     * combined), so every write path - booking, "Add service", "Edit
-     * service" - reports the same number without repeating the math.
+     * Keeps slice_end_at synced with [start_time + duration] for active slices
+     * and keeps discount_amount in lockstep with original_price vs. final_price.
      */
     protected static function booted(): void
     {
         static::saving(function (self $line) {
+            if ($line->is_pending) {
+                $line->is_parallel = false;
+                $line->slice_end_at = null;
+            } elseif ($line->start_time !== null) {
+                $start = $line->start_time instanceof \Illuminate\Support\Carbon
+                    ? $line->start_time->copy()
+                    : \Illuminate\Support\Carbon::parse($line->start_time);
+                $line->slice_end_at = $start->addMinutes(max(1, (int) ($line->duration ?: 30)));
+            } else {
+                $line->slice_end_at = null;
+            }
+
             if ($line->isPackageRedemptionLine()) {
                 $line->discount_amount = 0;
 
@@ -107,7 +123,11 @@ class AppointmentService extends Model
 
     public function getEndTimeAttribute()
     {
-        return $this->start_time ? $this->start_time->copy()->addMinutes($this->duration) : null;
+        if ($this->slice_end_at) {
+            return $this->slice_end_at->copy();
+        }
+
+        return $this->start_time ? $this->start_time->copy()->addMinutes((int) ($this->duration ?: 30)) : null;
     }
 
     public function getFinalPriceAttribute(): float
