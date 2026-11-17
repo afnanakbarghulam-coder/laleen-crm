@@ -1,6 +1,8 @@
 @extends('layouts.app')
 
 @section('content')
+    @include('products._subnav', ['activeTab' => 'catalog'])
+
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4>Retail Products</h4>
         @moduleEdit('products')

@@ -7,10 +7,16 @@ use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        if (in_array($request->query('tab'), ['rd', 'rd-sourcing'], true)) {
+            return app(ProductRdController::class)->index($request);
+        }
+
         $products = Product::orderBy('name')->get();
-        return view('products.index', compact('products'));
+        $activeTab = 'catalog';
+
+        return view('products.index', compact('products', 'activeTab'));
     }
 
     public function store(Request $request)

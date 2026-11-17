@@ -43,6 +43,7 @@ use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LegalTaskController;
 use App\Http\Controllers\OpsActionTrackerController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductRdController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ServiceCategoryController;
 use App\Http\Controllers\ServiceController;
@@ -283,11 +284,24 @@ Route::middleware(['auth'])->group(function () {
     // ---- Products ----
     Route::middleware('module:products')->group(function () {
         Route::get('/products', [ProductController::class, 'index'])->name('products.index');
+        Route::get('/products/rd-sourcing', [ProductRdController::class, 'index'])->name('products.rd.index');
     });
     Route::middleware('module:products,edit')->group(function () {
         Route::post('/products', [ProductController::class, 'store'])->name('products.store');
         Route::put('/products/{product}', [ProductController::class, 'update'])->name('products.update');
         Route::delete('/products/{product}', [ProductController::class, 'destroy'])->name('products.destroy');
+
+        Route::post('/products/rd-sourcing/items', [ProductRdController::class, 'storeItem'])->name('products.rd.items.store');
+        Route::match(['put', 'patch'], '/products/rd-sourcing/items/{item}', [ProductRdController::class, 'updateItem'])->name('products.rd.items.update');
+        Route::delete('/products/rd-sourcing/items/{item}/regional/{market}', [ProductRdController::class, 'destroyRegionalRow'])->name('products.rd.items.regional.destroy');
+        Route::delete('/products/rd-sourcing/items/{item}', [ProductRdController::class, 'destroyItem'])->name('products.rd.items.destroy');
+        Route::patch('/products/rd-sourcing/items/{item}/packaging-status', [ProductRdController::class, 'cyclePackagingStatus'])->name('products.rd.items.packaging-status');
+        Route::match(['put', 'patch'], '/products/rd-sourcing/items/{item}/battlecard', [ProductRdController::class, 'saveBattlecard'])->name('products.rd.items.battlecard');
+        Route::match(['put', 'patch'], '/products/rd-sourcing/samples/{sample}', [ProductRdController::class, 'updateSample'])->name('products.rd.samples.update');
+        Route::delete('/products/rd-sourcing/samples/{sample}', [ProductRdController::class, 'destroySample'])->name('products.rd.samples.destroy');
+        Route::post('/products/rd-sourcing/suppliers', [ProductRdController::class, 'storeSupplier'])->name('products.rd.suppliers.store');
+        Route::match(['put', 'patch'], '/products/rd-sourcing/suppliers/{supplier}', [ProductRdController::class, 'updateSupplier'])->name('products.rd.suppliers.update');
+        Route::delete('/products/rd-sourcing/suppliers/{supplier}', [ProductRdController::class, 'destroySupplier'])->name('products.rd.suppliers.destroy');
     });
 
     // ---- Clients ----
