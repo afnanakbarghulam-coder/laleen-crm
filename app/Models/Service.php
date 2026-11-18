@@ -52,4 +52,19 @@ class Service extends Model
     {
         return $this->hasMany(ClientPackageService::class, 'service_id');
     }
+
+    public function anchoredFreebiePackages()
+    {
+        return $this->hasMany(ServiceFreebiePackage::class, 'anchor_service_id');
+    }
+
+    public function freebiePackages()
+    {
+        return $this->belongsToMany(ServiceFreebiePackage::class, 'service_freebie_package_items', 'service_id', 'package_id');
+    }
+
+    public function freebieCredits()
+    {
+        return $this->hasMany(ClientFreebieCredit::class, 'redeemed_service_id');
+    }
 }

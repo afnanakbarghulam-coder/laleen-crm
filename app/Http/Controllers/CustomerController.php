@@ -490,6 +490,13 @@ class CustomerController extends Controller
         // package never shows stale "pending" services here.
         ClientPackage::expireDue($customer->id);
         $clientPackages = $customer->clientPackages()->with('combo.services', 'services', 'redeemedServices')->get();
+        $freebieCredits = Schema::hasTable('client_freebie_credits')
+            ? $customer->freebieCredits()
+                ->with(['package.eligibleServices', 'anchorAppointment', 'redeemedService', 'redemptionAppointment'])
+                ->orderByDesc('anchor_appointment_id')
+                ->orderBy('slot_number')
+                ->get()
+            : collect();
 
         // ---- Hormozi LTV & Ascension Playbook Intelligence ----
         $catalogServices = Service::with('category')->get();
@@ -650,6 +657,7 @@ class CustomerController extends Controller
             'loyaltyHistory',
             'maintenanceSchedule',
             'clientPackages',
+            'freebieCredits',
             'ascensionOpportunities',
             'uncapturedCategories',
             'uncapturedCategoryNames',
@@ -1309,6 +1317,11 @@ class CustomerController extends Controller
         return response()->json($customer->redeemablePackageServices());
     }
 
+    public function freebieCredits(Customer $customer)
+    {
+        return response()->json($customer->redeemableFreebieCreditsPayload());
+    }
+
     /**
      * Quick phone lookup used by the booking modal to auto-fill returning customers.
      */
@@ -1352,6 +1365,7 @@ class CustomerController extends Controller
             'visit_count' => $visitCount,
             'last_visit' => $lastVisit ? \Illuminate\Support\Carbon::parse($lastVisit)->format('d M Y') : null,
             'profile_url' => route('customers.show', $customer->id),
+            'available_freebie_credits' => $customer->redeemableFreebieCreditsPayload(),
         ]);
     }
 }

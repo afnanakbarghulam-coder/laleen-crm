@@ -913,6 +913,68 @@
     .fb-conflict-banner-close:hover {
         color: #f6e7dc;
     }
+
+    .fb-freebie-pill {
+        border: 1px solid rgba(229, 184, 168, 0.36);
+        border-radius: 999px;
+        padding: 7px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        background: transparent;
+        color: #e5b8a8;
+    }
+
+    .fb-freebie-pill:hover {
+        background: rgba(229, 184, 168, 0.08);
+    }
+
+    .fb-freebie-alert-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 12px;
+        margin: 12px 0 6px;
+        border-left: 2px solid #6ee7b7;
+        background: rgba(110, 231, 183, 0.06);
+        border-radius: 0 8px 8px 0;
+        font-size: 12.5px;
+        color: #f8efe6;
+    }
+
+    .fb-freebie-alert-cta {
+        border: 1px solid rgba(110, 231, 183, 0.45);
+        background: rgba(110, 231, 183, 0.14);
+        color: #6ee7b7;
+        border-radius: 999px;
+        padding: 3px 11px;
+        font-size: 11.5px;
+        font-weight: 700;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+
+    .fb-freebie-alert-cta:hover {
+        background: rgba(110, 231, 183, 0.24);
+        color: #f8efe6;
+    }
+
+    .fb-freebie-slot-row {
+        padding: 8px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .fb-freebie-slot-select {
+        background: #1b1514;
+        border: 1px solid rgba(229, 184, 168, 0.22);
+        color: #f8efe6;
+        font-size: 12px;
+        border-radius: 7px;
+        padding: 4px 8px;
+    }
 </style>
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="calendarBookModal" aria-labelledby="calendarBookModalLabel">
@@ -983,19 +1045,29 @@
                         </label>
                     </div>
 
+                    <!-- LIVE CLIENT FREEBIE ALERT BANNER -->
+                    <div id="fbFreebieAlertBanner" class="fb-freebie-alert-banner d-none"></div>
+
                     <div class="fb-section-title">Services</div>
                     <div id="fbSvcList"></div>
                     <div id="fbComboList"></div>
+                    <div id="fbFreebieList"></div>
                     <div id="fbRedeemList"></div>
+                    <div id="fbFreebieRedeemList"></div>
                     <input type="hidden" name="decide_in_salon" id="bookDecideInSalonHidden" value="0">
                     <div id="fbComboHiddenInputs"></div>
+                    <div id="fbFreebieHiddenInputs"></div>
                     <div id="fbRedeemHiddenInputs"></div>
+                    <div id="fbFreebieRedeemHiddenInputs"></div>
                     <div class="d-flex align-items-center gap-2 flex-wrap">
                         <button type="button" class="fb-add-pill" id="fbOpenServicePanel">
                             <i class="bx bx-plus"></i> Add service
                         </button>
                         <button type="button" class="fb-combo-pill" id="fbOpenComboPanel">
                             <i class="bx bx-plus"></i> Add Combo
+                        </button>
+                        <button type="button" class="fb-freebie-pill" id="fbOpenFreebiePanel">
+                            <i class="bx bx-gift"></i> Service + Freebies
                         </button>
                         <button type="button" class="fb-decide-pill" id="fbDecideSalonPill">
                             Decide in Salon
@@ -1148,6 +1220,21 @@
 
                     <div id="fbRedeemPickerList"></div>
                 </div>
+
+                <!-- PANEL: SELECT SERVICE + FREEBIES PACKAGE -->
+                <div id="fbPanelFreebie" class="fb-content d-none">
+                    <div class="fb-panel-header">
+                        <button type="button" class="fb-back-btn" onclick="fbShowPanel('main')"><i class="bx bx-arrow-back"></i></button>
+                        <h5>Service + Freebies</h5>
+                    </div>
+
+                    <div class="fb-search-wrap" id="fbFreebieCatalogSearchWrap">
+                        <i class="bx bx-search"></i>
+                        <input type="text" id="fbFreebieCatalogSearch" class="form-control" placeholder="Search Service + Freebies packages…">
+                    </div>
+
+                    <div id="fbFreebiePickerList"></div>
+                </div>
             </div>
         </div>
 
@@ -1204,6 +1291,7 @@
     (function() {
         const ALL_SERVICES = @json($servicesCatalog ?? []);
         const ALL_COMBOS = @json($combosCatalog ?? []);
+        const ALL_FREEBIE_PACKAGES = @json($freebiePackagesCatalog ?? []);
         const ALL_STAFFS = @json($bookableStaffCatalog);
         const SERVER_BOOKING_PREFILL = @json($bookingPrefill ?? null);
         const FB_BRANCH_LABELS = { old_airport: 'Old Airport', wakrah: 'Al Wakrah' };
@@ -1287,6 +1375,8 @@
         let selectedCombos = [];
         let fbActiveComboDraft = null;
         let comboRowSeq = 0;
+        let selectedFreebiePackages = []; // [{ rowId, pkg, anchorStaffId, anchorParallel, slots: [{ slotNumber, serviceId: ''|number, staffId, isParallel }] }]
+        let freebieRowSeq = 0;
         let selectedClient = null; // { id, name, phone } or null
         let pendingStaffId = null;
         let staffRequestSeq = 0;
@@ -1297,6 +1387,9 @@
         let redeemParallelMap = {}; // { "pkgId:svcId": boolean }
         let redeemStaffOptionsMap = {}; // { "pkgId:svcId": { sig, options } }
         let redeemStaffRequestSeq = 0;
+        let clientFreebieCredits = []; // available non-expired freebie credits for selected client
+        let selectedFreebieRedemptions = []; // [{ credit_id, package_name, slot_number, days_left, eligible_services, service_id, staff_id, is_parallel }]
+        let pendingAutoRedeemFreebieCreditId = null;
 
         function fbCurrentBaseTimeHHMM() {
             const isUnscheduled = document.getElementById('bookUnscheduledToggle').checked;
@@ -1314,6 +1407,8 @@
         function fbHasAnyActiveTodaySlices() {
             if (selectedServices.length > 0) return true;
             if (selectedRedemptions.length > 0) return true;
+            if (selectedFreebiePackages.length > 0) return true;
+            if (selectedFreebieRedemptions.length > 0) return true;
             return selectedCombos.some(r => Array.isArray(r.immediateIds) && r.immediateIds.length > 0);
         }
 
@@ -1331,6 +1426,53 @@
                     duration: Number(s.duration) || 30,
                     staff_id: s.staff_id || '',
                     is_parallel: Boolean(s.is_parallel)
+                });
+            });
+
+            selectedFreebiePackages.forEach((fpRow, fpIdx) => {
+                const pkg = fpRow.pkg;
+                rawItems.push({
+                    uid: `freebie_anchor:${fpRow.rowId}`,
+                    kind: 'freebie_anchor',
+                    rowId: fpRow.rowId,
+                    fpIdx,
+                    service_id: Number(pkg.anchor_service_id),
+                    name: pkg.anchor_service_name,
+                    duration: Number(pkg.anchor_duration) || 60,
+                    staff_id: fpRow.anchorStaffId || '',
+                    is_parallel: Boolean(fpRow.anchorParallel)
+                });
+                const poolMap = new Map((pkg.eligible_services || []).map(es => [Number(es.id), es]));
+                (fpRow.slots || []).forEach(sl => {
+                    if (!sl.serviceId) return;
+                    const es = poolMap.get(Number(sl.serviceId));
+                    if (!es) return;
+                    rawItems.push({
+                        uid: `freebie_slot:${fpRow.rowId}:${sl.slotNumber}`,
+                        kind: 'freebie_slot',
+                        rowId: fpRow.rowId,
+                        slotNumber: sl.slotNumber,
+                        service_id: Number(es.id),
+                        name: es.name,
+                        duration: Number(es.duration) || 30,
+                        staff_id: sl.staffId || '',
+                        is_parallel: Boolean(sl.isParallel)
+                    });
+                });
+            });
+
+            selectedFreebieRedemptions.forEach((fr, frIdx) => {
+                const chosen = (fr.eligible_services || []).find(es => Number(es.id) === Number(fr.service_id)) || (fr.eligible_services || [])[0];
+                rawItems.push({
+                    uid: `freebie_redeem:${fr.credit_id}`,
+                    kind: 'freebie_redeem',
+                    frIdx,
+                    creditId: fr.credit_id,
+                    service_id: chosen ? Number(chosen.id) : null,
+                    name: chosen ? chosen.name : 'Freebie Service',
+                    duration: chosen ? (Number(chosen.duration) || 30) : 30,
+                    staff_id: fr.staff_id || '',
+                    is_parallel: Boolean(fr.is_parallel)
                 });
             });
 
@@ -1385,6 +1527,16 @@
                         targetRow.serviceParallel = targetRow.serviceParallel || {};
                         targetRow.serviceParallel[sl.sid] = Boolean(sl.is_parallel);
                     }
+                } else if (sl.kind === 'freebie_anchor') {
+                    const fpRow = selectedFreebiePackages.find(r => Number(r.rowId) === Number(sl.rowId));
+                    if (fpRow) fpRow.anchorParallel = Boolean(sl.is_parallel);
+                } else if (sl.kind === 'freebie_slot') {
+                    const fpRow = selectedFreebiePackages.find(r => Number(r.rowId) === Number(sl.rowId));
+                    const slotObj = fpRow ? (fpRow.slots || []).find(s => Number(s.slotNumber) === Number(sl.slotNumber)) : null;
+                    if (slotObj) slotObj.isParallel = Boolean(sl.is_parallel);
+                } else if (sl.kind === 'freebie_redeem') {
+                    const frObj = selectedFreebieRedemptions.find(r => Number(r.credit_id) === Number(sl.creditId));
+                    if (frObj) frObj.is_parallel = Boolean(sl.is_parallel);
                 }
             });
 
@@ -1463,6 +1615,70 @@
                             changed = true;
                         }
                     }
+                } else if (sl.kind === 'freebie_anchor') {
+                    const fpRow = selectedFreebiePackages.find(r => Number(r.rowId) === Number(sl.rowId));
+                    if (fpRow && !fpRow.anchorStaffId) {
+                        const picked = window.LaleenSliceEngine.pickAutoSpecialist({
+                            branch,
+                            serviceId: sl.service_id,
+                            serviceName: sl.name,
+                            startMin: sl.startMin,
+                            endMin: sl.endMin,
+                            clickedStaffId: pendingStaffId,
+                            daySnapshot: daySnap,
+                            excludeApptId: null,
+                            priorSlices: prior,
+                            allStaffs: ALL_STAFFS
+                        });
+                        if (picked) {
+                            fpRow.anchorStaffId = String(picked);
+                            sl.staff_id = String(picked);
+                            changed = true;
+                        }
+                    }
+                } else if (sl.kind === 'freebie_slot') {
+                    const fpRow = selectedFreebiePackages.find(r => Number(r.rowId) === Number(sl.rowId));
+                    const slotObj = fpRow ? (fpRow.slots || []).find(s => Number(s.slotNumber) === Number(sl.slotNumber)) : null;
+                    if (slotObj && !slotObj.staffId) {
+                        const picked = window.LaleenSliceEngine.pickAutoSpecialist({
+                            branch,
+                            serviceId: sl.service_id,
+                            serviceName: sl.name,
+                            startMin: sl.startMin,
+                            endMin: sl.endMin,
+                            clickedStaffId: null,
+                            daySnapshot: daySnap,
+                            excludeApptId: null,
+                            priorSlices: prior,
+                            allStaffs: ALL_STAFFS
+                        });
+                        if (picked) {
+                            slotObj.staffId = String(picked);
+                            sl.staff_id = String(picked);
+                            changed = true;
+                        }
+                    }
+                } else if (sl.kind === 'freebie_redeem') {
+                    const frObj = selectedFreebieRedemptions.find(r => Number(r.credit_id) === Number(sl.creditId));
+                    if (frObj && !frObj.staff_id && sl.service_id) {
+                        const picked = window.LaleenSliceEngine.pickAutoSpecialist({
+                            branch,
+                            serviceId: sl.service_id,
+                            serviceName: sl.name,
+                            startMin: sl.startMin,
+                            endMin: sl.endMin,
+                            clickedStaffId: pendingStaffId,
+                            daySnapshot: daySnap,
+                            excludeApptId: null,
+                            priorSlices: prior,
+                            allStaffs: ALL_STAFFS
+                        });
+                        if (picked) {
+                            frObj.staff_id = String(picked);
+                            sl.staff_id = String(picked);
+                            changed = true;
+                        }
+                    }
                 }
             });
 
@@ -1487,7 +1703,10 @@
         function fbRenderAllListsWithoutRecursion() {
             fbRenderServices(true);
             fbRenderCombos(true);
+            fbRenderFreebiePackages(true);
             fbRenderRedemptions(true);
+            fbRenderFreebieRedemptions(true);
+            fbRenderFreebieAlertBanner();
             fbUpdateTeamMemberVisibility();
             fbSyncHiddenAndTotals();
         }
@@ -1500,12 +1719,16 @@
             document.getElementById('bookDecideInSalonHidden').value = '0';
             selectedCombos = [];
             fbActiveComboDraft = null;
+            selectedFreebiePackages = [];
             selectedClient = null;
             clientPendingPackages = [];
             selectedRedemptions = [];
             redeemStaffMap = {};
             redeemParallelMap = {};
             redeemStaffOptionsMap = {};
+            clientFreebieCredits = [];
+            selectedFreebieRedemptions = [];
+            pendingAutoRedeemFreebieCreditId = prefill.redeemFreebieCreditId ? Number(prefill.redeemFreebieCreditId) : null;
             pendingStaffId = prefill.staffId || null;
             fbClearBookingError();
 
@@ -1619,6 +1842,7 @@
                 combo: 'fbPanelCombo',
                 comboconfig: 'fbPanelComboConfig',
                 redeem: 'fbPanelRedeem',
+                freebie: 'fbPanelFreebie',
             };
             Object.entries(panelMap).forEach(([key, id]) => {
                 const el = document.getElementById(id);
@@ -1641,6 +1865,11 @@
                 const comboSearch = document.getElementById('fbComboCatalogSearch');
                 if (comboSearch) comboSearch.value = '';
                 fbRenderComboPicker('');
+            }
+            if (name === 'freebie') {
+                const fSearch = document.getElementById('fbFreebieCatalogSearch');
+                if (fSearch) fSearch.value = '';
+                fbRenderFreebiePicker('');
             }
             if (name === 'redeem') {
                 fbRenderRedeemPicker();
@@ -1976,6 +2205,7 @@
 
             selectedClient = { name, phone: fullPhone };
             selectedRedemptions = [];
+            selectedFreebieRedemptions = [];
             redeemStaffMap = {};
             redeemStaffOptionsMap = {};
             fbLoadClientPendingPackages();
@@ -1987,6 +2217,7 @@
         function fbSelectExistingClient(client) {
             selectedClient = { id: client.id, name: client.name, phone: client.phone };
             selectedRedemptions = [];
+            selectedFreebieRedemptions = [];
             redeemStaffMap = {};
             redeemStaffOptionsMap = {};
             fbUpdateRail();
@@ -2020,7 +2251,9 @@
 
         function fbLoadClientPendingPackages() {
             clientPendingPackages = [];
+            clientFreebieCredits = [];
             fbUpdateRedeemButton();
+            fbRenderFreebieAlertBanner();
 
             if (!selectedClient || !selectedClient.id) return;
 
@@ -2029,6 +2262,22 @@
                 .then(data => {
                     clientPendingPackages = Array.isArray(data) ? data : [];
                     fbUpdateRedeemButton();
+                })
+                .catch(() => {});
+
+            fetch(`/customers/${selectedClient.id}/freebie-credits`)
+                .then(res => res.json())
+                .then(data => {
+                    clientFreebieCredits = Array.isArray(data) ? data : [];
+                    if (pendingAutoRedeemFreebieCreditId) {
+                        const targetCredit = clientFreebieCredits.find(c => Number(c.credit_id) === Number(pendingAutoRedeemFreebieCreditId));
+                        pendingAutoRedeemFreebieCreditId = null;
+                        if (targetCredit) {
+                            fbActivateFreebieRedemption(targetCredit.credit_id);
+                            return;
+                        }
+                    }
+                    fbRenderFreebieAlertBanner();
                 })
                 .catch(() => {});
         }
@@ -2524,7 +2773,11 @@
         }
 
         function fbSyncHiddenAndTotals() {
-            const hasRealItems = selectedServices.length > 0 || selectedCombos.length > 0 || selectedRedemptions.length > 0;
+            const hasRealItems = selectedServices.length > 0
+                || selectedCombos.length > 0
+                || selectedRedemptions.length > 0
+                || selectedFreebiePackages.length > 0
+                || selectedFreebieRedemptions.length > 0;
             if (hasRealItems) {
                 decideInSalon = false;
             }
@@ -2592,6 +2845,51 @@
             `;
             }).join('');
 
+            const freebieHidden = document.getElementById('fbFreebieHiddenInputs');
+            if (freebieHidden) {
+                freebieHidden.innerHTML = selectedFreebiePackages.map((fpRow, fpIdx) => {
+                    const anchorSl = byUid.get(`freebie_anchor:${fpRow.rowId}`);
+                    const anchorSort = anchorSl ? anchorSl.sort_order : 0;
+                    const anchorPar = anchorSl && anchorSl.is_parallel ? '1' : '0';
+                    const slotInputs = (fpRow.slots || []).map((slotObj, sIdx) => {
+                        const mode = slotObj.serviceId ? 'same_day' : 'save_for_later';
+                        const sl = slotObj.serviceId ? byUid.get(`freebie_slot:${fpRow.rowId}:${slotObj.slotNumber}`) : null;
+                        const sortOrd = sl ? sl.sort_order : (sIdx + 1);
+                        const isPar = sl && sl.is_parallel ? '1' : '0';
+                        return `
+                            <input type="hidden" name="freebie_packages[${fpIdx}][slots][${sIdx}][mode]" value="${mode}">
+                            <input type="hidden" name="freebie_packages[${fpIdx}][slots][${sIdx}][service_id]" value="${slotObj.serviceId || ''}">
+                            <input type="hidden" name="freebie_packages[${fpIdx}][slots][${sIdx}][staff_id]" value="${slotObj.staffId || ''}">
+                            <input type="hidden" name="freebie_packages[${fpIdx}][slots][${sIdx}][sort_order]" value="${sortOrd}">
+                            <input type="hidden" name="freebie_packages[${fpIdx}][slots][${sIdx}][is_parallel]" value="${isPar}">
+                        `;
+                    }).join('');
+                    return `
+                        <input type="hidden" name="freebie_packages[${fpIdx}][package_id]" value="${fpRow.pkg.id}">
+                        <input type="hidden" name="freebie_packages[${fpIdx}][anchor_staff_id]" value="${fpRow.anchorStaffId || ''}">
+                        <input type="hidden" name="freebie_packages[${fpIdx}][anchor_sort_order]" value="${anchorSort}">
+                        <input type="hidden" name="freebie_packages[${fpIdx}][anchor_is_parallel]" value="${anchorPar}">
+                        ${slotInputs}
+                    `;
+                }).join('');
+            }
+
+            const freebieRedeemHidden = document.getElementById('fbFreebieRedeemHiddenInputs');
+            if (freebieRedeemHidden) {
+                freebieRedeemHidden.innerHTML = selectedFreebieRedemptions.map((fr, frIdx) => {
+                    const sl = byUid.get(`freebie_redeem:${fr.credit_id}`);
+                    const sortOrd = sl ? sl.sort_order : frIdx;
+                    const isPar = sl && sl.is_parallel ? '1' : '0';
+                    return `
+                        <input type="hidden" name="redeem_freebies[${frIdx}][credit_id]" value="${fr.credit_id}">
+                        <input type="hidden" name="redeem_freebies[${frIdx}][service_id]" value="${fr.service_id || ''}">
+                        <input type="hidden" name="redeem_freebies[${frIdx}][staff_id]" value="${fr.staff_id || ''}">
+                        <input type="hidden" name="redeem_freebies[${frIdx}][sort_order]" value="${sortOrd}">
+                        <input type="hidden" name="redeem_freebies[${frIdx}][is_parallel]" value="${isPar}">
+                    `;
+                }).join('');
+            }
+
             // Sync hidden Team Member select to first Today slice's specialist when per-service pickers are active
             if (timeline.slices.length > 0) {
                 const firstStaff = timeline.slices[0].staff_id || '';
@@ -2606,7 +2904,8 @@
             }
 
             const comboPackagesPrice = selectedCombos.reduce((sum, r) => sum + (Number(r.combo.price) || 0), 0);
-            const totalPrice = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0) + comboPackagesPrice;
+            const freebiePackagesPrice = selectedFreebiePackages.reduce((sum, fp) => sum + (Number(fp.pkg.price) || 0), 0);
+            const totalPrice = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0) + comboPackagesPrice + freebiePackagesPrice;
             const totalDiscount = selectedServices.reduce((sum, s) => sum + fbServiceDiscount(s), 0);
 
             let totalMin = timeline.spanMinutes || 0;
@@ -3264,6 +3563,388 @@
             fbRenderComboPicker(this.value);
         });
 
+        /* ---------------- SERVICE + FREEBIES PACKAGES & REDEMPTIONS ---------------- */
+        function fbRenderFreebiePicker(query = '') {
+            const box = document.getElementById('fbFreebiePickerList');
+            const searchWrap = document.getElementById('fbFreebieCatalogSearchWrap');
+            if (!box) return;
+            if (searchWrap) {
+                searchWrap.classList.toggle('d-none', ALL_FREEBIE_PACKAGES.length === 0);
+            }
+            if (!ALL_FREEBIE_PACKAGES.length) {
+                box.innerHTML = '<div class="text-muted small px-2">No active Service + Freebies packages in the catalog.</div>';
+                return;
+            }
+            const q = String(query || '').trim().toLowerCase();
+            const filtered = ALL_FREEBIE_PACKAGES.filter(p => {
+                if (!q) return true;
+                if (String(p.name || '').toLowerCase().includes(q)) return true;
+                if (String(p.anchor_service_name || '').toLowerCase().includes(q)) return true;
+                return (p.eligible_services || []).some(s => String(s.name || '').toLowerCase().includes(q));
+            });
+            if (!filtered.length) {
+                box.innerHTML = '<div class="text-muted small px-2 py-2">No Service + Freebies packages match your search.</div>';
+                return;
+            }
+            box.innerHTML = filtered.map(p => {
+                const origIdx = ALL_FREEBIE_PACKAGES.indexOf(p);
+                const poolCnt = (p.eligible_services || []).length;
+                return `
+                <div class="fb-service-row" data-freebie-idx="${origIdx}">
+                    <div class="svc-info">
+                        <div class="name">${fbEscHtml(p.name)}</div>
+                        <div class="meta">${fbEscHtml(p.anchor_service_name)} (${p.anchor_duration} min) &middot; Choose ${p.free_choices_count} Free from ${poolCnt} &middot; Valid ${p.validity_days}d</div>
+                    </div>
+                    <div class="svc-price">${Number(p.price).toFixed(2)} QAR &rsaquo;</div>
+                </div>`;
+            }).join('');
+
+            box.querySelectorAll('.fb-service-row[data-freebie-idx]').forEach(row => {
+                row.addEventListener('click', () => {
+                    const pkg = ALL_FREEBIE_PACKAGES[Number(row.dataset.freebieIdx)];
+                    if (!pkg) return;
+                    const count = Number(pkg.free_choices_count) || 2;
+                    const slots = [];
+                    for (let i = 1; i <= count; i++) {
+                        slots.push({ slotNumber: i, serviceId: '', staffId: '', isParallel: false });
+                    }
+                    decideInSalon = false;
+                    selectedFreebiePackages.push({
+                        rowId: ++freebieRowSeq,
+                        pkg,
+                        anchorStaffId: '',
+                        anchorParallel: false,
+                        slots
+                    });
+                    fbAutoAssignUnpickedTodaySlices();
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                    fbShowPanel('main');
+                });
+            });
+        }
+
+        document.getElementById('fbOpenFreebiePanel')?.addEventListener('click', () => fbShowPanel('freebie'));
+        document.getElementById('fbFreebieCatalogSearch')?.addEventListener('input', function() {
+            fbRenderFreebiePicker(this.value);
+        });
+
+        function fbRenderFreebiePackages(skipSync = false) {
+            const container = document.getElementById('fbFreebieList');
+            if (!container) return;
+            const branch = fbNormalizeBranch(document.getElementById('bookBranch').value) || fbResolveActiveCalendarBranch();
+            const daySnap = fbCurrentDaySnapshot();
+            const { timeline, byUid } = fbComputeUnifiedTimeline();
+
+            container.innerHTML = selectedFreebiePackages.map(fpRow => {
+                const pkg = fpRow.pkg;
+                const anchorSl = byUid.get(`freebie_anchor:${fpRow.rowId}`);
+                const anchorPos = anchorSl ? timeline.slices.indexOf(anchorSl) : 0;
+                const anchorPrior = anchorPos > 0 ? timeline.slices.slice(0, anchorPos) : [];
+                const anchorMeta = window.LaleenSliceEngine
+                    ? window.LaleenSliceEngine.buildSpecialistSelectMeta({
+                        branch,
+                        serviceId: Number(pkg.anchor_service_id),
+                        serviceName: pkg.anchor_service_name,
+                        startMin: anchorSl ? anchorSl.startMin : null,
+                        endMin: anchorSl ? anchorSl.endMin : null,
+                        selectedStaffId: fpRow.anchorStaffId || '',
+                        daySnapshot: daySnap,
+                        excludeApptId: null,
+                        priorSlices: anchorPrior,
+                        allStaffs: ALL_STAFFS
+                    })
+                    : { html: '', unmappedFallback: false, hasConflict: false, needsSelection: false };
+
+                const slotsHtml = (fpRow.slots || []).map(slotObj => {
+                    const selectedSvcId = slotObj.serviceId ? Number(slotObj.serviceId) : 0;
+                    const optionsHtml = [
+                        `<option value="" ${!selectedSvcId ? 'selected' : ''}>Save for Later (Pending — Valid ${pkg.validity_days} Days)</option>`,
+                        ...(pkg.eligible_services || []).map(es => `<option value="${es.id}" ${Number(es.id) === selectedSvcId ? 'selected' : ''}>${fbEscHtml(es.name)} (${es.duration} min) — 0.00 QAR (Freebie)</option>`)
+                    ].join('');
+
+                    let sameDaySubRow = '';
+                    if (selectedSvcId) {
+                        const esObj = (pkg.eligible_services || []).find(x => Number(x.id) === selectedSvcId);
+                        const sl = byUid.get(`freebie_slot:${fpRow.rowId}:${slotObj.slotNumber}`);
+                        const slPos = sl ? timeline.slices.indexOf(sl) : 0;
+                        const slPrior = slPos > 0 ? timeline.slices.slice(0, slPos) : [];
+                        const slMeta = window.LaleenSliceEngine && esObj
+                            ? window.LaleenSliceEngine.buildSpecialistSelectMeta({
+                                branch,
+                                serviceId: Number(esObj.id),
+                                serviceName: esObj.name,
+                                startMin: sl ? sl.startMin : null,
+                                endMin: sl ? sl.endMin : null,
+                                selectedStaffId: slotObj.staffId || '',
+                                daySnapshot: daySnap,
+                                excludeApptId: null,
+                                priorSlices: slPrior,
+                                allStaffs: ALL_STAFFS
+                            })
+                            : { html: '', unmappedFallback: false, hasConflict: false, needsSelection: false };
+
+                        const parallelBtn = (sl && sl.can_parallel) ? `
+                            <button type="button" class="laleen-parallel-pill fb-freebie-slot-parallel ${sl.is_parallel ? 'is-active' : ''}"
+                                data-row="${fpRow.rowId}" data-slot="${slotObj.slotNumber}">
+                                ${sl.is_parallel ? '⇉ Same time' : 'Same time'}
+                            </button>` : '';
+
+                        sameDaySubRow = `
+                            <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                                <span class="laleen-slice-sub">
+                                    <span class="laleen-time-pill">${fbEscHtml(sl ? sl.timeBadge : `${esObj ? esObj.duration : 30}m`)}</span>
+                                    <span style="color:#6ee7b7; font-size:11px; font-weight:700;">0.00 QAR (Freebie)</span>
+                                </span>
+                                <div class="d-flex align-items-center gap-2 ms-auto">
+                                    ${parallelBtn}
+                                    <select class="form-select form-select-sm laleen-specialist-pill fb-freebie-slot-staff ${slMeta.needsSelection ? 'is-needs-specialist' : ''} ${slMeta.hasConflict ? 'is-conflict' : ''}"
+                                        data-row="${fpRow.rowId}" data-slot="${slotObj.slotNumber}">
+                                        ${slMeta.html}
+                                    </select>
+                                </div>
+                            </div>`;
+                    }
+
+                    return `
+                        <div class="fb-freebie-slot-row">
+                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                <span style="font-size:11.5px; font-weight:700; color:#e5b8a8; white-space:nowrap;">Freebie #${slotObj.slotNumber}</span>
+                                <select class="form-select form-select-sm fb-freebie-slot-select flex-grow-1"
+                                    data-row="${fpRow.rowId}" data-slot="${slotObj.slotNumber}">
+                                    ${optionsHtml}
+                                </select>
+                            </div>
+                            ${sameDaySubRow}
+                        </div>`;
+                }).join('');
+
+                return `
+                    <div class="fb-svc-row fb-combo-card" data-freebie-row="${fpRow.rowId}">
+                        <div class="fb-svc-row-main">
+                            <div class="d-flex align-items-center gap-2 flex-wrap min-w-0">
+                                <span class="fb-combo-header-pill">Service + Freebies</span>
+                                <span class="name">${fbEscHtml(pkg.name)}</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fb-combo-price-lock">${Number(pkg.price).toFixed(2)} QAR</span>
+                                <button type="button" class="remove-btn fb-freebie-remove-btn" data-row="${fpRow.rowId}" title="Remove package"><i class="bx bx-x"></i></button>
+                            </div>
+                        </div>
+                        <div class="laleen-slice-row mt-1">
+                            <div class="laleen-slice-left">
+                                <div class="laleen-slice-title-wrap">
+                                    <span class="laleen-slice-title">Anchor: ${fbEscHtml(pkg.anchor_service_name)}</span>
+                                    <span class="laleen-slice-sub">
+                                        <span class="laleen-time-pill">${fbEscHtml(anchorSl ? anchorSl.timeBadge : `${pkg.anchor_duration}m`)}</span>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="laleen-slice-right">
+                                <select class="form-select form-select-sm laleen-specialist-pill fb-freebie-anchor-staff ${anchorMeta.needsSelection ? 'is-needs-specialist' : ''} ${anchorMeta.hasConflict ? 'is-conflict' : ''}"
+                                    data-row="${fpRow.rowId}">
+                                    ${anchorMeta.html}
+                                </select>
+                            </div>
+                        </div>
+                        ${slotsHtml}
+                    </div>`;
+            }).join('');
+
+            container.querySelectorAll('.fb-freebie-remove-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    selectedFreebiePackages = selectedFreebiePackages.filter(r => Number(r.rowId) !== Number(btn.dataset.row));
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                });
+            });
+
+            container.querySelectorAll('.fb-freebie-anchor-staff').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    const row = selectedFreebiePackages.find(r => Number(r.rowId) === Number(sel.dataset.row));
+                    if (!row) return;
+                    row.anchorStaffId = sel.value || '';
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                });
+            });
+
+            container.querySelectorAll('.fb-freebie-slot-select').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    const row = selectedFreebiePackages.find(r => Number(r.rowId) === Number(sel.dataset.row));
+                    const slotObj = row ? (row.slots || []).find(s => Number(s.slotNumber) === Number(sel.dataset.slot)) : null;
+                    if (!slotObj) return;
+                    slotObj.serviceId = sel.value || '';
+                    slotObj.staffId = '';
+                    slotObj.isParallel = false;
+                    fbAutoAssignUnpickedTodaySlices();
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                });
+            });
+
+            container.querySelectorAll('.fb-freebie-slot-staff').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    const row = selectedFreebiePackages.find(r => Number(r.rowId) === Number(sel.dataset.row));
+                    const slotObj = row ? (row.slots || []).find(s => Number(s.slotNumber) === Number(sel.dataset.slot)) : null;
+                    if (!slotObj) return;
+                    slotObj.staffId = sel.value || '';
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                });
+            });
+
+            container.querySelectorAll('.fb-freebie-slot-parallel').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const row = selectedFreebiePackages.find(r => Number(r.rowId) === Number(btn.dataset.row));
+                    const slotObj = row ? (row.slots || []).find(s => Number(s.slotNumber) === Number(btn.dataset.slot)) : null;
+                    if (!slotObj) return;
+                    slotObj.isParallel = !slotObj.isParallel;
+                    fbRenderAllListsWithoutRecursion();
+                });
+            });
+
+            if (!skipSync) {
+                fbUpdateTeamMemberVisibility();
+                fbSyncHiddenAndTotals();
+            }
+        }
+
+        function fbRenderFreebieAlertBanner() {
+            const banner = document.getElementById('fbFreebieAlertBanner');
+            if (!banner) return;
+            const unpicked = clientFreebieCredits.filter(c => !selectedFreebieRedemptions.some(r => Number(r.credit_id) === Number(c.credit_id)));
+            if (!unpicked.length) {
+                banner.classList.add('d-none');
+                banner.innerHTML = '';
+                return;
+            }
+            const first = unpicked[0];
+            const daysText = first.days_left <= 0 ? 'Expires today' : `${first.days_left}d left`;
+            banner.classList.remove('d-none');
+            banner.innerHTML = `
+                <div class="min-w-0">
+                    <span style="font-weight:700; color:#f8efe6;">🎁 ${unpicked.length} Freebie(s) Available</span>
+                    <span style="color:#b8a29a;"> — ${fbEscHtml(first.package_name)} · </span>
+                    <span style="color:#6ee7b7; font-weight:700;">${fbEscHtml(daysText)}</span>
+                </div>
+                <button type="button" class="fb-freebie-alert-cta" id="fbQuickRedeemFreebieBtn">Redeem Freebie</button>
+            `;
+            banner.querySelector('#fbQuickRedeemFreebieBtn')?.addEventListener('click', () => {
+                fbActivateFreebieRedemption(first.credit_id);
+            });
+        }
+
+        function fbActivateFreebieRedemption(creditId) {
+            const credit = clientFreebieCredits.find(c => Number(c.credit_id) === Number(creditId));
+            if (!credit) return;
+            if (selectedFreebieRedemptions.some(r => Number(r.credit_id) === Number(credit.credit_id))) return;
+            const firstEligible = (credit.eligible_services || [])[0];
+            if (!firstEligible) return;
+            decideInSalon = false;
+            selectedFreebieRedemptions.push({
+                credit_id: Number(credit.credit_id),
+                package_name: credit.package_name,
+                slot_number: credit.slot_number,
+                days_left: credit.days_left,
+                eligible_services: credit.eligible_services || [],
+                service_id: Number(firstEligible.id),
+                staff_id: '',
+                is_parallel: false
+            });
+            fbAutoAssignUnpickedTodaySlices();
+            fbRenderAllListsWithoutRecursion();
+            loadAvailableStaff();
+        }
+
+        function fbRenderFreebieRedemptions(skipSync = false) {
+            const list = document.getElementById('fbFreebieRedeemList');
+            if (!list) return;
+            const branch = fbNormalizeBranch(document.getElementById('bookBranch').value) || fbResolveActiveCalendarBranch();
+            const daySnap = fbCurrentDaySnapshot();
+            const { timeline, byUid } = fbComputeUnifiedTimeline();
+
+            list.innerHTML = selectedFreebieRedemptions.map((fr, idx) => {
+                const chosen = (fr.eligible_services || []).find(s => Number(s.id) === Number(fr.service_id)) || (fr.eligible_services || [])[0];
+                const sl = byUid.get(`freebie_redeem:${fr.credit_id}`);
+                const slPos = sl ? timeline.slices.indexOf(sl) : 0;
+                const slPrior = slPos > 0 ? timeline.slices.slice(0, slPos) : [];
+                const meta = window.LaleenSliceEngine && chosen
+                    ? window.LaleenSliceEngine.buildSpecialistSelectMeta({
+                        branch,
+                        serviceId: Number(chosen.id),
+                        serviceName: chosen.name,
+                        startMin: sl ? sl.startMin : null,
+                        endMin: sl ? sl.endMin : null,
+                        selectedStaffId: fr.staff_id || '',
+                        daySnapshot: daySnap,
+                        excludeApptId: null,
+                        priorSlices: slPrior,
+                        allStaffs: ALL_STAFFS
+                    })
+                    : { html: '', unmappedFallback: false, hasConflict: false, needsSelection: false };
+
+                const optionsHtml = (fr.eligible_services || []).map(es => `
+                    <option value="${es.id}" ${Number(es.id) === Number(fr.service_id) ? 'selected' : ''}>
+                        ${fbEscHtml(es.name)} (${es.duration} min)
+                    </option>`).join('');
+
+                return `
+                    <div class="fb-svc-row" style="border-left-color:#6ee7b7;">
+                        <div class="fb-svc-row-main">
+                            <div class="min-w-0">
+                                <div class="name">🎁 Freebie #${fr.slot_number} <span class="fb-decide-tag" style="color:#6ee7b7; background:rgba(110,231,183,0.14);">0.00 QAR</span></div>
+                                <div class="meta">${fbEscHtml(fr.package_name)} &middot; ${fr.days_left <= 0 ? 'Expires today' : `${fr.days_left}d left`}</div>
+                            </div>
+                            <button type="button" class="remove-btn fb-freebie-redeem-remove" data-idx="${idx}" title="Cancel redemption"><i class="bx bx-x"></i></button>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap pt-1">
+                            <select class="form-select form-select-sm fb-freebie-slot-select fb-freebie-redeem-svc flex-grow-1" data-idx="${idx}">
+                                ${optionsHtml}
+                            </select>
+                            <select class="form-select form-select-sm laleen-specialist-pill fb-freebie-redeem-staff ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-idx="${idx}">
+                                ${meta.html}
+                            </select>
+                        </div>
+                    </div>`;
+            }).join('');
+
+            list.querySelectorAll('.fb-freebie-redeem-remove').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    selectedFreebieRedemptions.splice(Number(btn.dataset.idx), 1);
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                });
+            });
+
+            list.querySelectorAll('.fb-freebie-redeem-svc').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    const fr = selectedFreebieRedemptions[Number(sel.dataset.idx)];
+                    if (!fr) return;
+                    fr.service_id = Number(sel.value);
+                    fr.staff_id = '';
+                    fbAutoAssignUnpickedTodaySlices();
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                });
+            });
+
+            list.querySelectorAll('.fb-freebie-redeem-staff').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    const fr = selectedFreebieRedemptions[Number(sel.dataset.idx)];
+                    if (!fr) return;
+                    fr.staff_id = sel.value || '';
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                });
+            });
+
+            if (!skipSync) {
+                fbUpdateTeamMemberVisibility();
+                fbSyncHiddenAndTotals();
+            }
+        }
+
         function fbRenderServiceResults(query) {
             const box = document.getElementById('fbServiceResults');
             const q = query.trim().toLowerCase();
@@ -3418,13 +4099,13 @@
                 return;
             }
 
-            if (!selectedServices.length && !decideInSalon && !selectedCombos.length && !selectedRedemptions.length) {
-                fbShowBookingError('Please add at least one service, combo package, or choose Decide in Salon.', 'validation');
+            if (!selectedServices.length && !decideInSalon && !selectedCombos.length && !selectedRedemptions.length && !selectedFreebiePackages.length && !selectedFreebieRedemptions.length) {
+                fbShowBookingError('Please add at least one service, combo package, Service + Freebies, or choose Decide in Salon.', 'validation');
                 fbShowPanel('service');
                 return;
             }
 
-            if (document.getElementById('bookThen').value === 'checkout' && decideInSalon && !selectedServices.length && !selectedCombos.length && !selectedRedemptions.length) {
+            if (document.getElementById('bookThen').value === 'checkout' && decideInSalon && !selectedServices.length && !selectedCombos.length && !selectedRedemptions.length && !selectedFreebiePackages.length && !selectedFreebieRedemptions.length) {
                 document.getElementById('bookThen').value = '';
                 fbShowPanel('main');
                 fbShowBookingError('Please add the service(s) or combo performed before completing checkout.', 'decide_in_salon');
@@ -3513,6 +4194,7 @@
                 || qs.has('name')
                 || qs.has('customer_name')
                 || qs.has('phone')
+                || qs.has('redeem_freebie_credit_id')
                 || qs.has('service_ids')
                 || qs.has('services')
                 || qs.has('service_name');
@@ -3524,6 +4206,7 @@
             const phone = srv.phone || qs.get('phone') || '';
             const branch = fbNormalizeBranch(srv.branch || qs.get('branch')) || fbResolveActiveCalendarBranch();
             const staffId = srv.staff_id || (qs.get('staff_id') ? Number(qs.get('staff_id')) : null);
+            const redeemFreebieCreditId = srv.redeem_freebie_credit_id || (qs.get('redeem_freebie_credit_id') ? Number(qs.get('redeem_freebie_credit_id')) : null);
 
             const urlServiceIds = (qs.get('service_ids') || '')
                 .split(',')
@@ -3549,6 +4232,7 @@
                     phone: phone,
                     branch: branch,
                     staffId: staffId,
+                    redeemFreebieCreditId: redeemFreebieCreditId,
                     serviceIds: serviceIds,
                     services: services,
                     date: qs.get('date') || null,

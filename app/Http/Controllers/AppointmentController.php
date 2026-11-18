@@ -19,7 +19,10 @@ use App\Models\Appointment;
 use App\Models\Combo;
 use App\Models\ClientPackage;
 use App\Models\ClientPackageService;
+use App\Models\ClientFreebieCredit;
+use App\Models\ServiceFreebiePackage;
 use App\Models\LoyaltyTransaction;
+use App\Services\ServiceFreebieLifecycleService;
 use App\Support\BookingConflictValidator;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -30,10 +33,16 @@ use Illuminate\Validation\Rule;
 class AppointmentController extends Controller
 {
     private ?BookingConflictValidator $conflictValidatorInstance = null;
+    private ?ServiceFreebieLifecycleService $freebieLifecycleInstance = null;
 
     private function conflictValidator(): BookingConflictValidator
     {
         return $this->conflictValidatorInstance ??= new BookingConflictValidator();
+    }
+
+    private function freebieService(): ServiceFreebieLifecycleService
+    {
+        return $this->freebieLifecycleInstance ??= new ServiceFreebieLifecycleService($this->conflictValidator());
     }
     const BRANCH_LABELS = [
         'old_airport' => 'Old Airport',
@@ -329,6 +338,28 @@ class AppointmentController extends Controller
                     }
                 }
             }
+            if (!$firstPerServiceStaffId) {
+                foreach ($this->freebieService()->extractAnchorPackageInputs($request) as $fPkgRow) {
+                    if (!empty($fPkgRow['anchor_staff_id'])) {
+                        $firstPerServiceStaffId = (int) $fPkgRow['anchor_staff_id'];
+                        break;
+                    }
+                    foreach ((array) ($fPkgRow['slots'] ?? []) as $slotRow) {
+                        if (is_array($slotRow) && !empty($slotRow['staff_id'])) {
+                            $firstPerServiceStaffId = (int) $slotRow['staff_id'];
+                            break 2;
+                        }
+                    }
+                }
+            }
+            if (!$firstPerServiceStaffId) {
+                foreach ($this->freebieService()->extractRedemptionInputs($request) as $fRedeemRow) {
+                    if (!empty($fRedeemRow['staff_id'])) {
+                        $firstPerServiceStaffId = (int) $fRedeemRow['staff_id'];
+                        break;
+                    }
+                }
+            }
             if ($firstPerServiceStaffId) {
                 $request->merge(['staff_id' => $firstPerServiceStaffId]);
             }
@@ -371,6 +402,19 @@ class AppointmentController extends Controller
             'redeem_service_staff' => 'nullable|array',
             'redeem_service_sort_order' => 'nullable|array',
             'redeem_service_parallel' => 'nullable|array',
+            'freebie_package_id' => 'nullable|integer|exists:service_freebie_packages,id',
+            'anchor_staff_id' => 'nullable|exists:staff,id',
+            'freebie_slots' => 'nullable|array',
+            'freebie_packages' => 'nullable|array',
+            'freebie_packages.*.package_id' => 'required_with:freebie_packages|integer|exists:service_freebie_packages,id',
+            'redeem_freebies' => 'nullable|array',
+            'freebie_credit_id' => 'nullable|integer',
+            'freebie_service_id' => 'nullable|integer',
+            'freebie_staff_id' => 'nullable|exists:staff,id',
+            'redeem_freebie_tokens' => 'nullable|array',
+            'redeem_freebie_staff' => 'nullable|array',
+            'redeem_freebie_sort_order' => 'nullable|array',
+            'redeem_freebie_parallel' => 'nullable|array',
         ];
 
         $messages = [
@@ -395,14 +439,25 @@ class AppointmentController extends Controller
             array_map('trim', (array) $request->input('service_name', [])),
             fn ($n) => $n !== '' && !in_array(strtolower($n), ['choose in salon', 'decide in salon', 'services tbd in salon'], true)
         ));
+        $rawFreebieAnchorInputs = $this->freebieService()->extractAnchorPackageInputs($request);
+        $rawFreebieRedemptionInputs = $this->freebieService()->extractRedemptionInputs($request);
+
+        // If 1-click single freebie redemption passed freebie_credit_id alongside service_name,
+        // treat that service strictly as the 0.00 QAR freebie redemption (not an extra paid standalone line).
+        if ($request->filled('freebie_credit_id') && count($rawFreebieRedemptionInputs) === 1 && count($rawServiceNames) === 1) {
+            $rawServiceNames = [];
+        }
+
         $hasRealServices = !empty($rawServiceNames);
         $hasRawPackages = !empty(array_filter((array) $request->input('packages', [])));
         $hasRawRedemptions = !empty(array_filter((array) $request->input('redeem_service_ids', [])));
-        $isDecideInSalon = ($hasRealServices || $hasRawPackages || $hasRawRedemptions)
+        $hasFreebieAnchors = !empty($rawFreebieAnchorInputs);
+        $hasFreebieRedemptions = !empty($rawFreebieRedemptionInputs);
+        $isDecideInSalon = ($hasRealServices || $hasRawPackages || $hasRawRedemptions || $hasFreebieAnchors || $hasFreebieRedemptions)
             ? false
             : $request->boolean('decide_in_salon');
 
-        if (!$hasRealServices && !$hasRawPackages && !$hasRawRedemptions && !$isDecideInSalon) {
+        if (!$hasRealServices && !$hasRawPackages && !$hasRawRedemptions && !$hasFreebieAnchors && !$hasFreebieRedemptions && !$isDecideInSalon) {
             return $this->conflictValidator()->toResponse($request, [
                 'reason' => 'validation',
                 'field' => 'service_name',
@@ -462,6 +517,35 @@ class AppointmentController extends Controller
             ]);
         }
 
+        [$freebieAnchorPlans, $freebieAnchorError, $freebieAnchorConflict] = $this->freebieService()->buildAnchorPurchasePlans(
+            $rawFreebieAnchorInputs,
+            (string) $request->branch,
+            $staffId
+        );
+        if ($freebieAnchorError !== null) {
+            return $this->conflictValidator()->toResponse($request, $freebieAnchorConflict ?? [
+                'reason' => 'validation',
+                'field' => 'freebie_package_id',
+                'message' => $freebieAnchorError,
+            ]);
+        }
+
+        [$freebieRedemptionPlans, $freebieRedeemError, $freebieRedeemConflict] = $this->freebieService()->buildFreebieRedemptionPlans(
+            $rawFreebieRedemptionInputs,
+            $existingCustomer,
+            (string) $request->branch,
+            Carbon::parse($appointmentDate, 'Asia/Qatar'),
+            null,
+            $staffId
+        );
+        if ($freebieRedeemError !== null) {
+            return $this->conflictValidator()->toResponse($request, $freebieRedeemConflict ?? [
+                'reason' => 'validation',
+                'field' => 'redeem_freebies',
+                'message' => $freebieRedeemError,
+            ]);
+        }
+
         $startTime = $isUnscheduled ? null : Carbon::parse($request->appointment_datetime);
         $serviceNames = $rawServiceNames;
 
@@ -491,6 +575,53 @@ class AppointmentController extends Controller
                     ? (int) $rawStandaloneSort[$idx]
                     : null,
                 'is_parallel' => filter_var($rawStandaloneParallel[$idx] ?? false, FILTER_VALIDATE_BOOLEAN),
+            ];
+        }
+
+        foreach ($freebieAnchorPlans as $faIdx => $faPlan) {
+            $anchorSvc = $faPlan['anchor_service'];
+            $anchorStaff = $faPlan['anchor_staff_id'] ?? $staffId;
+            $rawTimelineItems[] = [
+                'kind' => 'freebie_anchor',
+                'plan_idx' => $faIdx,
+                'name' => $anchorSvc->name,
+                'service_id' => $anchorSvc->id,
+                'duration' => (int) ($anchorSvc->duration ?: 60),
+                'staff_id' => $anchorStaff ? (int) $anchorStaff : null,
+                'sort_order' => $faPlan['anchor_sort_order'] ?? null,
+                'is_parallel' => (bool) ($faPlan['anchor_is_parallel'] ?? false),
+            ];
+
+            foreach ($faPlan['slots'] as $slotRow) {
+                if ($slotRow['mode'] === 'same_day' && $slotRow['service']) {
+                    $slotSvc = $slotRow['service'];
+                    $slotStaff = $slotRow['staff_id'] ?? $staffId;
+                    $rawTimelineItems[] = [
+                        'kind' => 'freebie_slot',
+                        'plan_idx' => $faIdx,
+                        'slot_number' => (int) $slotRow['slot_number'],
+                        'name' => $slotSvc->name,
+                        'service_id' => $slotSvc->id,
+                        'duration' => (int) ($slotSvc->duration ?: 30),
+                        'staff_id' => $slotStaff ? (int) $slotStaff : null,
+                        'sort_order' => $slotRow['sort_order'] ?? null,
+                        'is_parallel' => (bool) ($slotRow['is_parallel'] ?? false),
+                    ];
+                }
+            }
+        }
+
+        foreach ($freebieRedemptionPlans as $frIdx => $frPlan) {
+            $frStaff = $frPlan['staff_id'] ?? $staffId;
+            $rawTimelineItems[] = [
+                'kind' => 'freebie_redeem',
+                'redeem_idx' => $frIdx,
+                'name' => $frPlan['service']->name,
+                'service_id' => $frPlan['service']->id,
+                'duration' => (int) ($frPlan['service']->duration ?: 30),
+                'staff_id' => $frStaff ? (int) $frStaff : null,
+                'sort_order' => $frPlan['sort_order'] ?? null,
+                'is_parallel' => (bool) ($frPlan['is_parallel'] ?? false),
             ];
         }
 
@@ -596,6 +727,9 @@ class AppointmentController extends Controller
         $standaloneScheduleByIdx = [];
         $redemptionScheduleByIdx = [];
         $comboScheduleByPlanAndSvc = [];
+        $freebieAnchorScheduleByPlan = [];
+        $freebieSlotScheduleByPlanAndSlot = [];
+        $freebieRedeemScheduleByIdx = [];
         foreach ($scheduleEntries as $slice) {
             if ($slice['kind'] === 'standalone') {
                 $standaloneScheduleByIdx[$slice['standalone_idx']] = $slice;
@@ -603,12 +737,64 @@ class AppointmentController extends Controller
                 $redemptionScheduleByIdx[$slice['redemption_idx']] = $slice;
             } elseif ($slice['kind'] === 'combo') {
                 $comboScheduleByPlanAndSvc[$slice['plan_idx']][$slice['service_id']] = $slice;
+            } elseif ($slice['kind'] === 'freebie_anchor') {
+                $freebieAnchorScheduleByPlan[$slice['plan_idx']] = $slice;
+            } elseif ($slice['kind'] === 'freebie_slot') {
+                $freebieSlotScheduleByPlanAndSlot[$slice['plan_idx']][$slice['slot_number']] = $slice;
+            } elseif ($slice['kind'] === 'freebie_redeem') {
+                $freebieRedeemScheduleByIdx[$slice['redeem_idx']] = $slice;
             }
         }
 
-        $appointment = DB::transaction(function () use ($request, $services, $resolvedComboId, $resolvedComboName, $phone, $customer, $lifetimeRevenue, $staffId, $startTime, $appointmentDate, $isUnscheduled, $serviceNames, $packagePlans, $redemptionPlans, $isDecideInSalon, $standaloneScheduleByIdx, $redemptionScheduleByIdx, $comboScheduleByPlanAndSvc) {
+        $isPureFreebieRedemptionBooking = !empty($freebieRedemptionPlans)
+            && empty($serviceNames)
+            && empty($packagePlans)
+            && empty($redemptionPlans)
+            && empty($freebieAnchorPlans);
+
+        $appointment = DB::transaction(function () use (
+            $request,
+            $services,
+            $resolvedComboId,
+            $resolvedComboName,
+            $phone,
+            $customer,
+            $lifetimeRevenue,
+            $staffId,
+            $startTime,
+            $appointmentDate,
+            $isUnscheduled,
+            $serviceNames,
+            $packagePlans,
+            $redemptionPlans,
+            $freebieAnchorPlans,
+            $freebieRedemptionPlans,
+            $isPureFreebieRedemptionBooking,
+            $isDecideInSalon,
+            $standaloneScheduleByIdx,
+            $redemptionScheduleByIdx,
+            $comboScheduleByPlanAndSvc,
+            $freebieAnchorScheduleByPlan,
+            $freebieSlotScheduleByPlanAndSlot,
+            $freebieRedeemScheduleByIdx
+        ) {
+            $baseAttributes = $request->except([
+                'freebie_package_id',
+                'freebie_slots',
+                'freebie_packages',
+                'redeem_freebies',
+                'freebie_credit_id',
+                'freebie_service_id',
+                'freebie_staff_id',
+                'redeem_freebie_tokens',
+                'redeem_freebie_staff',
+                'redeem_freebie_sort_order',
+                'redeem_freebie_parallel',
+                'anchor_staff_id',
+            ]);
+
             $appointment = Appointment::create(array_merge(
-                $request->all(),
+                $baseAttributes,
                 [
                     'appointment_datetime' => $startTime ? $startTime : Carbon::parse($appointmentDate)->startOfDay(),
                     'booking_date' => $appointmentDate,
@@ -620,7 +806,7 @@ class AppointmentController extends Controller
                     'combo_name' => $resolvedComboName,
                     'decide_in_salon' => $isDecideInSalon,
                     'hold_duration' => $isDecideInSalon ? 60 : null,
-                    'price' => $isDecideInSalon ? 0 : ($request->price ?? 0),
+                    'price' => ($isDecideInSalon || $isPureFreebieRedemptionBooking) ? 0 : ($request->price ?? 0),
                     'customer_name' => $request->customer_name,
                     'phone' => $phone,
                     'customer_id' => $customer?->id,
@@ -637,6 +823,26 @@ class AppointmentController extends Controller
                 $request->service_discount_reason ?? [],
                 $standaloneScheduleByIdx
             );
+
+            if (!empty($freebieAnchorPlans) && $customer) {
+                $this->freebieService()->persistAnchorPurchasePlans(
+                    $appointment,
+                    $customer,
+                    $freebieAnchorPlans,
+                    $freebieAnchorScheduleByPlan,
+                    $freebieSlotScheduleByPlanAndSlot,
+                    $appointmentDate
+                );
+            }
+
+            if (!empty($freebieRedemptionPlans)) {
+                $this->freebieService()->persistFreebieRedemptionPlans(
+                    $appointment,
+                    $freebieRedemptionPlans,
+                    $freebieRedeemScheduleByIdx,
+                    $isPureFreebieRedemptionBooking
+                );
+            }
 
             if (!empty($redemptionPlans) || !empty($packagePlans)) {
                 $lastLine = $appointment->appointmentServices()->where('is_pending', false)->whereNotNull('start_time')->orderByDesc('start_time')->first();
@@ -697,7 +903,13 @@ class AppointmentController extends Controller
 
             $createdLines = $appointment->appointmentServices()->get();
             $activeLines = $createdLines->where('is_pending', false)->values();
-            if ($activeLines->isNotEmpty() && empty($packagePlans) && empty($redemptionPlans)) {
+            if (
+                $activeLines->isNotEmpty()
+                && empty($packagePlans)
+                && empty($redemptionPlans)
+                && empty($freebieAnchorPlans)
+                && empty($freebieRedemptionPlans)
+            ) {
                 $linesSum = (float) $activeLines->sum(fn ($s) => $s->final_price);
                 if ($linesSum == 0.0 && $activeLines->count() === 1 && $request->filled('price') && (float) $request->price > 0) {
                     $firstLine = $activeLines->first();
@@ -708,7 +920,7 @@ class AppointmentController extends Controller
                 }
             }
 
-            if ($createdLines->isNotEmpty() || !empty($packagePlans) || !empty($redemptionPlans)) {
+            if ($createdLines->isNotEmpty() || !empty($packagePlans) || !empty($redemptionPlans) || !empty($freebieAnchorPlans) || !empty($freebieRedemptionPlans)) {
                 $appointment->syncFromServices();
             } elseif ($isDecideInSalon) {
                 $appointment->update([
@@ -743,6 +955,8 @@ class AppointmentController extends Controller
                     'service_name' => $appointment->service_name,
                     'combo_id' => $appointment->combo_id,
                     'combo_name' => $appointment->display_combo_name,
+                    'freebie_package_id' => $appointment->freebie_package_id,
+                    'is_freebie_redemption' => (bool) $appointment->is_freebie_redemption,
                     'is_combo_tbd' => $appointment->is_combo_tbd,
                     'decide_in_salon' => (bool) $appointment->decide_in_salon,
                     'hold_duration' => $appointment->effective_hold_duration,
@@ -973,6 +1187,11 @@ class AppointmentController extends Controller
             || !empty($appointment->combo_name)
             || $appointment->appointmentServices()->whereNotNull('combo_name')->exists()
             || $request->filled('combo_packages');
+        $hasFreebieContext = $appointment->freebie_package_id !== null
+            || (bool) $appointment->is_freebie_redemption
+            || $appointment->appointmentServices()->where(function ($q) {
+                $q->whereNotNull('freebie_package_id')->orWhere('is_freebie_redemption', true);
+            })->exists();
 
         $request->validate([
             'customer_name' => 'nullable|string|max:255',
@@ -1010,11 +1229,11 @@ class AppointmentController extends Controller
         $hasRedeemRequest = !empty($requestedRedeemTokens);
         $hasExistingRedemptionLines = $appointment->appointmentServices()->where('is_pending', false)->get()->contains(fn ($l) => $l->isPackageRedemptionLine());
         $hasRealServices = !empty($rawServiceNamesInput) || $hasRedeemRequest || $hasExistingRedemptionLines;
-        $isDecideInSalon = ($hasRealServices || $hasComboContext)
+        $isDecideInSalon = ($hasRealServices || $hasComboContext || $hasFreebieContext)
             ? false
             : ($request->exists('decide_in_salon') ? $request->boolean('decide_in_salon') : (bool) $appointment->decide_in_salon);
 
-        if (!$hasRealServices && !$hasComboContext && !$isDecideInSalon && !in_array($request->status, ['cancelled', 'no_show'], true)) {
+        if (!$hasRealServices && !$hasComboContext && !$hasFreebieContext && !$isDecideInSalon && !in_array($request->status, ['cancelled', 'no_show'], true)) {
             return $this->conflictValidator()->toResponse($request, [
                 'reason' => 'validation',
                 'field' => 'service_name',
@@ -1022,9 +1241,9 @@ class AppointmentController extends Controller
             ]);
         }
 
-        $services = $hasRealServices
+        $services = !empty($rawServiceNamesInput)
             ? implode(', ', $rawServiceNamesInput)
-            : ($hasComboContext ? 'Choose in Salon' : 'Decide in Salon');
+            : ($hasFreebieContext ? ($appointment->service_name ?: 'Service + Freebies') : ($hasComboContext ? 'Choose in Salon' : 'Decide in Salon'));
         $phone = $request->phone ? Customer::normalizePhone($request->phone) : '';
 
         $staffId = $request->exists('staff_id')
@@ -1290,6 +1509,7 @@ class AppointmentController extends Controller
             $effectiveStatus,
             $submittedNames,
             $hasComboContext,
+            $hasFreebieContext,
             $validatedComboSyncPlans,
             $isDecideInSalon,
             $requestedRedeemTokens
@@ -1316,7 +1536,7 @@ class AppointmentController extends Controller
 
             $payload = $request->all();
             unset($payload['booking_agent_id'], $payload['combo_packages'], $payload['redeem_service_ids'], $payload['redeem_service_staff']);
-            if ($hasComboContext || $isDecideInSalon) {
+            if ($hasComboContext || $hasFreebieContext || $isDecideInSalon) {
                 unset($payload['price']);
             }
             $payload['status'] = $effectiveStatus;
@@ -1395,8 +1615,8 @@ class AppointmentController extends Controller
                 foreach ($validatedComboSyncPlans as $syncPlan) {
                     $this->persistComboPackageSelection($appointment, $syncPlan, $cursor);
                 }
-            } elseif ($hasComboContext && empty($submittedNames)) {
-                // Rescheduling/updating metadata on a Combo appointment without altering its services
+            } elseif (($hasComboContext || $hasFreebieContext) && empty($submittedNames)) {
+                // Rescheduling/updating metadata on a Combo or Service + Freebies appointment without altering its services
                 $comboActiveLines = $appointment->appointmentServices()
                     ->where('is_pending', false)
                     ->orderBy('sort_order')
@@ -1506,7 +1726,7 @@ class AppointmentController extends Controller
             }
 
             $freshLines = $appointment->appointmentServices()->where('is_pending', false)->get();
-            if (!$hasComboContext && $freshLines->count() === 1 && (float) $freshLines->first()->final_price == 0.0 && $request->filled('price') && (float) $request->price > 0 && !$freshLines->first()->discount_type) {
+            if (!$hasComboContext && !$hasFreebieContext && $freshLines->count() === 1 && (float) $freshLines->first()->final_price == 0.0 && $request->filled('price') && (float) $request->price > 0 && !$freshLines->first()->discount_type) {
                 $freshLines->first()->update([
                     'price' => (float) $request->price,
                     'original_price' => (float) $request->price,
@@ -1527,6 +1747,10 @@ class AppointmentController extends Controller
             }
 
             $appointment->syncFromServices();
+
+            if (!in_array($effectiveStatus, ['cancelled', 'no_show'], true)) {
+                $this->freebieService()->syncAnchorExpiryOnReschedule($appointment);
+            }
         });
 
         $appointment->refresh();
@@ -1794,6 +2018,9 @@ class AppointmentController extends Controller
             }
         }
 
+        // 2b. Void linked Service + Freebies credits (if anchor) or release scheduled slot (if future redemption)
+        $this->freebieService()->onAppointmentCancelledOrDeleted($appointment);
+
         // 3. If a Sale exists, reverse loyalty points (both earned and redeemed) and delete the Sale
         if ($sale) {
             $earnedPoints = (int) LoyaltyTransaction::where('sale_id', $sale->id)
@@ -1892,6 +2119,8 @@ class AppointmentController extends Controller
         if ($cancelledPkgs->isNotEmpty()) {
             $appointment->syncFromServices();
         }
+
+        $this->freebieService()->restoreVoidedAnchorCreditsOnRevival($appointment);
     }
 
     public function calendar(Request $request)
@@ -1930,6 +2159,31 @@ class AppointmentController extends Controller
             ])
             ->filter(fn($c) => $c['services']->isNotEmpty())
             ->values();
+
+        $freebiePackagesCatalog = \Illuminate\Support\Facades\Schema::hasTable('service_freebie_packages')
+            ? ServiceFreebiePackage::with(['anchorService', 'eligibleServices'])
+                ->active()
+                ->orderBy('name')
+                ->get()
+                ->filter(fn (ServiceFreebiePackage $p) => $p->anchorService !== null && $p->eligibleServices->isNotEmpty())
+                ->map(fn (ServiceFreebiePackage $p) => [
+                    'id' => (int) $p->id,
+                    'name' => $p->name,
+                    'price' => (float) $p->price,
+                    'anchor_service_id' => (int) $p->anchor_service_id,
+                    'anchor_service_name' => $p->anchorService->name,
+                    'anchor_duration' => (int) ($p->anchorService->duration ?: 60),
+                    'free_choices_count' => (int) $p->effective_choices_count,
+                    'validity_days' => (int) $p->effective_validity_days,
+                    'eligible_services' => $p->eligibleServices->map(fn (Service $s) => [
+                        'id' => (int) $s->id,
+                        'name' => $s->name,
+                        'duration' => (int) ($s->duration ?: 30),
+                        'price' => (float) $s->price,
+                    ])->values(),
+                ])
+                ->values()
+            : collect();
 
         $anchor = $request->date ? Carbon::parse($request->date)->startOfDay() : now()->startOfDay();
         $pendingTimeBookings = $this->pendingTimeBookingsForDate($request, $anchor);
@@ -1983,6 +2237,7 @@ class AppointmentController extends Controller
             || $request->filled('name')
             || $request->filled('customer_name')
             || $request->filled('phone')
+            || $request->filled('redeem_freebie_credit_id')
             || !empty($rawServiceIds)
             || !empty($rawServiceNames);
 
@@ -1999,13 +2254,14 @@ class AppointmentController extends Controller
                 ? $prefillBranch
                 : null,
             'staff_id' => $request->filled('staff_id') ? (int) $request->input('staff_id') : null,
+            'redeem_freebie_credit_id' => $request->filled('redeem_freebie_credit_id') ? (int) $request->input('redeem_freebie_credit_id') : null,
             'service_ids' => $matchedServices->pluck('id')->values()->all(),
             'services' => $matchedServices->isNotEmpty()
                 ? $matchedServices->pluck('name')->values()->all()
                 : $rawServiceNames,
         ];
 
-        return view('appointments.calendar', compact('staffs', 'activeStaffs', 'services', 'products', 'agents', 'servicesCatalog', 'productsCatalog', 'combosCatalog', 'pendingTimeBookings', 'bookingPrefill'));
+        return view('appointments.calendar', compact('staffs', 'activeStaffs', 'services', 'products', 'agents', 'servicesCatalog', 'productsCatalog', 'combosCatalog', 'freebiePackagesCatalog', 'pendingTimeBookings', 'bookingPrefill'));
     }
 
     /**
@@ -2213,6 +2469,8 @@ class AppointmentController extends Controller
             'show_price_badge' => ($idx === 0),
             'service_name' => $line->name,
             'combo_name' => $line->combo_name ?: $parentComboName,
+            'is_freebie_redemption' => (bool) $line->is_freebie_redemption,
+            'freebie_package_id' => $line->freebie_package_id,
             'is_combo_tbd' => false,
             'decide_in_salon' => false,
         ])->all();
@@ -2687,8 +2945,12 @@ class AppointmentController extends Controller
             ];
         });
 
+        $matchedCustomer = $firstCustomerId
+            ? Customer::find((int) $firstCustomerId)
+            : Customer::whereIn('phone', $phoneCandidates)->first();
+
         return response()->json([
-            'customer_id' => $appointments->first()->customer_id,
+            'customer_id' => $appointments->first()->customer_id ?: $matchedCustomer?->id,
             'customer_name' => $customerName,
             'phone' => $appointments->first()->phone, // show original format
             'total_visits' => $totalVisits,
@@ -2696,6 +2958,7 @@ class AppointmentController extends Controller
             'last_visit' => $lastVisit,
             'services_taken' => $servicesTaken,
             'lifetime_revenue' => $lifetimeRevenue,
+            'available_freebie_credits' => $matchedCustomer ? $matchedCustomer->redeemableFreebieCreditsPayload() : [],
             'appointments' => $appointmentList
         ]);
     }
@@ -2971,6 +3234,28 @@ class AppointmentController extends Controller
                 ], true);
             }
 
+            // Pure 0.00 QAR freebie redemption appointments owe nothing and can complete cleanly.
+            $isZeroDueFreebieRedemption = (bool) $appointment->is_freebie_redemption
+                && (float) $appointment->price <= 0.009
+                && !$appointment->upsells()->exists();
+
+            if ($isZeroDueFreebieRedemption) {
+                DB::transaction(function () use ($appointment) {
+                    $appointment->update([
+                        'status' => 'completed',
+                        'paid_at' => now('Asia/Qatar'),
+                    ]);
+                    $this->freebieService()->onAppointmentPaidOrCompleted($appointment);
+                    $this->markAppointmentLeadsAsBooked($appointment);
+                    $this->syncAdLeadAttributionForAppointment($appointment);
+                });
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Freebie redemption completed.',
+                ]);
+            }
+
             // Do NOT mutate status to 'completed' before payment is recorded.
             return response()->json([
                 'success' => true,
@@ -3003,6 +3288,10 @@ class AppointmentController extends Controller
             }
 
             $appointment->update(['status' => $request->status]);
+
+            if ($request->status === 'completed') {
+                $this->freebieService()->onAppointmentPaidOrCompleted($appointment);
+            }
 
             if (in_array($request->status, ['no_show', 'cancelled'], true)) {
                 $this->syncLeadCategoryFromAppointment($appointment, $request->status === 'no_show' ? 'no_show' : 'cancel');
@@ -3393,6 +3682,9 @@ class AppointmentController extends Controller
         $redeemablePackageServices = (!$isPaid && $customer)
             ? $customer->redeemablePackageServices(null)->values()->all()
             : [];
+        $redeemableFreebieCredits = (!$isPaid && $customer)
+            ? $customer->redeemableFreebieCreditsPayload($appointment->id)
+            : [];
 
         return response()->json([
             'id' => $appointment->id,
@@ -3426,6 +3718,9 @@ class AppointmentController extends Controller
             'visit_span_minutes' => $appointment->visit_span_minutes,
             'combo_packages' => $comboPackages,
             'redeemable_package_services' => $redeemablePackageServices,
+            'redeemable_freebie_credits' => $redeemableFreebieCredits,
+            'freebie_package_id' => $appointment->freebie_package_id,
+            'is_freebie_redemption' => (bool) $appointment->is_freebie_redemption,
             'notes' => $appointment->notes,
             'services' => $serviceLines,
             'pending_services' => $pendingServiceLines,
@@ -3576,6 +3871,7 @@ class AppointmentController extends Controller
                     $appointment->branch = $branch;
                 }
                 $appointment->syncFromServices();
+                $this->freebieService()->syncAnchorExpiryOnReschedule($appointment);
                 $this->markAppointmentLeadsAsBooked($appointment);
                 $this->syncAdLeadAttributionForAppointment($appointment, $oldStart);
             });
@@ -3755,6 +4051,7 @@ class AppointmentController extends Controller
                 $appointment->syncFromServices();
             }
 
+            $this->freebieService()->syncAnchorExpiryOnReschedule($appointment);
             $this->markAppointmentLeadsAsBooked($appointment);
             $this->syncAdLeadAttributionForAppointment($appointment, $oldStart);
         });
@@ -4178,6 +4475,9 @@ class AppointmentController extends Controller
             'discount_amount' => $isPkg ? 0.0 : (float) $s->discount_amount,
             'discount_reason' => $s->discount_reason,
             'is_package_redemption' => $isPkg,
+            'is_freebie_redemption' => (bool) $s->is_freebie_redemption,
+            'freebie_package_id' => $s->freebie_package_id,
+            'freebie_credit_id' => $s->freebie_credit_id,
             'start_time' => $s->start_time ? $s->start_time->format('H:i') : '',
             'end_time' => $endObj ? $endObj->format('H:i') : '',
             'time_range_label' => (!$s->is_pending && $s->start_time && $endObj)
@@ -5783,6 +6083,8 @@ class AppointmentController extends Controller
                     'payment_method' => $dominantMethod,
                     'paid_at' => now(),
                 ]);
+
+                $this->freebieService()->onAppointmentPaidOrCompleted($lockedAppointment);
 
                 $this->markAppointmentLeadsAsBooked($lockedAppointment);
                 $this->syncAdLeadAttributionForAppointment($lockedAppointment);

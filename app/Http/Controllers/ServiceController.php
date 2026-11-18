@@ -9,6 +9,7 @@ use App\Models\Combo;
 use App\Models\Lead;
 use App\Models\Service;
 use App\Models\ServiceCategory;
+use App\Models\ServiceFreebiePackage;
 use App\Models\Staff;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,12 +33,12 @@ class ServiceController extends Controller
         $services = $query->get()->groupBy(fn($s) => $s->category->name ?? 'Uncategorized');
         $staffList = Staff::orderBy('name')->get();
 
-        // Flat catalog (not grouped) for the Combos tab's service picker, and
-        // the combos themselves with their bundled services preloaded.
-        $allServices = Service::orderBy('name')->get();
+        // Flat catalog (not grouped) for the Combos & Service + Freebies tabs' pickers.
+        $allServices = Service::with('staff')->orderBy('name')->get();
         $combos = Combo::with('services')->orderBy('name')->get();
+        $freebiePackages = ServiceFreebiePackage::with(['anchorService.staff', 'eligibleServices'])->orderBy('name')->get();
 
-        return view('services.index', compact('categories', 'services', 'staffList', 'allServices', 'combos'));
+        return view('services.index', compact('categories', 'services', 'staffList', 'allServices', 'combos', 'freebiePackages'));
     }
 
     public function store(Request $request)
@@ -92,6 +93,12 @@ class ServiceController extends Controller
         }
         if ($service->complaints()->exists()) {
             $usages[] = 'staff complaints';
+        }
+        if ($service->anchoredFreebiePackages()->exists() || $service->freebiePackages()->exists()) {
+            $usages[] = 'Service + Freebies packages';
+        }
+        if ($service->freebieCredits()->exists()) {
+            $usages[] = 'client freebie redemptions';
         }
 
         if (!empty($usages)) {

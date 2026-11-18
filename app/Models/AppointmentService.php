@@ -12,6 +12,9 @@ class AppointmentService extends Model
         'combo_id',
         'combo_name',
         'client_package_id',
+        'freebie_package_id',
+        'freebie_credit_id',
+        'is_freebie_redemption',
         'staff_id',
         'sort_order',
         'is_parallel',
@@ -32,6 +35,7 @@ class AppointmentService extends Model
     protected $casts = [
         'sort_order' => 'integer',
         'is_parallel' => 'boolean',
+        'is_freebie_redemption' => 'boolean',
         'start_time' => 'datetime',
         'slice_end_at' => 'datetime',
         'is_pending' => 'boolean',
@@ -70,12 +74,19 @@ class AppointmentService extends Model
 
     public function isPackageRedemptionLine(): bool
     {
-        if ($this->is_pending || $this->client_package_id !== null || $this->combo_id !== null || !empty($this->combo_name)) {
+        if (
+            $this->is_pending
+            || $this->is_freebie_redemption
+            || $this->freebie_credit_id !== null
+            || $this->client_package_id !== null
+            || $this->combo_id !== null
+            || !empty($this->combo_name)
+        ) {
             return true;
         }
 
         $reason = trim((string) $this->discount_reason);
-        if ($reason !== '' && stripos($reason, 'Redeemed from ') === 0) {
+        if ($reason !== '' && (stripos($reason, 'Redeemed from ') === 0 || stripos($reason, 'Freebie from ') === 0)) {
             return true;
         }
 
@@ -84,6 +95,16 @@ class AppointmentService extends Model
         }
 
         return $this->exists && ClientPackageService::where('appointment_service_id', $this->id)->exists();
+    }
+
+    public function freebiePackage()
+    {
+        return $this->belongsTo(ServiceFreebiePackage::class, 'freebie_package_id');
+    }
+
+    public function freebieCredit()
+    {
+        return $this->belongsTo(ClientFreebieCredit::class, 'freebie_credit_id');
     }
 
     public function combo()

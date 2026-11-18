@@ -246,31 +246,58 @@
         color: #c9a39a;
         white-space: nowrap;
     }
+
+    @media print {
+        .svc-top-tabs, .svc-tab-action, .svc-cat-rail, .btn, form[method="GET"] {
+            display: none !important;
+        }
+        .svc-tab-pane {
+            display: block !important;
+        }
+        .svc-card, .combo-card {
+            background: #ffffff !important;
+            color: #111111 !important;
+            border-color: #dddddd !important;
+        }
+        .svc-card .svc-name, .combo-card .combo-name, .combo-card .combo-price, .svc-card .svc-price {
+            color: #111111 !important;
+        }
+        .svc-card .svc-meta, .combo-card .combo-meta, .combo-card .combo-services {
+            color: #444444 !important;
+        }
+    }
 </style>
 
 @section('content')
+    @php
+        $initialCatalogTab = in_array(request('tab'), ['services', 'combos', 'freebies'], true) ? request('tab') : 'services';
+    @endphp
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h4 class="fw-bold mb-0">Service Catalog</h4>
-            <p class="text-muted small mb-0">Manage the services your business offers, organized by category.</p>
+            <p class="text-muted small mb-0">Manage salon services, multi-visit combos, and Service + Freebies offers.</p>
         </div>
         @moduleEdit('services')
-            <button class="btn btn-dark svc-tab-action" data-tab="services" data-bs-toggle="modal" data-bs-target="#serviceModal">
+            <button class="btn btn-dark svc-tab-action {{ $initialCatalogTab !== 'services' ? 'd-none' : '' }}" data-tab="services" data-bs-toggle="modal" data-bs-target="#serviceModal">
                 <i class="bx bx-plus me-1"></i> Add Service
             </button>
-            <button class="btn btn-dark svc-tab-action d-none" data-tab="combos" id="addComboBtn">
+            <button class="btn btn-dark svc-tab-action {{ $initialCatalogTab !== 'combos' ? 'd-none' : '' }}" data-tab="combos" id="addComboBtn">
                 <i class="bx bx-plus me-1"></i> Add Combo
+            </button>
+            <button class="btn btn-dark svc-tab-action {{ $initialCatalogTab !== 'freebies' ? 'd-none' : '' }}" data-tab="freebies" id="addFreebieBtn">
+                <i class="bx bx-plus me-1"></i> Add Service + Freebies
             </button>
         @endmoduleEdit
     </div>
 
     <div class="svc-top-tabs">
-        <button type="button" class="svc-top-tab active" data-tab="services">Services</button>
-        <button type="button" class="svc-top-tab" data-tab="combos">Combos</button>
+        <button type="button" class="svc-top-tab {{ $initialCatalogTab === 'services' ? 'active' : '' }}" data-tab="services">Services</button>
+        <button type="button" class="svc-top-tab {{ $initialCatalogTab === 'combos' ? 'active' : '' }}" data-tab="combos">Combos</button>
+        <button type="button" class="svc-top-tab {{ $initialCatalogTab === 'freebies' ? 'active' : '' }}" data-tab="freebies">Service + Freebies</button>
     </div>
 
     <!-- TAB: SERVICES -->
-    <div class="svc-tab-pane active" id="tab-services">
+    <div class="svc-tab-pane {{ $initialCatalogTab === 'services' ? 'active' : '' }}" id="tab-services">
     <div class="row g-3">
         <div class="col-md-3">
             <div class="svc-cat-rail mb-3">
@@ -368,7 +395,7 @@
     <!-- /TAB: SERVICES -->
 
     <!-- TAB: COMBOS -->
-    <div class="svc-tab-pane" id="tab-combos">
+    <div class="svc-tab-pane {{ $initialCatalogTab === 'combos' ? 'active' : '' }}" id="tab-combos">
         <div id="comboList">
             @forelse ($combos as $combo)
                 <div class="combo-card" data-combo-id="{{ $combo->id }}">
@@ -429,9 +456,76 @@
     </div>
     <!-- /TAB: COMBOS -->
 
+    <!-- TAB: SERVICE + FREEBIES -->
+    <div class="svc-tab-pane {{ $initialCatalogTab === 'freebies' ? 'active' : '' }}" id="tab-freebies">
+        <div id="freebieList">
+            @forelse ($freebiePackages ?? [] as $fPkg)
+                @php
+                    $fAnchor = $fPkg->anchorService;
+                    $fStaffCount = $fAnchor ? $fAnchor->staff->count() : 0;
+                    $fPoolSize = $fPkg->eligibleServices->count();
+                    $fEditData = [
+                        'id' => $fPkg->id,
+                        'name' => $fPkg->name,
+                        'anchor_service_id' => $fPkg->anchor_service_id,
+                        'price' => (float) $fPkg->price,
+                        'free_choices_count' => $fPkg->effective_choices_count,
+                        'validity_days' => $fPkg->effective_validity_days,
+                        'is_active' => (bool) $fPkg->is_active,
+                    ];
+                    $fEligibleIds = $fPkg->eligibleServices->pluck('id')->values();
+                @endphp
+                <div class="combo-card freebie-pkg-card" data-freebie-id="{{ $fPkg->id }}">
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="d-flex align-items-center flex-wrap gap-2">
+                            <span class="combo-name">{{ $fPkg->name }}</span>
+                            <span class="combo-status {{ !$fPkg->is_active ? 'inactive' : '' }}">{{ $fPkg->is_active ? 'active' : 'inactive' }}</span>
+                        </div>
+                        <div class="combo-meta mt-1" style="color: #f8efe6; font-weight: 600;">
+                            Anchor: {{ $fAnchor?->name ?? 'Anchor Service' }} · {{ $fAnchor?->duration ?? 60 }} min
+                            @if ($fStaffCount > 0)
+                                · {{ $fStaffCount }} team member{{ $fStaffCount === 1 ? '' : 's' }}
+                            @else
+                                · No team members assigned
+                            @endif
+                        </div>
+                        <div class="combo-meta">
+                            Choose {{ $fPkg->effective_choices_count }} Free (from {{ $fPoolSize }} eligible) · Valid {{ $fPkg->effective_validity_days }} days
+                        </div>
+                        <div class="combo-services mt-1">{{ $fPkg->eligibleServices->pluck('name')->join(' · ') }}</div>
+                    </div>
+
+                    <div class="text-end shrink-0">
+                        <div class="combo-price">{{ number_format($fPkg->price, 2) }} QAR</div>
+                        @moduleEdit('services')
+                            <div class="mt-2 d-flex justify-content-end gap-1">
+                                <button type="button" class="btn btn-sm btn-outline-warning freebie-edit-btn"
+                                    data-pkg='@json($fEditData)'
+                                    data-eligible-ids='@json($fEligibleIds)'
+                                    title="Edit">
+                                    <i class="bi bi-pencil-square"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger freebie-delete-btn"
+                                    data-freebie-id="{{ $fPkg->id }}"
+                                    data-freebie-name="{{ $fPkg->name }}"
+                                    title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        @endmoduleEdit
+                    </div>
+                </div>
+            @empty
+                <div class="text-center text-muted py-5" id="freebieEmptyState">No Service + Freebies packages yet.</div>
+            @endforelse
+        </div>
+    </div>
+    <!-- /TAB: SERVICE + FREEBIES -->
+
     @moduleEdit('services')
     @include('services.main-form')
     @include('services.combo-form')
+    @include('services.freebie-form')
 
     <!-- Add Category Modal -->
     <div class="modal fade" id="categoryModal" tabindex="-1">

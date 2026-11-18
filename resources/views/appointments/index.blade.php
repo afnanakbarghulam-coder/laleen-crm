@@ -799,6 +799,11 @@
                                     @if ($rowComboName)
                                         <span class="bk-combo-badge">{{ $rowComboName }}</span>
                                     @endif
+                                    @if ($appointment->is_freebie_redemption)
+                                        <span class="bk-combo-badge" style="color: #6ee7b7; border-color: rgba(110,231,183,0.35); background: rgba(110,231,183,0.12);">Freebie · 0.00 QAR</span>
+                                    @elseif ($appointment->freebie_package_id)
+                                        <span class="bk-combo-badge">Service + Freebies</span>
+                                    @endif
                                     @if ($appointment->decide_in_salon && !$rowComboName)
                                         <span class="bk-decide-badge">Decide in Salon</span>
                                     @else
@@ -1147,6 +1152,24 @@
 
                     document.getElementById('profileServices').innerText = data.services_taken;
                     document.getElementById('profileRevenue').innerText = data.lifetime_revenue;
+
+                    const freebieBanner = document.getElementById('profileFreebieBanner');
+                    const availFreebies = Array.isArray(data.available_freebie_credits) ? data.available_freebie_credits : [];
+                    if (freebieBanner) {
+                        if (availFreebies.length > 0) {
+                            const fFirst = availFreebies[0];
+                            const fDays = fFirst.days_left <= 0 ? 'Expires today' : `${fFirst.days_left}d left`;
+                            const fUrl = `/appointments-calendar?open_booking=1&customer_id=${encodeURIComponent(data.customer_id || '')}&name=${encodeURIComponent(data.customer_name || '')}&phone=${encodeURIComponent(data.phone || '')}&redeem_freebie_credit_id=${encodeURIComponent(fFirst.credit_id)}`;
+                            freebieBanner.classList.remove('d-none');
+                            freebieBanner.innerHTML = `<div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                <span><strong>🎁 ${availFreebies.length} Freebie(s) Available</strong> — ${escHtml(fFirst.package_name)} · <span style="color:#6ee7b7; font-weight:700;">${escHtml(fDays)}</span></span>
+                                <a href="${fUrl}" class="btn btn-sm btn-outline-success py-0 px-2" style="font-size:11.5px;">Redeem Freebie</a>
+                            </div>`;
+                        } else {
+                            freebieBanner.classList.add('d-none');
+                            freebieBanner.innerHTML = '';
+                        }
+                    }
 
                     const fullLink = document.getElementById('profileFullLink');
                     if (data.customer_id) {

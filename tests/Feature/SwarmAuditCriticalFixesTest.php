@@ -260,7 +260,7 @@ class SwarmAuditCriticalFixesTest extends TestCase
 
     public function test_p0_4_unpicked_zero_of_x_choose_in_salon_combo_blocks_checkout_unless_services_picked_or_prepurchase_confirmed(): void
     {
-        $slot = Carbon::today()->addDay()->setTime(11, 0);
+        $slot = Carbon::today()->addDay()->setTime(13, 0);
 
         $storeRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
             'customer_name' => 'Maryam Al-Misnad',
@@ -316,7 +316,7 @@ class SwarmAuditCriticalFixesTest extends TestCase
 
     public function test_p1_1_visit_2_smart_coverage_prevents_double_charge_and_drawer_redeem_package_resolves_decide_in_salon(): void
     {
-        $visit1Slot = Carbon::today()->setTime(11, 0);
+        $visit1Slot = Carbon::today()->setTime(13, 0);
 
         // Visit 1: Buy 3-service Combo (Haircut + Manicure Today, Facial Pending -> 2 remaining if 1 Today or 1 remaining here)
         $v1Res = $this->actingAs($this->admin)->postJson(route('appointments.store'), [

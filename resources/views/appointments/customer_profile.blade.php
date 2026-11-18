@@ -7,6 +7,7 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <div id="profileFreebieBanner" class="d-none mb-3 px-3 py-2" style="border-left: 2px solid #6ee7b7; background: rgba(110, 231, 183, 0.08); border-radius: 0 8px 8px 0; font-size: 13px;"></div>
 
                 <!-- Customer Info -->
                 <div class="row mb-3">

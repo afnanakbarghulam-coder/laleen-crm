@@ -155,6 +155,53 @@
     .package-svc-chip .svc-status.pending { color: #c9a66b; }
     .package-svc-chip .svc-status.redeemed { color: #8ea88a; }
     .package-svc-chip .svc-status.expired { color: #a8524a; }
+
+    .freebie-flat-section {
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 14px 0;
+        margin-bottom: 20px;
+    }
+
+    .freebie-flat-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 9px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        font-size: 12.5px;
+    }
+
+    .freebie-redeem-link {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(110, 231, 183, 0.42);
+        background: rgba(110, 231, 183, 0.12);
+        color: #6ee7b7;
+        font-size: 11px;
+        font-weight: 700;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .freebie-redeem-link:hover {
+        background: rgba(110, 231, 183, 0.22);
+        color: #f8efe6;
+    }
+
+    @media print {
+        .freebie-flat-section, .card, .profile-stat, .appt-row, .planner-row, .package-item {
+            background: #ffffff !important;
+            color: #111111 !important;
+            border-color: #dddddd !important;
+        }
+        .freebie-redeem-link, .btn, .wa-trigger {
+            display: none !important;
+        }
+    }
 </style>
 
 @section('content')
@@ -527,6 +574,70 @@
                         <p class="text-muted small mb-0">No combo packages purchased yet.</p>
                     @endforelse
                 </div>
+            </div>
+
+            <!-- Flat Hairline Service + Freebies Section -->
+            <div class="freebie-flat-section">
+                @php
+                    $availableFreebiesCount = isset($freebieCredits)
+                        ? $freebieCredits->filter(fn ($fc) => $fc->effective_status === 'available')->count()
+                        : 0;
+                @endphp
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-semibold" style="color: #f8efe6; font-size: 14px;">Service + Freebies</span>
+                    @if ($availableFreebiesCount > 0)
+                        <span style="font-size: 11.5px; font-weight: 700; color: #6ee7b7;">🎁 {{ $availableFreebiesCount }} available</span>
+                    @endif
+                </div>
+
+                @forelse ($freebieCredits ?? [] as $credit)
+                    @php
+                        $effStatus = $credit->effective_status;
+                        $pkgName = $credit->package?->name ?? 'Service + Freebies';
+                        $anchorDateObj = $credit->anchorAppointment?->appointment_datetime ?: $credit->created_at;
+                        $anchorDateLabel = $anchorDateObj ? $anchorDateObj->copy()->timezone('Asia/Qatar')->format('d M Y') : '—';
+                        $validUntilLabel = $credit->expires_at ? $credit->expires_at->copy()->timezone('Asia/Qatar')->format('d M') : '—';
+                        $redeemedSvcName = $credit->redeemedService?->name ?? 'Mini-Service';
+                        $redeemedDateObj = $credit->redeemed_at ?: $credit->redemptionAppointment?->appointment_datetime;
+                        $redeemedDateLabel = $redeemedDateObj ? $redeemedDateObj->copy()->timezone('Asia/Qatar')->format('d M Y') : '—';
+                        $redeemParams = array_filter([
+                            'open_booking' => 1,
+                            'customer_id' => $customer->id,
+                            'name' => $customer->name,
+                            'phone' => $customer->phone,
+                            'branch' => $customer->branch ?: $lastCompletedVisit?->branch,
+                            'redeem_freebie_credit_id' => $credit->id,
+                        ]);
+                    @endphp
+                    <div class="freebie-flat-row">
+                        <div class="min-w-0">
+                            <div class="fw-semibold" style="color: #f8efe6;">
+                                {{ $pkgName }} <span style="color: #b8a29a; font-weight: 400;">· Slot #{{ $credit->slot_number }}</span>
+                            </div>
+                            <div style="font-size: 11.5px; color: #b8a29a;">
+                                Anchor {{ $anchorDateLabel }} ·
+                                @if ($effStatus === 'available')
+                                    <span style="color: #6ee7b7; font-weight: 600;">{{ $credit->days_left }}d left · Valid until {{ $validUntilLabel }}</span>
+                                @elseif ($effStatus === 'locked_until_paid')
+                                    <span style="color: #d4a373; font-weight: 600;">Pending Payment</span>
+                                @elseif ($effStatus === 'scheduled')
+                                    <span style="color: #e5b8a8; font-weight: 600;">Scheduled: {{ $redeemedSvcName }} ({{ $redeemedDateLabel }})</span>
+                                @elseif ($effStatus === 'redeemed')
+                                    <span style="color: #6ee7b7; font-weight: 600;">✓ Redeemed: {{ $redeemedSvcName }} on {{ $redeemedDateLabel }}</span>
+                                @elseif ($effStatus === 'expired')
+                                    <span style="color: #fda4af; font-weight: 600;">Expired ({{ $validUntilLabel }})</span>
+                                @elseif ($effStatus === 'voided')
+                                    <span style="color: #8a7d76;">Voided</span>
+                                @endif
+                            </div>
+                        </div>
+                        @if ($effStatus === 'available')
+                            <a href="{{ route('appointments.calendar', $redeemParams) }}" class="freebie-redeem-link">Redeem</a>
+                        @endif
+                    </div>
+                @empty
+                    <p class="text-muted small mb-0">No Service + Freebies credits yet.</p>
+                @endforelse
             </div>
 
             <div class="card mb-4">

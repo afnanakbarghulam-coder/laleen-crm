@@ -47,6 +47,7 @@ use App\Http\Controllers\ProductRdController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ServiceCategoryController;
 use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\ServiceFreebiePackageController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\StaffBlockController;
 use App\Http\Controllers\StaffComplaintController;
@@ -268,6 +269,7 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('module:services')->group(function () {
         Route::get('/services', [ServiceController::class, 'index'])->name('services.index');
         Route::get('/combos', [ComboController::class, 'index'])->name('combos.index');
+        Route::get('/service-freebie-packages', [ServiceFreebiePackageController::class, 'index'])->name('service-freebies.index');
     });
     Route::middleware('module:services,edit')->group(function () {
         Route::post('/services', [ServiceController::class, 'store'])->name('services.store');
@@ -279,6 +281,14 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/combos', [ComboController::class, 'store'])->name('combos.store');
         Route::put('/combos/{combo}', [ComboController::class, 'update'])->name('combos.update');
         Route::delete('/combos/{combo}', [ComboController::class, 'destroy'])->name('combos.destroy');
+
+        Route::post('/service-freebie-packages', [ServiceFreebiePackageController::class, 'store'])->name('service-freebies.store');
+        Route::match(['put', 'patch'], '/service-freebie-packages/{serviceFreebiePackage}', [ServiceFreebiePackageController::class, 'update'])
+            ->whereNumber('serviceFreebiePackage')
+            ->name('service-freebies.update');
+        Route::delete('/service-freebie-packages/{serviceFreebiePackage}', [ServiceFreebiePackageController::class, 'destroy'])
+            ->whereNumber('serviceFreebiePackage')
+            ->name('service-freebies.destroy');
     });
 
     // ---- Products ----
@@ -310,6 +320,12 @@ Route::middleware(['auth'])->group(function () {
     Route::match(['patch', 'post', 'put'], '/customers/{customer}/quick-rename', [CustomerController::class, 'quickRename'])->name('customers.quick-rename');
 
     Route::post('/customers/sync-retention-leads', [CustomerController::class, 'syncRetentionToLeads'])->middleware('throttle:20,1')->name('customers.sync-retention-leads');
+
+    Route::middleware('module:clients|bookings|calendar')->group(function () {
+        Route::get('/customers/{customer}/freebie-credits', [CustomerController::class, 'freebieCredits'])
+            ->whereNumber('customer')
+            ->name('customers.freebieCredits');
+    });
 
     Route::middleware('module:clients')->group(function () {
         Route::get('/customers-lookup', [CustomerController::class, 'lookup'])->name('customers.lookup');

@@ -23,6 +23,8 @@ class Appointment extends Model
         'service_name',
         'combo_id',
         'combo_name',
+        'freebie_package_id',
+        'is_freebie_redemption',
         'decide_in_salon',
         'hold_duration',
         'notes',
@@ -42,6 +44,8 @@ class Appointment extends Model
         'paid_at' => 'datetime',
         'decide_in_salon' => 'boolean',
         'hold_duration' => 'integer',
+        'freebie_package_id' => 'integer',
+        'is_freebie_redemption' => 'boolean',
     ];
 
     protected static function booted(): void
@@ -253,6 +257,21 @@ class Appointment extends Model
     public function priceOverrides()
     {
         return $this->hasMany(AppointmentPriceOverride::class)->orderByDesc('created_at');
+    }
+
+    public function freebiePackage()
+    {
+        return $this->belongsTo(ServiceFreebiePackage::class, 'freebie_package_id');
+    }
+
+    public function anchoredFreebieCredits()
+    {
+        return $this->hasMany(ClientFreebieCredit::class, 'anchor_appointment_id')->orderBy('slot_number');
+    }
+
+    public function redeemedFreebieCredits()
+    {
+        return $this->hasMany(ClientFreebieCredit::class, 'redemption_appointment_id')->orderBy('slot_number');
     }
 
     /**

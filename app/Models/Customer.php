@@ -428,6 +428,82 @@ class Customer extends Model
             ->orderByDesc('id');
     }
 
+    public function freebieCredits()
+    {
+        return $this->hasMany(ClientFreebieCredit::class, 'customer_id')
+            ->orderByDesc('id');
+    }
+
+    public function availableFreebieCredits()
+    {
+        return $this->hasMany(ClientFreebieCredit::class, 'customer_id')
+            ->availableNotExpired()
+            ->orderBy('expires_at')
+            ->orderBy('slot_number');
+    }
+
+    public function getAvailableFreebieCountAttribute(): int
+    {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('client_freebie_credits')) {
+            return 0;
+        }
+
+        return (int) $this->availableFreebieCredits()->count();
+    }
+
+    public function redeemableFreebieCreditsPayload(?int $forAppointmentId = null): array
+    {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('client_freebie_credits')) {
+            return [];
+        }
+
+        $query = $this->hasMany(ClientFreebieCredit::class, 'customer_id')
+            ->with(['package.eligibleServices', 'anchorAppointment'])
+            ->where(function ($q) use ($forAppointmentId) {
+                $q->where(function ($sub) {
+                    $sub->where('status', ClientFreebieCredit::STATUS_AVAILABLE)
+                        ->where('expires_at', '>=', now('Asia/Qatar'));
+                });
+                if ($forAppointmentId !== null) {
+                    $q->orWhere(function ($sub) use ($forAppointmentId) {
+                        $sub->where('status', ClientFreebieCredit::STATUS_SCHEDULED)
+                            ->where('redemption_appointment_id', $forAppointmentId)
+                            ->where('expires_at', '>=', now('Asia/Qatar'));
+                    });
+                }
+            })
+            ->orderBy('expires_at')
+            ->orderBy('slot_number');
+
+        return $query->get()
+            ->filter(fn (ClientFreebieCredit $credit) => $credit->canRedeem($forAppointmentId) && $credit->package !== null)
+            ->map(function (ClientFreebieCredit $credit) {
+                $pkg = $credit->package;
+                $expiresQatar = $credit->expires_at?->copy()->timezone('Asia/Qatar');
+
+                return [
+                    'id' => $credit->id,
+                    'credit_id' => $credit->id,
+                    'slot_number' => (int) $credit->slot_number,
+                    'status' => $credit->effective_status,
+                    'package_id' => (int) $pkg->id,
+                    'package_name' => $pkg->name,
+                    'redeemed_service_id' => $credit->redeemed_service_id ? (int) $credit->redeemed_service_id : null,
+                    'expires_at' => $expiresQatar ? $expiresQatar->format('d M Y') : null,
+                    'expires_at_iso' => $expiresQatar ? $expiresQatar->toIso8601String() : null,
+                    'days_left' => $credit->days_left,
+                    'eligible_services' => $pkg->eligibleServices->map(fn (Service $svc) => [
+                        'id' => (int) $svc->id,
+                        'name' => $svc->name,
+                        'duration' => (int) ($svc->duration ?: 30),
+                        'regular_price' => (float) $svc->price,
+                    ])->values()->all(),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
     /**
      * Normalize any phone input into the standard digits-only format via
      * Lead::splitPhone() and Lead::normalizePhone() so local 8-digit Qatar
