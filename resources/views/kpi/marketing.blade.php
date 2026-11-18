@@ -32,7 +32,7 @@
             <a href="{{ route('kpi.ads-plan.index') }}" class="kpi-hub-card">
                 <div class="kpi-hub-icon"><i class="bx bx-rocket"></i></div>
                 <h6 class="mb-1">Monthly Ads Plan</h6>
-                <p class="text-muted small mb-0">Kanban board tracking every ad through Planning, Production, Testing, and Scaling.</p>
+                <p class="text-muted small mb-0">3-column board tracking creative batches through Planning &amp; Production, Testing, and Scaling.</p>
             </a>
         </div>
     </div>

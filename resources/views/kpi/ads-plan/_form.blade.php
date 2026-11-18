@@ -1,9 +1,6 @@
-{{-- Shared Add/Edit modal for Monthly Ad rows. JS toggles it between
-     "create" (form posts to ads-plan.store) and "edit" (posts to
-     ads-plan.update for the clicked card). Phase itself is changed from
-     the Kanban card's inline select, not from this form. --}}
-<div class="modal fade" id="monthlyAdModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+{{-- Minimalist Add / Edit Ad Modal with Dynamic 1..N Creatives (Type, Format, Size & Reference URL) --}}
+<div class="modal fade laleen-ma-modal" id="monthlyAdModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 880px;">
         <div class="modal-content">
             <form method="POST" id="monthlyAdForm" action="{{ route('kpi.ads-plan.store') }}">
                 @csrf
@@ -11,352 +8,535 @@
 
                 <div class="modal-header">
                     <h5 class="modal-title" id="monthlyAdModalTitle">Add Ad</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
+
                 <div class="modal-body">
-                    <div class="row g-3">
+                    {{-- Zone 1: Campaign & Offer Brief --}}
+                    <div class="row g-2">
                         <div class="col-md-5">
-                            <label class="form-label">Ad Name</label>
-                            <input type="text" name="ad_name" id="maAdName" class="form-control" required>
+                            <label class="laleen-ma-lbl" for="maAdName">Ad / Campaign Name *</label>
+                            <input type="text" name="ad_name" id="maAdName" class="form-control form-control-sm laleen-ma-input" required>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">Plan Month</label>
-                            <input type="month" name="plan_month" id="maPlanMonth" class="form-control" required>
+                            <label class="laleen-ma-lbl" for="maPlanMonth">Plan Month *</label>
+                            <input type="month" name="plan_month" id="maPlanMonth" class="form-control form-control-sm laleen-ma-input" required>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Person Responsible</label>
-                            <select name="person_responsible" id="maPersonResponsible" class="form-select" required>
+                            <label class="laleen-ma-lbl" for="maPersonResponsible">Person Responsible *</label>
+                            <select name="person_responsible" id="maPersonResponsible" class="form-select form-select-sm laleen-ma-input" required>
                                 <option value="">— Select —</option>
                                 @foreach ($staff as $member)
                                     <option value="{{ $member->name }}">{{ $member->name }}</option>
                                 @endforeach
                             </select>
-                            <input type="hidden" id="maPersonResponsibleHidden" value="">
                         </div>
-                        <div class="col-md-8">
-                            <label class="form-label">Offer</label>
-                            <textarea name="offer" id="maOffer" class="form-control" rows="2" placeholder="What's the offer this ad promotes?"></textarea>
-                        </div>
+
                         <div class="col-md-4">
-                            <label class="form-label">Total Budget (QAR)</label>
-                            <input type="number" step="0.01" min="0" name="total_budget" id="maTotalBudget" class="form-control">
-                        </div>
-                        <div class="col-md-8">
-                            <label class="form-label">Pre-filled Message</label>
-                            <textarea name="pre_filled_message" id="maPreFilledMessage" class="form-control" rows="2" placeholder="Caption / copy ready to paste when the ad goes live"></textarea>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Live Date</label>
-                            <input type="date" name="live_date" id="maLiveDate" class="form-control">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Target Branch</label>
-                            <select name="target_branch" id="maTargetBranch" class="form-select">
+                            <label class="laleen-ma-lbl" for="maTargetBranch">Target Branch</label>
+                            <select name="target_branch" id="maTargetBranch" class="form-select form-select-sm laleen-ma-input">
                                 @foreach (\App\Models\KpiMonthlyAd::BRANCHES as $branch)
                                     <option value="{{ $branch }}">{{ $branch }}</option>
                                 @endforeach
                             </select>
-                            <input type="hidden" id="maTargetBranchHidden" value="">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="laleen-ma-lbl" for="maTotalBudget">Planned Budget (QAR)</label>
+                            <input type="number" step="0.01" min="0" name="total_budget" id="maTotalBudget" class="form-control form-control-sm laleen-ma-input" placeholder="0.00">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="laleen-ma-lbl" for="maOfferPrice">Ticket / Offer Price (QAR)</label>
+                            <input type="number" step="0.01" min="0" name="offer_price" id="maOfferPrice" class="form-control form-control-sm laleen-ma-input" placeholder="e.g. 180">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="laleen-ma-lbl" for="maLiveDate">Live Date</label>
+                            <input type="date" name="live_date" id="maLiveDate" class="form-control form-control-sm laleen-ma-input">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="laleen-ma-lbl" for="maOffer">Offer Summary</label>
+                            <input type="text" name="offer" id="maOffer" class="form-control form-control-sm laleen-ma-input" placeholder="What offer does this campaign promote?">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Service Ticket / Offer Price (QAR)</label>
-                            <input type="number" step="0.01" min="0" name="offer_price" id="maOfferPrice" class="form-control" placeholder="e.g. 50 or 300">
+                            <label class="laleen-ma-lbl" for="maPreFilledMessage">WhatsApp Pre-Filled Message / Caption</label>
+                            <input type="text" name="pre_filled_message" id="maPreFilledMessage" class="form-control form-control-sm laleen-ma-input" placeholder="Ready-to-paste caption or WhatsApp greeting">
                         </div>
                     </div>
 
-                    <div class="mt-4 pt-3 border-top d-none" id="maProductionSection">
-                        <h6 class="fw-bold">Production Deadlines</h6>
-                        <div class="mb-3">
-                            <label class="form-label d-block">Raw Data Status</label>
-                            <div class="d-flex gap-4">
-                                <div class="form-check">
-                                    <input type="radio" class="form-check-input" name="raw_data_status" id="maRawDataAvailable" value="available">
-                                    <label class="form-check-label" for="maRawDataAvailable">✔ Available Now</label>
-                                </div>
-                                <div class="form-check">
-                                    <input type="radio" class="form-check-input" name="raw_data_status" id="maRawDataScheduled" value="scheduled" checked>
-                                    <label class="form-check-label" for="maRawDataScheduled">📅 Set Deadline Date</label>
-                                </div>
-                            </div>
-                            <div class="mt-2 small d-none" id="maRawDataAvailableNote" style="color: #10b981;">Raw footage is ready for editing</div>
-                            <div class="mt-2" id="maRawDataDeadlineWrap">
-                                <label class="form-label">Raw Data Deadline</label>
-                                <input type="date" name="raw_data_deadline" id="maRawDataDeadline" class="form-control">
-                            </div>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Final Creative Deadline</label>
-                                <input type="date" name="final_creative_deadline" id="maFinalCreativeDeadline" class="form-control">
-                            </div>
-                        </div>
+                    {{-- Zone 2: Dynamic Unlimited Creatives (Minimalist Hairline Rows) --}}
+                    <div class="laleen-ma-section-divider my-3"></div>
 
-                        <h6 class="fw-bold mt-4">3 Named Creatives — required before Testing</h6>
-                        <div class="row g-3 mb-2">
-                            <div class="col-md-6">
-                                <label class="form-label">Creative 1 Name</label>
-                                <input type="text" name="creative_1_name" id="maCreative1Name" class="form-control" placeholder="e.g. C1 - Hook A (Urdu Voiceover)">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Creative 1 Asset Link</label>
-                                <input type="text" name="creative_asset_link" id="maCreativeAssetLink" class="form-control" placeholder="Link to Creative 1">
-                            </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="fw-semibold" style="color: #f8efe6; font-size: 0.86rem;">Creatives</span>
+                            <span class="laleen-ma-count-chip" id="maCreativesCountChip">1 Creative</span>
                         </div>
-                        <div class="row g-3 mb-2">
-                            <div class="col-md-6">
-                                <label class="form-label">Creative 2 Name</label>
-                                <input type="text" name="creative_2_name" id="maCreative2Name" class="form-control" placeholder="e.g. C2 - Before/After Reel">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Creative 2 Asset Link</label>
-                                <input type="text" name="creative_asset_link_2" id="maCreativeAssetLink2" class="form-control" placeholder="Link to Creative 2">
-                            </div>
-                        </div>
-                        <div class="row g-3 mb-4">
-                            <div class="col-md-6">
-                                <label class="form-label">Creative 3 Name</label>
-                                <input type="text" name="creative_3_name" id="maCreative3Name" class="form-control" placeholder="e.g. C3 - Offer Breakdown">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Creative 3 Asset Link</label>
-                                <input type="text" name="creative_asset_link_3" id="maCreativeAssetLink3" class="form-control" placeholder="Link to Creative 3">
-                            </div>
-                        </div>
-                        <div class="p-3 rounded mb-3" style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05);">
-                            <div class="row mb-4">
-                                <div class="col-md-6">
-                                    <div class="form-check mb-2">
-                                        <input type="checkbox" name="chk_hook" id="maChkHook" class="form-check-input" value="1">
-                                        <label for="maChkHook" class="form-check-label">1. Hook</label>
-                                    </div>
-                                    <input type="text" name="txt_hook" id="maTxtHook" class="form-control form-control-sm" style="border-color: rgba(255, 255, 255, 0.1);" placeholder="Describe the hook...">
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-check mb-2">
-                                        <input type="checkbox" name="chk_value" id="maChkValue" class="form-check-input" value="1">
-                                        <label for="maChkValue" class="form-check-label">2. Value</label>
-                                    </div>
-                                    <input type="text" name="txt_value" id="maTxtValue" class="form-control form-control-sm" style="border-color: rgba(255, 255, 255, 0.1);" placeholder="Describe the value...">
-                                </div>
-                            </div>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-check mb-2">
-                                        <input type="checkbox" name="chk_risk" id="maChkRisk" class="form-check-input" value="1">
-                                        <label for="maChkRisk" class="form-check-label">3. Risk</label>
-                                    </div>
-                                    <input type="text" name="txt_risk" id="maTxtRisk" class="form-control form-control-sm" style="border-color: rgba(255, 255, 255, 0.1);" placeholder="Describe the risk reversal...">
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-check mb-2">
-                                        <input type="checkbox" name="chk_cta" id="maChkCta" class="form-check-input" value="1">
-                                        <label for="maChkCta" class="form-check-label">4. CTA</label>
-                                    </div>
-                                    <input type="text" name="txt_cta" id="maTxtCta" class="form-control form-control-sm" style="border-color: rgba(255, 255, 255, 0.1);" placeholder="Describe the call to action...">
-                                </div>
-                            </div>
-                        </div>
+                        <button type="button" class="btn btn-sm laleen-ma-ghost-btn" id="maAddCreativeBtn">
+                            + Add Creative
+                        </button>
                     </div>
 
-                    <div class="mt-4 pt-3 border-top d-none" id="maTestingSection">
-                        <h6 class="fw-bold">7-Day Creative &amp; Funnel Evaluation</h6>
-                        <div class="small p-2 rounded mb-3 d-flex flex-wrap gap-3 align-items-center" style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05);">
-                            <span>Prod Started: <strong id="maTrailProdStarted">—</strong></span>
-                            <span>Test Started: <strong id="maTrailTestStarted">—</strong></span>
-                            <span class="d-flex align-items-center gap-2">
-                                Test Ends:
-                                <input type="date" name="testing_ends_at" id="maTestingEndsAt" class="form-control form-control-sm" style="width: auto;">
-                            </span>
+                    <div id="maCreativesList" class="laleen-ma-form-creatives">
+                        {{-- Populated dynamically by JS (1..N rows) --}}
+                    </div>
+
+                    {{-- Zone 3: Deadlines & Funnel Evaluation --}}
+                    <div class="laleen-ma-section-divider my-3"></div>
+
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <label class="laleen-ma-lbl" for="maFinalCreativeDeadline">Creative Deadline</label>
+                            <input type="date" name="final_creative_deadline" id="maFinalCreativeDeadline" class="form-control form-control-sm laleen-ma-input">
                         </div>
-                        <div class="p-3 rounded" style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05);">
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Winning Creative</label>
-                                    <select name="winning_creative" id="maWinningCreative" class="form-select">
-                                        <option value=""></option>
-                                        <option value="Creative 1" data-base-label="Creative 1">Creative 1</option>
-                                        <option value="Creative 2" data-base-label="Creative 2">Creative 2</option>
-                                        <option value="Creative 3" data-base-label="Creative 3">Creative 3</option>
-                                        <option value="None">None</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Cost Per WhatsApp Msg (QAR)</label>
-                                    <input type="number" step="0.01" min="0" name="cost_per_message" id="maCostPerMessage" class="form-control">
-                                    <div class="form-text" id="maCostPerMessageHelper"></div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Funnel Verdict</label>
-                                    <select name="sales_verdict" id="maSalesVerdict" class="form-select">
-                                        <option value="">-- Select Funnel Verdict --</option>
-                                        <option value="High Messages + Sales (Scale)">High Messages + Sales (Scale)</option>
-                                        <option value="Audience Only / No Sales">Audience Only / No Sales</option>
-                                        <option value="Too Expensive / Dead">Too Expensive / Dead</option>
-                                        <option value="__custom__">+ Add Custom Verdict Category...</option>
-                                    </select>
-                                    <div id="maCustomVerdictWrap" class="mt-2 d-none">
-                                        <input type="text" class="form-control form-control-sm" id="maSalesVerdictCustom" name="sales_verdict_custom" placeholder="Enter custom verdict category...">
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Audience &amp; Funnel Notes</label>
-                                    <textarea name="testing_notes" id="maTestingNotes" class="form-control" rows="1" placeholder="Which audience worked? Why did C3 get clicks but no sales?"></textarea>
-                                </div>
+                        <div class="col-md-3">
+                            <label class="laleen-ma-lbl" for="maTestingEndsAt">Test Ends</label>
+                            <input type="date" name="testing_ends_at" id="maTestingEndsAt" class="form-control form-control-sm laleen-ma-input">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="laleen-ma-lbl" for="maWinningCreative">Winning Creative</label>
+                            <select name="winning_creative" id="maWinningCreative" class="form-select form-select-sm laleen-ma-input">
+                                <option value="">— Select —</option>
+                                <option value="Creative 1">Creative 1</option>
+                                <option value="None">None</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="laleen-ma-lbl" for="maCostPerMessage">Cost / WhatsApp Msg (QAR)</label>
+                            <input type="number" step="0.01" min="0" name="cost_per_message" id="maCostPerMessage" class="form-control form-control-sm laleen-ma-input" placeholder="0.00">
+                            <div class="laleen-ma-helper" id="maCostPerMessageHelper"></div>
+                        </div>
+
+                        <div class="col-md-5">
+                            <label class="laleen-ma-lbl" for="maSalesVerdict">Funnel Verdict</label>
+                            <select name="sales_verdict" id="maSalesVerdict" class="form-select form-select-sm laleen-ma-input">
+                                <option value="">— Select Verdict —</option>
+                                <option value="High Messages + Sales (Scale)">High Messages + Sales (Scale)</option>
+                                <option value="Audience Only / No Sales">Audience Only / No Sales</option>
+                                <option value="Too Expensive / Dead">Too Expensive / Dead</option>
+                                <option value="__custom__">+ Custom Verdict...</option>
+                            </select>
+                            <div id="maCustomVerdictWrap" class="mt-1 d-none">
+                                <input type="text" class="form-control form-control-sm laleen-ma-input" id="maSalesVerdictCustom" name="sales_verdict_custom" placeholder="Enter custom verdict...">
                             </div>
+                        </div>
+                        <div class="col-md-7">
+                            <label class="laleen-ma-lbl" for="maTestingNotes">Audience &amp; Funnel Notes</label>
+                            <input type="text" name="testing_notes" id="maTestingNotes" class="form-control form-control-sm laleen-ma-input" placeholder="Hook retention, audience notes, or scaling takeaways...">
                         </div>
                     </div>
                 </div>
+
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-sm laleen-ma-ghost-btn" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm laleen-ma-rose-btn">Save Ad</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
+<style>
+    .laleen-ma-modal .modal-content {
+        background: linear-gradient(180deg, #22161b 0%, #150e12 100%);
+        border: 1px solid rgba(229, 184, 168, 0.2);
+        border-radius: 16px;
+        color: #f8efe6;
+    }
+    .laleen-ma-modal .modal-header,
+    .laleen-ma-modal .modal-footer {
+        border-color: rgba(255, 255, 255, 0.07);
+        padding: 13px 20px;
+    }
+    .laleen-ma-modal .modal-body {
+        padding: 16px 20px;
+    }
+
+    .laleen-ma-lbl {
+        display: block;
+        font-size: 0.72rem;
+        font-weight: 500;
+        color: #b8a29a;
+        margin-bottom: 3px;
+    }
+
+    .laleen-ma-input {
+        background-color: #120b0f !important;
+        border: 1px solid rgba(229, 184, 168, 0.18) !important;
+        color: #f8efe6 !important;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        color-scheme: dark;
+    }
+    .laleen-ma-input:focus {
+        border-color: #d98f83 !important;
+        box-shadow: 0 0 0 2px rgba(217, 143, 131, 0.16) !important;
+    }
+    .laleen-ma-input option {
+        background-color: #191115;
+        color: #f8efe6;
+    }
+
+    .laleen-ma-section-divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.07);
+    }
+
+    .laleen-ma-form-creatives {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .laleen-ma-form-crow {
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .laleen-ma-form-crow:first-child {
+        padding-top: 2px;
+    }
+    .laleen-ma-form-crow:last-child {
+        border-bottom: none;
+        padding-bottom: 2px;
+    }
+
+    .laleen-ma-crow-label {
+        font-size: 0.74rem;
+        font-weight: 600;
+        color: #e5b8a8;
+    }
+
+    .laleen-ma-crow-remove {
+        background: transparent;
+        border: none;
+        color: #9e8981;
+        font-size: 1rem;
+        line-height: 1;
+        padding: 0 4px;
+        cursor: pointer;
+    }
+    .laleen-ma-crow-remove:hover {
+        color: #fda4af;
+    }
+
+    .laleen-ma-url-preview {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 30px;
+        border: 1px solid rgba(229, 184, 168, 0.2);
+        border-left: none;
+        border-radius: 0 8px 8px 0;
+        background: rgba(229, 184, 168, 0.08);
+        color: #d4a373 !important;
+        text-decoration: none !important;
+        font-size: 0.78rem;
+        font-weight: 600;
+        padding: 0 8px;
+    }
+    .laleen-ma-url-preview.is-empty {
+        opacity: 0.35;
+        pointer-events: none;
+    }
+    .laleen-ma-url-preview:hover {
+        background: rgba(229, 184, 168, 0.18);
+        color: #f8efe6 !important;
+    }
+
+    .laleen-ma-helper {
+        font-size: 0.7rem;
+        color: #9e8981;
+        margin-top: 2px;
+    }
+</style>
+
 <script>
-    /** Brief fields read-only'd and Person Responsible / Target Branch locked once an ad has left Planning. */
-    const BRIEF_LOCK_FIELD_IDS = ['maAdName', 'maPlanMonth', 'maOffer', 'maPreFilledMessage', 'maTotalBudget', 'maLiveDate', 'maOfferPrice'];
-
+(function () {
     const PRESET_SALES_VERDICTS = ['High Messages + Sales (Scale)', 'Audience Only / No Sales', 'Too Expensive / Dead'];
+    const DEFAULT_SIZE_BY_TYPE = { reel: '9:16', story: '9:16', post: '4:5' };
 
-    function lockSelectWithHidden(selectId, hiddenId, name, locked) {
-        const select = document.getElementById(selectId);
-        const hidden = document.getElementById(hiddenId);
-        select.disabled = locked;
-        if (locked) {
-            hidden.value = select.value;
-            select.removeAttribute('name');
-            hidden.setAttribute('name', name);
-        } else {
-            select.setAttribute('name', name);
-            hidden.removeAttribute('name');
+    function escapeHtml(str) {
+        return String(str ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function isValidHttpUrl(val) {
+        if (!val) return false;
+        try {
+            const u = new URL(val.trim());
+            return u.protocol === 'http:' || u.protocol === 'https:';
+        } catch {
+            return false;
         }
     }
 
-    function setBriefLocked(locked) {
-        BRIEF_LOCK_FIELD_IDS.forEach(id => {
-            document.getElementById(id).readOnly = locked;
+    function createCreativeRowElement(data = {}, index = 0) {
+        const type = ['reel', 'story', 'post'].includes(data.creative_type) ? data.creative_type : 'reel';
+        const media = ['video', 'image'].includes(data.media_type) ? data.media_type : 'video';
+        const defaultSize = DEFAULT_SIZE_BY_TYPE[type] || '9:16';
+        const size = ['9:16', '4:5', '1:1', '16:9'].includes(data.size) ? data.size : defaultSize;
+        const sizeWasCustom = Boolean(data.size && data.size !== defaultSize);
+        const name = data.name || '';
+        const refUrl = data.reference_url || '';
+
+        const row = document.createElement('div');
+        row.className = 'laleen-ma-form-crow';
+        row.setAttribute('data-ma-crow', '');
+
+        row.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="laleen-ma-crow-label" data-crow-heading>Creative ${index + 1}</span>
+                <button type="button" class="laleen-ma-crow-remove" data-crow-remove title="Remove creative" aria-label="Remove creative">&times;</button>
+            </div>
+            <div class="row g-2 align-items-center">
+                <div class="col-md-4">
+                    <input type="text"
+                           class="form-control form-control-sm laleen-ma-input"
+                           data-crow-field="name"
+                           value="${escapeHtml(name)}"
+                           placeholder="Creative ${index + 1} — Angle / Hook"
+                           required>
+                </div>
+                <div class="col-4 col-md-2">
+                    <select class="form-select form-select-sm laleen-ma-input" data-crow-field="creative_type" aria-label="Creative Type">
+                        <option value="reel" ${type === 'reel' ? 'selected' : ''}>Reel</option>
+                        <option value="story" ${type === 'story' ? 'selected' : ''}>Story</option>
+                        <option value="post" ${type === 'post' ? 'selected' : ''}>Post</option>
+                    </select>
+                </div>
+                <div class="col-4 col-md-2">
+                    <select class="form-select form-select-sm laleen-ma-input" data-crow-field="media_type" aria-label="Media Format">
+                        <option value="video" ${media === 'video' ? 'selected' : ''}>Video</option>
+                        <option value="image" ${media === 'image' ? 'selected' : ''}>Image</option>
+                    </select>
+                </div>
+                <div class="col-4 col-md-2">
+                    <select class="form-select form-select-sm laleen-ma-input"
+                            data-crow-field="size"
+                            data-size-touched="${sizeWasCustom ? '1' : '0'}"
+                            aria-label="Creative Size">
+                        <option value="9:16" ${size === '9:16' ? 'selected' : ''}>9:16 (1080×1920)</option>
+                        <option value="4:5" ${size === '4:5' ? 'selected' : ''}>4:5 (1080×1350)</option>
+                        <option value="1:1" ${size === '1:1' ? 'selected' : ''}>1:1 (1080×1080)</option>
+                        <option value="16:9" ${size === '16:9' ? 'selected' : ''}>16:9 (1920×1080)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <div class="d-flex">
+                        <input type="url"
+                               class="form-control form-control-sm laleen-ma-input"
+                               style="border-top-right-radius: 0; border-bottom-right-radius: 0;"
+                               data-crow-field="reference_url"
+                               value="${escapeHtml(refUrl)}"
+                               placeholder="https://...">
+                        <a href="${isValidHttpUrl(refUrl) ? escapeHtml(refUrl) : '#'}"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           class="laleen-ma-url-preview ${isValidHttpUrl(refUrl) ? '' : 'is-empty'}"
+                           data-crow-preview
+                           title="Open reference link">↗</a>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const typeSel = row.querySelector('[data-crow-field="creative_type"]');
+        const sizeSel = row.querySelector('[data-crow-field="size"]');
+        const nameInput = row.querySelector('[data-crow-field="name"]');
+        const urlInput = row.querySelector('[data-crow-field="reference_url"]');
+        const previewLink = row.querySelector('[data-crow-preview]');
+        const removeBtn = row.querySelector('[data-crow-remove]');
+
+        sizeSel.addEventListener('change', () => {
+            sizeSel.dataset.sizeTouched = '1';
         });
 
-        lockSelectWithHidden('maPersonResponsible', 'maPersonResponsibleHidden', 'person_responsible', locked);
-        lockSelectWithHidden('maTargetBranch', 'maTargetBranchHidden', 'target_branch', locked);
+        typeSel.addEventListener('change', () => {
+            if (sizeSel.dataset.sizeTouched !== '1') {
+                sizeSel.value = DEFAULT_SIZE_BY_TYPE[typeSel.value] || '9:16';
+            }
+        });
 
-        document.getElementById('maProductionSection').classList.toggle('d-none', !locked);
+        nameInput.addEventListener('input', () => syncWinningCreativeOptions());
+
+        urlInput.addEventListener('input', () => {
+            const raw = urlInput.value.trim();
+            if (isValidHttpUrl(raw)) {
+                previewLink.href = raw;
+                previewLink.classList.remove('is-empty');
+            } else {
+                previewLink.href = '#';
+                previewLink.classList.add('is-empty');
+            }
+        });
+
+        removeBtn.addEventListener('click', () => {
+            const list = document.getElementById('maCreativesList');
+            if (list && list.querySelectorAll('[data-ma-crow]').length > 1) {
+                row.remove();
+                reindexCreativeRows();
+            }
+        });
+
+        return row;
+    }
+
+    function reindexCreativeRows() {
+        const list = document.getElementById('maCreativesList');
+        if (!list) return;
+        const rows = Array.from(list.querySelectorAll('[data-ma-crow]'));
+
+        rows.forEach((row, idx) => {
+            const num = idx + 1;
+            const heading = row.querySelector('[data-crow-heading]');
+            if (heading) heading.textContent = `Creative ${num}`;
+
+            const nameInput = row.querySelector('[data-crow-field="name"]');
+            if (nameInput) nameInput.placeholder = `Creative ${num} — Angle / Hook`;
+
+            row.querySelectorAll('[data-crow-field]').forEach((el) => {
+                const field = el.getAttribute('data-crow-field');
+                el.name = `creatives[${idx}][${field}]`;
+            });
+
+            const removeBtn = row.querySelector('[data-crow-remove]');
+            if (removeBtn) {
+                removeBtn.classList.toggle('d-none', rows.length <= 1);
+            }
+        });
+
+        const chip = document.getElementById('maCreativesCountChip');
+        if (chip) {
+            chip.textContent = `${rows.length} ${rows.length === 1 ? 'Creative' : 'Creatives'}`;
+        }
+
+        syncWinningCreativeOptions();
+    }
+
+    function syncWinningCreativeOptions(preferredValue = null) {
+        const select = document.getElementById('maWinningCreative');
+        const list = document.getElementById('maCreativesList');
+        if (!select || !list) return;
+
+        const currentVal = preferredValue !== null ? preferredValue : select.value;
+        const rows = Array.from(list.querySelectorAll('[data-ma-crow]'));
+
+        let html = '<option value="">— Select —</option>';
+        rows.forEach((row, idx) => {
+            const label = `Creative ${idx + 1}`;
+            const hook = (row.querySelector('[data-crow-field="name"]')?.value || '').trim();
+            const text = hook ? `${label} — ${hook}` : label;
+            html += `<option value="${escapeHtml(label)}">${escapeHtml(text)}</option>`;
+        });
+        html += '<option value="None">None</option>';
+
+        select.innerHTML = html;
+        if (currentVal && Array.from(select.options).some((o) => o.value === currentVal)) {
+            select.value = currentVal;
+        }
+    }
+
+    function renderCreativesList(creativesArray, preferredWinner = '') {
+        const list = document.getElementById('maCreativesList');
+        if (!list) return;
+        list.innerHTML = '';
+
+        const items = Array.isArray(creativesArray) && creativesArray.length > 0
+            ? creativesArray
+            : [{ name: '', creative_type: 'reel', media_type: 'video', size: '9:16', reference_url: '' }];
+
+        items.forEach((c, idx) => {
+            list.appendChild(createCreativeRowElement(c, idx));
+        });
+
+        reindexCreativeRows();
+        if (preferredWinner) {
+            syncWinningCreativeOptions(preferredWinner);
+        }
     }
 
     function updateCostPerMessageHelper() {
-        const cost = parseFloat(document.getElementById('maCostPerMessage').value);
-        const offerPrice = parseFloat(document.getElementById('maOfferPrice').value);
+        const cost = parseFloat(document.getElementById('maCostPerMessage')?.value || '');
+        const offerPrice = parseFloat(document.getElementById('maOfferPrice')?.value || '');
         const helper = document.getElementById('maCostPerMessageHelper');
+        if (!helper) return;
 
         if (!isNaN(cost) && !isNaN(offerPrice) && offerPrice > 0) {
-            helper.innerText = `Msg Cost is ${((cost / offerPrice) * 100).toFixed(1)}% of Service Ticket`;
+            helper.textContent = `${((cost / offerPrice) * 100).toFixed(1)}% of ticket`;
         } else {
-            helper.innerText = '';
+            helper.textContent = '';
         }
     }
 
-    document.getElementById('maCostPerMessage').addEventListener('input', updateCostPerMessageHelper);
-    document.getElementById('maOfferPrice').addEventListener('input', updateCostPerMessageHelper);
-
-    function updateRawDataUI() {
-        const available = document.getElementById('maRawDataAvailable').checked;
-        document.getElementById('maRawDataAvailableNote').classList.toggle('d-none', !available);
-        document.getElementById('maRawDataDeadlineWrap').classList.toggle('d-none', available);
-    }
-
-    document.getElementById('maRawDataAvailable').addEventListener('change', updateRawDataUI);
-    document.getElementById('maRawDataScheduled').addEventListener('change', updateRawDataUI);
-
     function updateSalesVerdictUI() {
-        document.getElementById('maCustomVerdictWrap').classList.toggle('d-none', document.getElementById('maSalesVerdict').value !== '__custom__');
+        const verdictSel = document.getElementById('maSalesVerdict');
+        const wrap = document.getElementById('maCustomVerdictWrap');
+        if (verdictSel && wrap) {
+            wrap.classList.toggle('d-none', verdictSel.value !== '__custom__');
+        }
     }
 
-    document.getElementById('maSalesVerdict').addEventListener('change', updateSalesVerdictUI);
-
-    function resetWinningCreativeLabels() {
-        document.querySelectorAll('#maWinningCreative option[data-base-label]').forEach(opt => {
-            opt.textContent = opt.dataset.baseLabel;
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('maAddCreativeBtn')?.addEventListener('click', () => {
+            const list = document.getElementById('maCreativesList');
+            if (!list) return;
+            const idx = list.querySelectorAll('[data-ma-crow]').length;
+            const row = createCreativeRowElement({}, idx);
+            list.appendChild(row);
+            reindexCreativeRows();
+            row.querySelector('[data-crow-field="name"]')?.focus();
         });
-    }
+
+        document.getElementById('maCostPerMessage')?.addEventListener('input', updateCostPerMessageHelper);
+        document.getElementById('maOfferPrice')?.addEventListener('input', updateCostPerMessageHelper);
+        document.getElementById('maSalesVerdict')?.addEventListener('change', updateSalesVerdictUI);
+
+        renderCreativesList([]);
+
+        document.querySelectorAll('.monthly-ad-edit-btn').forEach((btn) => {
+            btn.addEventListener('click', function () {
+                window.editMonthlyAd(JSON.parse(this.dataset.ad || '{}'));
+            });
+        });
+    });
 
     window.resetMonthlyAdForm = function () {
-        document.getElementById('monthlyAdModalTitle').innerText = 'Add Ad';
+        document.getElementById('monthlyAdModalTitle').textContent = 'Add Ad';
         document.getElementById('monthlyAdForm').action = '{{ route('kpi.ads-plan.store') }}';
         document.getElementById('monthlyAdFormMethod').value = '';
         document.getElementById('monthlyAdForm').reset();
         document.getElementById('maPlanMonth').value = new Date().toISOString().slice(0, 7);
-        document.getElementById('maRawDataScheduled').checked = true;
-        updateRawDataUI();
-        resetWinningCreativeLabels();
-        updateSalesVerdictUI();
         document.getElementById('maSalesVerdictCustom').value = '';
-        document.getElementById('maTrailProdStarted').textContent = '—';
-        document.getElementById('maTrailTestStarted').textContent = '—';
-        document.getElementById('maTestingEndsAt').value = '';
-        setBriefLocked(false);
-        document.getElementById('maTestingSection').classList.add('d-none');
+        updateSalesVerdictUI();
+        renderCreativesList([]);
         updateCostPerMessageHelper();
     };
 
     window.editMonthlyAd = function (ad) {
-        resetMonthlyAdForm();
+        window.resetMonthlyAdForm();
 
-        document.getElementById('monthlyAdModalTitle').innerText = 'Edit Ad';
+        document.getElementById('monthlyAdModalTitle').textContent = 'Edit Ad';
         document.getElementById('monthlyAdForm').action = `/kpis/ads-plan/${ad.id}`;
         document.getElementById('monthlyAdFormMethod').value = 'PUT';
 
         document.getElementById('maAdName').value = ad.ad_name || '';
         document.getElementById('maPlanMonth').value = ad.plan_month || new Date().toISOString().slice(0, 7);
         document.getElementById('maPersonResponsible').value = ad.person_responsible || '';
-        document.getElementById('maPersonResponsibleHidden').value = ad.person_responsible || '';
-        document.getElementById('maOffer').value = ad.offer || '';
-        document.getElementById('maTotalBudget').value = ad.total_budget || '';
-        document.getElementById('maPreFilledMessage').value = ad.pre_filled_message || '';
-        document.getElementById('maLiveDate').value = ad.live_date || '';
         document.getElementById('maTargetBranch').value = ad.target_branch || 'All Branches';
-        document.getElementById('maTargetBranchHidden').value = ad.target_branch || 'All Branches';
+        document.getElementById('maTotalBudget').value = ad.total_budget || '';
         document.getElementById('maOfferPrice').value = ad.offer_price || '';
+        document.getElementById('maLiveDate').value = ad.live_date || '';
+        document.getElementById('maOffer').value = ad.offer || '';
+        document.getElementById('maPreFilledMessage').value = ad.pre_filled_message || '';
 
-        document.getElementById('maRawDataAvailable').checked = ad.raw_data_status === 'available';
-        document.getElementById('maRawDataScheduled').checked = ad.raw_data_status !== 'available';
-        updateRawDataUI();
-        document.getElementById('maRawDataDeadline').value = ad.raw_data_deadline || '';
         document.getElementById('maFinalCreativeDeadline').value = ad.final_creative_deadline || '';
-
-        document.getElementById('maCreative1Name').value = ad.creative_1_name || '';
-        document.getElementById('maCreativeAssetLink').value = ad.creative_asset_link || '';
-        document.getElementById('maCreative2Name').value = ad.creative_2_name || '';
-        document.getElementById('maCreativeAssetLink2').value = ad.creative_asset_link_2 || '';
-        document.getElementById('maCreative3Name').value = ad.creative_3_name || '';
-        document.getElementById('maCreativeAssetLink3').value = ad.creative_asset_link_3 || '';
-
-        document.getElementById('maChkHook').checked = !!ad.chk_hook;
-        document.getElementById('maChkValue').checked = !!ad.chk_value;
-        document.getElementById('maChkRisk').checked = !!ad.chk_risk;
-        document.getElementById('maChkCta').checked = !!ad.chk_cta;
-        document.getElementById('maTxtHook').value = ad.txt_hook || '';
-        document.getElementById('maTxtValue').value = ad.txt_value || '';
-        document.getElementById('maTxtRisk').value = ad.txt_risk || '';
-        document.getElementById('maTxtCta').value = ad.txt_cta || '';
-
-        document.getElementById('maTrailProdStarted').textContent = ad.production_started_at || '—';
-        document.getElementById('maTrailTestStarted').textContent = ad.testing_started_at || '—';
         document.getElementById('maTestingEndsAt').value = ad.testing_ends_at || '';
-
-        resetWinningCreativeLabels();
-        const creativeNameByLabel = { 'Creative 1': ad.creative_1_name, 'Creative 2': ad.creative_2_name, 'Creative 3': ad.creative_3_name };
-        document.querySelectorAll('#maWinningCreative option[data-base-label]').forEach(opt => {
-            const name = creativeNameByLabel[opt.dataset.baseLabel];
-            if (name) {
-                opt.textContent = `${opt.dataset.baseLabel} — ${name}`;
-            }
-        });
-        document.getElementById('maWinningCreative').value = ad.winning_creative || '';
-
         document.getElementById('maCostPerMessage').value = ad.cost_per_message || '';
+        document.getElementById('maTestingNotes').value = ad.testing_notes || '';
+
+        renderCreativesList(ad.creatives || [], ad.winning_creative || '');
 
         if (ad.sales_verdict && !PRESET_SALES_VERDICTS.includes(ad.sales_verdict)) {
             document.getElementById('maSalesVerdict').value = '__custom__';
@@ -366,19 +546,9 @@
             document.getElementById('maSalesVerdictCustom').value = '';
         }
         updateSalesVerdictUI();
-
-        document.getElementById('maTestingNotes').value = ad.testing_notes || '';
-
-        setBriefLocked(ad.phase !== 'Planning');
-        document.getElementById('maTestingSection').classList.toggle('d-none', !['Testing', 'Scaling', 'Killed'].includes(ad.phase));
         updateCostPerMessageHelper();
 
         new bootstrap.Modal(document.getElementById('monthlyAdModal')).show();
     };
-
-    document.querySelectorAll('.monthly-ad-edit-btn').forEach(btn => {
-        btn.addEventListener('click', function () {
-            editMonthlyAd(JSON.parse(this.dataset.ad));
-        });
-    });
+})();
 </script>

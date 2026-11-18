@@ -408,6 +408,10 @@ Route::middleware(['auth'])->group(function () {
 
         Route::middleware('module:kpis')->get('/content-calendar', [ContentCalendarController::class, 'index'])->name('content-calendar.index');
         Route::middleware('module:kpis,edit')->post('/content-calendar', [ContentCalendarController::class, 'updateWeek'])->name('content-calendar.update');
+        Route::middleware('module:kpis,edit')->delete('/content-calendar', [ContentCalendarController::class, 'destroyWeek'])->name('content-calendar.destroy-week');
+        Route::middleware('module:kpis,edit')->post('/content-calendar/import-pdf', [ContentCalendarController::class, 'importPdf'])->name('content-calendar.import-pdf');
+        Route::middleware('module:kpis,edit')->patch('/content-calendar/week-meta', [ContentCalendarController::class, 'updateWeekMeta'])->name('content-calendar.update-meta');
+        Route::middleware('module:kpis,edit')->patch('/content-calendar/{plan}/inline', [ContentCalendarController::class, 'updateDayInline'])->name('content-calendar.inline-update');
         Route::middleware('module:kpis,edit')->patch('/content-calendar/{plan}/toggle-status', [ContentCalendarController::class, 'toggleStatus'])->name('content-calendar.toggle-status');
 
         Route::middleware('module:kpis')->get('/evaluations', [StaffEvaluationController::class, 'index'])->name('evaluations.index');

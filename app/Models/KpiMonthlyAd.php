@@ -2,14 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasMonthlyAdCreatives;
 use Illuminate\Database\Eloquent\Model;
 
 class KpiMonthlyAd extends Model
 {
-    const PHASES = ['Planning', 'Production', 'Testing', 'Scaling', 'Killed'];
+    use HasMonthlyAdCreatives;
 
-    /** Phases shown as Kanban columns on the board — Killed ads drop off the board once marked. */
-    const BOARD_PHASES = ['Planning', 'Production', 'Testing', 'Scaling'];
+    const PHASES = ['Planning', 'Testing', 'Scaling', 'Killed'];
+
+    /** Phases shown as the 3 Kanban columns on the board — Killed ads sit in the Graveyard below. */
+    const BOARD_PHASES = ['Planning', 'Testing', 'Scaling'];
 
     const BRANCHES = ['All Branches', 'Old Airport', 'Wakrah'];
 
@@ -50,6 +53,7 @@ class KpiMonthlyAd extends Model
         'final_creative_deadline',
         'total_budget',
         'phase',
+        'creatives',
         'creative_1_name',
         'creative_asset_link',
         'creative_2_name',
@@ -75,6 +79,7 @@ class KpiMonthlyAd extends Model
     ];
 
     protected $casts = [
+        'creatives' => 'array',
         'live_date' => 'date',
         'raw_data_deadline' => 'date',
         'final_creative_deadline' => 'date',
@@ -132,6 +137,9 @@ class KpiMonthlyAd extends Model
             'testing_notes',
         ]);
 
+        $payload['phase'] = $this->normalizedPhase();
+        $payload['creatives'] = $this->resolvedCreatives();
+
         foreach (self::DATE_FIELDS as $field) {
             $payload[$field] = $this->{$field}?->format('Y-m-d');
         }
@@ -142,29 +150,23 @@ class KpiMonthlyAd extends Model
     /** The upcoming (or, if already past, the most recent) deadline for the ad's current phase. Null if none applies. */
     public function nextDeadline(): ?array
     {
-        if ($this->phase === 'Planning') {
+        $phase = $this->normalizedPhase();
+
+        if ($phase === 'Planning') {
+            if ($this->final_creative_deadline) {
+                return ['label' => 'Creative Due', 'date' => $this->final_creative_deadline];
+            }
+
             return $this->live_date ? ['label' => 'Go Live', 'date' => $this->live_date] : null;
         }
 
-        if ($this->phase === 'Production') {
-            $creativesLinked = !empty($this->creative_asset_link) && !empty($this->creative_asset_link_2) && !empty($this->creative_asset_link_3);
-
-            if ($this->raw_data_status === 'scheduled' && $this->raw_data_deadline && !$creativesLinked) {
-                return ['label' => 'Raw Data Due', 'date' => $this->raw_data_deadline];
-            }
-
-            $date = $this->final_creative_deadline ?? $this->live_date;
-
-            return $date ? ['label' => 'Final Creative Due', 'date' => $date] : null;
-        }
-
-        if ($this->phase === 'Testing') {
+        if ($phase === 'Testing') {
             $date = $this->testing_ends_at ?? ($this->testing_started_at ? $this->testing_started_at->copy()->addDays(7) : $this->live_date);
 
-            return $date ? ['label' => '7-Day Test Ends', 'date' => $date] : null;
+            return $date ? ['label' => 'Test Ends', 'date' => $date] : null;
         }
 
-        if ($this->phase === 'Scaling') {
+        if ($phase === 'Scaling') {
             $date = $this->verdict_at ?? $this->live_date;
 
             return $date ? ['label' => 'Scaled On', 'date' => $date] : null;

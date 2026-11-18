@@ -3,7 +3,7 @@
          role="alert">
         <i class="bx bx-check-circle fs-4 mt-1"></i>
          <div class="fw-semibold">
-            <strong>Success:</strong> {{ session('success') }}
+            <strong>Success:</strong> {{ preg_replace('/^Success:\s*/i', '', (string) session('success')) }}
         </div>
         <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
     </div>

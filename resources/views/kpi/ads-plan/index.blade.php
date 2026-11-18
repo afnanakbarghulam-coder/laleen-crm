@@ -1,247 +1,259 @@
 @extends('layouts.app')
 @section('title', 'Monthly Ads Plan')
 
+@php
+    $labels = $phaseLabels ?? \App\Models\KpiMonthlyAd::BOARD_PHASE_LABELS;
+@endphp
+
 @section('content')
-    <div class="kpi-header">
-        <div>
-            <h4>Monthly Ads Plan</h4>
-            <p>3-Creative Batch &amp; 7-Day Funnel Test — move a card through the gates right from the board.</p>
+    <div class="laleen-ma-root">
+        {{-- Clean Minimalist Header --}}
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div>
+                <h4 class="mb-0" style="color: #f8efe6; font-weight: 600;">Monthly Ads Plan</h4>
+                <div class="small" style="color: #b8a29a;">Creative Batches &amp; Funnel Testing</div>
+            </div>
+            <div class="d-flex align-items-center flex-wrap gap-2 no-print">
+                @moduleEdit('kpis')
+                    <button type="button" class="btn btn-sm laleen-ma-rose-btn" data-bs-toggle="modal" data-bs-target="#monthlyAdModal" onclick="resetMonthlyAdForm()">
+                        + Add Ad
+                    </button>
+                @endmoduleEdit
+                <a href="{{ route('kpi.marketing.index') }}" class="btn btn-sm laleen-ma-ghost-btn">&larr; Back to Marketing</a>
+            </div>
         </div>
-        <div class="kpi-header-meta">
-            @moduleEdit('kpis')
-                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#monthlyAdModal" onclick="resetMonthlyAdForm()">
-                    <i class="bx bx-plus me-1"></i> Add Ad
-                </button>
-            @endmoduleEdit
-            <a href="{{ route('kpi.marketing.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Marketing</a>
+
+        {{-- Month Filter Strip & Total Planned Budget --}}
+        <div class="laleen-ma-filterbar mb-3 no-print">
+            <div class="d-flex flex-wrap align-items-center gap-1">
+                <a href="{{ route('kpi.ads-plan.index', ['month' => 'all']) }}"
+                   class="laleen-ma-month-pill {{ $selectedMonth === 'all' ? 'is-active' : '' }}">All Months</a>
+                @foreach ($availableMonths as $month)
+                    <a href="{{ route('kpi.ads-plan.index', ['month' => $month]) }}"
+                       class="laleen-ma-month-pill {{ $selectedMonth === $month ? 'is-active' : '' }}">
+                        {{ \Illuminate\Support\Carbon::createFromFormat('Y-m', $month)->format('M Y') }}
+                    </a>
+                @endforeach
+            </div>
+            <div class="small" style="color: #b8a29a;">
+                Total Planned Budget: <strong style="color: #f8efe6;">{{ number_format((float) $totalPlannedBudget, 0) }} QAR</strong>
+            </div>
         </div>
-    </div>
 
-    <div class="d-flex flex-wrap align-items-center gap-2 p-2 rounded mb-3" style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05);">
-        <a href="{{ route('kpi.ads-plan.index', ['month' => 'all']) }}" class="btn btn-sm {{ $selectedMonth === 'all' ? 'btn-primary' : 'btn-outline-secondary' }}">All Months</a>
-        @foreach ($availableMonths as $month)
-            <a href="{{ route('kpi.ads-plan.index', ['month' => $month]) }}" class="btn btn-sm {{ $selectedMonth === $month ? 'btn-primary' : 'btn-outline-secondary' }}">
-                {{ \Illuminate\Support\Carbon::createFromFormat('Y-m', $month)->format('F Y') }}
-            </a>
-        @endforeach
-        <span class="ms-auto small" style="color: rgba(255, 255, 255, 0.6);">
-            Total Planned Budget: <strong style="color: rgba(255, 255, 255, 0.9);">{{ number_format((float) $totalPlannedBudget, 0) }} QAR</strong>
-        </span>
-    </div>
+        {{-- Crisp 3-Column Equal-Width Board (Zero Horizontal Scroll) --}}
+        <div class="laleen-ma-board-grid">
+            @foreach ($adsByPhase as $phaseKey => $ads)
+                @php
+                    $colLabel = $labels[$phaseKey] ?? $phaseKey;
+                @endphp
+                <div class="laleen-ma-col" data-ma-column="{{ $phaseKey }}">
+                    <div class="laleen-ma-col-header">
+                        <span class="laleen-ma-col-title">{{ $colLabel }}</span>
+                        <span class="laleen-ma-count-chip">{{ $ads->count() }}</span>
+                    </div>
 
-    <div class="table-responsive">
-        <div class="row g-3 flex-nowrap" style="min-width: 1400px;">
-            @foreach ($adsByPhase as $phase => $ads)
-                <div class="col-md-3">
-                    <div class="card h-100">
-                        <div class="card-header d-flex align-items-center justify-content-between">
-                            <strong>{{ $phase }}</strong>
-                            <span class="badge bg-secondary">{{ $ads->count() }}</span>
-                        </div>
-                        <div class="card-body d-flex flex-column gap-2">
-                            @forelse ($ads as $ad)
-                                @php
-                                    $deadline = $ad->nextDeadline();
-                                    $creativesCount = (!empty($ad->creative_asset_link)) + (!empty($ad->creative_asset_link_2)) + (!empty($ad->creative_asset_link_3));
-                                    $checklistCount = $ad->chk_hook + $ad->chk_value + $ad->chk_risk + $ad->chk_cta;
-                                    $daysRemaining = $ad->testing_ends_at ? now()->startOfDay()->diffInDays($ad->testing_ends_at->copy()->startOfDay(), false) : null;
-                                    $winningName = match ($ad->winning_creative) {
-                                        'Creative 1' => $ad->creative_1_name,
-                                        'Creative 2' => $ad->creative_2_name,
-                                        'Creative 3' => $ad->creative_3_name,
-                                        default => null,
-                                    };
-                                    $winningLink = match ($ad->winning_creative) {
-                                        'Creative 1' => $ad->creative_asset_link,
-                                        'Creative 2' => $ad->creative_asset_link_2,
-                                        'Creative 3' => $ad->creative_asset_link_3,
-                                        default => null,
-                                    };
-                                @endphp
-                                <div class="card">
-                                    <div class="card-body p-3">
-                                        <div class="d-flex justify-content-between align-items-start gap-2">
-                                            <div class="fw-bold">{{ $ad->ad_name }}</div>
-                                            @moduleEdit('kpis')
-                                                <div class="d-flex gap-1">
-                                                    <button type="button" class="btn btn-sm btn-outline-warning monthly-ad-edit-btn"
-                                                        data-ad='@json($ad->toEditPayload())'
-                                                        title="Edit">
-                                                        <i class="bi bi-pencil-square"></i>
-                                                    </button>
-                                                    <form action="{{ route('kpi.ads-plan.destroy', $ad) }}" method="POST" onsubmit="return confirm('Delete this ad?')">
-                                                        @csrf @method('DELETE')
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
-                                                    </form>
-                                                </div>
-                                            @endmoduleEdit
-                                        </div>
-                                        <div class="small text-muted mt-1"><i class="bx bx-user me-1"></i>{{ $ad->person_responsible }}</div>
-
-                                        <div class="mt-2 d-flex flex-wrap gap-1">
-                                            <span class="badge bg-light text-dark">{{ $ad->target_branch }}</span>
-                                            @if ($ad->plan_month)
-                                                <span class="badge bg-light text-dark">{{ \Illuminate\Support\Carbon::createFromFormat('Y-m', $ad->plan_month)->format('M Y') }}</span>
-                                            @endif
-                                            @if ($ad->offer_price !== null)
-                                                <span class="badge bg-light text-dark">Ticket: {{ number_format((float) $ad->offer_price, 0) }} QAR</span>
-                                            @endif
-                                        </div>
-
-                                        <div class="mt-2">
-                                            @if ($deadline)
-                                                <span class="badge {{ $deadline['date']->isPast() ? 'bg-danger' : 'bg-warning text-dark' }}">
-                                                    {{ $deadline['label'] }}: {{ $deadline['date']->format('d M Y') }}
-                                                </span>
-                                            @else
-                                                <span class="badge bg-light text-dark">No deadline set</span>
-                                            @endif
-                                        </div>
-
-                                        @if ($phase === 'Planning')
-                                            @if ($ad->live_date)
-                                                <div class="small mt-1" style="color: rgba(255, 255, 255, 0.5);">Live: {{ $ad->live_date->format('d M Y') }}</div>
-                                            @endif
-                                            @if (auth()->user()->name === $ad->person_responsible)
-                                                <form action="{{ route('kpi.ads-plan.complete-planning', $ad) }}" method="POST">
-                                                    @csrf @method('PATCH')
-                                                    <button type="submit" class="btn btn-sm w-100 mt-2" style="background-color: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2);">✔ Mark Phase 1 Completed</button>
-                                                </form>
-                                            @else
-                                                <div class="text-muted text-center small mt-2 py-1 border rounded" style="border-color: #374151 !important;">Waiting for completion by assigned staff</div>
-                                            @endif
-                                        @elseif ($phase === 'Production')
-                                            <div class="small mt-1" style="color: rgba(255, 255, 255, 0.5);">
-                                                @if ($ad->raw_data_status === 'available')
-                                                    Raw: <span style="color: #10b981;">Ready</span>
-                                                @elseif ($ad->raw_data_deadline)
-                                                    Raw Due: {{ $ad->raw_data_deadline->format('d M Y') }}
-                                                @endif
-                                                @if ($ad->final_creative_deadline)
-                                                    &middot; Edit Due: {{ $ad->final_creative_deadline->format('d M Y') }}
-                                                @endif
-                                            </div>
-                                            <div class="mt-2 d-flex gap-1">
-                                                <span class="badge {{ $creativesCount === 3 ? 'bg-success' : 'bg-secondary' }}">Creatives: {{ $creativesCount }}/3</span>
-                                                <span class="badge {{ $checklistCount === 4 ? 'bg-success' : 'bg-secondary' }}">QC: {{ $checklistCount }}/4</span>
-                                            </div>
-                                            @moduleEdit('kpis')
-                                                <form action="{{ route('kpi.ads-plan.complete-production', $ad) }}" method="POST">
-                                                    @csrf @method('PATCH')
-                                                    <button type="submit" class="btn btn-sm w-100 mt-2" style="background-color: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2);">🚀 Push to Testing</button>
-                                                </form>
-                                            @endmoduleEdit
-                                        @elseif ($phase === 'Testing')
-                                            <div class="small mt-1" style="color: rgba(255, 255, 255, 0.5);">
-                                                Test Window: {{ $ad->testing_started_at?->format('d M') ?: '—' }} → {{ $ad->testing_ends_at?->format('d M Y') ?: '—' }}
-                                                @if ($daysRemaining !== null)
-                                                    <span class="badge {{ $daysRemaining < 0 ? 'bg-danger' : 'bg-warning text-dark' }}">
-                                                        {{ $daysRemaining < 0 ? abs($daysRemaining) . 'd overdue' : $daysRemaining . 'd left' }}
-                                                    </span>
-                                                @endif
-                                            </div>
-                                            <div class="small mt-1" style="color: rgba(255, 255, 255, 0.6);">
-                                                Winning Creative: {{ $ad->winning_creative ?: '—' }}
-                                                @if ($ad->cost_per_message !== null)
-                                                    &middot; Msg Cost: {{ number_format((float) $ad->cost_per_message, 2) }} QAR
-                                                @endif
-                                            </div>
-                                            @moduleEdit('kpis')
-                                                <div class="d-flex gap-2 mt-2">
-                                                    <form action="{{ route('kpi.ads-plan.scale', $ad) }}" method="POST" class="flex-grow-1">
-                                                        @csrf @method('PATCH')
-                                                        <button type="submit" class="btn btn-sm w-100" style="background-color: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2);">🔥 Scale Winner</button>
-                                                    </form>
-                                                    <form action="{{ route('kpi.ads-plan.kill', $ad) }}" method="POST" class="flex-grow-1">
-                                                        @csrf @method('PATCH')
-                                                        <button type="submit" class="btn btn-sm w-100" style="background-color: rgba(220, 38, 38, 0.1); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.2);">💀 Kill Test</button>
-                                                    </form>
-                                                </div>
-                                            @endmoduleEdit
-                                        @elseif ($phase === 'Scaling')
-                                            <div class="mt-2 p-2 rounded" style="background-color: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2);">
-                                                <div class="small fw-bold" style="color: #10b981;">🏆 {{ $ad->winning_creative ?: '—' }}{{ $winningName ? ' — ' . $winningName : '' }}</div>
-                                                @if ($winningLink)
-                                                    <a href="{{ $winningLink }}" target="_blank" class="small d-block text-truncate" style="color: #10b981;">{{ $winningLink }}</a>
-                                                @endif
-                                                @if ($ad->cost_per_message !== null)
-                                                    <div class="small mt-1" style="color: #10b981;">Msg Cost: {{ number_format((float) $ad->cost_per_message, 2) }} QAR</div>
-                                                @endif
-                                                @if ($ad->sales_verdict)
-                                                    <div class="small mt-1" style="color: #10b981;">Verdict: {{ $ad->sales_verdict }}</div>
-                                                @endif
-                                                @if ($ad->verdict_at)
-                                                    <div class="small mt-1" style="color: rgba(16, 185, 129, 0.7);">Scaled on {{ $ad->verdict_at->format('d M Y') }}</div>
-                                                @endif
-                                            </div>
-                                            @moduleEdit('kpis')
-                                                <form action="{{ route('kpi.ads-plan.kill', $ad) }}" method="POST" class="mt-2">
-                                                    @csrf @method('PATCH')
-                                                    <button type="submit" class="btn btn-sm w-100" style="background-color: rgba(255, 255, 255, 0.03); color: rgba(255, 255, 255, 0.5); border: 1px solid rgba(255, 255, 255, 0.08);">💀 End Campaign</button>
-                                                </form>
-                                            @endmoduleEdit
+                    <div class="laleen-ma-col-body">
+                        @forelse ($ads as $ad)
+                            @php
+                                $creatives = $ad->resolvedCreatives();
+                                $creativesCount = count($creatives);
+                                $deadline = $ad->nextDeadline();
+                                $daysRemaining = $ad->testing_ends_at
+                                    ? now()->startOfDay()->diffInDays($ad->testing_ends_at->copy()->startOfDay(), false)
+                                    : null;
+                                $winDetails = $ad->winningCreativeDetails();
+                                $editPayloadJson = $ad->toEditPayload();
+                            @endphp
+                            <article class="laleen-ma-card" data-ma-card="{{ $ad->id }}">
+                                {{-- Card Header: Ad / Offer Title, Planned Budget & Creative Count --}}
+                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                    <div class="min-w-0">
+                                        <div class="laleen-ma-card-title">{{ $ad->ad_name }}</div>
+                                        @if ($ad->offer)
+                                            <div class="laleen-ma-card-offer text-truncate" title="{{ $ad->offer }}">{{ $ad->offer }}</div>
                                         @endif
                                     </div>
+
+                                    @moduleEdit('kpis')
+                                        <div class="d-inline-flex align-items-center gap-1 flex-shrink-0 no-print">
+                                            <button type="button"
+                                                    class="laleen-ma-icon-btn monthly-ad-edit-btn"
+                                                    data-ad='@json($editPayloadJson)'
+                                                    title="Edit Ad"
+                                                    aria-label="Edit {{ $ad->ad_name }}">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <form action="{{ route('kpi.ads-plan.destroy', $ad) }}" method="POST" class="m-0 d-inline" onsubmit="return confirm('Delete this ad?')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="laleen-ma-icon-btn is-danger" title="Delete Ad" aria-label="Delete {{ $ad->ad_name }}">
+                                                    <i class="bi bi-trash3"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    @endmoduleEdit
                                 </div>
-                            @empty
-                                <div class="text-center text-muted small py-4">No ads in {{ $phase }}.</div>
-                            @endforelse
-                        </div>
+
+                                {{-- Compact Meta Line --}}
+                                <div class="laleen-ma-meta-line mt-1">
+                                    @if ($ad->total_budget !== null)
+                                        <span class="laleen-ma-budget">{{ number_format((float) $ad->total_budget, 0) }} QAR</span>
+                                        <span>&middot;</span>
+                                    @endif
+                                    <span>{{ $creativesCount }} {{ \Illuminate\Support\Str::plural('Creative', $creativesCount) }}</span>
+                                    <span>&middot;</span>
+                                    <span>{{ $ad->target_branch }}</span>
+                                    @if ($ad->person_responsible)
+                                        <span>&middot;</span>
+                                        <span>{{ $ad->person_responsible }}</span>
+                                    @endif
+                                </div>
+
+                                {{-- Creative Summary Hairline List --}}
+                                @if ($creativesCount > 0)
+                                    <div class="laleen-ma-creatives-list mt-2">
+                                        @foreach ($creatives as $c)
+                                            @php
+                                                $isWinner = $winDetails['label'] && strcasecmp($winDetails['label'], $c['label']) === 0;
+                                            @endphp
+                                            <div class="laleen-ma-creative-row">
+                                                <div class="min-w-0 d-flex align-items-baseline gap-1 flex-wrap">
+                                                    <span class="laleen-ma-c-spec {{ $isWinner ? 'is-winner' : '' }}">
+                                                        {{ $isWinner ? '★ ' : '' }}{{ $c['short_label'] }} &middot; {{ $c['type_label'] }} &middot; {{ $c['media_label'] }} {{ $c['size'] }}
+                                                    </span>
+                                                    @if ($c['name'] !== '')
+                                                        <span class="laleen-ma-c-hook text-truncate" title="{{ $c['name'] }}">{{ $c['name'] }}</span>
+                                                    @endif
+                                                </div>
+                                                @if (!empty($c['reference_url']))
+                                                    <a href="{{ $c['reference_url'] }}"
+                                                       target="_blank"
+                                                       rel="noopener noreferrer"
+                                                       class="laleen-ma-ref-link flex-shrink-0">Ref ↗</a>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
+
+                                {{-- Stage Status & Gate Actions Footer --}}
+                                <div class="laleen-ma-card-footer mt-2 pt-2">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-2">
+                                        <span class="laleen-ma-subtle">
+                                            @if ($phaseKey === 'Testing' && $ad->testing_ends_at)
+                                                Ends {{ $ad->testing_ends_at->format('d M') }}
+                                                @if ($daysRemaining !== null)
+                                                    ({{ $daysRemaining < 0 ? abs($daysRemaining) . 'd overdue' : $daysRemaining . 'd left' }})
+                                                @endif
+                                            @elseif ($deadline)
+                                                {{ $deadline['label'] }}: {{ $deadline['date']->format('d M Y') }}
+                                            @else
+                                                {{ $ad->plan_month ? \Illuminate\Support\Carbon::createFromFormat('Y-m', $ad->plan_month)->format('M Y') : '' }}
+                                            @endif
+                                        </span>
+
+                                        @if ($ad->cost_per_message !== null)
+                                            <span class="laleen-ma-subtle">Msg: {{ number_format((float) $ad->cost_per_message, 2) }} QAR</span>
+                                        @elseif ($ad->offer_price !== null)
+                                            <span class="laleen-ma-subtle">Ticket: {{ number_format((float) $ad->offer_price, 0) }} QAR</span>
+                                        @endif
+                                    </div>
+
+                                    @if ($phaseKey === 'Scaling' && ($winDetails['label'] || $ad->sales_verdict))
+                                        <div class="laleen-ma-winner-line mb-2">
+                                            @if ($winDetails['label'])
+                                                <span>Winner: {{ $winDetails['label'] }}{{ $winDetails['name'] ? ' — ' . $winDetails['name'] : '' }}</span>
+                                            @endif
+                                            @if ($ad->sales_verdict)
+                                                <span>{{ $winDetails['label'] ? ' · ' : '' }}{{ $ad->sales_verdict }}</span>
+                                            @endif
+                                        </div>
+                                    @endif
+
+                                    @moduleEdit('kpis')
+                                        <div class="d-flex align-items-center gap-2 no-print">
+                                            @if ($phaseKey === 'Planning')
+                                                <form action="{{ route('kpi.ads-plan.complete-production', $ad) }}" method="POST" class="flex-grow-1 m-0">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit" class="laleen-ma-gate-btn is-advance w-100">Move to Testing &rarr;</button>
+                                                </form>
+                                            @elseif ($phaseKey === 'Testing')
+                                                <form action="{{ route('kpi.ads-plan.scale', $ad) }}" method="POST" class="flex-grow-1 m-0">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit" class="laleen-ma-gate-btn is-scale w-100">Scale Winner &rarr;</button>
+                                                </form>
+                                                <form action="{{ route('kpi.ads-plan.kill', $ad) }}" method="POST" class="m-0">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit" class="laleen-ma-gate-btn is-kill">Kill</button>
+                                                </form>
+                                            @elseif ($phaseKey === 'Scaling')
+                                                <form action="{{ route('kpi.ads-plan.kill', $ad) }}" method="POST" class="w-100 m-0">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit" class="laleen-ma-gate-btn is-muted w-100">End Campaign</button>
+                                                </form>
+                                            @endif
+                                        </div>
+                                    @endmoduleEdit
+                                </div>
+                            </article>
+                        @empty
+                            <div class="laleen-ma-empty">No ads in {{ $colLabel }}.</div>
+                        @endforelse
                     </div>
                 </div>
             @endforeach
         </div>
-    </div>
 
-    <div class="mt-4">
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#killedAdsGraveyard">
-            <i class="bx bx-ghost me-1"></i> Killed Tests Graveyard ({{ $killedAds->count() }})
-        </button>
-        <div class="collapse mt-3" id="killedAdsGraveyard">
-            <div class="row g-3">
-                @forelse ($killedAds as $ad)
-                    @php
-                        $killedWinningName = match ($ad->winning_creative) {
-                            'Creative 1' => $ad->creative_1_name,
-                            'Creative 2' => $ad->creative_2_name,
-                            'Creative 3' => $ad->creative_3_name,
-                            default => null,
-                        };
-                    @endphp
-                    <div class="col-md-4">
-                        <div class="card h-100" style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05);">
-                            <div class="card-body p-3">
-                                <div class="d-flex justify-content-between align-items-start gap-2">
-                                    <div class="fw-bold">{{ $ad->ad_name }}</div>
-                                    @moduleEdit('kpis')
-                                        <form action="{{ route('kpi.ads-plan.destroy', $ad) }}" method="POST" onsubmit="return confirm('Delete this ad?')">
-                                            @csrf @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
+        {{-- Collapsible Killed Tests Graveyard --}}
+        <div class="mt-4 no-print">
+            <button type="button" class="btn btn-sm laleen-ma-ghost-btn" data-bs-toggle="collapse" data-bs-target="#killedAdsGraveyard">
+                Killed Tests Graveyard ({{ $killedAds->count() }})
+            </button>
+            <div class="collapse mt-3" id="killedAdsGraveyard">
+                <div class="laleen-ma-board-grid">
+                    @forelse ($killedAds as $ad)
+                        @php
+                            $killedCreatives = $ad->resolvedCreatives();
+                            $killedPayload = $ad->toEditPayload();
+                        @endphp
+                        <div class="laleen-ma-card is-killed">
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <div class="laleen-ma-card-title">{{ $ad->ad_name }}</div>
+                                @moduleEdit('kpis')
+                                    <div class="d-inline-flex gap-1">
+                                        <button type="button" class="laleen-ma-icon-btn monthly-ad-edit-btn" data-ad='@json($killedPayload)' title="View / Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <form action="{{ route('kpi.ads-plan.destroy', $ad) }}" method="POST" class="m-0 d-inline" onsubmit="return confirm('Delete this ad?')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="laleen-ma-icon-btn is-danger" title="Delete"><i class="bi bi-trash3"></i></button>
                                         </form>
-                                    @endmoduleEdit
-                                </div>
-                                <div class="small text-muted mt-1">{{ $ad->target_branch }} &middot; {{ $ad->person_responsible }}</div>
-                                <div class="small mt-2" style="color: rgba(255, 255, 255, 0.6);">
-                                    Winning Creative: {{ $ad->winning_creative ?: '—' }}{{ $killedWinningName ? ' — ' . $killedWinningName : '' }}
-                                    @if ($ad->cost_per_message !== null)
-                                        &middot; Msg Cost: {{ number_format((float) $ad->cost_per_message, 2) }} QAR
-                                    @endif
-                                </div>
-                                @if ($ad->sales_verdict)
-                                    <div class="small mt-1" style="color: #dc2626;">{{ $ad->sales_verdict }}</div>
-                                @endif
-                                @if ($ad->verdict_at)
-                                    <div class="small mt-1" style="color: rgba(255, 255, 255, 0.4);">Killed on {{ $ad->verdict_at->format('d M Y') }}</div>
-                                @endif
-                                @if ($ad->testing_notes)
-                                    <div class="small mt-2 p-2 rounded" style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05);">{{ $ad->testing_notes }}</div>
-                                @endif
+                                    </div>
+                                @endmoduleEdit
                             </div>
+                            <div class="laleen-ma-meta-line mt-1">
+                                <span>{{ count($killedCreatives) }} {{ \Illuminate\Support\Str::plural('Creative', count($killedCreatives)) }}</span>
+                                <span>&middot;</span>
+                                <span>{{ $ad->target_branch }}</span>
+                                <span>&middot;</span>
+                                <span>{{ $ad->person_responsible }}</span>
+                            </div>
+                            @if ($ad->sales_verdict)
+                                <div class="small mt-2" style="color: #fda4af;">{{ $ad->sales_verdict }}</div>
+                            @endif
+                            @if ($ad->testing_notes)
+                                <div class="laleen-ma-subtle mt-1">{{ $ad->testing_notes }}</div>
+                            @endif
                         </div>
-                    </div>
-                @empty
-                    <div class="text-center text-muted small py-4">No killed tests yet.</div>
-                @endforelse
+                    @empty
+                        <div class="laleen-ma-empty">No killed tests yet.</div>
+                    @endforelse
+                </div>
             </div>
         </div>
     </div>
@@ -249,4 +261,286 @@
     @moduleEdit('kpis')
         @include('kpi.ads-plan._form')
     @endmoduleEdit
+
+    <style>
+        .laleen-ma-rose-btn {
+            background: linear-gradient(135deg, #d98f83 0%, #c4776b 100%);
+            color: #180f13 !important;
+            font-weight: 600;
+            border: none;
+            border-radius: 999px;
+            padding: 5px 14px;
+            font-size: 0.8rem;
+        }
+        .laleen-ma-rose-btn:hover { opacity: 0.92; }
+
+        .laleen-ma-ghost-btn {
+            background: rgba(255, 255, 255, 0.04);
+            color: #e5b8a8 !important;
+            border: 1px solid rgba(229, 184, 168, 0.2);
+            border-radius: 999px;
+            padding: 5px 13px;
+            font-size: 0.78rem;
+            font-weight: 500;
+        }
+        .laleen-ma-ghost-btn:hover {
+            background: rgba(229, 184, 168, 0.12);
+            color: #f8efe6 !important;
+        }
+
+        .laleen-ma-filterbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 8px 12px;
+            background: rgba(21, 14, 18, 0.72);
+            border: 1px solid rgba(229, 184, 168, 0.12);
+            border-radius: 12px;
+        }
+
+        .laleen-ma-month-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 11px;
+            border-radius: 999px;
+            font-size: 0.76rem;
+            font-weight: 500;
+            color: #b8a29a !important;
+            text-decoration: none !important;
+            transition: all 0.14s ease;
+        }
+        .laleen-ma-month-pill:hover { color: #f8efe6 !important; background: rgba(255, 255, 255, 0.05); }
+        .laleen-ma-month-pill.is-active {
+            background: rgba(229, 184, 168, 0.18);
+            color: #f8efe6 !important;
+            font-weight: 600;
+        }
+
+        /* 3-Column Responsive Grid — Zero Horizontal Scrollbar */
+        .laleen-ma-board-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 14px;
+            width: 100%;
+        }
+        @media (min-width: 992px) {
+            .laleen-ma-board-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        .laleen-ma-col {
+            background: rgba(20, 13, 17, 0.58);
+            border: 1px solid rgba(229, 184, 168, 0.12);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .laleen-ma-col-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 11px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .laleen-ma-col-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #f8efe6;
+        }
+        .laleen-ma-count-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 22px;
+            height: 20px;
+            padding: 0 7px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            background: rgba(229, 184, 168, 0.14);
+            color: #e5b8a8;
+        }
+
+        .laleen-ma-col-body {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex: 1 1 auto;
+        }
+
+        .laleen-ma-card {
+            background: linear-gradient(180deg, rgba(34, 22, 27, 0.94) 0%, rgba(21, 14, 18, 0.97) 100%);
+            border: 1px solid rgba(229, 184, 168, 0.15);
+            border-radius: 13px;
+            padding: 12px 13px;
+            min-width: 0;
+        }
+        .laleen-ma-card.is-killed {
+            opacity: 0.82;
+        }
+
+        .laleen-ma-card-title {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #f8efe6;
+            line-height: 1.35;
+        }
+        .laleen-ma-card-offer {
+            font-size: 0.75rem;
+            color: #b8a29a;
+            margin-top: 1px;
+        }
+
+        .laleen-ma-icon-btn {
+            background: transparent;
+            border: none;
+            color: #b8a29a;
+            padding: 2px 5px;
+            font-size: 0.78rem;
+            border-radius: 6px;
+            transition: color 0.14s ease, background 0.14s ease;
+        }
+        .laleen-ma-icon-btn:hover {
+            color: #f8efe6;
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .laleen-ma-icon-btn.is-danger:hover {
+            color: #fda4af;
+            background: rgba(253, 164, 175, 0.1);
+        }
+
+        .laleen-ma-meta-line {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.73rem;
+            color: #9e8981;
+        }
+        .laleen-ma-budget {
+            color: #d4a373;
+            font-weight: 600;
+        }
+
+        /* Single-line Hairline Creative Summary Rows */
+        .laleen-ma-creatives-list {
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            padding-top: 4px;
+        }
+        .laleen-ma-creative-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: 0.74rem;
+        }
+        .laleen-ma-creative-row:last-child {
+            border-bottom: none;
+        }
+        .laleen-ma-c-spec {
+            color: #e5b8a8;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .laleen-ma-c-spec.is-winner {
+            color: #6ee7b7;
+        }
+        .laleen-ma-c-hook {
+            color: #d8c7c0;
+            max-width: 190px;
+        }
+        .laleen-ma-ref-link {
+            color: #d4a373 !important;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-decoration: none !important;
+        }
+        .laleen-ma-ref-link:hover {
+            color: #f8efe6 !important;
+            text-decoration: underline !important;
+        }
+
+        .laleen-ma-card-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .laleen-ma-subtle {
+            font-size: 0.71rem;
+            color: #9e8981;
+        }
+        .laleen-ma-winner-line {
+            font-size: 0.74rem;
+            color: #6ee7b7;
+            font-weight: 500;
+        }
+
+        .laleen-ma-gate-btn {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(229, 184, 168, 0.22);
+            color: #e5b8a8;
+            border-radius: 8px;
+            padding: 4px 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            transition: all 0.14s ease;
+        }
+        .laleen-ma-gate-btn.is-advance:hover {
+            background: rgba(229, 184, 168, 0.16);
+            color: #f8efe6;
+        }
+        .laleen-ma-gate-btn.is-scale {
+            border-color: rgba(110, 231, 183, 0.32);
+            color: #6ee7b7;
+            background: rgba(110, 231, 183, 0.08);
+        }
+        .laleen-ma-gate-btn.is-scale:hover {
+            background: rgba(110, 231, 183, 0.18);
+        }
+        .laleen-ma-gate-btn.is-kill {
+            border-color: rgba(253, 164, 175, 0.28);
+            color: #fda4af;
+            background: rgba(253, 164, 175, 0.07);
+        }
+        .laleen-ma-gate-btn.is-kill:hover {
+            background: rgba(253, 164, 175, 0.16);
+        }
+        .laleen-ma-gate-btn.is-muted {
+            border-color: rgba(255, 255, 255, 0.1);
+            color: #9e8981;
+        }
+        .laleen-ma-gate-btn.is-muted:hover {
+            color: #fda4af;
+            border-color: rgba(253, 164, 175, 0.28);
+        }
+
+        .laleen-ma-empty {
+            text-align: center;
+            color: #8a756e;
+            font-size: 0.78rem;
+            padding: 24px 8px;
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            .laleen-ma-col,
+            .laleen-ma-card {
+                background: #ffffff !important;
+                color: #111111 !important;
+                border: 1px solid #cccccc !important;
+            }
+            .laleen-ma-col-title,
+            .laleen-ma-card-title,
+            .laleen-ma-c-spec,
+            .laleen-ma-c-hook {
+                color: #111111 !important;
+            }
+        }
+    </style>
 @endsection

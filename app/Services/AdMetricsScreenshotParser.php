@@ -137,7 +137,9 @@ class AdMetricsScreenshotParser
 
     public function parseScreenshots(array $screenshots, array $options = []): array
     {
-        @set_time_limit(120);
+        if (PHP_SAPI !== 'cli') {
+            @set_time_limit(120);
+        }
         $this->lastTechnicalError = null;
 
         $encodedImages = $this->encodeImages($screenshots);
