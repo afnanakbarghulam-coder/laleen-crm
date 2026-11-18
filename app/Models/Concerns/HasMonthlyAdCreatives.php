@@ -28,6 +28,11 @@ trait HasMonthlyAdCreatives
         'Scaling'  => 'Scaling',
     ];
 
+    public const YES_NO_OPTIONS = [
+        'yes' => 'Yes',
+        'no'  => 'No',
+    ];
+
     protected static function bootHasMonthlyAdCreatives(): void
     {
         static::saving(function ($model) {
@@ -186,6 +191,50 @@ trait HasMonthlyAdCreatives
         }
 
         return ['label' => $win, 'name' => null, 'reference_url' => null];
+    }
+
+    /**
+     * Format the 4 stage-gated Testing & Scaling evaluation signals for minimalist card display.
+     *
+     * @return array{reaction: string, cpm: string, ctr: string, leads: string, has_any: bool}
+     */
+    public function testingMetricsSummary(string $currency = 'QAR'): array
+    {
+        $reactionRaw = strtolower(trim((string) ($this->aggressive_reaction ?? '')));
+        $reaction = match ($reactionRaw) {
+            'yes' => 'Yes',
+            'no'  => 'No',
+            default => '—',
+        };
+
+        $cpm = '—';
+        if ($this->cpm !== null && $this->cpm !== '') {
+            $cpmVal = (float) $this->cpm;
+            $formattedCpm = abs($cpmVal - round($cpmVal)) < 0.005
+                ? number_format($cpmVal, 0)
+                : number_format($cpmVal, 2);
+            $cpm = "{$formattedCpm} {$currency}";
+        }
+
+        $ctr = '—';
+        if ($this->ctr !== null && $this->ctr !== '') {
+            $ctr = number_format((float) $this->ctr, 2) . '%';
+        }
+
+        $leadsRaw = strtolower(trim((string) ($this->lead_conversion_status ?? '')));
+        $leads = match ($leadsRaw) {
+            'yes' => 'Yes',
+            'no'  => 'No',
+            default => '—',
+        };
+
+        return [
+            'reaction' => $reaction,
+            'cpm'      => $cpm,
+            'ctr'      => $ctr,
+            'leads'    => $leads,
+            'has_any'  => $reaction !== '—' || $cpm !== '—' || $ctr !== '—' || $leads !== '—',
+        ];
     }
 
     /**

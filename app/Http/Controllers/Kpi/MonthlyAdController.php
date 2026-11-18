@@ -212,8 +212,8 @@ class MonthlyAdController extends Controller
             'offer_price'             => 'nullable|numeric|min:0',
             'live_date'               => 'nullable|date',
             'raw_data_status'         => ['nullable', Rule::in(KpiMonthlyAd::RAW_DATA_STATUSES)],
-            'raw_data_deadline'       => 'nullable|date|before_or_equal:final_creative_deadline',
-            'final_creative_deadline' => 'nullable|date|before_or_equal:live_date',
+            'raw_data_deadline'       => $request->filled('final_creative_deadline') ? 'nullable|date|before_or_equal:final_creative_deadline' : 'nullable|date',
+            'final_creative_deadline' => $request->filled('live_date') ? 'nullable|date|before_or_equal:live_date' : 'nullable|date',
             'total_budget'            => 'nullable|numeric|min:0',
             'creative_1_name'         => 'nullable|string|max:255',
             'creative_asset_link'     => 'nullable|string|max:2048',
@@ -231,6 +231,10 @@ class MonthlyAdController extends Controller
             'sales_verdict'           => 'nullable|string|max:150',
             'sales_verdict_custom'    => 'nullable|string|max:150',
             'testing_notes'           => 'nullable|string',
+            'aggressive_reaction'     => ['nullable', Rule::in(['yes', 'no'])],
+            'cpm'                     => 'nullable|numeric|min:0',
+            'ctr'                     => 'nullable|numeric|min:0|max:100',
+            'lead_conversion_status'  => ['nullable', Rule::in(['yes', 'no'])],
         ];
 
         if ($hasCreativesArray) {

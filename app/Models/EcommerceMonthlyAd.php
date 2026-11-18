@@ -84,6 +84,10 @@ class EcommerceMonthlyAd extends Model
         'cost_per_message',
         'sales_verdict',
         'testing_notes',
+        'aggressive_reaction',
+        'cpm',
+        'ctr',
+        'lead_conversion_status',
     ];
 
     protected $casts = [
@@ -94,6 +98,8 @@ class EcommerceMonthlyAd extends Model
         'total_budget' => 'decimal:2',
         'offer_price' => 'decimal:2',
         'cost_per_message' => 'decimal:2',
+        'cpm' => 'decimal:2',
+        'ctr' => 'decimal:2',
         'production_started_at' => 'date',
         'testing_started_at' => 'date',
         'testing_ends_at' => 'date',
@@ -150,6 +156,10 @@ class EcommerceMonthlyAd extends Model
             'cost_per_message',
             'sales_verdict',
             'testing_notes',
+            'aggressive_reaction',
+            'cpm',
+            'ctr',
+            'lead_conversion_status',
         ]);
 
         $payload['phase'] = $this->normalizedPhase();

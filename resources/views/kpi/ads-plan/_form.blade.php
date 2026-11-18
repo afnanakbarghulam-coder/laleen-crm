@@ -1,6 +1,6 @@
-{{-- Minimalist Add / Edit Ad Modal with Dynamic 1..N Creatives (Type, Format, Size & Reference URL) --}}
+{{-- Minimalist Add / Edit Ad Modal with Dynamic 1..N Creatives & Stage-Gated Testing Metrics --}}
 <div class="modal fade laleen-ma-modal" id="monthlyAdModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 880px;">
+    <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 900px;">
         <div class="modal-content">
             <form method="POST" id="monthlyAdForm" action="{{ route('kpi.ads-plan.store') }}">
                 @csrf
@@ -34,7 +34,7 @@
 
                         <div class="col-md-4">
                             <label class="laleen-ma-lbl" for="maTargetBranch">Target Branch</label>
-                            <select name="target_branch" id="maTargetBranch" class="form-select form-select-sm laleen-ma-input">
+                            <select name="target_branch" id="maTargetBranch" class="form-select form-control-sm laleen-ma-input">
                                 @foreach (\App\Models\KpiMonthlyAd::BRANCHES as $branch)
                                     <option value="{{ $branch }}">{{ $branch }}</option>
                                 @endforeach
@@ -80,48 +80,49 @@
                         {{-- Populated dynamically by JS (1..N rows) --}}
                     </div>
 
-                    {{-- Zone 3: Deadlines & Funnel Evaluation --}}
+                    {{-- Zone 3: Creative Deadline --}}
                     <div class="laleen-ma-section-divider my-3"></div>
 
                     <div class="row g-2">
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <label class="laleen-ma-lbl" for="maFinalCreativeDeadline">Creative Deadline</label>
                             <input type="date" name="final_creative_deadline" id="maFinalCreativeDeadline" class="form-control form-control-sm laleen-ma-input">
                         </div>
-                        <div class="col-md-3">
-                            <label class="laleen-ma-lbl" for="maTestingEndsAt">Test Ends</label>
-                            <input type="date" name="testing_ends_at" id="maTestingEndsAt" class="form-control form-control-sm laleen-ma-input">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="laleen-ma-lbl" for="maWinningCreative">Winning Creative</label>
-                            <select name="winning_creative" id="maWinningCreative" class="form-select form-select-sm laleen-ma-input">
-                                <option value="">— Select —</option>
-                                <option value="Creative 1">Creative 1</option>
-                                <option value="None">None</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="laleen-ma-lbl" for="maCostPerMessage">Cost / WhatsApp Msg (QAR)</label>
-                            <input type="number" step="0.01" min="0" name="cost_per_message" id="maCostPerMessage" class="form-control form-control-sm laleen-ma-input" placeholder="0.00">
-                            <div class="laleen-ma-helper" id="maCostPerMessageHelper"></div>
+                    </div>
+
+                    {{-- Zone 4: Stage-Gated Testing Metrics (Visible ONLY for Testing / Scaling / Killed cards) --}}
+                    <div id="maTestingMetricsSection" class="d-none">
+                        <div class="laleen-ma-section-divider my-3"></div>
+
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="fw-semibold" style="color: #f8efe6; font-size: 0.86rem;">Testing Metrics</span>
                         </div>
 
-                        <div class="col-md-5">
-                            <label class="laleen-ma-lbl" for="maSalesVerdict">Funnel Verdict</label>
-                            <select name="sales_verdict" id="maSalesVerdict" class="form-select form-select-sm laleen-ma-input">
-                                <option value="">— Select Verdict —</option>
-                                <option value="High Messages + Sales (Scale)">High Messages + Sales (Scale)</option>
-                                <option value="Audience Only / No Sales">Audience Only / No Sales</option>
-                                <option value="Too Expensive / Dead">Too Expensive / Dead</option>
-                                <option value="__custom__">+ Custom Verdict...</option>
-                            </select>
-                            <div id="maCustomVerdictWrap" class="mt-1 d-none">
-                                <input type="text" class="form-control form-control-sm laleen-ma-input" id="maSalesVerdictCustom" name="sales_verdict_custom" placeholder="Enter custom verdict...">
+                        <div class="row g-2">
+                            <div class="col-6 col-md-3">
+                                <label class="laleen-ma-lbl" for="maAggressiveReaction">Aggressive Audience Reaction?</label>
+                                <select name="aggressive_reaction" id="maAggressiveReaction" class="form-select form-select-sm laleen-ma-input" data-testing-input>
+                                    <option value="">— Select —</option>
+                                    <option value="yes">Yes</option>
+                                    <option value="no">No</option>
+                                </select>
                             </div>
-                        </div>
-                        <div class="col-md-7">
-                            <label class="laleen-ma-lbl" for="maTestingNotes">Audience &amp; Funnel Notes</label>
-                            <input type="text" name="testing_notes" id="maTestingNotes" class="form-control form-control-sm laleen-ma-input" placeholder="Hook retention, audience notes, or scaling takeaways...">
+                            <div class="col-6 col-md-3">
+                                <label class="laleen-ma-lbl" for="maCpm">CPM (QAR)</label>
+                                <input type="number" step="0.01" min="0" name="cpm" id="maCpm" class="form-control form-control-sm laleen-ma-input" placeholder="0.00" data-testing-input>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="laleen-ma-lbl" for="maCtr">CTR (%)</label>
+                                <input type="number" step="0.01" min="0" max="100" name="ctr" id="maCtr" class="form-control form-control-sm laleen-ma-input" placeholder="0.00" data-testing-input>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="laleen-ma-lbl" for="maLeadConversionStatus">Lead Conversion Status</label>
+                                <select name="lead_conversion_status" id="maLeadConversionStatus" class="form-select form-select-sm laleen-ma-input" data-testing-input>
+                                    <option value="">— Select —</option>
+                                    <option value="yes">Yes</option>
+                                    <option value="no">No</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -174,6 +175,10 @@
     .laleen-ma-input option {
         background-color: #191115;
         color: #f8efe6;
+    }
+
+    .laleen-ma-size-select {
+        padding-right: 1.65rem !important;
     }
 
     .laleen-ma-section-divider {
@@ -240,18 +245,12 @@
         background: rgba(229, 184, 168, 0.18);
         color: #f8efe6 !important;
     }
-
-    .laleen-ma-helper {
-        font-size: 0.7rem;
-        color: #9e8981;
-        margin-top: 2px;
-    }
 </style>
 
 <script>
 (function () {
-    const PRESET_SALES_VERDICTS = ['High Messages + Sales (Scale)', 'Audience Only / No Sales', 'Too Expensive / Dead'];
     const DEFAULT_SIZE_BY_TYPE = { reel: '9:16', story: '9:16', post: '4:5' };
+    let isEditMode = false;
 
     function escapeHtml(str) {
         return String(str ?? '')
@@ -271,8 +270,6 @@
             return false;
         }
     }
-
-    let isEditMode = false;
 
     function createCreativeRowElement(data = {}, index = 0) {
         const type = ['reel', 'story', 'post'].includes(data.creative_type) ? data.creative_type : 'reel';
@@ -294,7 +291,7 @@
                 <button type="button" class="laleen-ma-crow-remove" data-crow-remove title="Remove creative" aria-label="Remove creative">&times;</button>
             </div>
             <div class="row g-2 align-items-center">
-                <div class="col-md-4">
+                <div class="col-12 col-md-3">
                     <input type="text"
                            class="form-control form-control-sm laleen-ma-input"
                            data-crow-field="name"
@@ -315,8 +312,8 @@
                         <option value="image" ${media === 'image' ? 'selected' : ''}>Image</option>
                     </select>
                 </div>
-                <div class="col-4 col-md-2">
-                    <select class="form-select form-select-sm laleen-ma-input"
+                <div class="col-4 col-md-3">
+                    <select class="form-select form-select-sm laleen-ma-input laleen-ma-size-select"
                             data-crow-field="size"
                             data-size-touched="${sizeWasCustom ? '1' : '0'}"
                             aria-label="Creative Size">
@@ -326,7 +323,7 @@
                         <option value="16:9" ${size === '16:9' ? 'selected' : ''}>16:9 (1920×1080)</option>
                     </select>
                 </div>
-                <div class="col-md-2">
+                <div class="col-12 col-md-2">
                     <div class="d-flex">
                         <input type="url"
                                class="form-control form-control-sm laleen-ma-input"
@@ -361,8 +358,6 @@
                 sizeSel.value = DEFAULT_SIZE_BY_TYPE[typeSel.value] || '9:16';
             }
         });
-
-        nameInput.addEventListener('input', () => syncWinningCreativeOptions());
 
         urlInput.addEventListener('input', () => {
             const raw = urlInput.value.trim();
@@ -419,34 +414,9 @@
         if (chip) {
             chip.textContent = `${rows.length} ${rows.length === 1 ? 'Creative' : 'Creatives'}`;
         }
-
-        syncWinningCreativeOptions();
     }
 
-    function syncWinningCreativeOptions(preferredValue = null) {
-        const select = document.getElementById('maWinningCreative');
-        const list = document.getElementById('maCreativesList');
-        if (!select || !list) return;
-
-        const currentVal = preferredValue !== null ? preferredValue : select.value;
-        const rows = Array.from(list.querySelectorAll('[data-ma-crow]'));
-
-        let html = '<option value="">— Select —</option>';
-        rows.forEach((row, idx) => {
-            const label = `Creative ${idx + 1}`;
-            const hook = (row.querySelector('[data-crow-field="name"]')?.value || '').trim();
-            const text = hook ? `${label} — ${hook}` : label;
-            html += `<option value="${escapeHtml(label)}">${escapeHtml(text)}</option>`;
-        });
-        html += '<option value="None">None</option>';
-
-        select.innerHTML = html;
-        if (currentVal && Array.from(select.options).some((o) => o.value === currentVal)) {
-            select.value = currentVal;
-        }
-    }
-
-    function renderCreativesList(creativesArray, preferredWinner = '') {
+    function renderCreativesList(creativesArray) {
         const list = document.getElementById('maCreativesList');
         if (!list) return;
         list.innerHTML = '';
@@ -460,30 +430,26 @@
         });
 
         reindexCreativeRows();
-        if (preferredWinner) {
-            syncWinningCreativeOptions(preferredWinner);
-        }
     }
 
-    function updateCostPerMessageHelper() {
-        const cost = parseFloat(document.getElementById('maCostPerMessage')?.value || '');
-        const offerPrice = parseFloat(document.getElementById('maOfferPrice')?.value || '');
-        const helper = document.getElementById('maCostPerMessageHelper');
-        if (!helper) return;
+    function setTestingSectionVisible(visible, adData = {}) {
+        const section = document.getElementById('maTestingMetricsSection');
+        if (!section) return;
+        section.classList.toggle('d-none', !visible);
 
-        if (!isNaN(cost) && !isNaN(offerPrice) && offerPrice > 0) {
-            helper.textContent = `${((cost / offerPrice) * 100).toFixed(1)}% of ticket`;
-        } else {
-            helper.textContent = '';
-        }
-    }
+        section.querySelectorAll('[data-testing-input]').forEach((el) => {
+            el.disabled = !visible;
+        });
 
-    function updateSalesVerdictUI() {
-        const verdictSel = document.getElementById('maSalesVerdict');
-        const wrap = document.getElementById('maCustomVerdictWrap');
-        if (verdictSel && wrap) {
-            wrap.classList.toggle('d-none', verdictSel.value !== '__custom__');
-        }
+        const reactionEl = document.getElementById('maAggressiveReaction');
+        const cpmEl = document.getElementById('maCpm');
+        const ctrEl = document.getElementById('maCtr');
+        const leadsEl = document.getElementById('maLeadConversionStatus');
+
+        if (reactionEl) reactionEl.value = visible ? (adData.aggressive_reaction || '') : '';
+        if (cpmEl) cpmEl.value = visible ? (adData.cpm ?? '') : '';
+        if (ctrEl) ctrEl.value = visible ? (adData.ctr ?? '') : '';
+        if (leadsEl) leadsEl.value = visible ? (adData.lead_conversion_status || '') : '';
     }
 
     function ensureSelectValue(selectEl, value, fallbackValue = '') {
@@ -533,11 +499,8 @@
             row.querySelector('[data-crow-field="name"]')?.focus();
         });
 
-        document.getElementById('maCostPerMessage')?.addEventListener('input', updateCostPerMessageHelper);
-        document.getElementById('maOfferPrice')?.addEventListener('input', updateCostPerMessageHelper);
-        document.getElementById('maSalesVerdict')?.addEventListener('change', updateSalesVerdictUI);
-
         renderCreativesList([]);
+        setTestingSectionVisible(false);
 
         document.addEventListener('click', (e) => {
             const btn = e.target.closest('.monthly-ad-edit-btn');
@@ -571,16 +534,17 @@
         document.getElementById('monthlyAdForm').reset();
         document.querySelectorAll('#maPersonResponsible option[data-legacy-opt], #maTargetBranch option[data-legacy-opt]').forEach((o) => o.remove());
         document.getElementById('maPlanMonth').value = new Date().toISOString().slice(0, 7);
-        document.getElementById('maSalesVerdictCustom').value = '';
-        updateSalesVerdictUI();
         renderCreativesList([]);
-        updateCostPerMessageHelper();
+        setTestingSectionVisible(false);
     };
 
     window.editMonthlyAd = function (ad, explicitUpdateUrl = '') {
         const safeAd = (ad && typeof ad === 'object') ? ad : {};
         window.resetMonthlyAdForm();
         isEditMode = true;
+
+        const phase = String(safeAd.phase || 'Planning').trim();
+        const showTestingMetrics = ['Testing', 'Scaling', 'Killed'].includes(phase);
 
         document.getElementById('monthlyAdModalTitle').textContent = 'Edit Ad';
         document.getElementById('monthlyAdForm').action = explicitUpdateUrl || `/kpis/ads-plan/${safeAd.id}`;
@@ -595,24 +559,11 @@
         document.getElementById('maLiveDate').value = safeAd.live_date || '';
         document.getElementById('maOffer').value = safeAd.offer || '';
         document.getElementById('maPreFilledMessage').value = safeAd.pre_filled_message || '';
-
         document.getElementById('maFinalCreativeDeadline').value = safeAd.final_creative_deadline || '';
-        document.getElementById('maTestingEndsAt').value = safeAd.testing_ends_at || '';
-        document.getElementById('maCostPerMessage').value = safeAd.cost_per_message ?? '';
-        document.getElementById('maTestingNotes').value = safeAd.testing_notes || '';
 
         const safeCreatives = Array.isArray(safeAd.creatives) ? safeAd.creatives : [];
-        renderCreativesList(safeCreatives, safeAd.winning_creative || '');
-
-        if (safeAd.sales_verdict && !PRESET_SALES_VERDICTS.includes(safeAd.sales_verdict)) {
-            document.getElementById('maSalesVerdict').value = '__custom__';
-            document.getElementById('maSalesVerdictCustom').value = safeAd.sales_verdict;
-        } else {
-            document.getElementById('maSalesVerdict').value = safeAd.sales_verdict || '';
-            document.getElementById('maSalesVerdictCustom').value = '';
-        }
-        updateSalesVerdictUI();
-        updateCostPerMessageHelper();
+        renderCreativesList(safeCreatives);
+        setTestingSectionVisible(showTestingMetrics, safeAd);
 
         openModalSafely(document.getElementById('monthlyAdModal'));
     };

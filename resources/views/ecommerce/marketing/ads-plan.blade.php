@@ -158,38 +158,35 @@
                                     </div>
                                 @endif
 
+                                @if (in_array($phaseKey, ['Testing', 'Scaling'], true))
+                                    @php
+                                        $tm = $ad->testingMetricsSummary($cardCurrency);
+                                    @endphp
+                                    <div class="laleen-ma-test-strip mt-2 pt-2">
+                                        <span>Reaction: <strong>{{ $tm['reaction'] }}</strong></span>
+                                        <span class="laleen-ma-sep">&middot;</span>
+                                        <span>CPM: <strong>{{ $tm['cpm'] }}</strong></span>
+                                        <span class="laleen-ma-sep">&middot;</span>
+                                        <span>CTR: <strong>{{ $tm['ctr'] }}</strong></span>
+                                        <span class="laleen-ma-sep">&middot;</span>
+                                        <span>Leads: <strong>{{ $tm['leads'] }}</strong></span>
+                                    </div>
+                                @endif
+
                                 <div class="laleen-ma-card-footer mt-2 pt-2">
                                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-2">
                                         <span class="laleen-ma-subtle">
-                                            @if ($phaseKey === 'Testing' && $ad->testing_ends_at)
-                                                Ends {{ $ad->testing_ends_at->format('d M') }}
-                                                @if ($daysRemaining !== null)
-                                                    ({{ $daysRemaining < 0 ? abs($daysRemaining) . 'd overdue' : $daysRemaining . 'd left' }})
-                                                @endif
-                                            @elseif ($deadline)
+                                            @if ($deadline)
                                                 {{ $deadline['label'] }}: {{ $deadline['date']->format('d M Y') }}
                                             @else
                                                 {{ $ad->plan_month ? \Illuminate\Support\Carbon::createFromFormat('Y-m', $ad->plan_month)->format('M Y') : '' }}
                                             @endif
                                         </span>
 
-                                        @if ($ad->cost_per_message !== null)
-                                            <span class="laleen-ma-subtle">Msg: {{ number_format((float) $ad->cost_per_message, 2) }} {{ $cardCurrency }}</span>
-                                        @elseif ($ad->offer_price !== null)
+                                        @if ($ad->offer_price !== null)
                                             <span class="laleen-ma-subtle">Ticket: {{ number_format((float) $ad->offer_price, 0) }} {{ $cardCurrency }}</span>
                                         @endif
                                     </div>
-
-                                    @if ($phaseKey === 'Scaling' && ($winDetails['label'] || $ad->sales_verdict))
-                                        <div class="laleen-ma-winner-line mb-2">
-                                            @if ($winDetails['label'])
-                                                <span>Winner: {{ $winDetails['label'] }}{{ $winDetails['name'] ? ' — ' . $winDetails['name'] : '' }}</span>
-                                            @endif
-                                            @if ($ad->sales_verdict)
-                                                <span>{{ $winDetails['label'] ? ' · ' : '' }}{{ $ad->sales_verdict }}</span>
-                                            @endif
-                                        </div>
-                                    @endif
 
                                     @moduleEdit('ecommerce')
                                         <div class="d-flex align-items-center gap-2 no-print">
@@ -274,11 +271,20 @@
                                 <span>&middot;</span>
                                 <span>{{ $ad->person_responsible }}</span>
                             </div>
-                            @if ($ad->sales_verdict)
-                                <div class="small mt-2 break-words whitespace-normal" style="color: #fda4af;">{{ $ad->sales_verdict }}</div>
-                            @endif
-                            @if ($ad->testing_notes)
-                                <div class="laleen-ma-subtle mt-1 break-words whitespace-normal">{{ $ad->testing_notes }}</div>
+                            @php
+                                $killedCurrency = strtoupper((string) ($ad->region ?? $activeRegion)) === 'QA' ? 'QAR' : 'PKR';
+                                $killedTm = $ad->testingMetricsSummary($killedCurrency);
+                            @endphp
+                            @if ($killedTm['has_any'])
+                                <div class="laleen-ma-test-strip mt-2 pt-2">
+                                    <span>Reaction: <strong>{{ $killedTm['reaction'] }}</strong></span>
+                                    <span class="laleen-ma-sep">&middot;</span>
+                                    <span>CPM: <strong>{{ $killedTm['cpm'] }}</strong></span>
+                                    <span class="laleen-ma-sep">&middot;</span>
+                                    <span>CTR: <strong>{{ $killedTm['ctr'] }}</strong></span>
+                                    <span class="laleen-ma-sep">&middot;</span>
+                                    <span>Leads: <strong>{{ $killedTm['leads'] }}</strong></span>
+                                </div>
                             @endif
                         </div>
                     @empty
@@ -558,6 +564,23 @@
             text-decoration: none !important;
         }
         .laleen-ma-ref-link:hover { color: #f8efe6 !important; text-decoration: underline !important; }
+
+        .laleen-ma-test-strip {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 5px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            font-size: 0.72rem;
+            color: #9e8981;
+            line-height: 1.45;
+        }
+        .laleen-ma-test-strip strong {
+            color: #e8d5c4;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        .laleen-ma-sep { opacity: 0.45; }
 
         .laleen-ma-card-footer { border-top: 1px solid rgba(255, 255, 255, 0.06); }
         .laleen-ma-subtle { font-size: 0.71rem; color: #9e8981; overflow-wrap: anywhere; word-break: break-word; }

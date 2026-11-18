@@ -436,4 +436,133 @@ class MonthlyAdsPlanTest extends TestCase
             $this->assertDatabaseMissing('monthly_ads', ['id' => $card->id]);
         }
     }
+
+    public function test_streamlined_planning_form_removes_five_legacy_fields_and_testing_stage_saves_and_renders_four_evaluation_metrics(): void
+    {
+        $month = now()->format('Y-m');
+
+        // 1. Verify the 5 removed legacy labels no longer render anywhere in Monthly Ads Plan
+        $initialBoard = $this->actingAs($this->admin)->get(route('kpi.ads-plan.index'));
+        $initialBoard->assertOk()
+            ->assertSee('Creative Deadline')
+            ->assertSee('Testing Metrics')
+            ->assertSee('Aggressive Audience Reaction?')
+            ->assertSee('CPM (QAR)')
+            ->assertSee('CTR (%)')
+            ->assertSee('Lead Conversion Status')
+            ->assertDontSee('Test Ends')
+            ->assertDontSee('Winning Creative')
+            ->assertDontSee('Cost / WhatsApp Msg (QAR)')
+            ->assertDontSee('Funnel Verdict')
+            ->assertDontSee('Audience &amp; Funnel Notes', false);
+
+        // 2. Create and update an ad in Planning & Production cleanly without any testing fields (even when Creative Deadline is set without Live Date)
+        $this->actingAs($this->admin)
+            ->post(route('kpi.ads-plan.store'), [
+                'plan_month'              => $month,
+                'ad_name'                 => 'Clean Planning Offer Batch',
+                'person_responsible'      => $this->admin->name,
+                'offer'                   => '7 Services 99 QAR',
+                'target_branch'           => 'All Branches',
+                'total_budget'            => 1200,
+                'final_creative_deadline' => now()->addDays(2)->toDateString(),
+                'creatives'               => [
+                    [
+                        'name'          => 'Hook 1 — 99 QAR Reveal',
+                        'creative_type' => 'reel',
+                        'media_type'    => 'video',
+                        'size'          => '9:16',
+                        'reference_url' => 'https://www.instagram.com/reel/plan99',
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('kpi.ads-plan.index'))
+            ->assertSessionHasNoErrors();
+
+        $ad = KpiMonthlyAd::where('ad_name', 'Clean Planning Offer Batch')->firstOrFail();
+        $this->assertSame('Planning', $ad->phase);
+
+        $this->actingAs($this->admin)
+            ->put(route('kpi.ads-plan.update', $ad), [
+                'plan_month'              => $month,
+                'ad_name'                 => 'Clean Planning Offer Batch (Edited)',
+                'person_responsible'      => $this->admin->name,
+                'offer'                   => '7 Services 99 QAR — Updated',
+                'target_branch'           => 'Old Airport',
+                'total_budget'            => 1400,
+                'final_creative_deadline' => now()->addDays(3)->toDateString(),
+                'creatives'               => $ad->creatives,
+            ])
+            ->assertRedirect(route('kpi.ads-plan.index'))
+            ->assertSessionHasNoErrors();
+
+        // 3. Move to Testing -> initially renders dashes ('—') for the 4 testing metrics on the card
+        $this->actingAs($this->admin)
+            ->patch(route('kpi.ads-plan.complete-production', $ad))
+            ->assertRedirect(route('kpi.ads-plan.index'));
+
+        $unfilledBoard = $this->actingAs($this->admin)->get(route('kpi.ads-plan.index'));
+        $unfilledBoard->assertOk()
+            ->assertSee('Reaction: <strong>—</strong>', false)
+            ->assertSee('CPM: <strong>—</strong>', false)
+            ->assertSee('CTR: <strong>—</strong>', false)
+            ->assertSee('Leads: <strong>—</strong>', false);
+
+        // 4. Reject invalid testing metric inputs with 422
+        $this->actingAs($this->admin)
+            ->putJson(route('kpi.ads-plan.update', $ad), [
+                'plan_month'             => $month,
+                'ad_name'                => 'Clean Planning Offer Batch (Edited)',
+                'person_responsible'     => $this->admin->name,
+                'target_branch'          => 'Old Airport',
+                'aggressive_reaction'    => 'maybe',
+                'cpm'                    => -5,
+                'ctr'                    => 125,
+                'lead_conversion_status' => 'invalid',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['aggressive_reaction', 'cpm', 'ctr', 'lead_conversion_status']);
+
+        // 5. Save valid 4 testing metrics on the Testing card -> persists & displays on Testing and Scaling cards
+        $this->actingAs($this->admin)
+            ->put(route('kpi.ads-plan.update', $ad), [
+                'plan_month'             => $month,
+                'ad_name'                => 'Clean Planning Offer Batch (Edited)',
+                'person_responsible'     => $this->admin->name,
+                'target_branch'          => 'Old Airport',
+                'total_budget'           => 1400,
+                'creatives'              => $ad->fresh()->creatives,
+                'aggressive_reaction'    => 'yes',
+                'cpm'                    => 42,
+                'ctr'                    => 2.35,
+                'lead_conversion_status' => 'yes',
+            ])
+            ->assertRedirect(route('kpi.ads-plan.index'))
+            ->assertSessionHasNoErrors();
+
+        $ad->refresh();
+        $this->assertSame('yes', $ad->aggressive_reaction);
+        $this->assertSame('42.00', (string) $ad->cpm);
+        $this->assertSame('2.35', (string) $ad->ctr);
+        $this->assertSame('yes', $ad->lead_conversion_status);
+
+        $testingBoard = $this->actingAs($this->admin)->get(route('kpi.ads-plan.index'));
+        $testingBoard->assertOk()
+            ->assertSee('Reaction: <strong>Yes</strong>', false)
+            ->assertSee('CPM: <strong>42 QAR</strong>', false)
+            ->assertSee('CTR: <strong>2.35%</strong>', false)
+            ->assertSee('Leads: <strong>Yes</strong>', false);
+
+        // Move to Scaling -> 4 metrics remain visible on the Scaling card
+        $this->actingAs($this->admin)
+            ->patch(route('kpi.ads-plan.scale', $ad))
+            ->assertRedirect(route('kpi.ads-plan.index'));
+
+        $scalingBoard = $this->actingAs($this->admin)->get(route('kpi.ads-plan.index'));
+        $scalingBoard->assertOk()
+            ->assertSee('Reaction: <strong>Yes</strong>', false)
+            ->assertSee('CPM: <strong>42 QAR</strong>', false)
+            ->assertSee('CTR: <strong>2.35%</strong>', false)
+            ->assertSee('Leads: <strong>Yes</strong>', false);
+    }
 }
