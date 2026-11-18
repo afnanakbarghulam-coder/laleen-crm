@@ -350,7 +350,9 @@ class AdCampaignMetricsController extends Controller
      */
     public function extractPreview(Request $request, AdMetricsScreenshotParser $parser)
     {
-        @set_time_limit(120);
+        if (PHP_SAPI !== 'cli') {
+            @set_time_limit(120);
+        }
 
         $workspace = in_array($request->input('workspace'), ['salon', 'ecommerce'], true)
             ? (string) $request->input('workspace')

@@ -75,8 +75,8 @@ class StaffNoticeController extends Controller
             'notice_date' => 'required|date',
             'type' => ['required', Rule::in(StaffNotice::TYPES)],
             'subject' => 'required|string|max:255',
-            'description' => 'nullable|string|max:2000',
-            'corrective_actions' => 'nullable|string|max:2000',
+            'description' => 'nullable|string|max:5000',
+            'corrective_actions' => 'nullable|string|max:5000',
             'acknowledged' => ['required', Rule::in(['Y', 'N'])],
         ]);
     }

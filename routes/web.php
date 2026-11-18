@@ -365,7 +365,7 @@ Route::middleware(['auth'])->group(function () {
 
         Route::middleware('module:kpis')->get('/ads-plan', [MonthlyAdController::class, 'index'])->name('ads-plan.index');
         Route::middleware('module:kpis,edit')->post('/ads-plan', [MonthlyAdController::class, 'store'])->name('ads-plan.store');
-        Route::middleware('module:kpis,edit')->put('/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'update'])->name('ads-plan.update');
+        Route::middleware('module:kpis,edit')->match(['put', 'patch'], '/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'update'])->name('ads-plan.update');
         Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/complete-planning', [MonthlyAdController::class, 'completePlanning'])->name('ads-plan.complete-planning');
         Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/complete-production', [MonthlyAdController::class, 'completeProduction'])->name('ads-plan.complete-production');
         Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/scale', [MonthlyAdController::class, 'scaleAd'])->name('ads-plan.scale');
@@ -551,7 +551,7 @@ Route::middleware(['auth'])->group(function () {
             Route::patch('/marketing/content-calendar/{content}/toggle-status', [EcommerceContentCalendarController::class, 'toggleStatus'])->name('marketing.content.toggle-status');
 
             Route::post('/marketing/ads-plan', [EcommerceMonthlyAdsController::class, 'store'])->name('marketing.ads-plan.store');
-            Route::put('/marketing/ads-plan/{ad}', [EcommerceMonthlyAdsController::class, 'update'])->name('marketing.ads-plan.update');
+            Route::match(['put', 'patch'], '/marketing/ads-plan/{ad}', [EcommerceMonthlyAdsController::class, 'update'])->name('marketing.ads-plan.update');
             Route::delete('/marketing/ads-plan/{ad}', [EcommerceMonthlyAdsController::class, 'destroy'])->name('marketing.ads-plan.destroy');
             Route::patch('/marketing/ads-plan/{ad}/complete-planning', [EcommerceMonthlyAdsController::class, 'completePlanning'])->name('marketing.ads-plan.complete-planning');
             Route::patch('/marketing/ads-plan/{ad}/complete-production', [EcommerceMonthlyAdsController::class, 'completeProduction'])->name('marketing.ads-plan.complete-production');

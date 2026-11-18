@@ -93,6 +93,56 @@
         color: #e79a91;
     }
 
+    /* HR Resolution Full-Width Expandable Corrective Action Editor */
+    .hr-corrective-fullwrap {
+        width: 100%;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .hr-corrective-textarea {
+        width: 100%;
+        min-height: 84px;
+        resize: vertical;
+        line-height: 1.5;
+        font-size: 0.82rem;
+        border-radius: 8px;
+        background: rgba(16, 12, 11, 0.65) !important;
+        border: 1px solid rgba(229, 184, 168, 0.2) !important;
+        color: #f5efea !important;
+        transition: border-color 0.15s ease, height 0.14s ease;
+    }
+
+    .hr-corrective-textarea:focus {
+        border-color: rgba(212, 163, 115, 0.52) !important;
+        box-shadow: 0 0 0 2px rgba(212, 163, 115, 0.12) !important;
+    }
+
+    .hr-corrective-textarea.is-expanded {
+        min-height: 260px;
+    }
+
+    .hr-corrective-expand-btn {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+        color: #b8a29a;
+        font-size: 0.7rem;
+        font-weight: 500;
+        line-height: 1;
+        padding: 3px 9px;
+        cursor: pointer;
+        transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .hr-corrective-expand-btn:hover,
+    .hr-corrective-expand-btn.is-active {
+        color: #f8efe6;
+        border-color: rgba(212, 163, 115, 0.45);
+        background: rgba(212, 163, 115, 0.14);
+    }
+
     .severity-badge, .status-badge, .ack-badge {
         font-size: 10.5px;
         font-weight: 700;
@@ -1555,7 +1605,7 @@
                                                         @moduleEdit('staff_management')
                                                             <button type="button" class="btn btn-sm btn-link text-warning p-0"
                                                                 x-show="!editMode" x-cloak
-                                                                @click="editMode = true"
+                                                                @click="editMode = true; $nextTick(() => window.refreshHrCorrectiveTextareas && window.refreshHrCorrectiveTextareas())"
                                                                 title="Edit HR Resolution">
                                                                 <i class="bi bi-pencil-square"></i>
                                                             </button>
@@ -1599,7 +1649,8 @@
                                                             </div>
                                                             @if ($hasNotice && !empty($staffNotice->corrective_actions))
                                                                 <div class="text-muted mt-1">
-                                                                    Corrective Action: <span class="text-body">{{ $staffNotice->corrective_actions }}</span>
+                                                                    <span class="d-block mb-1">Corrective Action:</span>
+                                                                    <div class="text-body" style="line-height: 1.5; word-break: break-word;">{!! nl2br(e($staffNotice->corrective_actions)) !!}</div>
                                                                 </div>
                                                             @endif
                                                         </div>
@@ -1692,17 +1743,32 @@
                                                                                         name="staff[{{ $staff->id }}][notice]"
                                                                                         id="noticeChk-{{ $complaint->id }}-{{ $staff->id }}"
                                                                                         value="1"
-                                                                                        x-model="staff[{{ $staff->id }}].notice">
+                                                                                        x-model="staff[{{ $staff->id }}].notice"
+                                                                                        @change="if ($event.target.checked) { $nextTick(() => window.autoGrowHrCorrective && window.autoGrowHrCorrective(document.getElementById('hrCorrective-{{ $complaint->id }}-{{ $staff->id }}'))) }">
                                                                                     <label class="form-check-label small" for="noticeChk-{{ $complaint->id }}-{{ $staff->id }}">Generate Notice</label>
                                                                                 </div>
-                                                                                <div class="mt-2" x-show="staff[{{ $staff->id }}].notice == true" x-cloak>
-                                                                                    <label class="form-label small text-muted mb-1">Corrective action to be taken</label>
-                                                                                    <input type="text" class="form-control form-control-sm"
-                                                                                        name="staff[{{ $staff->id }}][corrective_action]"
-                                                                                        x-model="staff[{{ $staff->id }}].corrective_action"
-                                                                                        placeholder="Corrective action...">
-                                                                                </div>
                                                                             </div>
+                                                                        </div>
+
+                                                                        <!-- Full-Width Expandable Corrective Action Block Underneath the 4-Column Row -->
+                                                                        <div class="hr-corrective-fullwrap col-span-full w-full"
+                                                                            x-show="staff[{{ $staff->id }}].mistake == 'yes' && staff[{{ $staff->id }}].notice == true"
+                                                                            x-cloak>
+                                                                            <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+                                                                                <label class="form-label small text-muted mb-0" for="hrCorrective-{{ $complaint->id }}-{{ $staff->id }}">Corrective action to be taken</label>
+                                                                                <button type="button"
+                                                                                    class="hr-corrective-expand-btn"
+                                                                                    data-hr-corrective-expand="hrCorrective-{{ $complaint->id }}-{{ $staff->id }}"
+                                                                                    aria-expanded="false">⤢ Expand</button>
+                                                                            </div>
+                                                                            <textarea
+                                                                                class="form-control hr-corrective-textarea w-full resize-y"
+                                                                                id="hrCorrective-{{ $complaint->id }}-{{ $staff->id }}"
+                                                                                name="staff[{{ $staff->id }}][corrective_action]"
+                                                                                x-model="staff[{{ $staff->id }}].corrective_action"
+                                                                                rows="3"
+                                                                                data-hr-corrective-autogrow
+                                                                                placeholder="Write clear corrective steps or coaching points..."></textarea>
                                                                         </div>
                                                                     </div>
                                                                 @empty
@@ -3351,11 +3417,11 @@
                             </div>
                             <div class="mb-2">
                                 <div class="fw-bold small text-uppercase text-muted mb-1">What Happened</div>
-                                <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap;">${escapeHtml(n.description || '—')}</div>
+                                <div class="p-2 rounded border border-secondary border-opacity-25 small whitespace-pre-line" style="line-height: 1.55; word-break: break-word;">${escapeHtml(n.description || '—').replace(/\r\n|\r|\n/g, '<br>')}</div>
                             </div>
                             <div class="mb-2">
                                 <div class="fw-bold small text-uppercase text-muted mb-1">Corrective Action to be taken</div>
-                                <div class="p-2 rounded border border-secondary border-opacity-25 small" style="white-space: pre-wrap;">${escapeHtml(n.corrective_actions || '—')}</div>
+                                <div class="p-2 rounded border border-secondary border-opacity-25 small whitespace-pre-line" style="line-height: 1.55; word-break: break-word;">${escapeHtml(n.corrective_actions || '—').replace(/\r\n|\r|\n/g, '<br>')}</div>
                             </div>
                             <div class="d-flex justify-content-end mt-2 pt-2 border-top border-secondary border-opacity-25" data-html2canvas-ignore="true">
                                 <button type="button" class="btn btn-sm btn-outline-primary btn-download-notice" id="download-jpg-btn-${n.id}" onclick="downloadNoticeJpg(${n.id})">
@@ -3589,6 +3655,70 @@
                 }
             });
         };
+
+        /* ---------- HR RESOLUTION: CHAT-STYLE AUTO-GROW + EXPAND TOGGLE ---------- */
+        window.autoGrowHrCorrective = function (el) {
+            if (!el) return;
+            if (el.classList.contains('is-expanded')) {
+                el.style.height = Math.max(260, Math.min(el.scrollHeight, 420)) + 'px';
+                el.style.overflowY = 'auto';
+                return;
+            }
+            el.style.height = 'auto';
+            const nextHeight = Math.max(84, Math.min(el.scrollHeight || 84, 260));
+            el.style.height = nextHeight + 'px';
+            el.style.overflowY = (el.scrollHeight || 0) > 260 ? 'auto' : 'hidden';
+        };
+
+        window.refreshHrCorrectiveTextareas = function () {
+            document.querySelectorAll('[data-hr-corrective-autogrow]').forEach(function (ta) {
+                window.autoGrowHrCorrective(ta);
+            });
+        };
+
+        document.querySelectorAll('[data-hr-corrective-autogrow]').forEach(function (ta) {
+            window.autoGrowHrCorrective(ta);
+            ta.addEventListener('input', function () {
+                window.autoGrowHrCorrective(ta);
+            });
+            ta.addEventListener('paste', function () {
+                requestAnimationFrame(function () {
+                    window.autoGrowHrCorrective(ta);
+                });
+            });
+        });
+
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('[data-hr-corrective-expand]');
+            if (!btn) return;
+            e.preventDefault();
+            const targetId = btn.getAttribute('data-hr-corrective-expand');
+            const textarea = targetId ? document.getElementById(targetId) : null;
+            if (!textarea) return;
+
+            const expanding = !textarea.classList.contains('is-expanded');
+            textarea.classList.toggle('is-expanded', expanding);
+            btn.classList.toggle('is-active', expanding);
+            btn.setAttribute('aria-expanded', expanding ? 'true' : 'false');
+            btn.textContent = expanding ? '⤡ Compact' : '⤢ Expand';
+
+            if (expanding) {
+                textarea.style.height = '260px';
+                textarea.style.overflowY = 'auto';
+                textarea.focus();
+            } else {
+                textarea.style.height = '84px';
+                textarea.style.overflowY = textarea.scrollHeight > 84 ? 'auto' : 'hidden';
+            }
+        });
+
+        document.querySelectorAll('.payroll-detail-row').forEach(function (collapseRow) {
+            collapseRow.addEventListener('shown.bs.collapse', function () {
+                requestAnimationFrame(function () {
+                    window.refreshHrCorrectiveTextareas();
+                });
+            });
+        });
 
     </script>
 @endsection

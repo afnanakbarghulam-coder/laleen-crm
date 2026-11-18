@@ -184,13 +184,19 @@ class EcommerceMonthlyAdsController extends Controller
                 if (!is_array($row)) {
                     continue;
                 }
+                $name = trim((string) ($row['name'] ?? ''));
+                $refUrl = trim((string) ($row['reference_url'] ?? ''));
+
+                if ($name === '' && $refUrl === '') {
+                    continue;
+                }
+
                 $type = strtolower(trim((string) ($row['creative_type'] ?? 'reel')));
                 $media = strtolower(trim((string) ($row['media_type'] ?? 'video')));
                 $size = trim((string) ($row['size'] ?? EcommerceMonthlyAd::defaultSizeForType($type)));
-                $refUrl = trim((string) ($row['reference_url'] ?? ''));
 
                 $cleanedCreatives[] = [
-                    'name'          => trim((string) ($row['name'] ?? '')),
+                    'name'          => $name,
                     'creative_type' => $type !== '' ? $type : 'reel',
                     'media_type'    => $media !== '' ? $media : 'video',
                     'size'          => $size !== '' ? $size : EcommerceMonthlyAd::defaultSizeForType($type),
@@ -233,7 +239,7 @@ class EcommerceMonthlyAdsController extends Controller
         ];
 
         if ($hasCreativesArray) {
-            $rules['creatives'] = 'required|array|min:1|max:30';
+            $rules['creatives'] = 'present|array|max:30';
             $rules['creatives.*.name'] = 'required|string|max:255';
             $rules['creatives.*.creative_type'] = ['required', Rule::in(array_keys(EcommerceMonthlyAd::CREATIVE_TYPES))];
             $rules['creatives.*.media_type'] = ['required', Rule::in(array_keys(EcommerceMonthlyAd::MEDIA_TYPES))];

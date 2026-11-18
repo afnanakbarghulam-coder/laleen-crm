@@ -434,4 +434,71 @@ class StaffManagementWave3Test extends TestCase
         ]);
         $this->assertSame('CMP-2026-003', $c3->reference_number);
     }
+
+    public function test_hr_resolution_saves_multiline_corrective_action_and_renders_full_width_expandable_textarea_and_notice_linebreaks(): void
+    {
+        $service = Service::create([
+            'name' => 'Signature Keratin',
+            'category' => 'Hair',
+            'price' => 350,
+            'duration' => 120,
+        ]);
+
+        $staff = Staff::create([
+            'name' => 'Nadia Stylist',
+            'first_name' => 'Nadia',
+            'branch' => 'old_airport',
+            'bookable' => true,
+        ]);
+
+        $complaint = StaffComplaint::create([
+            'complaint_date' => '2026-11-18',
+            'branch' => 'old_airport',
+            'customer_name' => 'Layla Client',
+            'service_id' => $service->id,
+            'category' => 'Service Quality',
+            'description' => 'Uneven blow-dry finish reported after keratin session.',
+            'what_happened' => 'Uneven blow-dry finish reported after keratin session.',
+        ]);
+        $complaint->staffMembers()->sync([$staff->id]);
+
+        $multilineCorrective = "1. Re-verify sectioning thickness before applying flat iron.\n2. Complete a 15-minute final mirror check with branch manager Rhea.\n\n3. Attend Saturday morning blow-dry calibration.";
+
+        // Save Resolutions with Generate Notice + multi-line Corrective Action
+        $this->actingAs($this->admin)
+            ->post(route('complaints.resolve', $complaint), [
+                'staff' => [
+                    $staff->id => [
+                        'mistake' => 'yes',
+                        'deduction' => 'yes',
+                        'deduction_amount' => 50,
+                        'notice' => '1',
+                        'corrective_action' => $multilineCorrective,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('staffs.index', ['tab' => 'complaints']))
+            ->assertSessionHasNoErrors();
+
+        $notice = StaffNotice::where('complaint_id', $complaint->id)
+            ->where('staff_id', $staff->id)
+            ->firstOrFail();
+
+        $this->assertSame($multilineCorrective, $notice->corrective_actions);
+
+        // Render Complaints tab: verify full-width expandable textarea, ⤢ Expand toggle, nl2br read-only display, and notice JSON payload
+        $page = $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'complaints']));
+
+        $page->assertOk()
+            ->assertSee('hr-corrective-fullwrap col-span-full w-full', false)
+            ->assertSee('hr-corrective-textarea w-full resize-y', false)
+            ->assertSee('data-hr-corrective-autogrow', false)
+            ->assertSee('data-hr-corrective-expand="hrCorrective-' . $complaint->id . '-' . $staff->id . '"', false)
+            ->assertSee('⤢ Expand')
+            ->assertSee('View Generated Staff Notice')
+            ->assertSee('1. Re-verify sectioning thickness before applying flat iron.<br />', false)
+            ->assertSee('2. Complete a 15-minute final mirror check with branch manager Rhea.<br />', false)
+            ->assertSee('3. Attend Saturday morning blow-dry calibration.', false);
+    }
 }

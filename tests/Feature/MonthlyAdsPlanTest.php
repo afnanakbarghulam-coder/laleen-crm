@@ -318,4 +318,122 @@ class MonthlyAdsPlanTest extends TestCase
             ->assertRedirect();
         $this->assertSame('Scaling', $ecomAd->fresh()->phase);
     }
+
+    public function test_legacy_zero_creatives_cards_with_long_descriptions_render_safely_and_support_edit_and_delete(): void
+    {
+        $month = now()->format('Y-m');
+        $longUnbrokenOffer = str_repeat('SuperLongUnbrokenKeratinOfferString99QAR_', 8)
+            . " plus Sana's \"Bridal & Glow\" multi-word promotional package across Doha Old Airport and Al Wakrah branches!";
+
+        // Seed 0-creative legacy cards across Planning, Testing, Scaling, and Killed
+        $planningZero = KpiMonthlyAd::create([
+            'ad_name'            => "Legacy Zero-Creative Card — Sana's SuperLongUnbrokenCampaignTitle_" . str_repeat('X', 65),
+            'person_responsible' => 'Legacy Staff Name',
+            'offer'              => $longUnbrokenOffer,
+            'plan_month'         => $month,
+            'target_branch'      => 'All Branches',
+            'total_budget'       => 500,
+            'phase'              => 'Planning',
+            'creatives'          => null,
+        ]);
+
+        $testingZero = KpiMonthlyAd::create([
+            'ad_name'            => 'Zero Creative Testing Card',
+            'person_responsible' => $this->admin->name,
+            'offer'              => $longUnbrokenOffer,
+            'plan_month'         => $month,
+            'target_branch'      => 'Old Airport',
+            'phase'              => 'Testing',
+            'creatives'          => [],
+        ]);
+
+        $scalingZero = KpiMonthlyAd::create([
+            'ad_name'            => 'Zero Creative Scaling Card',
+            'person_responsible' => $this->admin->name,
+            'plan_month'         => $month,
+            'target_branch'      => 'Wakrah',
+            'phase'              => 'Scaling',
+            'creatives'          => null,
+        ]);
+
+        $killedZero = KpiMonthlyAd::create([
+            'ad_name'            => 'Zero Creative Killed Graveyard Card',
+            'person_responsible' => $this->admin->name,
+            'plan_month'         => $month,
+            'target_branch'      => 'All Branches',
+            'phase'              => 'Killed',
+            'testing_notes'      => str_repeat('LongUnbrokenGraveyardNote_', 10),
+            'creatives'          => null,
+        ]);
+
+        // 1. Render board: verify flex overflow classes, pinned action container, 0 Creatives badge, and valid JSON data-ad
+        $board = $this->actingAs($this->admin)->get(route('kpi.ads-plan.index'));
+        $board->assertOk()
+            ->assertSee('0 Creatives')
+            ->assertSee('min-w-0 flex-1', false)
+            ->assertSee('break-words whitespace-normal', false)
+            ->assertSee('shrink-0 relative z-10 flex items-center gap-1.5', false)
+            ->assertSee('p-1.5 cursor-pointer', false)
+            ->assertSee(route('kpi.ads-plan.destroy', $planningZero), false)
+            ->assertSee(route('kpi.ads-plan.destroy', $killedZero), false);
+
+        // 2. Edit (PUT) the legacy 0-creatives card submitting the default untouched blank Creative 1 row -> saves cleanly as 0 Creatives
+        $this->actingAs($this->admin)
+            ->put(route('kpi.ads-plan.update', $planningZero), [
+                'plan_month'         => $month,
+                'ad_name'            => 'Edited Legacy Zero-Creative Card',
+                'person_responsible' => 'Legacy Staff Name',
+                'offer'              => 'Updated clean offer summary',
+                'target_branch'      => 'Old Airport',
+                'total_budget'       => 750,
+                'creatives'          => [
+                    [
+                        'name'          => '',
+                        'creative_type' => 'reel',
+                        'media_type'    => 'video',
+                        'size'          => '9:16',
+                        'reference_url' => '',
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('kpi.ads-plan.index'))
+            ->assertSessionHasNoErrors();
+
+        $planningZero->refresh();
+        $this->assertSame('Edited Legacy Zero-Creative Card', $planningZero->ad_name);
+        $this->assertSame('Updated clean offer summary', $planningZero->offer);
+        $this->assertCount(0, $planningZero->resolvedCreatives());
+
+        // 3. Edit via PATCH adding 1 creative onto the legacy 0-creatives card
+        $this->actingAs($this->admin)
+            ->patch(route('kpi.ads-plan.update', $planningZero), [
+                'plan_month'         => $month,
+                'ad_name'            => 'Edited Legacy Card With 1 Creative',
+                'person_responsible' => $this->admin->name,
+                'target_branch'      => 'Old Airport',
+                'total_budget'       => 900,
+                'creatives'          => [
+                    [
+                        'name'          => 'Fresh Hook 1',
+                        'creative_type' => 'reel',
+                        'media_type'    => 'video',
+                        'size'          => '9:16',
+                        'reference_url' => 'https://www.instagram.com/reel/fresh1',
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('kpi.ads-plan.index'))
+            ->assertSessionHasNoErrors();
+
+        $this->assertCount(1, $planningZero->fresh()->resolvedCreatives());
+
+        // 4. Delete cards cleanly across Planning & Production, Testing, Scaling, and Killed Tests Graveyard
+        foreach ([$planningZero, $testingZero, $scalingZero, $killedZero] as $card) {
+            $this->actingAs($this->admin)
+                ->delete(route('kpi.ads-plan.destroy', $card))
+                ->assertRedirect(route('kpi.ads-plan.index'));
+
+            $this->assertDatabaseMissing('monthly_ads', ['id' => $card->id]);
+        }
+    }
 }

@@ -77,28 +77,29 @@
                                 $editPayloadJson = $ad->toEditPayload();
                             @endphp
                             <article class="laleen-ma-card" data-ma-card="{{ $ad->id }}">
-                                <div class="d-flex justify-content-between align-items-start gap-2">
-                                    <div class="min-w-0">
-                                        <div class="laleen-ma-card-title">{{ $ad->ad_name }}</div>
+                                <div class="laleen-ma-card-head flex items-start justify-between gap-2 w-full min-w-0">
+                                    <div class="laleen-ma-card-copy min-w-0 flex-1">
+                                        <div class="laleen-ma-card-title break-words whitespace-normal">{{ $ad->ad_name }}</div>
                                         @if ($ad->offer)
-                                            <div class="laleen-ma-card-offer text-truncate" title="{{ $ad->offer }}">{{ $ad->offer }}</div>
+                                            <div class="laleen-ma-card-offer line-clamp-2 break-words whitespace-normal" title="{{ $ad->offer }}">{{ $ad->offer }}</div>
                                         @endif
                                     </div>
 
                                     @moduleEdit('ecommerce')
-                                        <div class="d-inline-flex align-items-center gap-1 flex-shrink-0 no-print">
+                                        <div class="laleen-ma-card-actions shrink-0 relative z-10 flex items-center gap-1.5 no-print">
                                             <button type="button"
-                                                    class="laleen-ma-icon-btn monthly-ad-edit-btn"
-                                                    data-ad='@json($editPayloadJson)'
+                                                    class="laleen-ma-icon-btn monthly-ad-edit-btn p-1.5 cursor-pointer"
+                                                    data-ad="{{ json_encode($editPayloadJson, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) }}"
+                                                    data-update-url="{{ route('ecommerce.marketing.ads-plan.update', $ad) }}"
                                                     title="Edit Ad"
                                                     aria-label="Edit {{ $ad->ad_name }}">
-                                                <i class="bi bi-pencil"></i>
+                                                <i class="bi bi-pencil" aria-hidden="true"></i>
                                             </button>
-                                            <form action="{{ route('ecommerce.marketing.ads-plan.destroy', $ad) }}" method="POST" class="m-0 d-inline" onsubmit="return confirm('Delete this ad?')">
+                                            <form action="{{ route('ecommerce.marketing.ads-plan.destroy', $ad) }}" method="POST" class="m-0 d-inline laleen-ma-delete-form" data-confirm="Delete this ad?">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit" class="laleen-ma-icon-btn is-danger" title="Delete Ad" aria-label="Delete {{ $ad->ad_name }}">
-                                                    <i class="bi bi-trash3"></i>
+                                                <button type="submit" class="laleen-ma-icon-btn is-danger p-1.5 cursor-pointer" title="Delete Ad" aria-label="Delete {{ $ad->ad_name }}">
+                                                    <i class="bi bi-trash3" aria-hidden="true"></i>
                                                 </button>
                                             </form>
                                         </div>
@@ -133,7 +134,7 @@
                                                         {{ $isWinner ? '★ ' : '' }}{{ $c['short_label'] }} &middot; {{ $c['type_label'] }} &middot; {{ $c['media_label'] }} {{ $c['size'] }}
                                                     </span>
                                                     @if ($c['name'] !== '')
-                                                        <span class="laleen-ma-c-hook text-truncate" title="{{ $c['name'] }}">{{ $c['name'] }}</span>
+                                                        <span class="laleen-ma-c-hook break-words whitespace-normal" title="{{ $c['name'] }}">{{ $c['name'] }}</span>
                                                     @endif
                                                 </div>
                                                 @if (!empty($c['reference_url']))
@@ -151,7 +152,7 @@
                                     <div class="mt-2 no-print">
                                         <button type="button"
                                                 class="laleen-ma-gate-btn w-100 ai-script-drawer-btn"
-                                                data-ad-script='@json($editPayloadJson)'>
+                                                data-ad-script="{{ json_encode($editPayloadJson, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) }}">
                                             🎬 View AI Script &amp; Flow Prompt
                                         </button>
                                     </div>
@@ -240,18 +241,30 @@
                             $killedCreatives = $ad->resolvedCreatives();
                             $killedPayload = $ad->toEditPayload();
                         @endphp
-                        <div class="laleen-ma-card is-killed">
-                            <div class="d-flex justify-content-between align-items-start gap-2">
-                                <div class="laleen-ma-card-title">{{ $ad->ad_name }}</div>
+                        <div class="laleen-ma-card is-killed" data-ma-card="{{ $ad->id }}">
+                            <div class="laleen-ma-card-head flex items-start justify-between gap-2 w-full min-w-0">
+                                <div class="laleen-ma-card-copy min-w-0 flex-1">
+                                    <div class="laleen-ma-card-title break-words whitespace-normal">{{ $ad->ad_name }}</div>
+                                    @if ($ad->offer)
+                                        <div class="laleen-ma-card-offer line-clamp-2 break-words whitespace-normal" title="{{ $ad->offer }}">{{ $ad->offer }}</div>
+                                    @endif
+                                </div>
                                 @moduleEdit('ecommerce')
-                                    <div class="d-inline-flex gap-1">
-                                        <button type="button" class="laleen-ma-icon-btn monthly-ad-edit-btn" data-ad='@json($killedPayload)' title="View / Edit">
-                                            <i class="bi bi-pencil"></i>
+                                    <div class="laleen-ma-card-actions shrink-0 relative z-10 flex items-center gap-1.5 no-print">
+                                        <button type="button"
+                                                class="laleen-ma-icon-btn monthly-ad-edit-btn p-1.5 cursor-pointer"
+                                                data-ad="{{ json_encode($killedPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) }}"
+                                                data-update-url="{{ route('ecommerce.marketing.ads-plan.update', $ad) }}"
+                                                title="View / Edit"
+                                                aria-label="Edit {{ $ad->ad_name }}">
+                                            <i class="bi bi-pencil" aria-hidden="true"></i>
                                         </button>
-                                        <form action="{{ route('ecommerce.marketing.ads-plan.destroy', $ad) }}" method="POST" class="m-0 d-inline" onsubmit="return confirm('Delete this ad?')">
+                                        <form action="{{ route('ecommerce.marketing.ads-plan.destroy', $ad) }}" method="POST" class="m-0 d-inline laleen-ma-delete-form" data-confirm="Delete this ad?">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="laleen-ma-icon-btn is-danger" title="Delete"><i class="bi bi-trash3"></i></button>
+                                            <button type="submit" class="laleen-ma-icon-btn is-danger p-1.5 cursor-pointer" title="Delete" aria-label="Delete {{ $ad->ad_name }}">
+                                                <i class="bi bi-trash3" aria-hidden="true"></i>
+                                            </button>
                                         </form>
                                     </div>
                                 @endmoduleEdit
@@ -262,10 +275,10 @@
                                 <span>{{ $ad->person_responsible }}</span>
                             </div>
                             @if ($ad->sales_verdict)
-                                <div class="small mt-2" style="color: #fda4af;">{{ $ad->sales_verdict }}</div>
+                                <div class="small mt-2 break-words whitespace-normal" style="color: #fda4af;">{{ $ad->sales_verdict }}</div>
                             @endif
                             @if ($ad->testing_notes)
-                                <div class="laleen-ma-subtle mt-1">{{ $ad->testing_notes }}</div>
+                                <div class="laleen-ma-subtle mt-1 break-words whitespace-normal">{{ $ad->testing_notes }}</div>
                             @endif
                         </div>
                     @empty
@@ -397,6 +410,7 @@
             display: flex;
             flex-direction: column;
             min-width: 0;
+            overflow: hidden;
         }
 
         .laleen-ma-col-header {
@@ -434,35 +448,79 @@
         }
 
         .laleen-ma-card {
+            position: relative;
             background: linear-gradient(180deg, rgba(34, 22, 27, 0.94) 0%, rgba(21, 14, 18, 0.97) 100%);
             border: 1px solid rgba(229, 184, 168, 0.15);
             border-radius: 13px;
             padding: 12px 13px;
             min-width: 0;
+            max-width: 100%;
+            overflow: hidden;
         }
         .laleen-ma-card.is-killed { opacity: 0.82; }
+
+        .laleen-ma-card-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            width: 100%;
+            min-width: 0;
+        }
+        .laleen-ma-card-copy {
+            flex: 1 1 0%;
+            min-width: 0;
+        }
 
         .laleen-ma-card-title {
             font-size: 0.88rem;
             font-weight: 600;
             color: #f8efe6;
             line-height: 1.35;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            white-space: normal;
         }
         .laleen-ma-card-offer {
             font-size: 0.75rem;
             color: #b8a29a;
-            margin-top: 1px;
+            margin-top: 2px;
+            line-height: 1.4;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            white-space: normal;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .laleen-ma-card-actions {
+            flex-shrink: 0;
+            position: relative;
+            z-index: 10;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .laleen-ma-icon-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             background: transparent;
             border: none;
             color: #b8a29a;
-            padding: 2px 5px;
-            font-size: 0.78rem;
-            border-radius: 6px;
+            padding: 6px;
+            min-width: 30px;
+            min-height: 30px;
+            font-size: 0.82rem;
+            border-radius: 7px;
+            cursor: pointer;
+            pointer-events: auto;
             transition: color 0.14s ease, background 0.14s ease;
         }
+        .laleen-ma-icon-btn i { pointer-events: none; }
         .laleen-ma-icon-btn:hover { color: #f8efe6; background: rgba(255, 255, 255, 0.06); }
         .laleen-ma-icon-btn.is-danger:hover { color: #fda4af; background: rgba(253, 164, 175, 0.1); }
 
@@ -492,7 +550,7 @@
         .laleen-ma-creative-row:last-child { border-bottom: none; }
         .laleen-ma-c-spec { color: #e5b8a8; font-weight: 600; white-space: nowrap; }
         .laleen-ma-c-spec.is-winner { color: #6ee7b7; }
-        .laleen-ma-c-hook { color: #d8c7c0; max-width: 190px; }
+        .laleen-ma-c-hook { color: #d8c7c0; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
         .laleen-ma-ref-link {
             color: #d4a373 !important;
             font-size: 0.72rem;
@@ -502,8 +560,8 @@
         .laleen-ma-ref-link:hover { color: #f8efe6 !important; text-decoration: underline !important; }
 
         .laleen-ma-card-footer { border-top: 1px solid rgba(255, 255, 255, 0.06); }
-        .laleen-ma-subtle { font-size: 0.71rem; color: #9e8981; }
-        .laleen-ma-winner-line { font-size: 0.74rem; color: #6ee7b7; font-weight: 500; }
+        .laleen-ma-subtle { font-size: 0.71rem; color: #9e8981; overflow-wrap: anywhere; word-break: break-word; }
+        .laleen-ma-winner-line { font-size: 0.74rem; color: #6ee7b7; font-weight: 500; overflow-wrap: anywhere; word-break: break-word; }
 
         .laleen-ma-gate-btn {
             background: rgba(255, 255, 255, 0.04);

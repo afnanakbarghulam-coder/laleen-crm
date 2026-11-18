@@ -272,6 +272,8 @@
         }
     }
 
+    let isEditMode = false;
+
     function createCreativeRowElement(data = {}, index = 0) {
         const type = ['reel', 'story', 'post'].includes(data.creative_type) ? data.creative_type : 'reel';
         const media = ['video', 'image'].includes(data.media_type) ? data.media_type : 'video';
@@ -280,6 +282,7 @@
         const sizeWasCustom = Boolean(data.size && data.size !== defaultSize);
         const name = data.name || '';
         const refUrl = data.reference_url || '';
+        const requireName = !isEditMode || Boolean(name || refUrl);
 
         const row = document.createElement('div');
         row.className = 'laleen-ma-form-crow';
@@ -297,7 +300,7 @@
                            data-crow-field="name"
                            value="${escapeHtml(name)}"
                            placeholder="Creative ${index + 1} — Angle / Hook"
-                           required>
+                           ${requireName ? 'required' : ''}>
                 </div>
                 <div class="col-4 col-md-2">
                     <select class="form-select form-select-sm laleen-ma-input" data-crow-field="creative_type" aria-label="Creative Type">
@@ -369,6 +372,11 @@
             } else {
                 previewLink.href = '#';
                 previewLink.classList.add('is-empty');
+            }
+            if (raw !== '') {
+                nameInput.required = true;
+            } else if (isEditMode && nameInput.value.trim() === '') {
+                nameInput.required = false;
             }
         });
 
@@ -478,7 +486,43 @@
         }
     }
 
+    function ensureSelectValue(selectEl, value, fallbackValue = '') {
+        if (!selectEl) return;
+        selectEl.querySelectorAll('option[data-legacy-opt]').forEach((o) => o.remove());
+        const target = String(value ?? '').trim();
+        if (!target) {
+            selectEl.value = fallbackValue;
+            return;
+        }
+        const exists = Array.from(selectEl.options).some((o) => o.value === target);
+        if (!exists) {
+            const opt = document.createElement('option');
+            opt.value = target;
+            opt.textContent = target;
+            opt.setAttribute('data-legacy-opt', '1');
+            selectEl.appendChild(opt);
+        }
+        selectEl.value = target;
+    }
+
+    function openModalSafely(modalEl) {
+        if (!modalEl) return;
+        if (modalEl.parentElement !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+        if (window.bootstrap && window.bootstrap.Modal) {
+            window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        } else if (window.jQuery) {
+            window.jQuery(modalEl).modal('show');
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
+        const modalEl = document.getElementById('monthlyAdModal');
+        if (modalEl && modalEl.parentElement !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+
         document.getElementById('maAddCreativeBtn')?.addEventListener('click', () => {
             const list = document.getElementById('maCreativesList');
             if (!list) return;
@@ -495,18 +539,37 @@
 
         renderCreativesList([]);
 
-        document.querySelectorAll('.monthly-ad-edit-btn').forEach((btn) => {
-            btn.addEventListener('click', function () {
-                window.editMonthlyAd(JSON.parse(this.dataset.ad || '{}'));
-            });
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('.monthly-ad-edit-btn');
+            if (!btn) return;
+            e.preventDefault();
+            e.stopPropagation();
+            let parsed = {};
+            try {
+                parsed = JSON.parse(btn.getAttribute('data-ad') || '{}') || {};
+            } catch (_) {
+                parsed = {};
+            }
+            window.editMonthlyAd(parsed, btn.getAttribute('data-update-url') || '');
+        });
+
+        document.addEventListener('submit', (e) => {
+            const delForm = e.target.closest('.laleen-ma-delete-form');
+            if (!delForm) return;
+            const promptMsg = delForm.getAttribute('data-confirm') || 'Delete this ad?';
+            if (!window.confirm(promptMsg)) {
+                e.preventDefault();
+            }
         });
     });
 
     window.resetMonthlyAdForm = function () {
+        isEditMode = false;
         document.getElementById('monthlyAdModalTitle').textContent = 'Add Ad';
         document.getElementById('monthlyAdForm').action = '{{ route('kpi.ads-plan.store') }}';
         document.getElementById('monthlyAdFormMethod').value = '';
         document.getElementById('monthlyAdForm').reset();
+        document.querySelectorAll('#maPersonResponsible option[data-legacy-opt], #maTargetBranch option[data-legacy-opt]').forEach((o) => o.remove());
         document.getElementById('maPlanMonth').value = new Date().toISOString().slice(0, 7);
         document.getElementById('maSalesVerdictCustom').value = '';
         updateSalesVerdictUI();
@@ -514,41 +577,44 @@
         updateCostPerMessageHelper();
     };
 
-    window.editMonthlyAd = function (ad) {
+    window.editMonthlyAd = function (ad, explicitUpdateUrl = '') {
+        const safeAd = (ad && typeof ad === 'object') ? ad : {};
         window.resetMonthlyAdForm();
+        isEditMode = true;
 
         document.getElementById('monthlyAdModalTitle').textContent = 'Edit Ad';
-        document.getElementById('monthlyAdForm').action = `/kpis/ads-plan/${ad.id}`;
+        document.getElementById('monthlyAdForm').action = explicitUpdateUrl || `/kpis/ads-plan/${safeAd.id}`;
         document.getElementById('monthlyAdFormMethod').value = 'PUT';
 
-        document.getElementById('maAdName').value = ad.ad_name || '';
-        document.getElementById('maPlanMonth').value = ad.plan_month || new Date().toISOString().slice(0, 7);
-        document.getElementById('maPersonResponsible').value = ad.person_responsible || '';
-        document.getElementById('maTargetBranch').value = ad.target_branch || 'All Branches';
-        document.getElementById('maTotalBudget').value = ad.total_budget || '';
-        document.getElementById('maOfferPrice').value = ad.offer_price || '';
-        document.getElementById('maLiveDate').value = ad.live_date || '';
-        document.getElementById('maOffer').value = ad.offer || '';
-        document.getElementById('maPreFilledMessage').value = ad.pre_filled_message || '';
+        document.getElementById('maAdName').value = safeAd.ad_name || '';
+        document.getElementById('maPlanMonth').value = safeAd.plan_month || new Date().toISOString().slice(0, 7);
+        ensureSelectValue(document.getElementById('maPersonResponsible'), safeAd.person_responsible, '');
+        ensureSelectValue(document.getElementById('maTargetBranch'), safeAd.target_branch, 'All Branches');
+        document.getElementById('maTotalBudget').value = safeAd.total_budget ?? '';
+        document.getElementById('maOfferPrice').value = safeAd.offer_price ?? '';
+        document.getElementById('maLiveDate').value = safeAd.live_date || '';
+        document.getElementById('maOffer').value = safeAd.offer || '';
+        document.getElementById('maPreFilledMessage').value = safeAd.pre_filled_message || '';
 
-        document.getElementById('maFinalCreativeDeadline').value = ad.final_creative_deadline || '';
-        document.getElementById('maTestingEndsAt').value = ad.testing_ends_at || '';
-        document.getElementById('maCostPerMessage').value = ad.cost_per_message || '';
-        document.getElementById('maTestingNotes').value = ad.testing_notes || '';
+        document.getElementById('maFinalCreativeDeadline').value = safeAd.final_creative_deadline || '';
+        document.getElementById('maTestingEndsAt').value = safeAd.testing_ends_at || '';
+        document.getElementById('maCostPerMessage').value = safeAd.cost_per_message ?? '';
+        document.getElementById('maTestingNotes').value = safeAd.testing_notes || '';
 
-        renderCreativesList(ad.creatives || [], ad.winning_creative || '');
+        const safeCreatives = Array.isArray(safeAd.creatives) ? safeAd.creatives : [];
+        renderCreativesList(safeCreatives, safeAd.winning_creative || '');
 
-        if (ad.sales_verdict && !PRESET_SALES_VERDICTS.includes(ad.sales_verdict)) {
+        if (safeAd.sales_verdict && !PRESET_SALES_VERDICTS.includes(safeAd.sales_verdict)) {
             document.getElementById('maSalesVerdict').value = '__custom__';
-            document.getElementById('maSalesVerdictCustom').value = ad.sales_verdict;
+            document.getElementById('maSalesVerdictCustom').value = safeAd.sales_verdict;
         } else {
-            document.getElementById('maSalesVerdict').value = ad.sales_verdict || '';
+            document.getElementById('maSalesVerdict').value = safeAd.sales_verdict || '';
             document.getElementById('maSalesVerdictCustom').value = '';
         }
         updateSalesVerdictUI();
         updateCostPerMessageHelper();
 
-        new bootstrap.Modal(document.getElementById('monthlyAdModal')).show();
+        openModalSafely(document.getElementById('monthlyAdModal'));
     };
 })();
 </script>

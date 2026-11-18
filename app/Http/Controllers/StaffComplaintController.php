@@ -41,9 +41,9 @@ class StaffComplaintController extends Controller
     {
         if (!$request->has('staff_ids') && $request->hasAny(['what_happened', 'corrective_action', 'manager_feedback'])) {
             $data = $request->validate([
-                'what_happened' => 'required|string|max:2000',
-                'corrective_action' => 'nullable|string|max:2000',
-                'manager_feedback' => 'nullable|string|max:2000',
+                'what_happened' => 'required|string|max:5000',
+                'corrective_action' => 'nullable|string|max:5000',
+                'manager_feedback' => 'nullable|string|max:5000',
             ]);
 
             $whatHappened = trim($data['what_happened']);
@@ -110,7 +110,7 @@ class StaffComplaintController extends Controller
             'staff.*.deduction_amount' => 'nullable|numeric|min:0',
             'staff.*.amount' => 'nullable|numeric|min:0',
             'staff.*.notice' => 'nullable',
-            'staff.*.corrective_action' => 'nullable|string|max:2000',
+            'staff.*.corrective_action' => 'nullable|string|max:5000',
         ]);
 
         $attachedStaffIds = $staffComplaint->staffMembers()->pluck('staff.id')->map(fn ($id) => (int) $id)->all();
@@ -221,8 +221,8 @@ class StaffComplaintController extends Controller
             'staff_ids.*' => [Rule::exists('staff', 'id')],
             'type' => ['required', Rule::in(StaffNotice::TYPES)],
             'subject' => 'required|string|max:255',
-            'summary' => 'required|string|max:2000',
-            'corrective_actions' => 'nullable|string|max:2000',
+            'summary' => 'required|string|max:5000',
+            'corrective_actions' => 'nullable|string|max:5000',
         ]);
 
         $notices = collect($validated['staff_ids'])->map(fn ($staffId) => StaffNotice::create([
@@ -353,10 +353,10 @@ class StaffComplaintController extends Controller
             'customer_phone' => 'nullable|string|max:30',
             'service_id' => ['required', Rule::exists('services', 'id')],
             'category' => ['required', Rule::in(StaffComplaint::CATEGORIES)],
-            'what_happened' => 'nullable|string|max:2000',
-            'description' => 'nullable|string|max:2000',
-            'corrective_action' => 'nullable|string|max:2000',
-            'manager_feedback' => 'nullable|string|max:2000',
+            'what_happened' => 'nullable|string|max:5000',
+            'description' => 'nullable|string|max:5000',
+            'corrective_action' => 'nullable|string|max:5000',
+            'manager_feedback' => 'nullable|string|max:5000',
             'is_staff_mistake' => 'nullable|boolean',
             'deduction_applied' => ['nullable', Rule::in(['Y', 'N'])],
             'deduction_amount' => 'nullable|required_if:deduction_applied,Y|numeric|min:0',

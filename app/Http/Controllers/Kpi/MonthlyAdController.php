@@ -78,11 +78,20 @@ class MonthlyAdController extends Controller
         return redirect()->route('kpi.ads-plan.index', $params)->with('success', 'Ad updated.');
     }
 
-    public function destroy(KpiMonthlyAd $monthlyAd)
+    public function destroy(Request $request, KpiMonthlyAd $monthlyAd)
     {
+        $planMonth = $monthlyAd->plan_month;
         $monthlyAd->delete();
 
-        return redirect()->route('kpi.ads-plan.index')->with('success', 'Ad deleted.');
+        $redirectMonth = $request->input('redirect_month');
+        $params = [];
+        if ($redirectMonth && $redirectMonth !== now()->format('Y-m')) {
+            $params['month'] = $redirectMonth;
+        } elseif ($planMonth && $planMonth !== now()->format('Y-m')) {
+            $params['month'] = $planMonth;
+        }
+
+        return redirect()->route('kpi.ads-plan.index', $params)->with('success', 'Ad deleted.');
     }
 
     /**
@@ -169,13 +178,20 @@ class MonthlyAdController extends Controller
                 if (!is_array($row)) {
                     continue;
                 }
+                $name = trim((string) ($row['name'] ?? ''));
+                $refUrl = trim((string) ($row['reference_url'] ?? ''));
+
+                // Ignore completely untouched blank creative rows (e.g. when editing a legacy 0-Creatives card)
+                if ($name === '' && $refUrl === '') {
+                    continue;
+                }
+
                 $type = strtolower(trim((string) ($row['creative_type'] ?? 'reel')));
                 $media = strtolower(trim((string) ($row['media_type'] ?? 'video')));
                 $size = trim((string) ($row['size'] ?? KpiMonthlyAd::defaultSizeForType($type)));
-                $refUrl = trim((string) ($row['reference_url'] ?? ''));
 
                 $cleanedCreatives[] = [
-                    'name'          => trim((string) ($row['name'] ?? '')),
+                    'name'          => $name,
                     'creative_type' => $type !== '' ? $type : 'reel',
                     'media_type'    => $media !== '' ? $media : 'video',
                     'size'          => $size !== '' ? $size : KpiMonthlyAd::defaultSizeForType($type),
@@ -218,7 +234,7 @@ class MonthlyAdController extends Controller
         ];
 
         if ($hasCreativesArray) {
-            $rules['creatives'] = 'required|array|min:1|max:30';
+            $rules['creatives'] = 'present|array|max:30';
             $rules['creatives.*.name'] = 'required|string|max:255';
             $rules['creatives.*.creative_type'] = ['required', Rule::in(array_keys(KpiMonthlyAd::CREATIVE_TYPES))];
             $rules['creatives.*.media_type'] = ['required', Rule::in(array_keys(KpiMonthlyAd::MEDIA_TYPES))];
