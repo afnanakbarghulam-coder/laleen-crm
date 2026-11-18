@@ -703,10 +703,16 @@ class StaffOpsTrackerTest extends TestCase
             $hubResp->assertDontSee('Social_media_editor');
             $hubResp->assertSee('Timeframe / Extend Deadline (Admin Only)');
             $hubResp->assertSee('Keep Current Deadline');
-            $hubResp->assertSee('+24 Hours (from now)');
-            $hubResp->assertSee('+48 Hours (from now)');
-            $hubResp->assertSee('+72 Hours / 3 Days (from now)');
-            $hubResp->assertSee('+1 Week (from now)');
+            $hubResp->assertSeeInOrder([
+                'Extend from Current Time',
+                '+10 Hours (from now)',
+                '+24 Hours (from now)',
+                '+48 Hours (from now)',
+                '+72 Hours / 3 Days (from now)',
+                '+1 Week (from now)',
+            ]);
+            $hubResp->assertDontSee('Standard Timeframe Presets');
+            $hubResp->assertDontSee('value="preset_24"', false);
 
             $standaloneResp = $this->actingAs($this->admin)
                 ->get(route('staff.ops-tracker.index'))
@@ -716,6 +722,16 @@ class StaffOpsTrackerTest extends TestCase
             $standaloneResp->assertSee('Social Media Editor');
             $standaloneResp->assertDontSee('Marketing_specialist');
             $standaloneResp->assertDontSee('Social_media_editor');
+            $standaloneResp->assertSeeInOrder([
+                'Extend from Current Time',
+                '+10 Hours (from now)',
+                '+24 Hours (from now)',
+                '+48 Hours (from now)',
+                '+72 Hours / 3 Days (from now)',
+                '+1 Week (from now)',
+            ]);
+            $standaloneResp->assertDontSee('Standard Timeframe Presets');
+            $standaloneResp->assertDontSee('value="preset_24"', false);
 
             // 1. Editing Note / Context or Pending With with "Keep Current Deadline" leaves existing due_at untouched
             $originalCreated = Carbon::parse('2026-11-13 10:00:00');
@@ -775,6 +791,28 @@ class StaffOpsTrackerTest extends TestCase
 
             $this->assertTrue($overdueTask->fresh()->is_overdue);
             $this->assertSame(0, $overdueTask->fresh()->hours_remaining);
+
+            // Extend +10 Hours (from now = 2026-11-14 14:30:00 -> 2026-11-15 00:30:00)
+            $this->actingAs($this->admin)
+                ->patch(route('staff.ops-tracker.update', $overdueTask), [
+                    'notes' => 'Granted +10h same-day window from now.',
+                    'assigned_user_ids' => [$this->opsLeadUser->id],
+                    'deadline_action' => 'extend_10',
+                ])
+                ->assertRedirect()
+                ->assertSessionHasNoErrors();
+
+            $overdueTask->refresh();
+            $this->assertSame(10, $overdueTask->sla_hours);
+            $this->assertTrue($overdueTask->due_at->equalTo(Carbon::now()->copy()->addHours(10)));
+            $this->assertFalse($overdueTask->is_overdue);
+            $this->assertSame(10, $overdueTask->hours_remaining);
+
+            $afterExtend10Hub = $this->actingAs($this->admin)
+                ->get(route('staffs.index', ['tab' => 'ops_tracker']))
+                ->assertOk();
+            $afterExtend10Hub->assertDontSee('🚨 Overdue');
+            $afterExtend10Hub->assertSee('⏳ 10h left');
 
             // Extend +24 Hours (from now = 2026-11-14 14:30:00 -> 2026-11-15 14:30:00)
             $this->actingAs($this->admin)
@@ -863,5 +901,62 @@ class StaffOpsTrackerTest extends TestCase
         } finally {
             Carbon::setTestNow();
         }
+    }
+
+    public function test_add_and_edit_drawers_render_expandable_four_row_notes_and_persist_multiline_checklists(): void
+    {
+        // 1. Staff Management Hub view renders 4-row auto-grow Note / Context textareas + Expand toggles on BOTH drawers
+        $hubResp = $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'ops_tracker']))
+            ->assertOk();
+
+        $hubResp->assertSee('data-ops-note-expand="hubOpsCreateNotes"', false);
+        $hubResp->assertSee('data-ops-note-expand="hubOpsEditNotes"', false);
+        $hubResp->assertSee('id="hubOpsCreateNotes"', false);
+        $hubResp->assertSee('id="hubOpsEditNotes"', false);
+        $hubResp->assertSee('⤢ Expand');
+        $hubResp->assertSee('⤡ Compact');
+
+        // 2. Standalone Ops Tracker view also renders 4-row auto-grow Note / Context textareas + Expand toggles on BOTH drawers
+        $standaloneResp = $this->actingAs($this->admin)
+            ->get(route('staff.ops-tracker.index'))
+            ->assertOk();
+
+        $standaloneResp->assertSee('data-ops-note-expand="opsCreateNotesInput"', false);
+        $standaloneResp->assertSee('data-ops-note-expand="opsEditDrawerNotesInput"', false);
+        $standaloneResp->assertSee('id="opsCreateNotesInput"', false);
+        $standaloneResp->assertSee('id="opsEditDrawerNotesInput"', false);
+        $standaloneResp->assertSee('rows="4"', false);
+        $standaloneResp->assertSee('data-ops-autogrow', false);
+
+        // 3. Multi-point checklist notes create and update cleanly without loss
+        $multilineCreate = "1. Count Old Airport Keratin testers\n2. Photograph expiry labels\n3. Share summary with Ops Lead\n4. Update reorder sheet";
+
+        $this->actingAs($this->admin)
+            ->post(route('staff.ops-tracker.store'), [
+                'title' => 'Monthly Backbar Checklist',
+                'notes' => $multilineCreate,
+                'scope' => 'Old Airport',
+                'assigned_user_ids' => [$this->opsLeadUser->id],
+                'sla_hours' => 48,
+                'return_to_staff_hub' => 1,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $created = OpsActionItem::where('title', 'Monthly Backbar Checklist')->firstOrFail();
+        $this->assertSame($multilineCreate, $created->notes);
+
+        $multilineUpdate = $multilineCreate . "\n5. Confirm Al Wakrah transfer cartons";
+        $this->actingAs($this->admin)
+            ->patch(route('staff.ops-tracker.update', $created), [
+                'notes' => $multilineUpdate,
+                'assigned_user_ids' => [$this->opsLeadUser->id],
+                'deadline_action' => 'keep',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($multilineUpdate, $created->fresh()->notes);
     }
 }

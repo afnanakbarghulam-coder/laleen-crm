@@ -235,19 +235,70 @@
     .hub-ops-slide-drawer {
         position: fixed;
         top: 0;
-        right: -460px;
+        right: -580px;
         width: 100%;
         max-width: 430px;
         height: 100vh;
+        height: 100dvh;
         background: linear-gradient(180deg, #24171c 0%, #170f13 100%);
         border-left: 1px solid rgba(229, 184, 168, 0.22);
         z-index: 1090;
         display: flex;
         flex-direction: column;
-        transition: right 0.22s ease;
+        transition: right 0.22s ease, max-width 0.22s ease;
         box-shadow: -12px 0 36px rgba(0, 0, 0, 0.5);
     }
     .hub-ops-slide-drawer.open { right: 0; }
+    .hub-ops-slide-drawer.is-note-expanded { max-width: min(540px, 100vw); }
+
+    .hub-ops-note-textarea {
+        min-height: 104px;
+        line-height: 1.55;
+        resize: vertical;
+        max-height: none;
+        background-color: rgba(20, 14, 17, 0.72) !important;
+        color: #f8efe6 !important;
+        border: 1px solid rgba(229, 184, 168, 0.22) !important;
+        border-radius: 10px !important;
+        padding: 9px 12px !important;
+        font-size: 13px !important;
+        transition: height 0.16s ease, min-height 0.16s ease, border-color 0.15s ease;
+    }
+    .hub-ops-note-textarea:focus {
+        border-color: #e5b8a8 !important;
+        box-shadow: 0 0 0 3px rgba(229, 184, 168, 0.14) !important;
+    }
+    .hub-ops-note-textarea.is-expanded {
+        min-height: 300px;
+        height: 300px;
+        overflow-y: auto !important;
+    }
+
+    .ops-note-expand-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(229, 184, 168, 0.08);
+        border: 1px solid rgba(229, 184, 168, 0.22);
+        color: #e5b8a8;
+        border-radius: 999px;
+        padding: 2px 9px;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.4;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .ops-note-expand-toggle:hover {
+        background: rgba(229, 184, 168, 0.18);
+        border-color: rgba(229, 184, 168, 0.42);
+        color: #f8efe6;
+    }
+    .ops-note-expand-toggle.is-active {
+        background: rgba(229, 184, 168, 0.2);
+        border-color: #e5b8a8;
+        color: #f8efe6;
+    }
 
     .hub-ops-dark-select {
         background-color: #1b1214 !important;
@@ -501,25 +552,36 @@
     <div class="hub-ops-drawer-backdrop" id="hubOpsDrawerBackdrop" onclick="closeHubOpsDrawers()"></div>
 
     <aside class="hub-ops-slide-drawer" id="hubOpsCreateDrawer" aria-hidden="true">
-        <div class="d-flex justify-content-between align-items-center p-3" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+        <div class="d-flex justify-content-between align-items-center p-3 flex-shrink-0" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
             <h6 class="fw-bold mb-0" style="color: #f8efe6;">Add Action Item</h6>
             <button type="button" class="sc-action-pill" onclick="closeHubOpsDrawers()">✕</button>
         </div>
 
-        <form method="POST" action="{{ route('staff.ops-tracker.store') }}" class="d-flex flex-column flex-grow-1 overflow-hidden m-0">
+        <form method="POST" action="{{ route('staff.ops-tracker.store') }}" id="hubOpsCreateForm" class="d-flex flex-column flex-grow-1 overflow-hidden m-0" style="min-height: 0;">
             @csrf
             <input type="hidden" name="return_to_staff_hub" value="1">
             <input type="hidden" name="week_start_date" value="{{ $hubOpsMon->toDateString() }}">
 
-            <div class="p-3 flex-grow-1 overflow-auto">
+            <div class="p-3 flex-grow-1 overflow-y-auto" style="min-height: 0;">
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Task / Issue *</label>
                     <input type="text" name="title" id="hubOpsCreateTitle" class="form-control form-control-sm" placeholder="What needs to be done or followed up?" required>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold">Note / Context (Optional)</label>
-                    <textarea name="notes" rows="2" class="form-control form-control-sm" placeholder="Optional context or details..."></textarea>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label small fw-semibold mb-0" for="hubOpsCreateNotes">Note / Context (Optional)</label>
+                        <button type="button"
+                                class="ops-note-expand-toggle"
+                                data-ops-note-expand="hubOpsCreateNotes"
+                                aria-expanded="false">⤢ Expand</button>
+                    </div>
+                    <textarea name="notes"
+                              id="hubOpsCreateNotes"
+                              rows="4"
+                              class="form-control form-control-sm hub-ops-note-textarea"
+                              data-ops-autogrow
+                              placeholder="Optional context, checklist points, or details..."></textarea>
                 </div>
 
                 <div class="mb-3">
@@ -558,7 +620,7 @@
                 </div>
             </div>
 
-            <div class="p-3 d-flex justify-content-end gap-2" style="border-top: 1px solid rgba(255, 255, 255, 0.08);">
+            <div class="p-3 d-flex justify-content-end gap-2 flex-shrink-0" style="border-top: 1px solid rgba(255, 255, 255, 0.08);">
                 <button type="button" class="sc-btn-ghost" onclick="closeHubOpsDrawers()">Cancel</button>
                 <button type="submit" class="sc-btn-rosegold">+ Save Task</button>
             </div>
@@ -566,24 +628,35 @@
     </aside>
 
     <aside class="hub-ops-slide-drawer" id="hubOpsEditDrawer" aria-hidden="true">
-        <div class="d-flex justify-content-between align-items-center p-3" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+        <div class="d-flex justify-content-between align-items-center p-3 flex-shrink-0" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
             <h6 class="fw-bold mb-0" style="color: #f8efe6;">Update Note &amp; Staff</h6>
             <button type="button" class="sc-action-pill" onclick="closeHubOpsDrawers()">✕</button>
         </div>
 
-        <form method="POST" action="" id="hubOpsEditForm" class="d-flex flex-column flex-grow-1 overflow-hidden m-0">
+        <form method="POST" action="" id="hubOpsEditForm" class="d-flex flex-column flex-grow-1 overflow-hidden m-0" style="min-height: 0;">
             @csrf
             @method('PATCH')
 
-            <div class="p-3 flex-grow-1 overflow-auto">
+            <div class="p-3 flex-grow-1 overflow-y-auto" style="min-height: 0;">
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Task / Issue (Locked)</label>
                     <div class="p-2 rounded small fw-semibold" id="hubOpsEditLockedTitle" style="background: rgba(20, 14, 17, 0.6); border: 1px solid rgba(229, 184, 168, 0.16); color: #f8efe6;"></div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold">Note / Context</label>
-                    <textarea name="notes" id="hubOpsEditNotes" rows="3" class="form-control form-control-sm" placeholder="Add or update note..."></textarea>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label small fw-semibold mb-0" for="hubOpsEditNotes">Note / Context</label>
+                        <button type="button"
+                                class="ops-note-expand-toggle"
+                                data-ops-note-expand="hubOpsEditNotes"
+                                aria-expanded="false">⤢ Expand</button>
+                    </div>
+                    <textarea name="notes"
+                              id="hubOpsEditNotes"
+                              rows="4"
+                              class="form-control form-control-sm hub-ops-note-textarea"
+                              data-ops-autogrow
+                              placeholder="Add or update multi-point notes..."></textarea>
                 </div>
 
                 <div class="mb-3">
@@ -609,23 +682,18 @@
                         <select name="deadline_action" id="hubOpsEditDeadlineAction" class="form-select form-select-sm hub-ops-dark-select">
                             <option value="keep" id="hubOpsEditKeepDeadlineOpt" selected>Keep Current Deadline</option>
                             <optgroup label="Extend from Current Time">
+                                <option value="extend_10">+10 Hours (from now)</option>
                                 <option value="extend_24">+24 Hours (from now)</option>
                                 <option value="extend_48">+48 Hours (from now)</option>
                                 <option value="extend_72">+72 Hours / 3 Days (from now)</option>
                                 <option value="extend_168">+1 Week (from now)</option>
-                            </optgroup>
-                            <optgroup label="Standard Timeframe Presets">
-                                <option value="preset_24">24h (1 Day)</option>
-                                <option value="preset_48">48h (2 Days)</option>
-                                <option value="preset_72">3 Days</option>
-                                <option value="preset_168">1 Week</option>
                             </optgroup>
                         </select>
                     </div>
                 @endif
             </div>
 
-            <div class="p-3 d-flex justify-content-end gap-2" style="border-top: 1px solid rgba(255, 255, 255, 0.08);">
+            <div class="p-3 d-flex justify-content-end gap-2 flex-shrink-0" style="border-top: 1px solid rgba(255, 255, 255, 0.08);">
                 <button type="button" class="sc-btn-ghost" onclick="closeHubOpsDrawers()">Cancel</button>
                 <button type="submit" class="sc-btn-rosegold">✓ Save Changes</button>
             </div>
@@ -807,8 +875,68 @@
         }
     });
 
+    window.syncHubOpsNoteHeight = function (textarea) {
+        if (!textarea || textarea.classList.contains('is-expanded')) return;
+        textarea.style.height = 'auto';
+        const target = Math.min(260, Math.max(104, textarea.scrollHeight));
+        textarea.style.height = target + 'px';
+        textarea.style.overflowY = textarea.scrollHeight > 260 ? 'auto' : 'hidden';
+    };
+
+    window.resetHubOpsNoteField = function (textareaId) {
+        const textarea = document.getElementById(textareaId);
+        const btn = document.querySelector(`[data-ops-note-expand="${textareaId}"]`);
+        const drawer = textarea?.closest('.hub-ops-slide-drawer');
+        if (textarea) {
+            textarea.classList.remove('is-expanded');
+            textarea.style.height = '';
+            textarea.style.overflowY = '';
+        }
+        if (btn) {
+            btn.classList.remove('is-active');
+            btn.setAttribute('aria-expanded', 'false');
+            btn.textContent = '⤢ Expand';
+        }
+        drawer?.classList.remove('is-note-expanded');
+    };
+
+    document.querySelectorAll('[data-ops-autogrow]').forEach(function (ta) {
+        ta.addEventListener('input', function () {
+            window.syncHubOpsNoteHeight(ta);
+        });
+    });
+
+    document.querySelectorAll('[data-ops-note-expand]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const targetId = btn.getAttribute('data-ops-note-expand');
+            const textarea = targetId ? document.getElementById(targetId) : null;
+            if (!textarea) return;
+
+            const drawer = textarea.closest('.hub-ops-slide-drawer');
+            const expanding = !textarea.classList.contains('is-expanded');
+
+            textarea.classList.toggle('is-expanded', expanding);
+            btn.classList.toggle('is-active', expanding);
+            btn.setAttribute('aria-expanded', expanding ? 'true' : 'false');
+            btn.textContent = expanding ? '⤡ Compact' : '⤢ Expand';
+            drawer?.classList.toggle('is-note-expanded', expanding);
+
+            if (expanding) {
+                textarea.style.height = Math.max(300, Math.min(420, textarea.scrollHeight)) + 'px';
+                textarea.style.overflowY = 'auto';
+                textarea.focus();
+            } else {
+                textarea.style.height = '';
+                window.syncHubOpsNoteHeight(textarea);
+            }
+        });
+    });
+
     window.openHubOpsCreateDrawer = function () {
         document.getElementById('hubOpsEditDrawer')?.classList.remove('open');
+        window.resetHubOpsNoteField('hubOpsCreateNotes');
+        const createNotes = document.getElementById('hubOpsCreateNotes');
+        if (createNotes) window.syncHubOpsNoteHeight(createNotes);
         document.getElementById('hubOpsDrawerBackdrop')?.classList.add('open');
         document.getElementById('hubOpsCreateDrawer')?.classList.add('open');
         setTimeout(() => document.getElementById('hubOpsCreateTitle')?.focus(), 160);
@@ -817,6 +945,7 @@
     window.openHubOpsEditDrawer = function (payload) {
         if (!payload) return;
         document.getElementById('hubOpsCreateDrawer')?.classList.remove('open');
+        window.resetHubOpsNoteField('hubOpsEditNotes');
         const form = document.getElementById('hubOpsEditForm');
         if (form && payload.update_url) form.action = payload.update_url;
         const titleEl = document.getElementById('hubOpsEditLockedTitle');
@@ -840,12 +969,17 @@
 
         document.getElementById('hubOpsDrawerBackdrop')?.classList.add('open');
         document.getElementById('hubOpsEditDrawer')?.classList.add('open');
+        requestAnimationFrame(() => {
+            if (notesEl) window.syncHubOpsNoteHeight(notesEl);
+        });
     };
 
     window.closeHubOpsDrawers = function () {
         document.getElementById('hubOpsDrawerBackdrop')?.classList.remove('open');
         document.getElementById('hubOpsCreateDrawer')?.classList.remove('open');
         document.getElementById('hubOpsEditDrawer')?.classList.remove('open');
+        window.resetHubOpsNoteField('hubOpsCreateNotes');
+        window.resetHubOpsNoteField('hubOpsEditNotes');
     };
 
     document.addEventListener('click', function (e) {

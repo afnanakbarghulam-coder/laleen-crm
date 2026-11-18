@@ -438,12 +438,16 @@
         display: flex;
         flex-direction: column;
         transform: translateX(100%);
-        transition: transform .24s cubic-bezier(0.22, 1, 0.36, 1);
+        transition: transform .24s cubic-bezier(0.22, 1, 0.36, 1), width .22s ease;
         color: var(--ops-ink);
     }
 
     .ops-slide-drawer.open {
         transform: translateX(0);
+    }
+
+    .ops-slide-drawer.is-note-expanded {
+        width: min(540px, 100vw);
     }
 
     .ops-drawer-header {
@@ -453,6 +457,7 @@
         padding: 18px 22px 14px;
         border-bottom: 1px solid rgba(217, 143, 131, 0.16);
         background: #241c1c;
+        flex-shrink: 0;
     }
 
     .ops-drawer-title {
@@ -484,12 +489,14 @@
     }
 
     .ops-drawer-body {
-        flex: 1;
+        flex: 1 1 auto;
+        min-height: 0;
         overflow-y: auto;
         padding: 18px 22px;
     }
 
     .ops-drawer-footer {
+        flex-shrink: 0;
         padding: 14px 22px 18px;
         border-top: 1px solid rgba(217, 143, 131, 0.16);
         background: #241c1c;
@@ -517,7 +524,48 @@
         padding: 9px 12px;
         font-size: 13px;
         color: var(--ops-ink);
-        transition: border-color .15s ease, box-shadow .15s ease;
+        transition: border-color .15s ease, box-shadow .15s ease, height .16s ease, min-height .16s ease;
+    }
+
+    .ops-drawer-textarea {
+        min-height: 104px;
+        line-height: 1.55;
+        resize: vertical;
+        max-height: none;
+    }
+
+    .ops-drawer-textarea.is-expanded {
+        min-height: 300px;
+        height: 300px;
+        overflow-y: auto !important;
+    }
+
+    .ops-note-expand-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(217, 143, 131, 0.08);
+        border: 1px solid rgba(217, 143, 131, 0.24);
+        color: #e5b8a8;
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.4;
+        cursor: pointer;
+        transition: all .15s ease;
+    }
+
+    .ops-note-expand-btn:hover {
+        background: rgba(217, 143, 131, 0.18);
+        border-color: rgba(217, 143, 131, 0.45);
+        color: #f8efe6;
+    }
+
+    .ops-note-expand-btn.is-active {
+        background: rgba(217, 143, 131, 0.22);
+        border-color: var(--ops-accent);
+        color: #f8efe6;
     }
 
     .ops-drawer-input:focus,
@@ -1092,7 +1140,7 @@
                 </button>
             </div>
 
-            <form method="POST" action="{{ route('staff.ops-tracker.store') }}" id="opsCreateDrawerForm" class="d-flex flex-column flex-grow-1 overflow-hidden m-0">
+            <form method="POST" action="{{ route('staff.ops-tracker.store') }}" id="opsCreateDrawerForm" class="d-flex flex-column flex-grow-1 overflow-hidden m-0" style="min-height: 0;">
                 @csrf
                 <input type="hidden" name="week_start_date" value="{{ $monday->toDateString() }}">
 
@@ -1111,12 +1159,19 @@
 
                     {{-- Field 2: Note / Context (Optional) --}}
                     <div class="mb-3">
-                        <label class="ops-drawer-field-label" for="opsCreateNotesInput">Note / Context (Optional)</label>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="ops-drawer-field-label mb-0" for="opsCreateNotesInput">Note / Context (Optional)</label>
+                            <button type="button"
+                                    class="ops-note-expand-btn"
+                                    data-ops-note-expand="opsCreateNotesInput"
+                                    aria-expanded="false">⤢ Expand</button>
+                        </div>
                         <textarea name="notes"
                                   id="opsCreateNotesInput"
-                                  rows="2"
+                                  rows="4"
                                   class="ops-drawer-textarea"
-                                  placeholder="Optional context or details...">{{ old('notes') }}</textarea>
+                                  data-ops-autogrow
+                                  placeholder="Optional context, checklist points, or details...">{{ old('notes') }}</textarea>
                     </div>
 
                     {{-- Field 3: Area (Selectable Pill Chips) --}}
@@ -1193,7 +1248,7 @@
                 </button>
             </div>
 
-            <form method="POST" action="" id="opsEditDrawerForm" class="d-flex flex-column flex-grow-1 overflow-hidden m-0">
+            <form method="POST" action="" id="opsEditDrawerForm" class="d-flex flex-column flex-grow-1 overflow-hidden m-0" style="min-height: 0;">
                 @csrf
                 @method('PATCH')
 
@@ -1206,12 +1261,19 @@
 
                     {{-- Editable Note / Context --}}
                     <div class="mb-3">
-                        <label class="ops-drawer-field-label" for="opsEditDrawerNotesInput">Note / Context</label>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="ops-drawer-field-label mb-0" for="opsEditDrawerNotesInput">Note / Context</label>
+                            <button type="button"
+                                    class="ops-note-expand-btn"
+                                    data-ops-note-expand="opsEditDrawerNotesInput"
+                                    aria-expanded="false">⤢ Expand</button>
+                        </div>
                         <textarea name="notes"
                                   id="opsEditDrawerNotesInput"
-                                  rows="3"
+                                  rows="4"
                                   class="ops-drawer-textarea"
-                                  placeholder="Add or update note..."></textarea>
+                                  data-ops-autogrow
+                                  placeholder="Add or update multi-point notes..."></textarea>
                     </div>
 
                     {{-- Editable Pending With (Staff Access — Select 1 or more) --}}
@@ -1242,16 +1304,11 @@
                             <select name="deadline_action" id="opsEditDrawerDeadlineAction" class="ops-drawer-select">
                                 <option value="keep" id="opsEditDrawerKeepDeadlineOpt" selected>Keep Current Deadline</option>
                                 <optgroup label="Extend from Current Time">
+                                    <option value="extend_10">+10 Hours (from now)</option>
                                     <option value="extend_24">+24 Hours (from now)</option>
                                     <option value="extend_48">+48 Hours (from now)</option>
                                     <option value="extend_72">+72 Hours / 3 Days (from now)</option>
                                     <option value="extend_168">+1 Week (from now)</option>
-                                </optgroup>
-                                <optgroup label="Standard Timeframe Presets">
-                                    <option value="preset_24">24h (1 Day)</option>
-                                    <option value="preset_48">48h (2 Days)</option>
-                                    <option value="preset_72">3 Days</option>
-                                    <option value="preset_168">1 Week</option>
                                 </optgroup>
                             </select>
                         </div>
@@ -1330,12 +1387,74 @@
     let pendingOpsConfirmItemId = null;
     let pendingOpsConfirmAction = 'complete';
 
+    function syncOpsDrawerNoteHeight(textarea) {
+        if (!textarea || textarea.classList.contains('is-expanded')) return;
+        textarea.style.height = 'auto';
+        const target = Math.min(260, Math.max(104, textarea.scrollHeight));
+        textarea.style.height = target + 'px';
+        textarea.style.overflowY = textarea.scrollHeight > 260 ? 'auto' : 'hidden';
+    }
+
+    function resetOpsDrawerNoteField(textareaId) {
+        const textarea = document.getElementById(textareaId);
+        const btn = document.querySelector('[data-ops-note-expand="' + textareaId + '"]');
+        const drawer = textarea ? textarea.closest('.ops-slide-drawer') : null;
+        if (textarea) {
+            textarea.classList.remove('is-expanded');
+            textarea.style.height = '';
+            textarea.style.overflowY = '';
+        }
+        if (btn) {
+            btn.classList.remove('is-active');
+            btn.setAttribute('aria-expanded', 'false');
+            btn.textContent = '⤢ Expand';
+        }
+        if (drawer) {
+            drawer.classList.remove('is-note-expanded');
+        }
+    }
+
+    document.querySelectorAll('[data-ops-autogrow]').forEach(function (ta) {
+        ta.addEventListener('input', function () {
+            syncOpsDrawerNoteHeight(ta);
+        });
+    });
+
+    document.querySelectorAll('[data-ops-note-expand]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const targetId = btn.getAttribute('data-ops-note-expand');
+            const textarea = targetId ? document.getElementById(targetId) : null;
+            if (!textarea) return;
+
+            const drawer = textarea.closest('.ops-slide-drawer');
+            const expanding = !textarea.classList.contains('is-expanded');
+
+            textarea.classList.toggle('is-expanded', expanding);
+            btn.classList.toggle('is-active', expanding);
+            btn.setAttribute('aria-expanded', expanding ? 'true' : 'false');
+            btn.textContent = expanding ? '⤡ Compact' : '⤢ Expand';
+            if (drawer) drawer.classList.toggle('is-note-expanded', expanding);
+
+            if (expanding) {
+                textarea.style.height = Math.max(300, Math.min(420, textarea.scrollHeight)) + 'px';
+                textarea.style.overflowY = 'auto';
+                textarea.focus();
+            } else {
+                textarea.style.height = '';
+                syncOpsDrawerNoteHeight(textarea);
+            }
+        });
+    });
+
     function openOpsCreateDrawer() {
         const backdropEl = document.getElementById('opsDrawerBackdrop');
         const createDrawer = document.getElementById('opsCreateDrawer');
         const editDrawer = document.getElementById('opsEditDrawer');
 
         if (editDrawer) editDrawer.classList.remove('open');
+        resetOpsDrawerNoteField('opsCreateNotesInput');
+        const createNotesEl = document.getElementById('opsCreateNotesInput');
+        if (createNotesEl) syncOpsDrawerNoteHeight(createNotesEl);
         if (backdropEl) backdropEl.classList.add('open');
         if (createDrawer) {
             createDrawer.classList.add('open');
@@ -1357,6 +1476,7 @@
         const lockedTimeframeEl = document.getElementById('opsEditDrawerLockedTimeframe');
 
         if (createDrawer) createDrawer.classList.remove('open');
+        resetOpsDrawerNoteField('opsEditDrawerNotesInput');
         if (formEl && payload.update_url) {
             formEl.action = payload.update_url;
         }
@@ -1398,6 +1518,9 @@
         if (backdropEl) backdropEl.classList.add('open');
         if (editDrawer) {
             editDrawer.classList.add('open');
+            requestAnimationFrame(function () {
+                if (notesInput) syncOpsDrawerNoteHeight(notesInput);
+            });
             setTimeout(function () {
                 if (notesInput) notesInput.focus();
             }, 180);
@@ -1412,6 +1535,8 @@
         if (backdropEl) backdropEl.classList.remove('open');
         if (createDrawer) createDrawer.classList.remove('open');
         if (editDrawer) editDrawer.classList.remove('open');
+        resetOpsDrawerNoteField('opsCreateNotesInput');
+        resetOpsDrawerNoteField('opsEditDrawerNotesInput');
     }
 
     function syncOpsConfirmRemarksState() {

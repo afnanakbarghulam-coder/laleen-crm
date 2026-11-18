@@ -30,6 +30,7 @@ class OpsActionItem extends Model
     ];
 
     public const EXTEND_OPTIONS = [
+        'extend_10' => '+10 Hours (from now)',
         'extend_24' => '+24 Hours (from now)',
         'extend_48' => '+48 Hours (from now)',
         'extend_72' => '+72 Hours / 3 Days (from now)',
@@ -37,6 +38,8 @@ class OpsActionItem extends Model
     ];
 
     public const EXTEND_HOURS_MAP = [
+        'extend_10' => 10,
+        'extend_10h' => 10,
         'extend_24' => 24,
         'extend_48' => 48,
         'extend_72' => 72,

@@ -308,7 +308,7 @@ class OpsActionTrackerController extends Controller
             'pending_with_name' => ['nullable', 'string', 'max:500'],
             'pending_with_type' => ['nullable', Rule::in(['owner', 'ops_lead', 'staff'])],
             'deadline_action' => ['nullable', 'string', Rule::in($allowedDeadlineActions)],
-            'sla_hours' => ['nullable', 'integer', Rule::in([6, 24, 48, 72, 120, 168])],
+            'sla_hours' => ['nullable', 'integer', Rule::in([6, 10, 24, 48, 72, 120, 168])],
         ]);
 
         $payload = [];
