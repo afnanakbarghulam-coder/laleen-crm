@@ -1,3 +1,16 @@
+@php
+    $masterFreebieServices = ($allServices ?? collect())->map(function ($svc) {
+        return [
+            'id' => (int) $svc->id,
+            'name' => (string) $svc->name,
+            'category' => (string) ($svc->category?->name ?? 'Uncategorized'),
+            'duration' => (int) ($svc->duration ?: 30),
+            'price' => round((float) ($svc->price ?? 0), 2),
+            'staff_count' => $svc->relationLoaded('staff') ? $svc->staff->count() : $svc->staff()->count(),
+        ];
+    })->values();
+@endphp
+
 <style>
     #freebieModal .modal-content {
         background: linear-gradient(180deg, rgba(34, 22, 27, 0.96) 0%, rgba(21, 14, 18, 0.98) 100%);
@@ -18,6 +31,164 @@
         margin-bottom: 5px;
     }
 
+    /* Custom Dark Rose/Blush Searchable Combobox for Main Anchor Service */
+    #freebieModal .freebie-anchor-combo {
+        position: relative;
+    }
+
+    #freebieModal .freebie-anchor-input-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    #freebieModal .freebie-anchor-search-icon {
+        position: absolute;
+        left: 11px;
+        color: #b8a29a;
+        font-size: 14px;
+        pointer-events: none;
+    }
+
+    #freebieModal .freebie-anchor-input {
+        width: 100%;
+        padding: 7px 62px 7px 32px;
+        border-radius: 8px;
+        border: 1px solid rgba(229, 184, 168, 0.22);
+        background: rgba(21, 14, 18, 0.85);
+        color: #f8efe6;
+        font-size: 13.5px;
+        line-height: 1.4;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    #freebieModal .freebie-anchor-input::placeholder {
+        color: rgba(184, 162, 154, 0.65);
+    }
+
+    #freebieModal .freebie-anchor-input:focus {
+        outline: none;
+        border-color: rgba(229, 184, 168, 0.58);
+        box-shadow: 0 0 0 3px rgba(217, 143, 131, 0.16);
+    }
+
+    #freebieModal .freebie-anchor-controls {
+        position: absolute;
+        right: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    #freebieModal .freebie-anchor-clear-btn,
+    #freebieModal .freebie-anchor-toggle-btn {
+        border: none;
+        background: transparent;
+        color: #b8a29a;
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+        font-size: 15px;
+        line-height: 1;
+        transition: background 0.12s ease, color 0.12s ease;
+    }
+
+    #freebieModal .freebie-anchor-clear-btn:hover,
+    #freebieModal .freebie-anchor-toggle-btn:hover {
+        background: rgba(229, 184, 168, 0.14);
+        color: #f8efe6;
+    }
+
+    #freebieModal .freebie-anchor-selected-meta {
+        margin-top: 5px;
+        font-size: 11.5px;
+        color: #e5b8a8;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    #freebieModal .freebie-anchor-dropdown {
+        position: absolute;
+        top: calc(100% + 5px);
+        left: 0;
+        right: 0;
+        z-index: 1080;
+        max-height: 250px;
+        overflow-y: auto;
+        background: linear-gradient(180deg, #271a1f 0%, #191115 100%);
+        border: 1px solid rgba(229, 184, 168, 0.28);
+        border-radius: 10px;
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+        padding: 4px 0;
+    }
+
+    #freebieModal .freebie-anchor-option {
+        width: 100%;
+        border: none;
+        background: transparent;
+        text-align: left;
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        cursor: pointer;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        transition: background 0.12s ease;
+    }
+
+    #freebieModal .freebie-anchor-option:last-child {
+        border-bottom: none;
+    }
+
+    #freebieModal .freebie-anchor-option:hover,
+    #freebieModal .freebie-anchor-option.is-highlighted {
+        background: rgba(229, 184, 168, 0.11);
+    }
+
+    #freebieModal .freebie-anchor-option.is-selected {
+        background: rgba(229, 184, 168, 0.16);
+    }
+
+    #freebieModal .freebie-anchor-opt-name {
+        color: #f8efe6;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.25;
+    }
+
+    #freebieModal .freebie-anchor-opt-cat {
+        color: #b8a29a;
+        font-size: 11px;
+        margin-top: 2px;
+    }
+
+    #freebieModal .freebie-anchor-opt-right {
+        text-align: right;
+        flex-shrink: 0;
+    }
+
+    #freebieModal .freebie-anchor-opt-price {
+        color: #e5b8a8;
+        font-size: 12.5px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    #freebieModal .freebie-anchor-opt-dur {
+        color: #b8a29a;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    /* Eligible Mini-Services Pool */
     #freebieModal .freebie-svc-picker {
         max-height: 240px;
         overflow-y: auto;
@@ -33,14 +204,23 @@
         gap: 10px;
         padding: 8px 6px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        transition: opacity 0.14s ease, background 0.12s ease;
     }
 
     #freebieModal .freebie-svc-row:last-child {
         border-bottom: none;
     }
 
-    #freebieModal .freebie-svc-row:hover {
+    #freebieModal .freebie-svc-row:hover:not(.is-anchor-excluded) {
         background: rgba(229, 184, 168, 0.05);
+    }
+
+    #freebieModal .freebie-svc-row.is-anchor-excluded {
+        opacity: 0.45;
+    }
+
+    #freebieModal .freebie-svc-row.is-anchor-excluded .freebie-svc-label {
+        cursor: not-allowed;
     }
 
     #freebieModal .freebie-svc-label {
@@ -51,10 +231,31 @@
         cursor: pointer;
     }
 
+    #freebieModal .freebie-svc-cat-tag {
+        font-size: 11px;
+        color: #b8a29a;
+        margin-left: 4px;
+    }
+
+    #freebieModal .freebie-anchor-excluded-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 7px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: #e5b8a8;
+        background: rgba(229, 184, 168, 0.14);
+        margin-left: 6px;
+        white-space: nowrap;
+    }
+
     #freebieModal .freebie-svc-meta {
         font-size: 11.5px;
         color: #b8a29a;
         white-space: nowrap;
+        flex-shrink: 0;
     }
 
     .freebie-save-btn {
@@ -84,21 +285,35 @@
                     <div id="freebieFormError" class="py-2 px-3 mb-3 d-none" style="border-left: 2px solid #fda4af; background: rgba(253, 164, 175, 0.08); color: #fda4af; font-size: 12.5px;"></div>
 
                     <div class="row g-3 mb-3">
-                        <div class="col-md-7">
+                        <div class="col-md-6">
                             <label class="form-label" for="freebieName">Package Name</label>
                             <input type="text" id="freebieName" name="name" class="form-control" placeholder="e.g. Hair Color + 2 Free Services" required maxlength="255">
                         </div>
-                        <div class="col-md-5">
-                            <label class="form-label" for="freebieAnchorService">Main Anchor Service</label>
-                            <select id="freebieAnchorService" name="anchor_service_id" class="form-select" required>
-                                <option value="">Select anchor service…</option>
-                                @foreach ($allServices as $svc)
-                                    @php $teamCnt = $svc->staff->count(); @endphp
-                                    <option value="{{ $svc->id }}" data-duration="{{ $svc->duration }}" data-staff-count="{{ $teamCnt }}">
-                                        {{ $svc->name }} ({{ $svc->duration }} min · {{ $teamCnt }} team{{ $teamCnt === 1 ? '' : '' }})
-                                    </option>
-                                @endforeach
-                            </select>
+                        <div class="col-md-6">
+                            <label class="form-label" for="freebieAnchorSearch">Main Anchor Service</label>
+                            <input type="hidden" id="freebieAnchorService" name="anchor_service_id" value="">
+                            <div class="freebie-anchor-combo" id="freebieAnchorCombo">
+                                <div class="freebie-anchor-input-wrap">
+                                    <i class="bx bx-search freebie-anchor-search-icon" aria-hidden="true"></i>
+                                    <input type="text"
+                                        id="freebieAnchorSearch"
+                                        class="freebie-anchor-input"
+                                        placeholder="Search service or category…"
+                                        autocomplete="off"
+                                        role="combobox"
+                                        aria-autocomplete="list"
+                                        aria-expanded="false"
+                                        aria-controls="freebieAnchorDropdown">
+                                    <div class="freebie-anchor-controls">
+                                        <button type="button" id="freebieAnchorClearBtn" class="freebie-anchor-clear-btn d-none" title="Clear anchor service" aria-label="Clear anchor service">&times;</button>
+                                        <button type="button" id="freebieAnchorToggleBtn" class="freebie-anchor-toggle-btn" title="Toggle services list" aria-label="Toggle services list">
+                                            <i class="bx bx-chevron-down"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="freebieAnchorSelectedMeta" class="freebie-anchor-selected-meta d-none"></div>
+                                <div id="freebieAnchorDropdown" class="freebie-anchor-dropdown d-none" role="listbox"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -132,22 +347,29 @@
                         <span style="font-size: 11.5px; color: #b8a29a;">Clients redeem at 0.00 QAR within validity window</span>
                     </div>
 
-                    <input type="text" id="freebieServiceSearch" class="form-control form-control-sm mb-2" placeholder="Search mini-services to include in pool…" autocomplete="off">
+                    <input type="text" id="freebieServiceSearch" class="form-control form-control-sm mb-2" placeholder="Search mini-services by name or category…" autocomplete="off">
 
-                    <div class="freebie-svc-picker">
-                        @forelse ($allServices as $service)
-                            <div class="freebie-svc-row">
-                                <label class="freebie-svc-label mb-0" for="freebie-svc-{{ $service->id }}">
+                    <div class="freebie-svc-picker" id="freebieSvcPicker">
+                        @forelse ($masterFreebieServices as $service)
+                            <div class="freebie-svc-row"
+                                data-service-id="{{ $service['id'] }}"
+                                data-search-text="{{ strtolower($service['name'] . ' ' . $service['category']) }}">
+                                <label class="freebie-svc-label mb-0" for="freebie-svc-{{ $service['id'] }}">
                                     <input type="checkbox" class="form-check-input mt-0 freebie-svc-checkbox"
-                                        value="{{ $service->id }}"
-                                        id="freebie-svc-{{ $service->id }}">
-                                    <span style="color: #f8efe6; font-size: 13px; font-weight: 500;">{{ $service->name }}</span>
+                                        value="{{ $service['id'] }}"
+                                        id="freebie-svc-{{ $service['id'] }}">
+                                    <span class="text-truncate">
+                                        <span style="color: #f8efe6; font-size: 13px; font-weight: 500;">{{ $service['name'] }}</span>
+                                        <span class="freebie-svc-cat-tag">· {{ $service['category'] }}</span>
+                                        <span class="freebie-anchor-excluded-pill d-none">Anchor service</span>
+                                    </span>
                                 </label>
-                                <span class="freebie-svc-meta">{{ $service->duration }} min · {{ number_format($service->price, 2) }} QAR</span>
+                                <span class="freebie-svc-meta">{{ $service['duration'] }} min · {{ number_format($service['price'], 2) }} QAR</span>
                             </div>
                         @empty
                             <div class="text-muted small px-2 py-2">No services in the catalog yet.</div>
                         @endforelse
+                        <div class="text-muted small px-2 py-3 text-center d-none" id="freebiePoolNoMatch">No services match your search.</div>
                     </div>
                 </div>
 
@@ -179,6 +401,7 @@
 
 <script>
     (function() {
+        const MASTER_SERVICES = @json($masterFreebieServices);
         const modalEl = document.getElementById('freebieModal');
         const deleteModalEl = document.getElementById('freebieDeleteModal');
         if (!modalEl) return;
@@ -193,8 +416,21 @@
         const form = document.getElementById('freebieForm');
         const errorBox = document.getElementById('freebieFormError');
         const searchInput = document.getElementById('freebieServiceSearch');
+        const anchorCombo = document.getElementById('freebieAnchorCombo');
+        const anchorHiddenInput = document.getElementById('freebieAnchorService');
+        const anchorSearchInput = document.getElementById('freebieAnchorSearch');
+        const anchorClearBtn = document.getElementById('freebieAnchorClearBtn');
+        const anchorToggleBtn = document.getElementById('freebieAnchorToggleBtn');
+        const anchorSelectedMeta = document.getElementById('freebieAnchorSelectedMeta');
+        const anchorDropdown = document.getElementById('freebieAnchorDropdown');
+        const poolNoMatch = document.getElementById('freebiePoolNoMatch');
+
         let editingId = null;
         let pendingDelete = null;
+        let selectedAnchorId = null;
+        let anchorDropdownOpen = false;
+        let anchorHighlightIdx = -1;
+        let filteredAnchorOptions = [];
 
         function escHtml(str) {
             return String(str ?? '')
@@ -205,8 +441,200 @@
                 .replace(/'/g, '&#39;');
         }
 
+        function findMasterService(id) {
+            const num = Number(id);
+            if (!num) return null;
+            return MASTER_SERVICES.find(s => Number(s.id) === num) || null;
+        }
+
+        /* ---------------- ANCHOR EXCLUSION GUARD ON ELIGIBLE POOL ---------------- */
+        function syncAnchorExclusionInPool() {
+            const anchorIdNum = selectedAnchorId ? Number(selectedAnchorId) : 0;
+            modalEl.querySelectorAll('.freebie-svc-row').forEach(row => {
+                const rowSvcId = Number(row.dataset.serviceId);
+                const cb = row.querySelector('.freebie-svc-checkbox');
+                const pill = row.querySelector('.freebie-anchor-excluded-pill');
+                const isAnchor = anchorIdNum > 0 && rowSvcId === anchorIdNum;
+
+                row.classList.toggle('is-anchor-excluded', isAnchor);
+                if (pill) pill.classList.toggle('d-none', !isAnchor);
+                if (cb) {
+                    if (isAnchor && cb.checked) {
+                        cb.checked = false;
+                    }
+                    cb.disabled = isAnchor;
+                }
+            });
+            updateEligibleCount();
+        }
+
+        /* ---------------- SEARCHABLE ANCHOR COMBOBOX ---------------- */
+        function setSelectedAnchor(serviceId) {
+            const svc = findMasterService(serviceId);
+            selectedAnchorId = svc ? Number(svc.id) : null;
+            anchorHiddenInput.value = svc ? String(svc.id) : '';
+
+            if (svc) {
+                anchorSearchInput.value = svc.name;
+                anchorClearBtn.classList.remove('d-none');
+                const teamText = svc.staff_count > 0
+                    ? `${svc.staff_count} team member${svc.staff_count === 1 ? '' : 's'}`
+                    : 'No team assigned';
+                anchorSelectedMeta.innerHTML = `
+                    <span>${escHtml(svc.category)} · ${svc.duration} min · ${escHtml(teamText)}</span>
+                    <span style="font-weight:700; color:#f8efe6;">${Number(svc.price).toFixed(2)} QAR</span>
+                `;
+                anchorSelectedMeta.classList.remove('d-none');
+            } else {
+                anchorSearchInput.value = '';
+                anchorClearBtn.classList.add('d-none');
+                anchorSelectedMeta.innerHTML = '';
+                anchorSelectedMeta.classList.add('d-none');
+            }
+
+            syncAnchorExclusionInPool();
+        }
+
+        function renderAnchorOptions(query) {
+            const q = String(query || '').trim().toLowerCase();
+            const currentAnchor = findMasterService(selectedAnchorId);
+            const effectiveQuery = (currentAnchor && q === currentAnchor.name.toLowerCase()) ? '' : q;
+
+            filteredAnchorOptions = MASTER_SERVICES.filter(s => {
+                if (!effectiveQuery) return true;
+                return s.name.toLowerCase().includes(effectiveQuery)
+                    || s.category.toLowerCase().includes(effectiveQuery);
+            });
+
+            if (!filteredAnchorOptions.length) {
+                anchorDropdown.innerHTML = '<div class="px-3 py-3 text-center small" style="color:#b8a29a;">No matching services in catalog.</div>';
+                anchorHighlightIdx = -1;
+                return;
+            }
+
+            if (anchorHighlightIdx >= filteredAnchorOptions.length) {
+                anchorHighlightIdx = 0;
+            }
+
+            anchorDropdown.innerHTML = filteredAnchorOptions.map((s, idx) => {
+                const isSelected = selectedAnchorId && Number(s.id) === Number(selectedAnchorId);
+                const isHighlighted = idx === anchorHighlightIdx;
+                return `
+                    <button type="button"
+                        class="freebie-anchor-option ${isSelected ? 'is-selected' : ''} ${isHighlighted ? 'is-highlighted' : ''}"
+                        data-anchor-id="${s.id}"
+                        data-opt-idx="${idx}"
+                        role="option"
+                        aria-selected="${isSelected ? 'true' : 'false'}">
+                        <div class="min-w-0">
+                            <div class="freebie-anchor-opt-name text-truncate">${escHtml(s.name)}</div>
+                            <div class="freebie-anchor-opt-cat">${escHtml(s.category)}</div>
+                        </div>
+                        <div class="freebie-anchor-opt-right">
+                            <div class="freebie-anchor-opt-price">${Number(s.price).toFixed(2)} QAR</div>
+                            <div class="freebie-anchor-opt-dur">${s.duration} min</div>
+                        </div>
+                    </button>`;
+            }).join('');
+
+            anchorDropdown.querySelectorAll('.freebie-anchor-option').forEach(btn => {
+                btn.addEventListener('mousedown', function(ev) {
+                    ev.preventDefault();
+                    setSelectedAnchor(Number(this.dataset.anchorId));
+                    closeAnchorDropdown();
+                });
+            });
+        }
+
+        function openAnchorDropdown(queryOverride) {
+            anchorDropdownOpen = true;
+            anchorHighlightIdx = -1;
+            renderAnchorOptions(queryOverride !== undefined ? queryOverride : anchorSearchInput.value);
+            anchorDropdown.classList.remove('d-none');
+            anchorSearchInput.setAttribute('aria-expanded', 'true');
+        }
+
+        function closeAnchorDropdown() {
+            anchorDropdownOpen = false;
+            anchorHighlightIdx = -1;
+            anchorDropdown.classList.add('d-none');
+            anchorSearchInput.setAttribute('aria-expanded', 'false');
+            const currentSvc = findMasterService(selectedAnchorId);
+            anchorSearchInput.value = currentSvc ? currentSvc.name : '';
+        }
+
+        anchorSearchInput.addEventListener('focus', () => openAnchorDropdown(''));
+        anchorSearchInput.addEventListener('input', () => {
+            if (selectedAnchorId) {
+                const currentSvc = findMasterService(selectedAnchorId);
+                if (!currentSvc || anchorSearchInput.value.trim() !== currentSvc.name) {
+                    selectedAnchorId = null;
+                    anchorHiddenInput.value = '';
+                    anchorSelectedMeta.classList.add('d-none');
+                    anchorClearBtn.classList.toggle('d-none', !anchorSearchInput.value.trim());
+                    syncAnchorExclusionInPool();
+                }
+            } else {
+                anchorClearBtn.classList.toggle('d-none', !anchorSearchInput.value.trim());
+            }
+            openAnchorDropdown(anchorSearchInput.value);
+        });
+
+        anchorSearchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (!anchorDropdownOpen) {
+                    openAnchorDropdown(anchorSearchInput.value);
+                }
+                if (filteredAnchorOptions.length) {
+                    anchorHighlightIdx = (anchorHighlightIdx + 1) % filteredAnchorOptions.length;
+                    renderAnchorOptions(anchorSearchInput.value);
+                    anchorDropdown.querySelector('.is-highlighted')?.scrollIntoView({ block: 'nearest' });
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (filteredAnchorOptions.length) {
+                    anchorHighlightIdx = anchorHighlightIdx <= 0 ? filteredAnchorOptions.length - 1 : anchorHighlightIdx - 1;
+                    renderAnchorOptions(anchorSearchInput.value);
+                    anchorDropdown.querySelector('.is-highlighted')?.scrollIntoView({ block: 'nearest' });
+                }
+            } else if (e.key === 'Enter' && anchorDropdownOpen) {
+                e.preventDefault();
+                const target = filteredAnchorOptions[anchorHighlightIdx >= 0 ? anchorHighlightIdx : 0];
+                if (target) {
+                    setSelectedAnchor(target.id);
+                    closeAnchorDropdown();
+                }
+            } else if (e.key === 'Escape' && anchorDropdownOpen) {
+                e.preventDefault();
+                closeAnchorDropdown();
+            }
+        });
+
+        anchorToggleBtn.addEventListener('click', function() {
+            if (anchorDropdownOpen) {
+                closeAnchorDropdown();
+            } else {
+                anchorSearchInput.focus();
+                openAnchorDropdown('');
+            }
+        });
+
+        anchorClearBtn.addEventListener('click', function() {
+            setSelectedAnchor(null);
+            anchorSearchInput.focus();
+            openAnchorDropdown('');
+        });
+
+        document.addEventListener('click', function(e) {
+            if (anchorDropdownOpen && anchorCombo && !anchorCombo.contains(e.target)) {
+                closeAnchorDropdown();
+            }
+        });
+
+        /* ---------------- ELIGIBLE MINI-SERVICES POOL ---------------- */
         function updateEligibleCount() {
-            const count = modalEl.querySelectorAll('.freebie-svc-checkbox:checked').length;
+            const count = modalEl.querySelectorAll('.freebie-svc-checkbox:checked:not(:disabled)').length;
             const countEl = document.getElementById('freebieEligibleCount');
             if (countEl) countEl.textContent = count;
         }
@@ -214,10 +642,16 @@
 
         function filterServices() {
             const q = (searchInput ? searchInput.value : '').trim().toLowerCase();
+            let visibleCount = 0;
             modalEl.querySelectorAll('.freebie-svc-row').forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = (!q || text.includes(q)) ? '' : 'none';
+                const haystack = (row.dataset.searchText || row.textContent || '').toLowerCase();
+                const matches = !q || haystack.includes(q);
+                row.style.display = matches ? '' : 'none';
+                if (matches) visibleCount++;
             });
+            if (poolNoMatch) {
+                poolNoMatch.classList.toggle('d-none', visibleCount > 0 || MASTER_SERVICES.length === 0);
+            }
         }
         if (searchInput) searchInput.addEventListener('input', filterServices);
 
@@ -231,7 +665,12 @@
             document.getElementById('freebieIsActive').value = '1';
             errorBox.classList.add('d-none');
             errorBox.textContent = '';
-            modalEl.querySelectorAll('.freebie-svc-checkbox').forEach(cb => { cb.checked = false; });
+            setSelectedAnchor(null);
+            closeAnchorDropdown();
+            modalEl.querySelectorAll('.freebie-svc-checkbox').forEach(cb => {
+                cb.checked = false;
+                cb.disabled = false;
+            });
             if (searchInput) {
                 searchInput.value = '';
                 filterServices();
@@ -253,7 +692,6 @@
             document.getElementById('freebieModalTitle').textContent = 'Edit Service + Freebies Package';
             document.getElementById('freebieSubmitBtn').textContent = 'Update Package';
             document.getElementById('freebieName').value = pkg.name || '';
-            document.getElementById('freebieAnchorService').value = pkg.anchor_service_id || '';
             document.getElementById('freebiePrice').value = pkg.price ?? '';
             document.getElementById('freebieChoicesCount').value = pkg.free_choices_count || 2;
             document.getElementById('freebieValidityDays').value = pkg.validity_days || 7;
@@ -263,7 +701,9 @@
             modalEl.querySelectorAll('.freebie-svc-checkbox').forEach(cb => {
                 cb.checked = idSet.has(Number(cb.value));
             });
-            updateEligibleCount();
+
+            setSelectedAnchor(pkg.anchor_service_id || null);
+            closeAnchorDropdown();
             freebieModalInstance().show();
         };
 
@@ -273,10 +713,15 @@
             const statusClass = pkg.is_active ? '' : 'inactive';
             const statusText = pkg.is_active ? 'active' : 'inactive';
             const poolSize = (pkg.eligible_services || []).length;
-            const eligibleNames = (pkg.eligible_services || []).map(s => escHtml(s.name)).join(' · ');
+            const eligibleNames = (pkg.eligible_services || [])
+                .map(s => `${escHtml(s.name)} (${Number(s.price || 0).toFixed(2)} QAR)`)
+                .join(' · ');
             const staffLabel = pkg.anchor_staff_count > 0
                 ? `${pkg.anchor_staff_count} team member${pkg.anchor_staff_count === 1 ? '' : 's'}`
                 : 'No team members assigned';
+            const catHtml = pkg.anchor_category_name
+                ? ` <span style="color: #b8a29a; font-weight: 400;">(${escHtml(pkg.anchor_category_name)})</span>`
+                : '';
 
             const editJson = JSON.stringify({
                 id: pkg.id,
@@ -297,7 +742,7 @@
                             <span class="combo-status ${statusClass}">${statusText}</span>
                         </div>
                         <div class="combo-meta mt-1" style="color: #f8efe6; font-weight: 600;">
-                            Anchor: ${escHtml(pkg.anchor_service_name)} · ${pkg.anchor_duration} min · ${escHtml(staffLabel)}
+                            Anchor: ${escHtml(pkg.anchor_service_name)}${catHtml} · ${pkg.anchor_duration} min · ${Number(pkg.anchor_price || 0).toFixed(2)} QAR · ${escHtml(staffLabel)}
                         </div>
                         <div class="combo-meta">
                             Choose ${pkg.free_choices_count} Free (from ${poolSize} eligible) · Valid ${pkg.validity_days} days
@@ -406,7 +851,19 @@
             e.preventDefault();
             errorBox.classList.add('d-none');
 
-            const eligibleIds = Array.from(modalEl.querySelectorAll('.freebie-svc-checkbox:checked')).map(cb => Number(cb.value));
+            const anchorId = Number(anchorHiddenInput.value);
+            if (!anchorId) {
+                errorBox.textContent = 'Please select a Main Anchor Service from the catalog.';
+                errorBox.classList.remove('d-none');
+                anchorSearchInput.focus();
+                openAnchorDropdown('');
+                return;
+            }
+
+            const eligibleIds = Array.from(modalEl.querySelectorAll('.freebie-svc-checkbox:checked:not(:disabled)'))
+                .map(cb => Number(cb.value))
+                .filter(id => id !== anchorId);
+
             if (!eligibleIds.length) {
                 errorBox.textContent = 'Select at least one eligible mini-service for this package.';
                 errorBox.classList.remove('d-none');
@@ -415,7 +872,7 @@
 
             const payload = {
                 name: document.getElementById('freebieName').value,
-                anchor_service_id: Number(document.getElementById('freebieAnchorService').value),
+                anchor_service_id: anchorId,
                 price: document.getElementById('freebiePrice').value,
                 free_choices_count: Number(document.getElementById('freebieChoicesCount').value || 2),
                 validity_days: Number(document.getElementById('freebieValidityDays').value || 7),

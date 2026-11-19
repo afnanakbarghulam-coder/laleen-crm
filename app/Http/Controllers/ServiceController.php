@@ -33,10 +33,14 @@ class ServiceController extends Controller
         $services = $query->get()->groupBy(fn($s) => $s->category->name ?? 'Uncategorized');
         $staffList = Staff::orderBy('name')->get();
 
-        // Flat catalog (not grouped) for the Combos & Service + Freebies tabs' pickers.
-        $allServices = Service::with('staff')->orderBy('name')->get();
+        // Flat master Services catalog (not grouped) for the Combos & Service + Freebies tabs' pickers.
+        $allServices = Service::with(['category', 'staff'])->orderBy('name')->get();
         $combos = Combo::with('services')->orderBy('name')->get();
-        $freebiePackages = ServiceFreebiePackage::with(['anchorService.staff', 'eligibleServices'])->orderBy('name')->get();
+        $freebiePackages = ServiceFreebiePackage::with([
+            'anchorService.category',
+            'anchorService.staff',
+            'eligibleServices.category',
+        ])->orderBy('name')->get();
 
         return view('services.index', compact('categories', 'services', 'staffList', 'allServices', 'combos', 'freebiePackages'));
     }

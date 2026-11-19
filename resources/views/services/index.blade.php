@@ -482,7 +482,12 @@
                             <span class="combo-status {{ !$fPkg->is_active ? 'inactive' : '' }}">{{ $fPkg->is_active ? 'active' : 'inactive' }}</span>
                         </div>
                         <div class="combo-meta mt-1" style="color: #f8efe6; font-weight: 600;">
-                            Anchor: {{ $fAnchor?->name ?? 'Anchor Service' }} · {{ $fAnchor?->duration ?? 60 }} min
+                            Anchor: {{ $fAnchor?->name ?? 'Anchor Service' }}
+                            @if ($fAnchor?->category?->name)
+                                <span style="color: #b8a29a; font-weight: 400;">({{ $fAnchor->category->name }})</span>
+                            @endif
+                            · {{ $fAnchor?->duration ?? 60 }} min
+                            · {{ number_format((float) ($fAnchor?->price ?? 0), 2) }} QAR
                             @if ($fStaffCount > 0)
                                 · {{ $fStaffCount }} team member{{ $fStaffCount === 1 ? '' : 's' }}
                             @else
@@ -492,7 +497,9 @@
                         <div class="combo-meta">
                             Choose {{ $fPkg->effective_choices_count }} Free (from {{ $fPoolSize }} eligible) · Valid {{ $fPkg->effective_validity_days }} days
                         </div>
-                        <div class="combo-services mt-1">{{ $fPkg->eligibleServices->pluck('name')->join(' · ') }}</div>
+                        <div class="combo-services mt-1">
+                            {{ $fPkg->eligibleServices->map(fn ($es) => $es->name . ' (' . number_format((float) $es->price, 2) . ' QAR)')->join(' · ') }}
+                        </div>
                     </div>
 
                     <div class="text-end shrink-0">

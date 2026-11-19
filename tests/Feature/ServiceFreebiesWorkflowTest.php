@@ -474,4 +474,101 @@ class ServiceFreebiesWorkflowTest extends TestCase
             ->firstOrFail();
         $this->assertSame('cancelled', $sameDayFreebieSlice->status);
     }
+
+    public function test_package_links_master_services_rejects_anchor_in_pool_and_reflects_live_service_updates(): void
+    {
+        $f = $this->createFreebiesCatalogFixture();
+        $anchor = $f['anchorService'];
+        $mini1 = $f['eligibleServices'][0];
+        $mini2 = $f['eligibleServices'][1];
+        $mini3 = $f['eligibleServices'][2];
+
+        // 1) Reject selecting the Main Anchor Service inside the Eligible Mini-Services Pool
+        $overlapResp = $this->actingAs($this->admin)->postJson(route('service-freebies.store'), [
+            'name' => 'Invalid Overlap Package',
+            'anchor_service_id' => $anchor->id,
+            'price' => 299.00,
+            'free_choices_count' => 2,
+            'validity_days' => 7,
+            'is_active' => true,
+            'eligible_service_ids' => [$anchor->id, $mini1->id, $mini2->id],
+        ]);
+        $overlapResp->assertStatus(422)->assertJsonValidationErrors(['eligible_service_ids']);
+
+        // 2) Create package linked via master services.id FKs
+        $createResp = $this->actingAs($this->admin)->postJson(route('service-freebies.store'), [
+            'name' => 'Color Glow + 2 Freebies',
+            'anchor_service_id' => $anchor->id,
+            'price' => 299.00,
+            'free_choices_count' => 2,
+            'validity_days' => 7,
+            'is_active' => true,
+            'eligible_service_ids' => [$mini1->id, $mini2->id],
+        ]);
+        $createResp->assertStatus(201)
+            ->assertJsonPath('package.anchor_service_id', $anchor->id)
+            ->assertJsonPath('package.anchor_category_name', 'Hair Color')
+            ->assertJsonPath('package.anchor_price', 350);
+
+        $pkgId = $createResp->json('package.id');
+
+        // 3) Edit package to swap eligible pool & anchor (still rejecting anchor inside pool)
+        $this->actingAs($this->admin)->putJson(route('service-freebies.update', $pkgId), [
+            'name' => 'Color Glow + 2 Freebies Updated',
+            'anchor_service_id' => $anchor->id,
+            'price' => 310.00,
+            'free_choices_count' => 2,
+            'validity_days' => 10,
+            'is_active' => true,
+            'eligible_service_ids' => [$mini1->id, $mini3->id],
+        ])->assertOk()
+            ->assertJsonPath('package.name', 'Color Glow + 2 Freebies Updated');
+
+        $package = ServiceFreebiePackage::with(['anchorService', 'eligibleServices'])->findOrFail($pkgId);
+        $this->assertSame($anchor->id, (int) $package->anchor_service_id);
+        $this->assertEqualsCanonicalizing([$mini1->id, $mini3->id], $package->eligibleServices->pluck('id')->all());
+
+        // 4) Modal uses custom searchable combobox (not native <select>) bound to master Services catalog
+        $pageResp = $this->actingAs($this->admin)->get(route('services.index', ['tab' => 'freebies']));
+        $pageResp->assertOk()
+            ->assertSee('id="freebieAnchorSearch"', false)
+            ->assertSee('id="freebieAnchorDropdown"', false)
+            ->assertSee('id="freebieAnchorClearBtn"', false)
+            ->assertDontSee('<select id="freebieAnchorService"', false);
+
+        // 5) Updating Anchor Service & Mini-Service name/price in Services module immediately reflects in the package
+        $this->actingAs($this->admin)->put(route('services.update', $anchor->id), [
+            'name' => 'Signature Gloss Hair Color',
+            'category_id' => $anchor->category_id,
+            'price' => 420.00,
+            'duration' => 105,
+        ])->assertRedirect();
+
+        $this->actingAs($this->admin)->put(route('services.update', $mini1->id), [
+            'name' => 'Precision Brow Shaping',
+            'category_id' => $mini1->category_id,
+            'price' => 45.00,
+            'duration' => 20,
+        ])->assertRedirect();
+
+        $this->actingAs($this->admin)->getJson(route('service-freebies.index'))
+            ->assertOk()
+            ->assertJsonPath('0.anchor_service_name', 'Signature Gloss Hair Color')
+            ->assertJsonPath('0.anchor_price', 420)
+            ->assertJsonPath('0.anchor_duration', 105)
+            ->assertJsonFragment([
+                'id' => $mini1->id,
+                'name' => 'Precision Brow Shaping',
+                'price' => 45,
+                'duration' => 20,
+                'category_name' => 'Express Beauty',
+            ]);
+
+        $this->actingAs($this->admin)->get(route('services.index', ['tab' => 'freebies']))
+            ->assertOk()
+            ->assertSee('Signature Gloss Hair Color')
+            ->assertSee('420.00 QAR')
+            ->assertSee('Precision Brow Shaping')
+            ->assertSee('45.00 QAR');
+    }
 }

@@ -13,7 +13,11 @@ class ServiceFreebiePackageController extends Controller
 {
     public function index()
     {
-        $packages = ServiceFreebiePackage::with(['anchorService.staff', 'eligibleServices'])
+        $packages = ServiceFreebiePackage::with([
+            'anchorService.category',
+            'anchorService.staff',
+            'eligibleServices.category',
+        ])
             ->orderBy('name')
             ->get();
 
@@ -30,7 +34,11 @@ class ServiceFreebiePackageController extends Controller
             $pkg = ServiceFreebiePackage::create($data);
             $pkg->eligibleServices()->sync($eligibleServiceIds);
 
-            return $pkg->load(['anchorService.staff', 'eligibleServices']);
+            return $pkg->load([
+                'anchorService.category',
+                'anchorService.staff',
+                'eligibleServices.category',
+            ]);
         });
 
         if ($request->expectsJson() || $request->ajax()) {
@@ -78,7 +86,11 @@ class ServiceFreebiePackageController extends Controller
             $serviceFreebiePackage->eligibleServices()->sync($eligibleServiceIds);
         });
 
-        $serviceFreebiePackage->load(['anchorService.staff', 'eligibleServices']);
+        $serviceFreebiePackage->load([
+            'anchorService.category',
+            'anchorService.staff',
+            'eligibleServices.category',
+        ]);
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
@@ -134,10 +146,19 @@ class ServiceFreebiePackageController extends Controller
             'eligible_service_ids.*' => 'integer|exists:services,id|distinct',
         ]);
 
+        $anchorServiceId = (int) $data['anchor_service_id'];
+        $eligibleServiceIds = array_values(array_map('intval', $data['eligible_service_ids']));
+
+        if (in_array($anchorServiceId, $eligibleServiceIds, true)) {
+            throw ValidationException::withMessages([
+                'eligible_service_ids' => 'The Main Anchor Service cannot also be selected in the Eligible Mini-Services Pool.',
+            ]);
+        }
+
         $freeChoicesCount = !empty($data['free_choices_count']) ? (int) $data['free_choices_count'] : 2;
         $validityDays = !empty($data['validity_days']) ? (int) $data['validity_days'] : 7;
 
-        if ($freeChoicesCount > count($data['eligible_service_ids'])) {
+        if ($freeChoicesCount > count($eligibleServiceIds)) {
             throw ValidationException::withMessages([
                 'free_choices_count' => 'Free mini-services count cannot exceed the number of eligible mini-services in the pool.',
             ]);
@@ -152,12 +173,12 @@ class ServiceFreebiePackageController extends Controller
 
         return [
             'name' => trim($data['name']),
-            'anchor_service_id' => (int) $data['anchor_service_id'],
+            'anchor_service_id' => $anchorServiceId,
             'price' => round((float) $data['price'], 2),
             'free_choices_count' => $freeChoicesCount,
             'validity_days' => $validityDays,
             'is_active' => $isActive,
-            'eligible_service_ids' => array_values(array_map('intval', $data['eligible_service_ids'])),
+            'eligible_service_ids' => $eligibleServiceIds,
         ];
     }
 
@@ -171,6 +192,7 @@ class ServiceFreebiePackageController extends Controller
         $eligibleServices = $package->eligibleServices->map(fn (Service $s) => [
             'id' => (int) $s->id,
             'name' => $s->name,
+            'category_name' => $s->category?->name ?? 'Uncategorized',
             'price' => (float) $s->price,
             'duration' => (int) ($s->duration ?: 30),
         ])->values();
@@ -180,6 +202,8 @@ class ServiceFreebiePackageController extends Controller
             'name' => $package->name,
             'anchor_service_id' => (int) $package->anchor_service_id,
             'anchor_service_name' => $anchor?->name ?? 'Anchor Service',
+            'anchor_category_name' => $anchor?->category?->name ?? 'Uncategorized',
+            'anchor_price' => (float) ($anchor?->price ?? 0),
             'anchor_duration' => (int) ($anchor?->duration ?: 60),
             'anchor_staff_count' => (int) $staffCount,
             'price' => (float) $package->price,
