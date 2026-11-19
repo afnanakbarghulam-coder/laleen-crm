@@ -983,14 +983,17 @@ class StaffOpsTrackerTest extends TestCase
             'week_start_date' => now()->startOfWeek(Carbon::MONDAY)->toDateString(),
         ]);
 
-        // 1. Admin sees inline Edit toggle + locked display + disabled input in BOTH Standalone & Staff Hub views
+        // 1. Admin sees inline Edit toggle + locked display + non-disabled title input + "✓ Done" (never "✕ Lock") in BOTH views
         $adminStandalone = $this->actingAs($this->admin)
             ->get(route('staff.ops-tracker.index'))
             ->assertOk();
         $adminStandalone->assertSee('id="opsEditDrawerTitleToggleBtn"', false);
         $adminStandalone->assertSee('id="opsEditDrawerTitleInput"', false);
         $adminStandalone->assertSee('id="opsEditDrawerLockedTitle"', false);
+        $adminStandalone->assertSee('id="opsEditDrawerForm" novalidate', false);
         $adminStandalone->assertSee('✎ Edit');
+        $adminStandalone->assertSee('✓ Done');
+        $adminStandalone->assertDontSee('✕ Lock');
         $adminStandalone->assertDontSee('Task / Issue (Locked)');
 
         $adminHub = $this->actingAs($this->admin)
@@ -999,7 +1002,10 @@ class StaffOpsTrackerTest extends TestCase
         $adminHub->assertSee('id="hubOpsEditTitleToggleBtn"', false);
         $adminHub->assertSee('id="hubOpsEditTitleInput"', false);
         $adminHub->assertSee('id="hubOpsEditLockedTitle"', false);
+        $adminHub->assertSee('id="hubOpsEditForm" novalidate', false);
         $adminHub->assertSee('✎ Edit');
+        $adminHub->assertSee('✓ Done');
+        $adminHub->assertDontSee('✕ Lock');
         $adminHub->assertDontSee('Task / Issue (Locked)');
 
         // 2. Non-admin users (Ops Lead / Manager, Agent, Marketing Specialist) see strictly locked title with NO edit toggle or title input

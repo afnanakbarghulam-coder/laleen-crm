@@ -646,11 +646,11 @@
             <button type="button" class="sc-action-pill" onclick="closeHubOpsDrawers()">✕</button>
         </div>
 
-        <form method="POST" action="" id="hubOpsEditForm" class="d-flex flex-column flex-grow-1 overflow-hidden m-0" style="min-height: 0;">
+        <form method="POST" action="" id="hubOpsEditForm" novalidate class="d-flex flex-column flex-grow-1 overflow-hidden m-0" style="min-height: 0;">
             @csrf
             @method('PATCH')
 
-            <div class="p-3 flex-grow-1 overflow-y-auto" style="min-height: 0;">
+            <div class="p-3 flex-grow-1 overflow-y-auto" id="hubOpsEditBody" style="min-height: 0;">
                 <div id="hubOpsEditError" class="alert alert-danger py-2 px-3 small mb-3 d-none" role="alert"></div>
 
                 @if (auth()->user()?->isAdmin())
@@ -668,8 +668,7 @@
                                id="hubOpsEditTitleInput"
                                class="form-control form-control-sm hub-ops-title-input d-none"
                                maxlength="255"
-                               placeholder="Enter task / issue title..."
-                               disabled>
+                               placeholder="Enter task / issue title...">
                     </div>
                 @else
                     <div class="mb-3">
@@ -728,9 +727,9 @@
                 @endif
             </div>
 
-            <div class="p-3 d-flex justify-content-end gap-2 flex-shrink-0" style="border-top: 1px solid rgba(255, 255, 255, 0.08);">
+            <div class="p-3 d-flex justify-content-end gap-2 flex-shrink-0" style="border-top: 1px solid rgba(255, 255, 255, 0.08); position: relative; z-index: 2;">
                 <button type="button" class="sc-btn-ghost" onclick="closeHubOpsDrawers()">Cancel</button>
-                <button type="submit" class="sc-btn-rosegold" id="hubOpsEditSaveBtn">✓ Save Changes</button>
+                <button type="submit" class="sc-btn-rosegold" id="hubOpsEditSaveBtn" style="cursor: pointer; pointer-events: auto;">✓ Save Changes</button>
             </div>
         </form>
     </aside>
@@ -792,7 +791,19 @@
 
 <script>
     window.hubOpsRowStore = window.hubOpsRowStore || {};
-    window._hubOpsActiveOriginalTitle = '';
+    window._hubOpsSavedTitle = '';
+    window._hubOpsDraftTitle = '';
+    window._hubOpsIsEditingTitle = false;
+    window._hubOpsEditSubmitting = false;
+
+    window.ensureHubOpsDrawersInBody = function () {
+        ['hubOpsDrawerBackdrop', 'hubOpsCreateDrawer', 'hubOpsEditDrawer'].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (el && el.parentElement !== document.body) {
+                document.body.appendChild(el);
+            }
+        });
+    };
 
     window.showHubOpsEditError = function (message) {
         const errEl = document.getElementById('hubOpsEditError');
@@ -800,37 +811,60 @@
         if (message) {
             errEl.textContent = message;
             errEl.classList.remove('d-none');
+            const bodyEl = document.getElementById('hubOpsEditBody');
+            if (bodyEl) bodyEl.scrollTop = 0;
         } else {
             errEl.textContent = '';
             errEl.classList.add('d-none');
         }
     };
 
-    window.setHubOpsEditTitleMode = function (editing, focusInput) {
+    window.resetHubOpsSaveButton = function () {
+        window._hubOpsEditSubmitting = false;
+        const saveBtn = document.getElementById('hubOpsEditSaveBtn');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = '✓ Save Changes';
+        }
+    };
+
+    window.setHubOpsEditTitleMode = function (editing, focusInput, discardDraft) {
         const lockedTitleEl = document.getElementById('hubOpsEditLockedTitle');
         const titleInput = document.getElementById('hubOpsEditTitleInput');
         const toggleBtn = document.getElementById('hubOpsEditTitleToggleBtn');
         if (!titleInput || !toggleBtn) return;
 
+        if (discardDraft) {
+            window._hubOpsDraftTitle = window._hubOpsSavedTitle || '';
+        }
+
         if (editing) {
+            window._hubOpsIsEditingTitle = true;
+            titleInput.value = window._hubOpsDraftTitle;
             lockedTitleEl?.classList.add('d-none');
             titleInput.classList.remove('d-none');
-            titleInput.disabled = false;
-            titleInput.required = true;
             toggleBtn.classList.add('is-active');
             toggleBtn.setAttribute('aria-expanded', 'true');
-            toggleBtn.textContent = '✕ Lock';
+            toggleBtn.textContent = '✓ Done';
             if (focusInput) {
                 titleInput.focus();
                 titleInput.setSelectionRange(titleInput.value.length, titleInput.value.length);
             }
         } else {
-            titleInput.value = window._hubOpsActiveOriginalTitle || '';
-            titleInput.disabled = true;
-            titleInput.required = false;
+            if (!discardDraft && window._hubOpsIsEditingTitle) {
+                const candidate = titleInput.value;
+                if (candidate.trim() === '') {
+                    window.showHubOpsEditError('Task / Issue title cannot be empty.');
+                    titleInput.focus();
+                    return;
+                }
+                window._hubOpsDraftTitle = candidate.trim();
+            }
+            window._hubOpsIsEditingTitle = false;
+            titleInput.value = window._hubOpsDraftTitle;
             titleInput.classList.add('d-none');
             if (lockedTitleEl) {
-                lockedTitleEl.textContent = window._hubOpsActiveOriginalTitle || '';
+                lockedTitleEl.textContent = window._hubOpsDraftTitle;
                 lockedTitleEl.classList.remove('d-none');
             }
             toggleBtn.classList.remove('is-active');
@@ -1106,68 +1140,112 @@
         });
     });
 
+    document.getElementById('hubOpsEditTitleInput')?.addEventListener('input', function () {
+        window._hubOpsDraftTitle = this.value;
+    });
+
     document.getElementById('hubOpsEditTitleToggleBtn')?.addEventListener('click', function () {
-        const isEditing = this.getAttribute('aria-expanded') === 'true';
         window.showHubOpsEditError('');
-        window.setHubOpsEditTitleMode(!isEditing, !isEditing);
+        window.setHubOpsEditTitleMode(!window._hubOpsIsEditingTitle, !window._hubOpsIsEditingTitle, false);
     });
 
     document.getElementById('hubOpsEditForm')?.addEventListener('submit', async function (e) {
         e.preventDefault();
+        if (window._hubOpsEditSubmitting) return;
         window.showHubOpsEditError('');
 
         const form = this;
+        const actionUrl = form.getAttribute('action');
+        if (!actionUrl) {
+            window.showHubOpsEditError('Unable to determine task update URL. Please reopen the drawer and try again.');
+            return;
+        }
+
+        const formData = new FormData(form);
         const titleInput = document.getElementById('hubOpsEditTitleInput');
-        if (titleInput && !titleInput.disabled) {
-            const trimmedTitle = titleInput.value.trim();
-            if (!trimmedTitle) {
+        if (titleInput) {
+            if (window._hubOpsIsEditingTitle) {
+                window._hubOpsDraftTitle = titleInput.value;
+            }
+            const finalTitle = String(window._hubOpsDraftTitle || '').trim();
+            if (!finalTitle) {
+                window.setHubOpsEditTitleMode(true, true, false);
                 window.showHubOpsEditError('Task / Issue title cannot be empty.');
-                titleInput.focus();
                 return;
             }
-            titleInput.value = trimmedTitle;
+            window._hubOpsDraftTitle = finalTitle;
+            titleInput.value = finalTitle;
+            formData.set('title', finalTitle);
+        }
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+            || form.querySelector('input[name="_token"]')?.value
+            || '';
+        if (csrfToken) {
+            formData.set('_token', csrfToken);
         }
 
         const saveBtn = document.getElementById('hubOpsEditSaveBtn');
-        const origText = saveBtn ? saveBtn.textContent : '✓ Save Changes';
+        window._hubOpsEditSubmitting = true;
         if (saveBtn) {
             saveBtn.disabled = true;
             saveBtn.textContent = 'Saving...';
         }
 
         try {
-            const response = await fetch(form.action, {
+            const headers = {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            };
+            if (csrfToken) {
+                headers['X-CSRF-TOKEN'] = csrfToken;
+            }
+
+            const response = await fetch(actionUrl, {
                 method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: new FormData(form),
+                credentials: 'same-origin',
+                headers: headers,
+                body: formData,
             });
 
-            const data = await response.json().catch(() => ({}));
+            const contentType = response.headers.get('content-type') || '';
+            const isJson = contentType.includes('application/json');
+            const data = isJson ? await response.json().catch(() => null) : null;
+
+            if (response.status === 419) {
+                window.showHubOpsEditError('Your session expired (419). Please refresh the page and try again.');
+                return;
+            }
+            if (response.status === 403) {
+                window.showHubOpsEditError((data && data.message) || 'You do not have permission to perform this update.');
+                return;
+            }
             if (!response.ok) {
                 const firstErr = data && data.errors ? Object.values(data.errors).flat()[0] : null;
-                window.showHubOpsEditError(firstErr || data.message || 'Unable to save changes. Please try again.');
+                window.showHubOpsEditError(firstErr || (data && data.message) || ('Unable to save changes (HTTP ' + response.status + '). Please try again.'));
+                return;
+            }
+            if (!data || data.success !== true) {
+                window.showHubOpsEditError('Unexpected server response. Please refresh the page and try again.');
                 return;
             }
 
-            if (data && data.ui) {
+            if (data.ui) {
+                window._hubOpsSavedTitle = data.ui.title || window._hubOpsDraftTitle;
+                window._hubOpsDraftTitle = window._hubOpsSavedTitle;
                 window.updateHubOpsRowFromUi(data.ui);
             }
             window.closeHubOpsDrawers();
-            window.showHubOpsInlineToast((data && data.message) || 'Task updated.');
+            window.showHubOpsInlineToast(data.message || 'Task updated.');
         } catch (err) {
-            window.showHubOpsEditError('Network error while saving changes. Please try again.');
+            window.showHubOpsEditError('Network error while saving changes. Please check your connection and try again.');
         } finally {
-            if (saveBtn) {
-                saveBtn.disabled = false;
-                saveBtn.textContent = origText;
-            }
+            window.resetHubOpsSaveButton();
         }
     });
 
     window.openHubOpsCreateDrawer = function () {
+        window.ensureHubOpsDrawersInBody();
         document.getElementById('hubOpsEditDrawer')?.classList.remove('open');
         window.resetHubOpsNoteField('hubOpsCreateNotes');
         const createNotes = document.getElementById('hubOpsCreateNotes');
@@ -1179,6 +1257,9 @@
 
     window.openHubOpsEditDrawer = function (payload) {
         if (!payload) return;
+        window.ensureHubOpsDrawersInBody();
+        window.resetHubOpsSaveButton();
+
         const livePayload = (payload.id && window.hubOpsRowStore[payload.id])
             ? Object.assign({}, payload, window.hubOpsRowStore[payload.id])
             : payload;
@@ -1186,19 +1267,21 @@
         if (livePayload.id) {
             window.hubOpsRowStore[livePayload.id] = livePayload;
         }
-        window._hubOpsActiveOriginalTitle = livePayload.title || '';
+        window._hubOpsSavedTitle = livePayload.title || '';
+        window._hubOpsDraftTitle = window._hubOpsSavedTitle;
+        window._hubOpsIsEditingTitle = false;
 
         document.getElementById('hubOpsCreateDrawer')?.classList.remove('open');
         window.resetHubOpsNoteField('hubOpsEditNotes');
         window.showHubOpsEditError('');
-        window.setHubOpsEditTitleMode(false, false);
+        window.setHubOpsEditTitleMode(false, false, true);
 
         const form = document.getElementById('hubOpsEditForm');
-        if (form && livePayload.update_url) form.action = livePayload.update_url;
+        if (form && livePayload.update_url) form.setAttribute('action', livePayload.update_url);
         const titleEl = document.getElementById('hubOpsEditLockedTitle');
-        if (titleEl) titleEl.textContent = window._hubOpsActiveOriginalTitle;
+        if (titleEl) titleEl.textContent = window._hubOpsDraftTitle;
         const titleInput = document.getElementById('hubOpsEditTitleInput');
-        if (titleInput) titleInput.value = window._hubOpsActiveOriginalTitle;
+        if (titleInput) titleInput.value = window._hubOpsDraftTitle;
         const notesEl = document.getElementById('hubOpsEditNotes');
         if (notesEl) notesEl.value = livePayload.notes || '';
         const keepOptEl = document.getElementById('hubOpsEditKeepDeadlineOpt');
@@ -1230,13 +1313,24 @@
         window.resetHubOpsNoteField('hubOpsCreateNotes');
         window.resetHubOpsNoteField('hubOpsEditNotes');
         window.showHubOpsEditError('');
-        window.setHubOpsEditTitleMode(false, false);
+        window.resetHubOpsSaveButton();
+        window.setHubOpsEditTitleMode(false, false, true);
     };
 
     document.addEventListener('click', function (e) {
         const wrap = document.getElementById('hubOpsStaffDropdownWrap');
         if (wrap && !wrap.contains(e.target)) {
             document.getElementById('hubOpsStaffMenu')?.classList.remove('open');
+        }
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            const editDrawer = document.getElementById('hubOpsEditDrawer');
+            const createDrawer = document.getElementById('hubOpsCreateDrawer');
+            if (editDrawer?.classList.contains('open') || createDrawer?.classList.contains('open')) {
+                window.closeHubOpsDrawers();
+            }
         }
     });
 </script>

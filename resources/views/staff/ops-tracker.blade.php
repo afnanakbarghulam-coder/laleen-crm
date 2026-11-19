@@ -3,7 +3,8 @@
 @section('title', 'Ops & Action Tracker — Staff Management')
 
 <style>
-    .ops-tracker-wrap {
+    .ops-tracker-wrap,
+    .ops-slide-drawer {
         --ops-bg-card: #241c1c;
         --ops-bg-elevated: #2c2222;
         --ops-bg-drawer: #1a1414;
@@ -1248,11 +1249,11 @@
                 </button>
             </div>
 
-            <form method="POST" action="" id="opsEditDrawerForm" class="d-flex flex-column flex-grow-1 overflow-hidden m-0" style="min-height: 0;">
+            <form method="POST" action="" id="opsEditDrawerForm" novalidate class="d-flex flex-column flex-grow-1 overflow-hidden m-0" style="min-height: 0;">
                 @csrf
                 @method('PATCH')
 
-                <div class="ops-drawer-body">
+                <div class="ops-drawer-body" id="opsEditDrawerBody">
                     <div id="opsEditDrawerError" class="alert alert-danger py-2 px-3 small mb-3 d-none" role="alert"></div>
 
                     {{-- Task / Issue Title (Admin-only inline Edit unlock; strictly locked for non-admin) --}}
@@ -1271,8 +1272,7 @@
                                    id="opsEditDrawerTitleInput"
                                    class="ops-drawer-input d-none"
                                    maxlength="255"
-                                   placeholder="Enter task / issue title..."
-                                   disabled>
+                                   placeholder="Enter task / issue title...">
                         </div>
                     @else
                         <div class="mb-3">
@@ -1344,11 +1344,11 @@
                     @endif
                 </div>
 
-                <div class="ops-drawer-footer">
+                <div class="ops-drawer-footer" style="position: relative; z-index: 2;">
                     <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-2" onclick="closeOpsTaskDrawer()">
                         Cancel
                     </button>
-                    <button type="submit" class="btn-ops-drawer-save" id="opsEditDrawerSaveBtn">
+                    <button type="submit" class="btn-ops-drawer-save" id="opsEditDrawerSaveBtn" style="cursor: pointer; pointer-events: auto;">
                         ✓ Save Changes
                     </button>
                 </div>
@@ -1410,7 +1410,19 @@
     let pendingOpsConfirmAction = 'complete';
     const opsEditRowStore = {};
     let activeOpsEditItemId = null;
-    let activeOpsEditOriginalTitle = '';
+    let activeOpsSavedTitle = '';
+    let activeOpsDraftTitle = '';
+    let isOpsEditingTitle = false;
+    let isOpsEditSubmitting = false;
+
+    function ensureOpsDrawersInBody() {
+        ['opsDrawerBackdrop', 'opsCreateDrawer', 'opsEditDrawer'].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (el && el.parentElement !== document.body) {
+                document.body.appendChild(el);
+            }
+        });
+    }
 
     function showOpsEditDrawerError(message) {
         const errEl = document.getElementById('opsEditDrawerError');
@@ -1418,37 +1430,60 @@
         if (message) {
             errEl.textContent = message;
             errEl.classList.remove('d-none');
+            const bodyEl = document.getElementById('opsEditDrawerBody');
+            if (bodyEl) bodyEl.scrollTop = 0;
         } else {
             errEl.textContent = '';
             errEl.classList.add('d-none');
         }
     }
 
-    function setOpsEditTitleMode(editing, focusInput) {
+    function resetOpsEditSaveButton() {
+        isOpsEditSubmitting = false;
+        const saveBtn = document.getElementById('opsEditDrawerSaveBtn');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = '✓ Save Changes';
+        }
+    }
+
+    function setOpsEditTitleMode(editing, focusInput, discardDraft) {
         const lockedTitleEl = document.getElementById('opsEditDrawerLockedTitle');
         const titleInput = document.getElementById('opsEditDrawerTitleInput');
         const toggleBtn = document.getElementById('opsEditDrawerTitleToggleBtn');
         if (!titleInput || !toggleBtn) return;
 
+        if (discardDraft) {
+            activeOpsDraftTitle = activeOpsSavedTitle || '';
+        }
+
         if (editing) {
+            isOpsEditingTitle = true;
+            titleInput.value = activeOpsDraftTitle;
             if (lockedTitleEl) lockedTitleEl.classList.add('d-none');
             titleInput.classList.remove('d-none');
-            titleInput.disabled = false;
-            titleInput.required = true;
             toggleBtn.classList.add('is-active');
             toggleBtn.setAttribute('aria-expanded', 'true');
-            toggleBtn.textContent = '✕ Lock';
+            toggleBtn.textContent = '✓ Done';
             if (focusInput) {
                 titleInput.focus();
                 titleInput.setSelectionRange(titleInput.value.length, titleInput.value.length);
             }
         } else {
-            titleInput.value = activeOpsEditOriginalTitle;
-            titleInput.disabled = true;
-            titleInput.required = false;
+            if (!discardDraft && isOpsEditingTitle) {
+                const candidate = titleInput.value;
+                if (candidate.trim() === '') {
+                    showOpsEditDrawerError('Task / Issue title cannot be empty.');
+                    titleInput.focus();
+                    return;
+                }
+                activeOpsDraftTitle = candidate.trim();
+            }
+            isOpsEditingTitle = false;
+            titleInput.value = activeOpsDraftTitle;
             titleInput.classList.add('d-none');
             if (lockedTitleEl) {
-                lockedTitleEl.textContent = activeOpsEditOriginalTitle;
+                lockedTitleEl.textContent = activeOpsDraftTitle;
                 lockedTitleEl.classList.remove('d-none');
             }
             toggleBtn.classList.remove('is-active');
@@ -1611,12 +1646,18 @@
         });
     });
 
+    const opsEditTitleInputEl = document.getElementById('opsEditDrawerTitleInput');
+    if (opsEditTitleInputEl) {
+        opsEditTitleInputEl.addEventListener('input', function () {
+            activeOpsDraftTitle = opsEditTitleInputEl.value;
+        });
+    }
+
     const opsEditTitleToggleBtn = document.getElementById('opsEditDrawerTitleToggleBtn');
     if (opsEditTitleToggleBtn) {
         opsEditTitleToggleBtn.addEventListener('click', function () {
-            const isEditing = opsEditTitleToggleBtn.getAttribute('aria-expanded') === 'true';
             showOpsEditDrawerError('');
-            setOpsEditTitleMode(!isEditing, !isEditing);
+            setOpsEditTitleMode(!isOpsEditingTitle, !isOpsEditingTitle, false);
         });
     }
 
@@ -1624,62 +1665,103 @@
     if (opsEditFormEl) {
         opsEditFormEl.addEventListener('submit', async function (e) {
             e.preventDefault();
+            if (isOpsEditSubmitting) return;
             showOpsEditDrawerError('');
 
+            const actionUrl = opsEditFormEl.getAttribute('action');
+            if (!actionUrl) {
+                showOpsEditDrawerError('Unable to determine task update URL. Please reopen the drawer and try again.');
+                return;
+            }
+
+            const formData = new FormData(opsEditFormEl);
             const titleInput = document.getElementById('opsEditDrawerTitleInput');
-            if (titleInput && !titleInput.disabled) {
-                const trimmedTitle = titleInput.value.trim();
-                if (!trimmedTitle) {
+            if (titleInput) {
+                if (isOpsEditingTitle) {
+                    activeOpsDraftTitle = titleInput.value;
+                }
+                const finalTitle = String(activeOpsDraftTitle || '').trim();
+                if (!finalTitle) {
+                    setOpsEditTitleMode(true, true, false);
                     showOpsEditDrawerError('Task / Issue title cannot be empty.');
-                    titleInput.focus();
                     return;
                 }
-                titleInput.value = trimmedTitle;
+                activeOpsDraftTitle = finalTitle;
+                titleInput.value = finalTitle;
+                formData.set('title', finalTitle);
+            }
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                || opsEditFormEl.querySelector('input[name="_token"]')?.value
+                || '';
+            if (csrfToken) {
+                formData.set('_token', csrfToken);
             }
 
             const saveBtn = document.getElementById('opsEditDrawerSaveBtn');
-            const origLabel = saveBtn ? saveBtn.textContent : '✓ Save Changes';
+            isOpsEditSubmitting = true;
             if (saveBtn) {
                 saveBtn.disabled = true;
                 saveBtn.textContent = 'Saving...';
             }
 
             try {
-                const response = await fetch(opsEditFormEl.action, {
+                const headers = {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                };
+                if (csrfToken) {
+                    headers['X-CSRF-TOKEN'] = csrfToken;
+                }
+
+                const response = await fetch(actionUrl, {
                     method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                    body: new FormData(opsEditFormEl),
+                    credentials: 'same-origin',
+                    headers: headers,
+                    body: formData,
                 });
 
-                const data = await response.json().catch(function () { return {}; });
+                const contentType = response.headers.get('content-type') || '';
+                const isJson = contentType.includes('application/json');
+                const data = isJson ? await response.json().catch(function () { return null; }) : null;
+
+                if (response.status === 419) {
+                    showOpsEditDrawerError('Your session expired (419). Please refresh the page and try again.');
+                    return;
+                }
+                if (response.status === 403) {
+                    showOpsEditDrawerError((data && data.message) || 'You do not have permission to perform this update.');
+                    return;
+                }
                 if (!response.ok) {
                     const firstFieldErr = data && data.errors
                         ? Object.values(data.errors).flat()[0]
                         : null;
-                    showOpsEditDrawerError(firstFieldErr || data.message || 'Unable to save changes. Please try again.');
+                    showOpsEditDrawerError(firstFieldErr || (data && data.message) || ('Unable to save changes (HTTP ' + response.status + '). Please try again.'));
+                    return;
+                }
+                if (!data || data.success !== true) {
+                    showOpsEditDrawerError('Unexpected server response. Please refresh the page and try again.');
                     return;
                 }
 
-                if (data && data.ui) {
+                if (data.ui) {
+                    activeOpsSavedTitle = data.ui.title || activeOpsDraftTitle;
+                    activeOpsDraftTitle = activeOpsSavedTitle;
                     updateOpsTableRowFromUi(data.ui);
                 }
                 closeOpsTaskDrawer();
-                showOpsInlineToast((data && data.message) || 'Task updated.');
+                showOpsInlineToast(data.message || 'Task updated.');
             } catch (err) {
-                showOpsEditDrawerError('Network error while saving changes. Please try again.');
+                showOpsEditDrawerError('Network error while saving changes. Please check your connection and try again.');
             } finally {
-                if (saveBtn) {
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = origLabel;
-                }
+                resetOpsEditSaveButton();
             }
         });
     }
 
     function openOpsCreateDrawer() {
+        ensureOpsDrawersInBody();
         const backdropEl = document.getElementById('opsDrawerBackdrop');
         const createDrawer = document.getElementById('opsCreateDrawer');
         const editDrawer = document.getElementById('opsEditDrawer');
@@ -1700,6 +1782,9 @@
 
     function openOpsEditDrawer(payload) {
         if (!payload) return;
+        ensureOpsDrawersInBody();
+        resetOpsEditSaveButton();
+
         const livePayload = (payload.id && opsEditRowStore[payload.id])
             ? Object.assign({}, payload, opsEditRowStore[payload.id])
             : payload;
@@ -1708,7 +1793,9 @@
             opsEditRowStore[livePayload.id] = livePayload;
             activeOpsEditItemId = livePayload.id;
         }
-        activeOpsEditOriginalTitle = livePayload.title || '';
+        activeOpsSavedTitle = livePayload.title || '';
+        activeOpsDraftTitle = activeOpsSavedTitle;
+        isOpsEditingTitle = false;
 
         const backdropEl = document.getElementById('opsDrawerBackdrop');
         const createDrawer = document.getElementById('opsCreateDrawer');
@@ -1722,16 +1809,16 @@
         if (createDrawer) createDrawer.classList.remove('open');
         resetOpsDrawerNoteField('opsEditDrawerNotesInput');
         showOpsEditDrawerError('');
-        setOpsEditTitleMode(false, false);
+        setOpsEditTitleMode(false, false, true);
 
         if (formEl && livePayload.update_url) {
-            formEl.action = livePayload.update_url;
+            formEl.setAttribute('action', livePayload.update_url);
         }
         if (lockedTitleEl) {
-            lockedTitleEl.textContent = activeOpsEditOriginalTitle;
+            lockedTitleEl.textContent = activeOpsDraftTitle;
         }
         if (titleInput) {
-            titleInput.value = activeOpsEditOriginalTitle;
+            titleInput.value = activeOpsDraftTitle;
         }
         if (notesInput) {
             notesInput.value = livePayload.notes || '';
@@ -1788,7 +1875,8 @@
         resetOpsDrawerNoteField('opsCreateNotesInput');
         resetOpsDrawerNoteField('opsEditDrawerNotesInput');
         showOpsEditDrawerError('');
-        setOpsEditTitleMode(false, false);
+        resetOpsEditSaveButton();
+        setOpsEditTitleMode(false, false, true);
     }
 
     function syncOpsConfirmRemarksState() {
