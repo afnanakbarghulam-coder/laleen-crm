@@ -272,8 +272,9 @@ class OpsActionTrackerController extends Controller
 
     /**
      * Update an existing Ops Action Item.
-     * Task title is strictly immutable after creation — only notes, Staff Access
-     * assignees (assigned_user_ids / assigned_names), and Admin-only deadline extensions/timeframes may be updated.
+     * Task title may ONLY be updated by an Owner / Admin (ignored server-side for all other roles);
+     * notes, Staff Access assignees (assigned_user_ids / assigned_names), and Admin-only deadline
+     * extensions/timeframes may be updated here.
      */
     public function update(Request $request, OpsActionItem $opsActionItem)
     {
@@ -301,7 +302,7 @@ class OpsActionTrackerController extends Controller
             array_keys(OpsActionItem::PRESET_HOURS_MAP)
         );
 
-        $validated = $request->validate([
+        $rules = [
             'notes' => ['nullable', 'string', 'max:3000'],
             'assigned_user_ids' => ['nullable', 'array'],
             'assigned_names' => ['nullable', 'array'],
@@ -309,10 +310,26 @@ class OpsActionTrackerController extends Controller
             'pending_with_type' => ['nullable', Rule::in(['owner', 'ops_lead', 'staff'])],
             'deadline_action' => ['nullable', 'string', Rule::in($allowedDeadlineActions)],
             'sla_hours' => ['nullable', 'integer', Rule::in([6, 10, 24, 48, 72, 120, 168])],
-        ]);
+        ];
+
+        if ($isAdmin && $request->has('title')) {
+            $rules['title'] = ['required', 'string', 'max:255'];
+        }
+
+        $validated = $request->validate($rules);
 
         $payload = [];
         $assigneesChanged = false;
+
+        if ($isAdmin && $request->has('title')) {
+            $trimmedTitle = trim((string) ($validated['title'] ?? ''));
+            if ($trimmedTitle === '') {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'title' => ['The task / issue title is required.'],
+                ]);
+            }
+            $payload['title'] = $trimmedTitle;
+        }
 
         if ($request->has('notes')) {
             $payload['notes'] = isset($validated['notes']) && trim($validated['notes']) !== ''
@@ -378,9 +395,37 @@ class OpsActionTrackerController extends Controller
         }
 
         if ($request->expectsJson()) {
+            $fresh = $opsActionItem->fresh();
+            $slaHours = (int) ($fresh->sla_hours ?: 48);
+            $assignedStamp = ($fresh->ball_assigned_at ?? $fresh->created_at)
+                ? ($fresh->ball_assigned_at ?? $fresh->created_at)->format('d M Y, h:i A')
+                : now()->format('d M Y, h:i A');
+            $completedStamp = ($fresh->completed_at ?? $fresh->updated_at)
+                ? ($fresh->completed_at ?? $fresh->updated_at)->format('d M Y, h:i A')
+                : now()->format('d M Y, h:i A');
+
             return response()->json([
                 'success' => true,
-                'item' => $opsActionItem->fresh(),
+                'message' => 'Task updated.',
+                'item' => $fresh,
+                'ui' => [
+                    'id' => $fresh->id,
+                    'title' => $fresh->title,
+                    'notes' => (string) ($fresh->notes ?? ''),
+                    'assigned_user_ids' => is_array($fresh->assigned_user_ids)
+                        ? array_values(array_map('intval', $fresh->assigned_user_ids))
+                        : [],
+                    'assigned_names' => $fresh->assignee_list,
+                    'sla_hours' => $slaHours,
+                    'timeframe_label' => OpsActionItem::SLA_OPTIONS[$slaHours] ?? ($slaHours . 'h'),
+                    'keep_deadline_label' => $fresh->currentDeadlineOptionLabel(),
+                    'assigned_at_stamp' => $assignedStamp,
+                    'completed_at_stamp' => $completedStamp,
+                    'is_completed' => (bool) $fresh->is_completed,
+                    'is_overdue' => (bool) $fresh->is_overdue,
+                    'hours_remaining' => (int) $fresh->hours_remaining,
+                    'completed_by' => $fresh->completed_by,
+                ],
             ]);
         }
 

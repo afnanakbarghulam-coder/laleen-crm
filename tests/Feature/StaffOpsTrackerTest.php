@@ -213,8 +213,8 @@ class StaffOpsTrackerTest extends TestCase
             'ball_assigned_at' => $originalBallAt,
         ]);
 
-        // Submit PATCH with a modified title + updated notes + new multi-staff assignees
-        $this->actingAs($this->admin)
+        // Submit PATCH as a non-admin with a tampered title + updated notes + new multi-staff assignees
+        $this->actingAs($this->opsLeadUser)
             ->patch(route('staff.ops-tracker.update', $item), [
                 'title' => 'Attempted Title Tamper That Must Be Ignored',
                 'notes' => 'Confirmation rate reached 88% today; looping in Owner and Ayan.',
@@ -224,7 +224,7 @@ class StaffOpsTrackerTest extends TestCase
 
         $item->refresh();
 
-        // Title remains 100% immutable after creation
+        // Title remains 100% immutable for non-admin editors even if payload is tampered
         $this->assertSame('Audit Hunza Apricot Oil COD confirmation rate', $item->title);
 
         // Notes and multi-staff assignees updated cleanly
@@ -958,5 +958,131 @@ class StaffOpsTrackerTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame($multilineUpdate, $created->fresh()->notes);
+    }
+
+    public function test_admin_only_task_title_edit_toggle_validation_and_non_admin_tamper_protection(): void
+    {
+        $marketingUser = User::create([
+            'name' => 'Hira Marketing',
+            'email' => 'hira.title.test@laleen.qa',
+            'password' => bcrypt('password'),
+            'role' => 'marketing_specialist',
+            'is_active' => true,
+            'permissions' => ['staff_management' => 'edit'],
+        ]);
+
+        $item = OpsActionItem::create([
+            'title' => 'Confirm Ramadan Keratin promo banners',
+            'notes' => 'Draft copy ready for review.',
+            'scope' => 'Marketing & Ads',
+            'pending_with_type' => 'ops_lead',
+            'pending_with_name' => 'Ops Lead',
+            'assigned_user_ids' => [$this->opsLeadUser->id],
+            'assigned_names' => ['Ops Lead'],
+            'sla_hours' => 48,
+            'week_start_date' => now()->startOfWeek(Carbon::MONDAY)->toDateString(),
+        ]);
+
+        // 1. Admin sees inline Edit toggle + locked display + disabled input in BOTH Standalone & Staff Hub views
+        $adminStandalone = $this->actingAs($this->admin)
+            ->get(route('staff.ops-tracker.index'))
+            ->assertOk();
+        $adminStandalone->assertSee('id="opsEditDrawerTitleToggleBtn"', false);
+        $adminStandalone->assertSee('id="opsEditDrawerTitleInput"', false);
+        $adminStandalone->assertSee('id="opsEditDrawerLockedTitle"', false);
+        $adminStandalone->assertSee('✎ Edit');
+        $adminStandalone->assertDontSee('Task / Issue (Locked)');
+
+        $adminHub = $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'ops_tracker']))
+            ->assertOk();
+        $adminHub->assertSee('id="hubOpsEditTitleToggleBtn"', false);
+        $adminHub->assertSee('id="hubOpsEditTitleInput"', false);
+        $adminHub->assertSee('id="hubOpsEditLockedTitle"', false);
+        $adminHub->assertSee('✎ Edit');
+        $adminHub->assertDontSee('Task / Issue (Locked)');
+
+        // 2. Non-admin users (Ops Lead / Manager, Agent, Marketing Specialist) see strictly locked title with NO edit toggle or title input
+        foreach ([$this->opsLeadUser, $this->ayanUser, $marketingUser] as $nonAdmin) {
+            $nonAdminStandalone = $this->actingAs($nonAdmin)
+                ->get(route('staff.ops-tracker.index'))
+                ->assertOk();
+            $nonAdminStandalone->assertSee('Task / Issue (Locked)');
+            $nonAdminStandalone->assertSee('id="opsEditDrawerLockedTitle"', false);
+            $nonAdminStandalone->assertDontSee('id="opsEditDrawerTitleToggleBtn"', false);
+            $nonAdminStandalone->assertDontSee('id="opsEditDrawerTitleInput"', false);
+
+            $nonAdminHub = $this->actingAs($nonAdmin)
+                ->get(route('staffs.index', ['tab' => 'ops_tracker']))
+                ->assertOk();
+            $nonAdminHub->assertSee('Task / Issue (Locked)');
+            $nonAdminHub->assertSee('id="hubOpsEditLockedTitle"', false);
+            $nonAdminHub->assertDontSee('id="hubOpsEditTitleToggleBtn"', false);
+            $nonAdminHub->assertDontSee('id="hubOpsEditTitleInput"', false);
+        }
+
+        // 3. Admin saving without unlocking title (title omitted) leaves existing title untouched
+        $this->actingAs($this->admin)
+            ->patchJson(route('staff.ops-tracker.update', $item), [
+                'notes' => 'Checked copy; keeping original title.',
+                'assigned_user_ids' => [$this->opsLeadUser->id],
+                'deadline_action' => 'keep',
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('item.title', 'Confirm Ramadan Keratin promo banners')
+            ->assertJsonPath('ui.title', 'Confirm Ramadan Keratin promo banners');
+
+        // 4. Admin validation rejects blank/whitespace and >255 char titles with 422
+        $this->actingAs($this->admin)
+            ->patchJson(route('staff.ops-tracker.update', $item), [
+                'title' => '   ',
+                'notes' => 'Attempted blank title.',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('title');
+
+        $this->actingAs($this->admin)
+            ->patchJson(route('staff.ops-tracker.update', $item), [
+                'title' => str_repeat('A', 256),
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('title');
+
+        $this->assertSame('Confirm Ramadan Keratin promo banners', $item->fresh()->title);
+
+        // 5. Admin unlocking and updating task title persists cleanly and returns updated UI payload
+        $this->actingAs($this->admin)
+            ->patchJson(route('staff.ops-tracker.update', $item), [
+                'title' => '  Finalize Eid Keratin & Hair Color promo banners  ',
+                'notes' => 'Updated title & approved final creatives.',
+                'assigned_user_ids' => [$this->opsLeadUser->id, $marketingUser->id],
+                'deadline_action' => 'keep',
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('item.title', 'Finalize Eid Keratin & Hair Color promo banners')
+            ->assertJsonPath('ui.title', 'Finalize Eid Keratin & Hair Color promo banners')
+            ->assertJsonPath('ui.notes', 'Updated title & approved final creatives.');
+
+        $item->refresh();
+        $this->assertSame('Finalize Eid Keratin & Hair Color promo banners', $item->title);
+        $this->assertSame('Updated title & approved final creatives.', $item->notes);
+
+        // 6. Non-admin users tampering with title in JSON payload cannot modify title server-side
+        foreach ([$this->opsLeadUser, $this->ayanUser, $marketingUser] as $nonAdmin) {
+            $this->actingAs($nonAdmin)
+                ->patchJson(route('staff.ops-tracker.update', $item), [
+                    'title' => 'Tampered By ' . $nonAdmin->name,
+                    'notes' => 'Legitimate note update by ' . $nonAdmin->name,
+                ])
+                ->assertOk()
+                ->assertJsonPath('item.title', 'Finalize Eid Keratin & Hair Color promo banners')
+                ->assertJsonPath('ui.title', 'Finalize Eid Keratin & Hair Color promo banners');
+
+            $item->refresh();
+            $this->assertSame('Finalize Eid Keratin & Hair Color promo banners', $item->title);
+            $this->assertSame('Legitimate note update by ' . $nonAdmin->name, $item->notes);
+        }
     }
 }

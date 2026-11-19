@@ -316,6 +316,19 @@
         background-color: #1b1214;
         color: #f8efe6;
     }
+
+    .hub-ops-title-input {
+        background-color: rgba(20, 14, 17, 0.78) !important;
+        color: #f8efe6 !important;
+        border: 1px solid rgba(229, 184, 168, 0.28) !important;
+        border-radius: 10px !important;
+        padding: 8px 12px !important;
+        font-size: 13px !important;
+    }
+    .hub-ops-title-input:focus {
+        border-color: #e5b8a8 !important;
+        box-shadow: 0 0 0 3px rgba(229, 184, 168, 0.14) !important;
+    }
 </style>
 
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
@@ -453,7 +466,7 @@
 
                                 <div class="flex-grow-1">
                                     <div class="d-flex flex-wrap align-items-center gap-2">
-                                        <span class="fw-semibold {{ $item->is_completed ? 'text-decoration-line-through text-muted' : '' }}" style="color: #f8efe6; font-size: 13.5px;">
+                                        <span data-hub-ops-title-text class="fw-semibold {{ $item->is_completed ? 'text-decoration-line-through text-muted' : '' }}" style="color: #f8efe6; font-size: 13.5px;">
                                             {{ $item->title }}
                                         </span>
                                         <span class="sc-inline-chip">{{ $item->scope }}</span>
@@ -470,7 +483,7 @@
                                             </button>
                                         @endmoduleEdit
                                     </div>
-                                    <div class="small mt-1" style="color: #b8a29a; font-size: 11.5px;">
+                                    <div class="small mt-1" data-hub-ops-meta-line style="color: #b8a29a; font-size: 11.5px;">
                                         @if ($item->notes)
                                             <span>{{ $item->notes }}</span> &bull;
                                         @endif
@@ -493,13 +506,13 @@
                             </div>
                         </td>
                         <td>
-                            <div class="d-flex flex-wrap gap-1">
+                            <div class="d-flex flex-wrap gap-1" data-hub-ops-assignees-wrap>
                                 @foreach ($item->assignee_list as $assigneeName)
                                     <span class="hub-ops-assignee-pill">👤 {{ $assigneeName }}</span>
                                 @endforeach
                             </div>
                         </td>
-                        <td>
+                        <td data-hub-ops-deadline-cell>
                             @if (!$item->is_completed)
                                 @if ($item->is_overdue)
                                     <span class="sc-status-badge" style="background: rgba(253, 164, 175, 0.14); color: #fda4af; border: 1px solid rgba(253, 164, 175, 0.3);">🚨 Overdue</span>
@@ -638,10 +651,32 @@
             @method('PATCH')
 
             <div class="p-3 flex-grow-1 overflow-y-auto" style="min-height: 0;">
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold">Task / Issue (Locked)</label>
-                    <div class="p-2 rounded small fw-semibold" id="hubOpsEditLockedTitle" style="background: rgba(20, 14, 17, 0.6); border: 1px solid rgba(229, 184, 168, 0.16); color: #f8efe6;"></div>
-                </div>
+                <div id="hubOpsEditError" class="alert alert-danger py-2 px-3 small mb-3 d-none" role="alert"></div>
+
+                @if (auth()->user()?->isAdmin())
+                    <div class="mb-3" id="hubOpsEditTitleGroup">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label small fw-semibold mb-0" for="hubOpsEditTitleInput">Task / Issue</label>
+                            <button type="button"
+                                    class="ops-note-expand-toggle"
+                                    id="hubOpsEditTitleToggleBtn"
+                                    aria-expanded="false">✎ Edit</button>
+                        </div>
+                        <div class="p-2 rounded small fw-semibold" id="hubOpsEditLockedTitle" style="background: rgba(20, 14, 17, 0.6); border: 1px solid rgba(229, 184, 168, 0.16); color: #f8efe6;"></div>
+                        <input type="text"
+                               name="title"
+                               id="hubOpsEditTitleInput"
+                               class="form-control form-control-sm hub-ops-title-input d-none"
+                               maxlength="255"
+                               placeholder="Enter task / issue title..."
+                               disabled>
+                    </div>
+                @else
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Task / Issue (Locked)</label>
+                        <div class="p-2 rounded small fw-semibold" id="hubOpsEditLockedTitle" style="background: rgba(20, 14, 17, 0.6); border: 1px solid rgba(229, 184, 168, 0.16); color: #f8efe6;"></div>
+                    </div>
+                @endif
 
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
@@ -695,7 +730,7 @@
 
             <div class="p-3 d-flex justify-content-end gap-2 flex-shrink-0" style="border-top: 1px solid rgba(255, 255, 255, 0.08);">
                 <button type="button" class="sc-btn-ghost" onclick="closeHubOpsDrawers()">Cancel</button>
-                <button type="submit" class="sc-btn-rosegold">✓ Save Changes</button>
+                <button type="submit" class="sc-btn-rosegold" id="hubOpsEditSaveBtn">✓ Save Changes</button>
             </div>
         </form>
     </aside>
@@ -756,6 +791,139 @@
 @endif
 
 <script>
+    window.hubOpsRowStore = window.hubOpsRowStore || {};
+    window._hubOpsActiveOriginalTitle = '';
+
+    window.showHubOpsEditError = function (message) {
+        const errEl = document.getElementById('hubOpsEditError');
+        if (!errEl) return;
+        if (message) {
+            errEl.textContent = message;
+            errEl.classList.remove('d-none');
+        } else {
+            errEl.textContent = '';
+            errEl.classList.add('d-none');
+        }
+    };
+
+    window.setHubOpsEditTitleMode = function (editing, focusInput) {
+        const lockedTitleEl = document.getElementById('hubOpsEditLockedTitle');
+        const titleInput = document.getElementById('hubOpsEditTitleInput');
+        const toggleBtn = document.getElementById('hubOpsEditTitleToggleBtn');
+        if (!titleInput || !toggleBtn) return;
+
+        if (editing) {
+            lockedTitleEl?.classList.add('d-none');
+            titleInput.classList.remove('d-none');
+            titleInput.disabled = false;
+            titleInput.required = true;
+            toggleBtn.classList.add('is-active');
+            toggleBtn.setAttribute('aria-expanded', 'true');
+            toggleBtn.textContent = '✕ Lock';
+            if (focusInput) {
+                titleInput.focus();
+                titleInput.setSelectionRange(titleInput.value.length, titleInput.value.length);
+            }
+        } else {
+            titleInput.value = window._hubOpsActiveOriginalTitle || '';
+            titleInput.disabled = true;
+            titleInput.required = false;
+            titleInput.classList.add('d-none');
+            if (lockedTitleEl) {
+                lockedTitleEl.textContent = window._hubOpsActiveOriginalTitle || '';
+                lockedTitleEl.classList.remove('d-none');
+            }
+            toggleBtn.classList.remove('is-active');
+            toggleBtn.setAttribute('aria-expanded', 'false');
+            toggleBtn.textContent = '✎ Edit';
+        }
+    };
+
+    window.showHubOpsInlineToast = function (message) {
+        let toast = document.getElementById('hubOpsInlineToast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'hubOpsInlineToast';
+            toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:1120;background:rgba(34,22,27,0.96);color:#f8efe6;border:1px solid rgba(229,184,168,0.42);border-radius:999px;padding:8px 16px;font-size:12.5px;font-weight:600;box-shadow:0 12px 30px rgba(0,0,0,0.45);transition:opacity .2s ease;';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = '✓ ' + (message || 'Task updated.');
+        toast.style.opacity = '1';
+        clearTimeout(toast._hideTimer);
+        toast._hideTimer = setTimeout(function () {
+            toast.style.opacity = '0';
+        }, 2500);
+    };
+
+    window.updateHubOpsRowFromUi = function (ui) {
+        if (!ui || !ui.id) return;
+        const existing = window.hubOpsRowStore[ui.id] || {};
+        window.hubOpsRowStore[ui.id] = Object.assign({}, existing, {
+            id: ui.id,
+            title: ui.title,
+            notes: ui.notes || '',
+            assigned_user_ids: Array.isArray(ui.assigned_user_ids) ? ui.assigned_user_ids : [],
+            assigned_names: Array.isArray(ui.assigned_names) ? ui.assigned_names : [],
+            sla_hours: ui.sla_hours,
+            keep_deadline_label: ui.keep_deadline_label,
+        });
+
+        const row = document.querySelector('tr[data-ops-row-id="' + ui.id + '"]');
+        if (!row) return;
+
+        const titleEl = row.querySelector('[data-hub-ops-title-text]');
+        if (titleEl) {
+            titleEl.textContent = ui.title || '';
+        }
+
+        const metaEl = row.querySelector('[data-hub-ops-meta-line]');
+        if (metaEl) {
+            metaEl.innerHTML = '';
+            if (ui.notes && ui.notes.trim() !== '') {
+                const noteSpan = document.createElement('span');
+                noteSpan.textContent = ui.notes;
+                metaEl.appendChild(noteSpan);
+                metaEl.appendChild(document.createTextNode(' • '));
+            }
+            const assignedSpan = document.createElement('span');
+            assignedSpan.textContent = 'Assigned: ' + (ui.assigned_at_stamp || '');
+            metaEl.appendChild(assignedSpan);
+            if (ui.is_completed) {
+                metaEl.appendChild(document.createTextNode(' • '));
+                const compSpan = document.createElement('span');
+                compSpan.style.color = '#6ee7b7';
+                compSpan.textContent = 'Completed: ' + (ui.completed_at_stamp || '');
+                metaEl.appendChild(compSpan);
+            }
+        }
+
+        const assigneesWrap = row.querySelector('[data-hub-ops-assignees-wrap]');
+        if (assigneesWrap && Array.isArray(ui.assigned_names)) {
+            assigneesWrap.innerHTML = '';
+            ui.assigned_names.forEach(function (name) {
+                const pill = document.createElement('span');
+                pill.className = 'hub-ops-assignee-pill';
+                pill.textContent = '👤 ' + name;
+                assigneesWrap.appendChild(pill);
+            });
+        }
+
+        const deadlineCell = row.querySelector('[data-hub-ops-deadline-cell]');
+        if (deadlineCell && !ui.is_completed) {
+            deadlineCell.innerHTML = '';
+            const badge = document.createElement('span');
+            if (ui.is_overdue) {
+                badge.className = 'sc-status-badge';
+                badge.style.cssText = 'background: rgba(253, 164, 175, 0.14); color: #fda4af; border: 1px solid rgba(253, 164, 175, 0.3);';
+                badge.textContent = '\uD83D\uDEA8 Overdue';
+            } else {
+                badge.className = 'sc-status-badge sc-status-pending_signature';
+                badge.textContent = '\u23F3 ' + ui.hours_remaining + 'h left';
+            }
+            deadlineCell.appendChild(badge);
+        }
+    };
+
     window.toggleHubOpsStaffMenu = function (event) {
         if (event) event.stopPropagation();
         document.getElementById('hubOpsStaffMenu')?.classList.toggle('open');
@@ -790,6 +958,12 @@
 
     window.openHubOpsVerifyModal = function (payload) {
         if (!payload) return;
+        const liveRow = payload.id ? window.hubOpsRowStore[payload.id] : null;
+        const effectiveTitle = (liveRow && liveRow.title) ? liveRow.title : (payload.title || '');
+        const effectiveAssignees = (liveRow && Array.isArray(liveRow.assigned_names) && liveRow.assigned_names.length)
+            ? liveRow.assigned_names
+            : payload.assignees;
+
         const modalEl = document.getElementById('hubOpsVerifyModal');
         const formEl = document.getElementById('hubOpsVerifyForm');
         const modeInput = document.getElementById('hubOpsVerifyIsCompletedInput');
@@ -804,12 +978,12 @@
         if (!modalEl || !formEl) return;
 
         formEl.action = payload.toggle_url || '';
-        if (taskTitleEl) taskTitleEl.textContent = payload.title || '';
+        if (taskTitleEl) taskTitleEl.textContent = effectiveTitle;
 
         if (assigneesWrap) {
             assigneesWrap.innerHTML = '';
-            const names = Array.isArray(payload.assignees) && payload.assignees.length
-                ? payload.assignees
+            const names = Array.isArray(effectiveAssignees) && effectiveAssignees.length
+                ? effectiveAssignees
                 : ['Ops Team'];
             names.forEach(function (name) {
                 const chip = document.createElement('span');
@@ -932,6 +1106,67 @@
         });
     });
 
+    document.getElementById('hubOpsEditTitleToggleBtn')?.addEventListener('click', function () {
+        const isEditing = this.getAttribute('aria-expanded') === 'true';
+        window.showHubOpsEditError('');
+        window.setHubOpsEditTitleMode(!isEditing, !isEditing);
+    });
+
+    document.getElementById('hubOpsEditForm')?.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        window.showHubOpsEditError('');
+
+        const form = this;
+        const titleInput = document.getElementById('hubOpsEditTitleInput');
+        if (titleInput && !titleInput.disabled) {
+            const trimmedTitle = titleInput.value.trim();
+            if (!trimmedTitle) {
+                window.showHubOpsEditError('Task / Issue title cannot be empty.');
+                titleInput.focus();
+                return;
+            }
+            titleInput.value = trimmedTitle;
+        }
+
+        const saveBtn = document.getElementById('hubOpsEditSaveBtn');
+        const origText = saveBtn ? saveBtn.textContent : '✓ Save Changes';
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+        }
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: new FormData(form),
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const firstErr = data && data.errors ? Object.values(data.errors).flat()[0] : null;
+                window.showHubOpsEditError(firstErr || data.message || 'Unable to save changes. Please try again.');
+                return;
+            }
+
+            if (data && data.ui) {
+                window.updateHubOpsRowFromUi(data.ui);
+            }
+            window.closeHubOpsDrawers();
+            window.showHubOpsInlineToast((data && data.message) || 'Task updated.');
+        } catch (err) {
+            window.showHubOpsEditError('Network error while saving changes. Please try again.');
+        } finally {
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = origText;
+            }
+        }
+    });
+
     window.openHubOpsCreateDrawer = function () {
         document.getElementById('hubOpsEditDrawer')?.classList.remove('open');
         window.resetHubOpsNoteField('hubOpsCreateNotes');
@@ -944,25 +1179,39 @@
 
     window.openHubOpsEditDrawer = function (payload) {
         if (!payload) return;
+        const livePayload = (payload.id && window.hubOpsRowStore[payload.id])
+            ? Object.assign({}, payload, window.hubOpsRowStore[payload.id])
+            : payload;
+
+        if (livePayload.id) {
+            window.hubOpsRowStore[livePayload.id] = livePayload;
+        }
+        window._hubOpsActiveOriginalTitle = livePayload.title || '';
+
         document.getElementById('hubOpsCreateDrawer')?.classList.remove('open');
         window.resetHubOpsNoteField('hubOpsEditNotes');
+        window.showHubOpsEditError('');
+        window.setHubOpsEditTitleMode(false, false);
+
         const form = document.getElementById('hubOpsEditForm');
-        if (form && payload.update_url) form.action = payload.update_url;
+        if (form && livePayload.update_url) form.action = livePayload.update_url;
         const titleEl = document.getElementById('hubOpsEditLockedTitle');
-        if (titleEl) titleEl.textContent = payload.title || '';
+        if (titleEl) titleEl.textContent = window._hubOpsActiveOriginalTitle;
+        const titleInput = document.getElementById('hubOpsEditTitleInput');
+        if (titleInput) titleInput.value = window._hubOpsActiveOriginalTitle;
         const notesEl = document.getElementById('hubOpsEditNotes');
-        if (notesEl) notesEl.value = payload.notes || '';
+        if (notesEl) notesEl.value = livePayload.notes || '';
         const keepOptEl = document.getElementById('hubOpsEditKeepDeadlineOpt');
         if (keepOptEl) {
-            keepOptEl.textContent = payload.keep_deadline_label || 'Keep Current Deadline';
+            keepOptEl.textContent = livePayload.keep_deadline_label || 'Keep Current Deadline';
         }
         const deadlineEl = document.getElementById('hubOpsEditDeadlineAction');
         if (deadlineEl) {
             deadlineEl.value = 'keep';
         }
 
-        const ids = Array.isArray(payload.assigned_user_ids) ? payload.assigned_user_ids.map(Number) : [];
-        const names = Array.isArray(payload.assigned_names) ? payload.assigned_names.map(n => String(n).toLowerCase()) : [];
+        const ids = Array.isArray(livePayload.assigned_user_ids) ? livePayload.assigned_user_ids.map(Number) : [];
+        const names = Array.isArray(livePayload.assigned_names) ? livePayload.assigned_names.map(n => String(n).toLowerCase()) : [];
         document.querySelectorAll('.hub-ops-edit-cb').forEach(cb => {
             cb.checked = ids.includes(Number(cb.dataset.uid)) || names.includes(cb.dataset.uname || '');
         });
@@ -980,6 +1229,8 @@
         document.getElementById('hubOpsEditDrawer')?.classList.remove('open');
         window.resetHubOpsNoteField('hubOpsCreateNotes');
         window.resetHubOpsNoteField('hubOpsEditNotes');
+        window.showHubOpsEditError('');
+        window.setHubOpsEditTitleMode(false, false);
     };
 
     document.addEventListener('click', function (e) {

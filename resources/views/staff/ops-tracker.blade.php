@@ -998,7 +998,7 @@
                                     <div class="flex-grow-1">
                                         {{-- Line 1: Task Title + Area Pill + Carryover + Tiny Inline Pencil Icon --}}
                                         <div class="d-flex flex-wrap align-items-center gap-2">
-                                            <span class="fw-semibold {{ $item->is_completed ? 'text-decoration-line-through text-muted' : '' }}" style="font-size: 13.5px; line-height: 1.25;">
+                                            <span data-ops-title-text class="fw-semibold {{ $item->is_completed ? 'text-decoration-line-through text-muted' : '' }}" style="font-size: 13.5px; line-height: 1.25;">
                                                 {{ $item->title }}
                                             </span>
                                             <span class="ops-area-badge">{{ $item->scope }}</span>
@@ -1017,7 +1017,7 @@
                                         </div>
 
                                         {{-- Line 2: Compact Muted Metadata Row (Note + Assigned Timestamp + Completed Timestamp) --}}
-                                        <div class="ops-meta-line">
+                                        <div class="ops-meta-line" data-ops-meta-line>
                                             @if ($item->notes)
                                                 <span class="ops-meta-note">{{ $item->notes }}</span>
                                                 <span>&bull;</span>
@@ -1047,7 +1047,7 @@
 
                             {{-- Col 2: Read-Only Assignee Pill Badges (Vertically Centered) --}}
                             <td class="align-middle">
-                                <div class="d-flex flex-wrap gap-1 align-items-center">
+                                <div class="d-flex flex-wrap gap-1 align-items-center" data-ops-assignees-wrap>
                                     @foreach ($item->assignee_list as $assigneeName)
                                         <span class="ops-locked-assignee-pill">
                                             👤 {{ $assigneeName }}
@@ -1057,7 +1057,7 @@
                             </td>
 
                             {{-- Col 3: Deadline / Status Pill (Vertically Centered) --}}
-                            <td class="align-middle">
+                            <td class="align-middle" data-ops-deadline-cell>
                                 @if (! $item->is_completed)
                                     @if ($item->is_overdue)
                                         <span class="ops-overdue-badge">🚨 Overdue</span>
@@ -1253,11 +1253,33 @@
                 @method('PATCH')
 
                 <div class="ops-drawer-body">
-                    {{-- Locked Read-Only Task Title Display Block (Immutable) --}}
-                    <div class="mb-3">
-                        <label class="ops-drawer-field-label">Task / Issue (Locked)</label>
-                        <div class="ops-locked-title-box" id="opsEditDrawerLockedTitle"></div>
-                    </div>
+                    <div id="opsEditDrawerError" class="alert alert-danger py-2 px-3 small mb-3 d-none" role="alert"></div>
+
+                    {{-- Task / Issue Title (Admin-only inline Edit unlock; strictly locked for non-admin) --}}
+                    @if (auth()->user()?->isAdmin())
+                        <div class="mb-3" id="opsEditDrawerTitleGroup">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="ops-drawer-field-label mb-0" for="opsEditDrawerTitleInput">Task / Issue</label>
+                                <button type="button"
+                                        class="ops-note-expand-btn"
+                                        id="opsEditDrawerTitleToggleBtn"
+                                        aria-expanded="false">✎ Edit</button>
+                            </div>
+                            <div class="ops-locked-title-box" id="opsEditDrawerLockedTitle"></div>
+                            <input type="text"
+                                   name="title"
+                                   id="opsEditDrawerTitleInput"
+                                   class="ops-drawer-input d-none"
+                                   maxlength="255"
+                                   placeholder="Enter task / issue title..."
+                                   disabled>
+                        </div>
+                    @else
+                        <div class="mb-3">
+                            <label class="ops-drawer-field-label">Task / Issue (Locked)</label>
+                            <div class="ops-locked-title-box" id="opsEditDrawerLockedTitle"></div>
+                        </div>
+                    @endif
 
                     {{-- Editable Note / Context --}}
                     <div class="mb-3">
@@ -1326,7 +1348,7 @@
                     <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-2" onclick="closeOpsTaskDrawer()">
                         Cancel
                     </button>
-                    <button type="submit" class="btn-ops-drawer-save">
+                    <button type="submit" class="btn-ops-drawer-save" id="opsEditDrawerSaveBtn">
                         ✓ Save Changes
                     </button>
                 </div>
@@ -1386,6 +1408,149 @@
     let pendingOpsConfirmFormId = null;
     let pendingOpsConfirmItemId = null;
     let pendingOpsConfirmAction = 'complete';
+    const opsEditRowStore = {};
+    let activeOpsEditItemId = null;
+    let activeOpsEditOriginalTitle = '';
+
+    function showOpsEditDrawerError(message) {
+        const errEl = document.getElementById('opsEditDrawerError');
+        if (!errEl) return;
+        if (message) {
+            errEl.textContent = message;
+            errEl.classList.remove('d-none');
+        } else {
+            errEl.textContent = '';
+            errEl.classList.add('d-none');
+        }
+    }
+
+    function setOpsEditTitleMode(editing, focusInput) {
+        const lockedTitleEl = document.getElementById('opsEditDrawerLockedTitle');
+        const titleInput = document.getElementById('opsEditDrawerTitleInput');
+        const toggleBtn = document.getElementById('opsEditDrawerTitleToggleBtn');
+        if (!titleInput || !toggleBtn) return;
+
+        if (editing) {
+            if (lockedTitleEl) lockedTitleEl.classList.add('d-none');
+            titleInput.classList.remove('d-none');
+            titleInput.disabled = false;
+            titleInput.required = true;
+            toggleBtn.classList.add('is-active');
+            toggleBtn.setAttribute('aria-expanded', 'true');
+            toggleBtn.textContent = '✕ Lock';
+            if (focusInput) {
+                titleInput.focus();
+                titleInput.setSelectionRange(titleInput.value.length, titleInput.value.length);
+            }
+        } else {
+            titleInput.value = activeOpsEditOriginalTitle;
+            titleInput.disabled = true;
+            titleInput.required = false;
+            titleInput.classList.add('d-none');
+            if (lockedTitleEl) {
+                lockedTitleEl.textContent = activeOpsEditOriginalTitle;
+                lockedTitleEl.classList.remove('d-none');
+            }
+            toggleBtn.classList.remove('is-active');
+            toggleBtn.setAttribute('aria-expanded', 'false');
+            toggleBtn.textContent = '✎ Edit';
+        }
+    }
+
+    function showOpsInlineToast(message) {
+        let toast = document.getElementById('opsInlineToast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'opsInlineToast';
+            toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:1120;background:rgba(34,22,27,0.96);color:#f8efe6;border:1px solid rgba(217,143,131,0.42);border-radius:999px;padding:8px 16px;font-size:12.5px;font-weight:600;box-shadow:0 12px 30px rgba(0,0,0,0.45);transition:opacity .2s ease;';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = '✓ ' + (message || 'Task updated.');
+        toast.style.opacity = '1';
+        clearTimeout(toast._hideTimer);
+        toast._hideTimer = setTimeout(function () {
+            toast.style.opacity = '0';
+        }, 2500);
+    }
+
+    function updateOpsTableRowFromUi(ui) {
+        if (!ui || !ui.id) return;
+        const existing = opsEditRowStore[ui.id] || {};
+        opsEditRowStore[ui.id] = Object.assign({}, existing, {
+            id: ui.id,
+            title: ui.title,
+            notes: ui.notes || '',
+            assigned_user_ids: Array.isArray(ui.assigned_user_ids) ? ui.assigned_user_ids : [],
+            assigned_names: Array.isArray(ui.assigned_names) ? ui.assigned_names : [],
+            sla_hours: ui.sla_hours,
+            timeframe_label: ui.timeframe_label,
+            keep_deadline_label: ui.keep_deadline_label,
+        });
+
+        const row = document.querySelector('tr[data-ops-item-id="' + ui.id + '"]');
+        if (!row) return;
+
+        row.setAttribute('data-sla-hours', String(ui.sla_hours || 48));
+
+        const titleSpan = row.querySelector('[data-ops-title-text]');
+        if (titleSpan) {
+            titleSpan.textContent = ui.title || '';
+        }
+
+        const metaLine = row.querySelector('[data-ops-meta-line]');
+        if (metaLine) {
+            metaLine.innerHTML = '';
+            if (ui.notes && ui.notes.trim() !== '') {
+                const noteSpan = document.createElement('span');
+                noteSpan.className = 'ops-meta-note';
+                noteSpan.textContent = ui.notes;
+                metaLine.appendChild(noteSpan);
+
+                const dot = document.createElement('span');
+                dot.textContent = '•';
+                metaLine.appendChild(dot);
+            }
+            const assignedSpan = document.createElement('span');
+            assignedSpan.textContent = '🕒 Assigned: ' + (ui.assigned_at_stamp || '');
+            metaLine.appendChild(assignedSpan);
+
+            if (ui.is_completed) {
+                const dot2 = document.createElement('span');
+                dot2.textContent = '•';
+                metaLine.appendChild(dot2);
+
+                const compSpan = document.createElement('span');
+                compSpan.className = 'text-success fw-semibold';
+                compSpan.textContent = '✓ Completed: ' + (ui.completed_at_stamp || '') + (ui.completed_by ? ' (' + ui.completed_by + ')' : '');
+                metaLine.appendChild(compSpan);
+            }
+        }
+
+        const assigneesWrap = row.querySelector('[data-ops-assignees-wrap]');
+        if (assigneesWrap && Array.isArray(ui.assigned_names)) {
+            assigneesWrap.innerHTML = '';
+            ui.assigned_names.forEach(function (name) {
+                const pill = document.createElement('span');
+                pill.className = 'ops-locked-assignee-pill';
+                pill.textContent = '👤 ' + name;
+                assigneesWrap.appendChild(pill);
+            });
+        }
+
+        const deadlineCell = row.querySelector('[data-ops-deadline-cell]');
+        if (deadlineCell && !ui.is_completed) {
+            deadlineCell.innerHTML = '';
+            const badge = document.createElement('span');
+            if (ui.is_overdue) {
+                badge.className = 'ops-overdue-badge';
+                badge.textContent = '\uD83D\uDEA8 Overdue';
+            } else {
+                badge.className = 'ops-timeleft-badge';
+                badge.textContent = '\u23F3 ' + ui.hours_remaining + 'h left';
+            }
+            deadlineCell.appendChild(badge);
+        }
+    }
 
     function syncOpsDrawerNoteHeight(textarea) {
         if (!textarea || textarea.classList.contains('is-expanded')) return;
@@ -1446,6 +1611,74 @@
         });
     });
 
+    const opsEditTitleToggleBtn = document.getElementById('opsEditDrawerTitleToggleBtn');
+    if (opsEditTitleToggleBtn) {
+        opsEditTitleToggleBtn.addEventListener('click', function () {
+            const isEditing = opsEditTitleToggleBtn.getAttribute('aria-expanded') === 'true';
+            showOpsEditDrawerError('');
+            setOpsEditTitleMode(!isEditing, !isEditing);
+        });
+    }
+
+    const opsEditFormEl = document.getElementById('opsEditDrawerForm');
+    if (opsEditFormEl) {
+        opsEditFormEl.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            showOpsEditDrawerError('');
+
+            const titleInput = document.getElementById('opsEditDrawerTitleInput');
+            if (titleInput && !titleInput.disabled) {
+                const trimmedTitle = titleInput.value.trim();
+                if (!trimmedTitle) {
+                    showOpsEditDrawerError('Task / Issue title cannot be empty.');
+                    titleInput.focus();
+                    return;
+                }
+                titleInput.value = trimmedTitle;
+            }
+
+            const saveBtn = document.getElementById('opsEditDrawerSaveBtn');
+            const origLabel = saveBtn ? saveBtn.textContent : '✓ Save Changes';
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving...';
+            }
+
+            try {
+                const response = await fetch(opsEditFormEl.action, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: new FormData(opsEditFormEl),
+                });
+
+                const data = await response.json().catch(function () { return {}; });
+                if (!response.ok) {
+                    const firstFieldErr = data && data.errors
+                        ? Object.values(data.errors).flat()[0]
+                        : null;
+                    showOpsEditDrawerError(firstFieldErr || data.message || 'Unable to save changes. Please try again.');
+                    return;
+                }
+
+                if (data && data.ui) {
+                    updateOpsTableRowFromUi(data.ui);
+                }
+                closeOpsTaskDrawer();
+                showOpsInlineToast((data && data.message) || 'Task updated.');
+            } catch (err) {
+                showOpsEditDrawerError('Network error while saving changes. Please try again.');
+            } finally {
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = origLabel;
+                }
+            }
+        });
+    }
+
     function openOpsCreateDrawer() {
         const backdropEl = document.getElementById('opsDrawerBackdrop');
         const createDrawer = document.getElementById('opsCreateDrawer');
@@ -1467,30 +1700,47 @@
 
     function openOpsEditDrawer(payload) {
         if (!payload) return;
+        const livePayload = (payload.id && opsEditRowStore[payload.id])
+            ? Object.assign({}, payload, opsEditRowStore[payload.id])
+            : payload;
+
+        if (livePayload.id) {
+            opsEditRowStore[livePayload.id] = livePayload;
+            activeOpsEditItemId = livePayload.id;
+        }
+        activeOpsEditOriginalTitle = livePayload.title || '';
+
         const backdropEl = document.getElementById('opsDrawerBackdrop');
         const createDrawer = document.getElementById('opsCreateDrawer');
         const editDrawer = document.getElementById('opsEditDrawer');
         const formEl = document.getElementById('opsEditDrawerForm');
         const lockedTitleEl = document.getElementById('opsEditDrawerLockedTitle');
+        const titleInput = document.getElementById('opsEditDrawerTitleInput');
         const notesInput = document.getElementById('opsEditDrawerNotesInput');
         const lockedTimeframeEl = document.getElementById('opsEditDrawerLockedTimeframe');
 
         if (createDrawer) createDrawer.classList.remove('open');
         resetOpsDrawerNoteField('opsEditDrawerNotesInput');
-        if (formEl && payload.update_url) {
-            formEl.action = payload.update_url;
+        showOpsEditDrawerError('');
+        setOpsEditTitleMode(false, false);
+
+        if (formEl && livePayload.update_url) {
+            formEl.action = livePayload.update_url;
         }
         if (lockedTitleEl) {
-            lockedTitleEl.textContent = payload.title || '';
+            lockedTitleEl.textContent = activeOpsEditOriginalTitle;
+        }
+        if (titleInput) {
+            titleInput.value = activeOpsEditOriginalTitle;
         }
         if (notesInput) {
-            notesInput.value = payload.notes || '';
+            notesInput.value = livePayload.notes || '';
         }
 
-        const currentSlaHours = parseInt(payload.sla_hours || 48, 10);
+        const currentSlaHours = parseInt(livePayload.sla_hours || 48, 10);
         const keepDeadlineOptEl = document.getElementById('opsEditDrawerKeepDeadlineOpt');
         if (keepDeadlineOptEl) {
-            keepDeadlineOptEl.textContent = payload.keep_deadline_label || 'Keep Current Deadline';
+            keepDeadlineOptEl.textContent = livePayload.keep_deadline_label || 'Keep Current Deadline';
         }
         const deadlineSelectEl = document.getElementById('opsEditDrawerDeadlineAction');
         if (deadlineSelectEl) {
@@ -1498,15 +1748,15 @@
         }
 
         if (lockedTimeframeEl) {
-            const tfLabel = payload.timeframe_label || (currentSlaHours + 'h');
+            const tfLabel = livePayload.timeframe_label || (currentSlaHours + 'h');
             lockedTimeframeEl.textContent = '🔒 Timeframe: ' + tfLabel + ' — Admin Only';
         }
 
-        const assignedIds = Array.isArray(payload.assigned_user_ids)
-            ? payload.assigned_user_ids.map(function (v) { return parseInt(v, 10); })
+        const assignedIds = Array.isArray(livePayload.assigned_user_ids)
+            ? livePayload.assigned_user_ids.map(function (v) { return parseInt(v, 10); })
             : [];
-        const assignedNamesLower = Array.isArray(payload.assigned_names)
-            ? payload.assigned_names.map(function (n) { return String(n).toLowerCase(); })
+        const assignedNamesLower = Array.isArray(livePayload.assigned_names)
+            ? livePayload.assigned_names.map(function (n) { return String(n).toLowerCase(); })
             : [];
 
         document.querySelectorAll('.ops-edit-drawer-cb').forEach(function (cb) {
@@ -1537,6 +1787,8 @@
         if (editDrawer) editDrawer.classList.remove('open');
         resetOpsDrawerNoteField('opsCreateNotesInput');
         resetOpsDrawerNoteField('opsEditDrawerNotesInput');
+        showOpsEditDrawerError('');
+        setOpsEditTitleMode(false, false);
     }
 
     function syncOpsConfirmRemarksState() {
@@ -1569,6 +1821,12 @@
         pendingOpsConfirmItemId = itemId;
         pendingOpsConfirmAction = actionType || 'complete';
 
+        const liveItem = opsEditRowStore[itemId];
+        const effectiveTitle = (liveItem && liveItem.title) ? liveItem.title : (taskTitle || '');
+        const effectiveAssignees = (liveItem && Array.isArray(liveItem.assigned_names) && liveItem.assigned_names.length)
+            ? liveItem.assigned_names
+            : assigneeList;
+
         const titleEl = document.getElementById('opsConfirmModalTitle');
         const taskBoxEl = document.getElementById('opsConfirmModalTaskTitle');
         const assigneesEl = document.getElementById('opsConfirmModalAssignees');
@@ -1578,12 +1836,12 @@
         const submitBtnEl = document.getElementById('opsConfirmModalSubmitBtn');
 
         if (taskBoxEl) {
-            taskBoxEl.textContent = taskTitle || '';
+            taskBoxEl.textContent = effectiveTitle;
         }
 
         if (assigneesEl) {
             assigneesEl.innerHTML = '';
-            const names = Array.isArray(assigneeList) && assigneeList.length ? assigneeList : ['Ops Team'];
+            const names = Array.isArray(effectiveAssignees) && effectiveAssignees.length ? effectiveAssignees : ['Ops Team'];
             names.forEach(function (name) {
                 const badge = document.createElement('span');
                 badge.className = 'ui-chip ops-locked-assignee-pill';
@@ -1597,7 +1855,7 @@
             if (titleEl) titleEl.textContent = 'Move Back to Pending?';
             remarksGroupEl?.classList.add('d-none');
             messageEl?.classList.remove('d-none');
-            if (messageEl) messageEl.textContent = "Reopen '" + (taskTitle || '') + "' and restart its active SLA timer?";
+            if (messageEl) messageEl.textContent = "Reopen '" + effectiveTitle + "' and restart its active SLA timer?";
             if (submitBtnEl) {
                 submitBtnEl.textContent = '↺ Yes, Move to Pending';
                 submitBtnEl.className = 'btn btn-sm btn-warning fw-bold text-dark rounded-pill px-3';
