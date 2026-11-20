@@ -13,6 +13,15 @@
             <form action="{{ route('leads.update', $lead->id) }}" method="POST">
                 @csrf
                 @method('PUT')
+                @foreach (request()->only(['tab', 'alert_filter', 'followup_date', 'agent_id', 'start_date', 'end_date', 'country_code', 'phone_number', 'category']) as $rfKey => $rfVal)
+                    @if (is_array($rfVal))
+                        @foreach ($rfVal as $rfItem)
+                            <input type="hidden" name="return_filters[{{ $rfKey }}][]" value="{{ $rfItem }}">
+                        @endforeach
+                    @elseif ($rfVal !== null && $rfVal !== '')
+                        <input type="hidden" name="return_filters[{{ $rfKey }}]" value="{{ $rfVal }}">
+                    @endif
+                @endforeach
                 <div class="modal-body">
                     <div class="row g-3">
                         <div class="col-md-6">

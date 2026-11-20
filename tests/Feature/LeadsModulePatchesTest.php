@@ -37,7 +37,7 @@ class LeadsModulePatchesTest extends TestCase
             'next_followup_date' => null,
         ]);
 
-        $indexResponse = $this->actingAs($user)->get(route('leads.index'));
+        $indexResponse = $this->actingAs($user)->get(route('leads.index', ['tab' => 'all']));
         $indexResponse->assertOk();
         $indexResponse->assertDontSee('Open WhatsApp Chat');
         $indexResponse->assertDontSee('wa.me/');
@@ -196,7 +196,7 @@ class LeadsModulePatchesTest extends TestCase
         $this->assertEquals('booked', $contactedLead->fresh()->needful_done);
 
         // Verify the Green Booked pill counter on leads/index is 1 (no double-counting) and the locked badge renders
-        $afterIndex = $this->actingAs($user)->get(route('leads.index'));
+        $afterIndex = $this->actingAs($user)->get(route('leads.index', ['tab' => 'all']));
         $afterIndex->assertOk()
             ->assertViewHas('bookedCount', 1)
             ->assertSee('<span class="lead-pill-count" id="bookedLeadsPillCount">1</span>', false)
@@ -646,7 +646,7 @@ class LeadsModulePatchesTest extends TestCase
         $this->assertStringContainsString('Asked about Balayage pricing', (string) $lead->customer_remarks);
 
         // 3. Verify both 'Cancelled' and 'Inquiry' badges render side-by-side in leads/index
-        $indexResponse = $this->actingAs($user)->get(route('leads.index'));
+        $indexResponse = $this->actingAs($user)->get(route('leads.index', ['tab' => 'all']));
         $indexResponse->assertOk()
             ->assertSee('<span class="lead-badge cat-cancel">Cancelled</span>', false)
             ->assertSee('<span class="lead-badge cat-inquiry">Inquiry</span>', false);
@@ -851,7 +851,7 @@ class LeadsModulePatchesTest extends TestCase
             'needful_done' => null,
         ]);
 
-        $response = $this->actingAs($user)->get(route('leads.index'));
+        $response = $this->actingAs($user)->get(route('leads.index', ['tab' => 'all']));
 
         $response->assertOk()
             ->assertSee('SERVICES &amp; NOTES', false)
@@ -1086,7 +1086,7 @@ class LeadsModulePatchesTest extends TestCase
         ], $lead->service_interest);
 
         // Verify the Leads list displays the saved combo and individual service and the Combos / Packages badge
-        $afterCreateResponse = $this->actingAs($user)->get(route('leads.index'));
+        $afterCreateResponse = $this->actingAs($user)->get(route('leads.index', ['tab' => 'all']));
         $afterCreateResponse->assertOk()
             ->assertSee('<span class="lead-badge cat-combos_packages">Combos / Packages</span>', false)
             ->assertSee('[Combo] Bridal Glow Package (550 QAR)')

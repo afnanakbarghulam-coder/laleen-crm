@@ -25,15 +25,29 @@ class LeadController extends Controller
 
     public function index(Request $request)
     {
+        $today = Lead::salonToday();
+        $todayDateStr = $today->toDateString();
+
         $query = Lead::query()->with(['agent', 'customer', 'appointment:id,status']);
+        $tab = $request->input('tab');
         $alertFilter = $request->input('alert_filter');
         if (!$alertFilter && $request->input('followup_filter') === 'pending') {
             $alertFilter = 'pending_followups';
         }
 
+        $hasExplicitNonDefaultParams = !empty($alertFilter)
+            || $tab === 'all'
+            || $request->hasAny(['category', 'followup_date', 'phone_number', 'start_date', 'end_date', 'agent_id', 'alert_filter', 'followup_filter']);
+
+        $isDueTodayView = (!$hasExplicitNonDefaultParams)
+            || ($tab === 'due_today' && empty($alertFilter) && !$request->filled('followup_date'));
+
+        $activeFollowupDate = null;
+
         if ($alertFilter === 'pending_followups') {
+            $activeTab = 'pending_followups';
             $query->whereNotNull('next_followup_date')
-                ->whereDate('next_followup_date', '<=', today())
+                ->whereDate('next_followup_date', '<=', $todayDateStr)
                 ->where(function ($q) {
                     $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
                 });
@@ -42,18 +56,21 @@ class LeadController extends Controller
                 $query->where('assigned_agent_id', $request->user()->id);
             }
         } elseif ($alertFilter === 'overdue') {
+            $activeTab = 'overdue';
             $query->whereNotNull('next_followup_date')
-                ->whereDate('next_followup_date', '<', today())
+                ->whereDate('next_followup_date', '<', $todayDateStr)
                 ->where(function ($q) {
                     $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
                 });
         } elseif ($alertFilter === 'unscheduled') {
+            $activeTab = 'unscheduled';
             $query->whereHasCategory(['no_show', 'cancel'])
                 ->whereNull('next_followup_date')
                 ->where(function ($q) {
                     $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
                 });
         } elseif ($alertFilter === 'booked') {
+            $activeTab = 'booked';
             $query->where(function ($q) {
                 $q->where(function ($sub) {
                     $sub->where('needful_done', 'booked')
@@ -64,6 +81,21 @@ class LeadController extends Controller
                         });
                 })->orWhereHas('appointment', fn ($ap) => $ap->whereNotIn('status', ['cancelled', 'no_show']));
             });
+        } elseif ($isDueTodayView) {
+            // Default fresh /leads view: open leads whose next_followup_date equals today in Asia/Qatar
+            // (aligned cleanly with the Morning Money Brief "Due Today" counter).
+            $activeTab = 'due_today';
+            $activeFollowupDate = $todayDateStr;
+            $query->whereNotNull('next_followup_date')
+                ->whereDate('next_followup_date', $todayDateStr)
+                ->where(function ($q) {
+                    $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
+                });
+        } elseif ($request->filled('followup_date')) {
+            $activeFollowupDate = (string) $request->input('followup_date');
+            $activeTab = $activeFollowupDate === $todayDateStr ? 'due_today' : 'date';
+        } else {
+            $activeTab = 'all';
         }
 
         if ($request->filled('category')) {
@@ -71,7 +103,8 @@ class LeadController extends Controller
         }
 
         if ($request->filled('followup_date')) {
-            $query->whereDate('next_followup_date', $request->followup_date);
+            $activeFollowupDate = (string) $request->input('followup_date');
+            $query->whereDate('next_followup_date', $activeFollowupDate);
         }
 
         if ($request->filled('phone_number')) {
@@ -91,20 +124,21 @@ class LeadController extends Controller
             $query->where('assigned_agent_id', $request->agent_id);
         }
 
-        // With no filters at all, keep the table to recent or recently synced/scheduled leads rather than ancient history.
-        if (empty($alertFilter) && !$request->hasAny(['category', 'followup_date', 'phone_number', 'start_date', 'end_date', 'agent_id', 'alert_filter'])) {
-            $query->where(function ($q) {
-                $q->where('created_at', '>=', now()->subMonth())
-                    ->orWhere('updated_at', '>=', now()->subMonth())
-                    ->orWhereDate('next_followup_date', '>=', now()->subMonth()->toDateString());
-            });
-        }
-
         if ($alertFilter === 'pending_followups') {
             $query->orderBy('next_followup_date', 'asc')->orderByDesc('id');
         } else {
             $query->orderBy('created_at', 'desc');
         }
+
+        $tableHeading = match (true) {
+            $activeTab === 'overdue' => 'Overdue Follow-ups',
+            $activeTab === 'unscheduled' => 'Needs Follow-up Date',
+            $activeTab === 'booked' => 'Booked',
+            $activeTab === 'pending_followups' => 'Pending Follow-ups',
+            $activeTab === 'due_today' => "Today's Follow-ups (" . $today->format('d M Y') . ')',
+            $activeFollowupDate !== null => 'Follow-ups for ' . Carbon::parse($activeFollowupDate)->format('d M Y'),
+            default => 'All Leads',
+        };
 
         $leads = $query->get();
         $agents = User::where('role', 'agent')->get();
@@ -156,6 +190,10 @@ class LeadController extends Controller
             'morningBrief',
             'bookedCount',
             'alertFilter',
+            'activeTab',
+            'activeFollowupDate',
+            'todayDateStr',
+            'tableHeading',
             'pendingFollowupsCount',
             'pendingDueTodayCount',
             'pendingOverdueCount',
@@ -172,7 +210,7 @@ class LeadController extends Controller
             'count' => $summary['total_count'],
             'due_today_count' => $summary['due_today_count'],
             'overdue_count' => $summary['overdue_count'],
-            'today' => today()->format('Y-m-d'),
+            'today' => Lead::salonToday()->format('Y-m-d'),
             'leads' => $summary['items'],
         ]);
     }
@@ -368,15 +406,46 @@ class LeadController extends Controller
             $existingLead->update($data);
             $lead->delete();
 
-            return redirect()->route('leads.index')
+            return redirect()->route('leads.index', $this->preservedReturnFilters($request))
                 ->with('existing_lead_id', $existingLead->id)
                 ->with('success', 'Lead updated and merged successfully.');
         }
 
         $lead->update($data);
 
-        return redirect()->route('leads.index')
+        return redirect()->route('leads.index', $this->preservedReturnFilters($request))
             ->with('success', 'Lead updated successfully.');
+    }
+
+    /**
+     * Preserve active Lead Management tab / follow-up date / filter query params across edit submissions.
+     */
+    private function preservedReturnFilters(Request $request): array
+    {
+        $raw = $request->input('return_filters', []);
+        if (!is_array($raw) || empty($raw)) {
+            return [];
+        }
+
+        $allowed = ['tab', 'alert_filter', 'followup_date', 'category', 'agent_id', 'start_date', 'end_date', 'country_code', 'phone_number'];
+        $clean = [];
+
+        foreach ($allowed as $key) {
+            if (!array_key_exists($key, $raw)) {
+                continue;
+            }
+            $val = $raw[$key];
+            if (is_array($val)) {
+                $filtered = array_values(array_filter($val, fn ($v) => $v !== null && $v !== ''));
+                if (!empty($filtered)) {
+                    $clean[$key] = $filtered;
+                }
+            } elseif ($val !== null && $val !== '') {
+                $clean[$key] = $val;
+            }
+        }
+
+        return $clean;
     }
 
     /**
@@ -686,7 +755,8 @@ class LeadController extends Controller
 
     public function buildMorningMoneyBrief(?int $overdueCount = null, ?int $unscheduledCount = null): array
     {
-        $today = today();
+        $today = Lead::salonToday();
+        $todayDateStr = $today->toDateString();
         $openLeads = Lead::with('customer')
             ->whereNotNull('phone')
             ->where('phone', '!=', '')
@@ -702,7 +772,7 @@ class LeadController extends Controller
             ->values();
 
         $dueTodayCount = $openLeads
-            ->filter(fn(Lead $l) => $l->next_followup_date && $l->next_followup_date->isSameDay($today))
+            ->filter(fn(Lead $l) => $l->next_followup_date && $l->next_followup_date->toDateString() === $todayDateStr)
             ->count();
 
         if ($overdueCount === null) {
@@ -948,7 +1018,7 @@ class LeadController extends Controller
     {
         return Lead::with(['agent', 'customer'])
             ->whereNotNull('next_followup_date')
-            ->whereDate('next_followup_date', '<', today())
+            ->whereDate('next_followup_date', '<', Lead::salonToday()->toDateString())
             ->where(function ($q) {
                 $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
             });

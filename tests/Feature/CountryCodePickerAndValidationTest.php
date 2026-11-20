@@ -116,7 +116,7 @@ class CountryCodePickerAndValidationTest extends TestCase
         }
 
         // Verify explicit label `for` bindings to phone inputs (not the picker)
-        $leadsHtml = $this->actingAs($this->admin)->get(route('leads.index'))->getContent();
+        $leadsHtml = $this->actingAs($this->admin)->get(route('leads.index', ['tab' => 'all']))->getContent();
         $this->assertStringContainsString('for="addLeadPhoneNumber"', $leadsHtml);
         $this->assertStringContainsString('for="editLeadPhoneNumber-' . $lead->id . '"', $leadsHtml);
         $this->assertStringContainsString('for="filterLeadPhoneNumber"', $leadsHtml);
@@ -153,7 +153,7 @@ class CountryCodePickerAndValidationTest extends TestCase
         $this->assertNotNull(Customer::where('phone', '962791234567')->first());
 
         // Edit modal on Leads page pre-fills +962 and 791234567 cleanly
-        $this->actingAs($this->admin)->get(route('leads.index'))
+        $this->actingAs($this->admin)->get(route('leads.index', ['tab' => 'all']))
             ->assertOk()
             ->assertSee('value="962"', false)
             ->assertSee('value="791234567"', false);

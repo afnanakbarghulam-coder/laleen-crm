@@ -345,14 +345,30 @@ class Lead extends Model
     }
 
     /**
+     * Resolve today's start-of-day date in the salon's local timezone (Asia/Qatar),
+     * ensuring early-morning Doha hours (00:00–02:59) never fall back to yesterday in UTC.
+     */
+    public static function salonToday(): Carbon
+    {
+        $tz = (string) config('app.timezone', 'Asia/Qatar');
+        if ($tz === '' || strtoupper($tz) === 'UTC') {
+            $tz = 'Asia/Qatar';
+        }
+
+        return Carbon::now($tz)->startOfDay();
+    }
+
+    /**
      * Role-scoped query of open leads with a follow-up due today or overdue
      * (including cancelled-booking reschedules that still need follow-up).
      */
     public static function pendingFollowUpsQuery(?User $user = null)
     {
+        $todayDateStr = static::salonToday()->toDateString();
+
         $query = static::query()
             ->whereNotNull('next_followup_date')
-            ->whereDate('next_followup_date', '<=', today())
+            ->whereDate('next_followup_date', '<=', $todayDateStr)
             ->where(function ($q) {
                 $q->whereNull('needful_done')->orWhereNotIn('needful_done', self::CLOSED_STATUSES);
             });
@@ -378,7 +394,8 @@ class Lead extends Model
      */
     public static function pendingFollowUpsSummary(?User $user = null): array
     {
-        $today = today();
+        $today = static::salonToday();
+        $todayDateStr = $today->toDateString();
         $models = static::pendingFollowUpsQuery($user)
             ->with(['customer:id,name,phone', 'agent:id,name'])
             ->orderBy('next_followup_date', 'asc')
@@ -390,7 +407,7 @@ class Lead extends Model
         $items = [];
 
         foreach ($models as $lead) {
-            $isOverdue = $lead->next_followup_date && $lead->next_followup_date->lt($today);
+            $isOverdue = $lead->next_followup_date && $lead->next_followup_date->toDateString() < $todayDateStr;
             if ($isOverdue) {
                 $overdueCount++;
             } else {

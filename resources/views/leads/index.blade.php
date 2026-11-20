@@ -568,6 +568,13 @@
         box-shadow: 0 0 12px rgba(217, 143, 131, 0.15);
     }
 
+    .lead-quick-pill.pill-due-today.is-active,
+    .lead-quick-pill.pill-due-today:hover {
+        border-color: #93c5fd;
+        color: #93c5fd;
+        background: rgba(147, 197, 253, 0.14);
+    }
+
     .lead-quick-pill.pill-overdue.is-active,
     .lead-quick-pill.pill-overdue:hover {
         border-color: #ef4444;
@@ -846,9 +853,12 @@
             <span class="fw-bold text-uppercase" style="color: #f3d9a4; letter-spacing: 0.03em; font-size: 11px;">
                 ⚡ Morning Money Brief
             </span>
-            <span class="morning-brief-chip" style="color: #93c5fd; border-color: rgba(147, 197, 253, 0.28);">
+            <a href="{{ route('leads.index', ['tab' => 'due_today']) }}"
+                class="morning-brief-chip text-decoration-none"
+                id="morningBriefDueTodayLink"
+                style="color: #93c5fd; border-color: rgba(147, 197, 253, 0.28);">
                 📅 Due Today: <strong x-text="dueToday">{{ $dueTodayCount ?? 0 }}</strong>
-            </span>
+            </a>
             <span class="morning-brief-chip" style="color: #fca5a5; border-color: rgba(252, 165, 165, 0.28);">
                 🔴 Overdue: <strong x-text="overdue">{{ $overdueCount ?? 0 }}</strong>
             </span>
@@ -882,8 +892,15 @@
             <div class="d-flex align-items-center gap-2 flex-wrap" id="leadQuickFilterBar"
                 data-overdue-ids='@json($overdueLeads->pluck("id")->values())'
                 data-unscheduled-ids='@json($unscheduledLeads->pluck("id")->values())'>
-                <a href="{{ route('leads.index') }}"
-                    class="lead-quick-pill {{ empty($alertFilter) ? 'is-active' : '' }}">
+                <a href="{{ route('leads.index', ['tab' => 'due_today']) }}"
+                    class="lead-quick-pill pill-due-today {{ ($activeTab ?? null) === 'due_today' ? 'is-active' : '' }}"
+                    id="dueTodayLeadsPill">
+                    <span>📅 Due Today</span>
+                    <span class="lead-pill-count" id="dueTodayLeadsPillCount">{{ $dueTodayCount ?? 0 }}</span>
+                </a>
+                <a href="{{ route('leads.index', ['tab' => 'all']) }}"
+                    class="lead-quick-pill {{ ($activeTab ?? null) === 'all' ? 'is-active' : '' }}"
+                    id="allLeadsPill">
                     <span>All Leads</span>
                 </a>
                 <a href="{{ route('leads.index', ['alert_filter' => 'overdue']) }}"
@@ -909,12 +926,18 @@
                         <span>🔔 Pending Follow-ups</span>
                         <span class="lead-pill-count">{{ $leads->count() }}</span>
                     </span>
-                    <a href="{{ route('leads.index') }}" class="lead-clear-filter-pill" id="clearPendingFollowupsFilterPill">
+                    <a href="{{ route('leads.index', ['tab' => 'all']) }}" class="lead-clear-filter-pill" id="clearPendingFollowupsFilterPill">
                         <span>&times; Clear filter</span>
                     </a>
                 @endif
             </div>
 
+            @php
+                $clearDateUrl = route('leads.index', array_filter([
+                    'tab' => empty($alertFilter) ? 'all' : null,
+                    'alert_filter' => $alertFilter ?: null,
+                ]));
+            @endphp
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse"
                     aria-expanded="false" aria-controls="filterCollapse">
@@ -925,11 +948,12 @@
                     @if (!empty($alertFilter))
                         <input type="hidden" name="alert_filter" value="{{ $alertFilter }}">
                     @endif
-                    <label class="form-label mb-0 small text-muted">Next Follow-up Date</label>
-                    <input type="date" name="followup_date" class="form-control form-control-sm" style="width: auto;"
-                        value="{{ request('followup_date') }}" onchange="this.form.submit()">
-                    @if (request('followup_date'))
-                        <a href="{{ route('leads.index') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+                    <label class="form-label mb-0 small text-muted" for="followupDateInput">Next Follow-up Date</label>
+                    <input type="date" name="followup_date" id="followupDateInput" class="form-control form-control-sm" style="width: auto;"
+                        value="{{ $activeFollowupDate ?? '' }}"
+                        onchange="if (!this.value) { window.location.href = @js($clearDateUrl); } else { this.form.submit(); }">
+                    @if (!empty($activeFollowupDate))
+                        <a href="{{ $clearDateUrl }}" class="btn btn-sm btn-outline-secondary" id="clearFollowupDateBtn">Clear</a>
                     @endif
                 </form>
             </div>
@@ -938,6 +962,12 @@
         <div class="collapse mt-3 {{ request()->hasAny(['category', 'phone_number', 'start_date', 'end_date', 'agent_id']) ? 'show' : '' }}" id="filterCollapse">
             <div class="card card-body shadow-sm border-0">
                 <form method="GET" action="{{ route('leads.index') }}">
+                    @if (($activeTab ?? null) === 'all')
+                        <input type="hidden" name="tab" value="all">
+                    @endif
+                    @if (!empty($alertFilter))
+                        <input type="hidden" name="alert_filter" value="{{ $alertFilter }}">
+                    @endif
                     @if (request('followup_date'))
                         <input type="hidden" name="followup_date" value="{{ request('followup_date') }}">
                     @endif
@@ -982,7 +1012,7 @@
 
                         <div class="leads-filter-grid-span-2 d-flex gap-2 align-items-end">
                             <button type="submit" class="btn btn-primary w-100">Filter</button>
-                            <a href="{{ route('leads.index') }}" class="btn btn-secondary w-100">Reset</a>
+                            <a href="{{ route('leads.index', ['tab' => 'all']) }}" class="btn btn-secondary w-100">Reset</a>
                         </div>
                     </div>
                 </form>
@@ -1013,11 +1043,11 @@
     <!-- Lead Table -->
     <div class="card">
         <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <h5 class="mb-0">{{ ($alertFilter ?? null) === 'pending_followups' ? 'Pending Follow-ups' : 'All Leads' }}</h5>
+            <h5 class="mb-0" id="leadsTableHeading">{{ $tableHeading ?? 'All Leads' }}</h5>
             @if (($alertFilter ?? null) === 'pending_followups')
                 <div class="d-flex align-items-center gap-2">
                     <span class="text-muted small">{{ $leads->count() }} due today / overdue</span>
-                    <a href="{{ route('leads.index') }}" class="lead-clear-filter-pill">
+                    <a href="{{ route('leads.index', ['tab' => 'all']) }}" class="lead-clear-filter-pill">
                         <span>&times; Clear filter</span>
                     </a>
                 </div>
