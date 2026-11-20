@@ -478,8 +478,7 @@ class AppointmentController extends Controller
         $staffId = $request->staff_id ? (int) $request->staff_id : null;
         $phone = Customer::normalizePhone($request->phone);
 
-        $existingCustomer = Customer::where('phone', $phone)
-            ->orWhere('phone', $request->phone)
+        $existingCustomer = Customer::whereIn('phone', Customer::phoneMatchVariants($request->phone))
             ->first();
 
         if ($existingCustomer) {
@@ -985,12 +984,10 @@ class AppointmentController extends Controller
         $rawDigits = preg_replace('/\D/', '', (string) $phone);
         [$countryCode, $localNumber] = Lead::splitPhone($rawDigits);
         $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
-        $withQatarCode = strlen($normalizedPhone) === 8 ? '974' . $normalizedPhone : null;
-        $phoneCandidates = array_values(array_unique(array_filter([
-            $normalizedPhone,
-            $rawDigits,
-            $withQatarCode,
-        ])));
+        $phoneCandidates = array_values(array_unique(array_merge(
+            Customer::phoneMatchVariants($phone),
+            array_filter([$normalizedPhone, $rawDigits])
+        )));
 
         if (!$customerId && empty($phoneCandidates)) {
             return 0.0;
@@ -2193,8 +2190,7 @@ class AppointmentController extends Controller
             ? Customer::normalizePhone((string) $request->input('phone'))
             : '';
         if (!$prefillCustomer && $request->filled('phone')) {
-            $rawPhoneDigits = preg_replace('/\D+/', '', (string) $request->input('phone'));
-            $prefillPhoneCandidates = array_values(array_unique(array_filter([$normalizedPrefillPhone, $rawPhoneDigits])));
+            $prefillPhoneCandidates = Customer::phoneMatchVariants((string) $request->input('phone'));
             if (!empty($prefillPhoneCandidates)) {
                 $prefillCustomer = Customer::whereIn('phone', $prefillPhoneCandidates)->first();
             }
@@ -2887,12 +2883,10 @@ class AppointmentController extends Controller
 
         [$countryCode, $localNumber] = Lead::splitPhone($rawDigits);
         $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
-        $withQatarCode = strlen($normalizedPhone) === 8 ? '974' . $normalizedPhone : null;
-        $phoneCandidates = array_values(array_unique(array_filter([
-            $normalizedPhone,
-            $rawDigits,
-            $withQatarCode,
-        ])));
+        $phoneCandidates = array_values(array_unique(array_merge(
+            Customer::phoneMatchVariants($phone),
+            array_filter([$normalizedPhone, $rawDigits])
+        )));
         $phone = $normalizedPhone !== '' ? $normalizedPhone : $rawDigits;
 
         $appointments = Appointment::with(['agent', 'clientPackages', 'appointmentServices'])
@@ -3650,9 +3644,7 @@ class AppointmentController extends Controller
 
         $customer = $appointment->customer;
         if (!$customer && $appointment->phone) {
-            $normalizedPhone = Customer::normalizePhone($appointment->phone);
-            $customer = Customer::where('phone', $normalizedPhone)
-                ->orWhere('phone', $appointment->phone)
+            $customer = Customer::whereIn('phone', Customer::phoneMatchVariants($appointment->phone))
                 ->first();
             if ($customer && !$appointment->customer_id) {
                 $appointment->update(['customer_id' => $customer->id]);

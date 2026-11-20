@@ -285,7 +285,7 @@ class StaffComplaintController extends Controller
 
         $rawPhone = preg_replace('/\D+/', '', (string) $validated['customer_phone']);
         $normalizedPhone = Customer::normalizePhone($validated['customer_phone']);
-        $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $rawPhone, $validated['customer_phone']])));
+        $phoneCandidates = Customer::phoneMatchVariants($validated['customer_phone']);
 
         if (empty($phoneCandidates)) {
             $validated['customer_id'] = null;

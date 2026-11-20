@@ -287,7 +287,10 @@ class AiScriptController extends Controller
         $rawPhone = trim((string) $phone);
         [$countryCode, $localNumber] = Lead::splitPhone($rawPhone);
         $normalizedPhone = Lead::normalizePhone($countryCode, $localNumber);
-        $phoneCandidates = array_values(array_unique(array_filter([$normalizedPhone, $rawPhone])));
+        $phoneCandidates = array_values(array_unique(array_merge(
+            Customer::phoneMatchVariants($rawPhone),
+            array_filter([$normalizedPhone, $rawPhone])
+        )));
 
         if (!$customer && !empty($phoneCandidates)) {
             $customer = Customer::whereIn('phone', $phoneCandidates)->first();

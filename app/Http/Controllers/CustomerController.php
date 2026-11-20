@@ -43,10 +43,14 @@ class CustomerController extends Controller
         if ($request->filled('search')) {
             $searchForCount = $request->search;
             $digitsForCount = preg_replace('/\D/', '', $searchForCount);
-            $baseBranchCountQuery->where(function ($q) use ($searchForCount, $digitsForCount) {
+            $e164ForCount = Customer::normalizePhoneE164($searchForCount);
+            $baseBranchCountQuery->where(function ($q) use ($searchForCount, $digitsForCount, $e164ForCount) {
                 $q->where('customers.name', 'like', '%' . $searchForCount . '%');
                 if ($digitsForCount !== '') {
                     $q->orWhere('customers.phone', 'like', '%' . $digitsForCount . '%');
+                }
+                if ($e164ForCount !== '' && $e164ForCount !== $digitsForCount) {
+                    $q->orWhere('customers.phone', 'like', '%' . $e164ForCount . '%');
                 }
             });
         }
@@ -83,11 +87,15 @@ class CustomerController extends Controller
         if ($request->filled('search')) {
             $search = $request->search;
             $digits = preg_replace('/\D/', '', $search);
+            $e164 = Customer::normalizePhoneE164($search);
 
-            $query->where(function ($q) use ($search, $digits) {
+            $query->where(function ($q) use ($search, $digits, $e164) {
                 $q->where('name', 'like', '%' . $search . '%');
                 if ($digits !== '') {
                     $q->orWhere('phone', 'like', '%' . $digits . '%');
+                }
+                if ($e164 !== '' && $e164 !== $digits) {
+                    $q->orWhere('phone', 'like', '%' . $e164 . '%');
                 }
             });
         }
@@ -283,16 +291,19 @@ class CustomerController extends Controller
         $normalizedBranch = Customer::normalizeBranchFilter($branch);
         $todayStart = now()->startOfDay();
         $cooldownCutoff = now()->subDays(Customer::RETENTION_COOLDOWN_DAYS);
-        $allCustomers = Customer::query()
-            ->when($normalizedBranch, fn ($q) => $q->forBranch($normalizedBranch))
-            ->get(['id', 'loyalty_points', 'last_retention_contacted_at']);
+
+        $customerBaseQuery = Customer::query()
+            ->when($normalizedBranch, fn ($q) => $q->forBranch($normalizedBranch));
+
+        $allCount = (clone $customerBaseQuery)->count();
 
         $branchCustomerLookup = $normalizedBranch
-            ? $allCustomers->pluck('id')->map(fn ($id) => (int) $id)->flip()
+            ? (clone $customerBaseQuery)->pluck('id')->map(fn ($id) => (int) $id)->flip()
             : null;
 
-        $cooldownCustomerIds = $allCustomers
-            ->filter(fn (Customer $c) => $c->last_retention_contacted_at !== null && $c->last_retention_contacted_at->gte($cooldownCutoff))
+        $cooldownCustomerIds = (clone $customerBaseQuery)
+            ->whereNotNull('last_retention_contacted_at')
+            ->where('last_retention_contacted_at', '>=', $cooldownCutoff)
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->flip();
@@ -408,8 +419,11 @@ class CustomerController extends Controller
 
         $bleedingVips = [];
 
-        foreach ($allCustomers as $customer) {
-            $cid = (int) $customer->id;
+        foreach ($completedStats as $rawCid => $stat) {
+            $cid = (int) $rawCid;
+            if ($branchCustomerLookup !== null && !$branchCustomerLookup->has($cid)) {
+                continue;
+            }
             if ($upcomingActiveCustomerIds->has($cid) || $cooldownCustomerIds->has($cid)) {
                 continue;
             }
@@ -418,16 +432,15 @@ class CustomerController extends Controller
                 continue;
             }
 
-            $stat = $completedStats->get($cid);
-            $completedCount = $stat ? (int) $stat->completed_count : 0;
-            $lastVisitAt = ($stat && $stat->last_visit) ? Carbon::parse($stat->last_visit) : null;
+            $completedCount = (int) $stat->completed_count;
+            $lastVisitAt = $stat->last_visit ? Carbon::parse($stat->last_visit) : null;
             $daysSinceLastVisit = $lastVisitAt
                 ? (int) floor(($todayStart->timestamp - $lastVisitAt->copy()->startOfDay()->timestamp) / 86400)
                 : null;
 
             $netLtv = $salesLtv->has($cid)
                 ? (float) $salesLtv->get($cid)
-                : ($stat ? (float) $stat->price_sum : 0.0);
+                : (float) $stat->price_sum;
 
             // Priority 3: bleeding_vips (2+ completed visits or Net LTV >= 500 QAR, > 45 days ago)
             if (($completedCount >= 2 || $netLtv >= 500) && $daysSinceLastVisit !== null && $daysSinceLastVisit > 45) {
@@ -436,7 +449,7 @@ class CustomerController extends Controller
         }
 
         return [
-            'all_count' => $allCustomers->count(),
+            'all_count' => $allCount,
             'due_for_refill' => array_keys($dueForRefillMap),
             'due_for_refill_details' => $dueForRefillDetails,
             'package_renewal' => array_keys($packageRenewalMap),
@@ -984,8 +997,7 @@ class CustomerController extends Controller
             $validated['branch'] = $submittedBranch;
         }
 
-        $rawDigits = preg_replace('/\D+/', '', (string) $validated['phone']);
-        $phoneCandidates = array_values(array_unique(array_filter([$validated['phone'], $rawDigits])));
+        $phoneCandidates = Customer::phoneMatchVariants($validated['phone']);
 
         $customer = Customer::whereIn('phone', $phoneCandidates)->first();
         if ($customer) {
@@ -1094,22 +1106,11 @@ class CustomerController extends Controller
     private function syncCustomerProfileAcrossModules(Customer $customer, ?string $previousPhone = null): void
     {
         $normalizedPhone = Customer::normalizePhone($customer->phone);
-        $rawDigits = preg_replace('/\D+/', '', (string) $customer->phone);
-        $prevNormalized = $previousPhone ? Customer::normalizePhone($previousPhone) : '';
-        $prevRawDigits = $previousPhone ? preg_replace('/\D+/', '', $previousPhone) : '';
 
-        $phoneCandidates = array_values(array_unique(array_filter([
-            (string) $customer->phone,
-            $normalizedPhone,
-            $rawDigits,
-            $normalizedPhone !== '' ? '+974' . $normalizedPhone : null,
-            $normalizedPhone !== '' ? '974' . $normalizedPhone : null,
-            $previousPhone,
-            $prevNormalized,
-            $prevRawDigits,
-            $prevNormalized !== '' ? '+974' . $prevNormalized : null,
-            $prevNormalized !== '' ? '974' . $prevNormalized : null,
-        ])));
+        $phoneCandidates = array_values(array_unique(array_merge(
+            Customer::phoneMatchVariants((string) $customer->phone),
+            $previousPhone ? Customer::phoneMatchVariants($previousPhone) : []
+        )));
 
         $canonicalPhone = $normalizedPhone !== '' ? $normalizedPhone : (string) $customer->phone;
 
@@ -1284,14 +1285,13 @@ class CustomerController extends Controller
 
         if ($q !== '') {
             $digits = preg_replace('/\D/', '', $q);
-            $normalizedDigits = Customer::normalizePhone($q);
-            $query->where(function ($sub) use ($q, $digits, $normalizedDigits) {
+            $normalizedE164 = Customer::normalizePhoneE164($q);
+            $normalizedBare = ltrim($normalizedE164, '+');
+            $normalizedLocal = Customer::normalizePhone($q);
+            $query->where(function ($sub) use ($q, $digits, $normalizedE164, $normalizedBare, $normalizedLocal) {
                 $sub->where('name', 'like', '%' . $q . '%');
-                if ($normalizedDigits !== '') {
-                    $sub->orWhere('phone', 'like', '%' . $normalizedDigits . '%');
-                }
-                if ($digits !== '' && $digits !== $normalizedDigits) {
-                    $sub->orWhere('phone', 'like', '%' . $digits . '%');
+                foreach (array_unique(array_filter([$normalizedE164, $normalizedBare, $normalizedLocal, $digits])) as $term) {
+                    $sub->orWhere('phone', 'like', '%' . $term . '%');
                 }
             });
         }

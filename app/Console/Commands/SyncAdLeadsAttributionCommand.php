@@ -62,7 +62,11 @@ class SyncAdLeadsAttributionCommand extends Command
             }
 
             if (!isset($canonicalByPhone[$norm])) {
-                if ($cust->phone !== $norm && !Customer::where('phone', $norm)->where('id', '!=', $cust->id)->exists()) {
+                if (
+                    !Customer::isCanonicalE164($cust->phone)
+                    && $cust->phone !== $norm
+                    && !Customer::where('phone', $norm)->where('id', '!=', $cust->id)->exists()
+                ) {
                     $cust->update(['phone' => $norm]);
                 }
                 $canonicalByPhone[$norm] = $cust;

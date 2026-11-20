@@ -165,6 +165,14 @@ class AdLeadEntry extends Model
             [$cc, $local] = Lead::splitPhone($digits);
             $normLead = Lead::normalizePhone($cc, $local);
 
+            foreach (Customer::phoneMatchVariants($rawStr) as $variant) {
+                $exactVariants[] = $variant;
+                $variantDigits = preg_replace('/\D+/', '', $variant);
+                if ($variantDigits !== '') {
+                    $strippedDigitsSet[] = $variantDigits;
+                }
+            }
+
             foreach ([$normCustomer, $normLead] as $norm) {
                 $norm = trim((string) $norm);
                 if ($norm === '') {
@@ -173,19 +181,22 @@ class AdLeadEntry extends Model
 
                 $canonicalPhones[] = $norm;
                 $exactVariants[] = $norm;
-                $strippedDigitsSet[] = $norm;
+                $normDigits = preg_replace('/\D+/', '', $norm);
+                if ($normDigits !== '') {
+                    $strippedDigitsSet[] = $normDigits;
+                }
 
-                if (strlen($norm) === 8) {
-                    $exactVariants[] = '974' . $norm;
-                    $exactVariants[] = '+974' . $norm;
-                    $exactVariants[] = '00974' . $norm;
-                    $exactVariants[] = '0' . $norm;
+                if (strlen($normDigits) === 8) {
+                    $exactVariants[] = '974' . $normDigits;
+                    $exactVariants[] = '+974' . $normDigits;
+                    $exactVariants[] = '00974' . $normDigits;
+                    $exactVariants[] = '0' . $normDigits;
 
-                    $strippedDigitsSet[] = '974' . $norm;
-                    $strippedDigitsSet[] = '00974' . $norm;
-                    $strippedDigitsSet[] = '0' . $norm;
-                    $strippedDigitsSet[] = '9740' . $norm;
-                    $strippedDigitsSet[] = '009740' . $norm;
+                    $strippedDigitsSet[] = '974' . $normDigits;
+                    $strippedDigitsSet[] = '00974' . $normDigits;
+                    $strippedDigitsSet[] = '0' . $normDigits;
+                    $strippedDigitsSet[] = '9740' . $normDigits;
+                    $strippedDigitsSet[] = '009740' . $normDigits;
                 }
             }
         }
@@ -278,7 +289,8 @@ class AdLeadEntry extends Model
 
         $updates = [];
         if (
-            $canonical->phone !== $canonicalPhone
+            !Customer::isCanonicalE164($canonical->phone)
+            && $canonical->phone !== $canonicalPhone
             && !Customer::where('phone', $canonicalPhone)->where('id', '!=', $canonical->id)->exists()
         ) {
             $updates['phone'] = $canonicalPhone;

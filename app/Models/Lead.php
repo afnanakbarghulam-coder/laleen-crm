@@ -459,7 +459,7 @@ class Lead extends Model
         }
 
         if ($this->phone) {
-            return Customer::where('phone', $this->phone)->value('name');
+            return Customer::whereIn('phone', Customer::phoneMatchVariants($this->phone))->value('name');
         }
 
         return null;
@@ -518,10 +518,7 @@ class Lead extends Model
             }
         }
 
-        $phoneCandidates = array_values(array_unique(array_filter([
-            $this->phone,
-            Customer::normalizePhone((string) $this->phone),
-        ])));
+        $phoneCandidates = Customer::phoneMatchVariants((string) $this->phone);
 
         $customerIds = array_values(array_unique(array_filter([
             $this->customer_id,

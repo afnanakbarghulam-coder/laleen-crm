@@ -31,6 +31,8 @@ class Customer extends Model
         'phone',
         'email',
         'branch',
+        'status',
+        'import_source',
         'notes',
         'allergies',
         'loyalty_points',
@@ -220,9 +222,7 @@ class Customer extends Model
         $customer = $customerId ? self::find($customerId) : null;
 
         if (!$customer && $phone !== null && trim($phone) !== '') {
-            $normPhone = self::normalizePhone($phone);
-            $digits = preg_replace('/\D+/', '', $phone);
-            $candidates = array_values(array_unique(array_filter([$normPhone, $digits, trim($phone)])));
+            $candidates = self::phoneMatchVariants($phone);
             if (!empty($candidates)) {
                 $customer = self::whereIn('phone', $candidates)->first();
             }
@@ -505,10 +505,10 @@ class Customer extends Model
     }
 
     /**
-     * Normalize any phone input into the standard digits-only format via
-     * Lead::splitPhone() and Lead::normalizePhone() so local 8-digit Qatar
-     * numbers ('55123456') and international variants ('+974 5512 3456',
-     * '97455123456') resolve to the exact same canonical phone string.
+     * Normalize any phone input into the standard CRM matching key (8-digit local
+     * for Qatar '55123456', bare digits with country code for international
+     * '918010267487') so Leads, Ad Leads, Appointments, and E.164 Customer
+     * records resolve to the exact same canonical identity.
      */
     public static function normalizePhone(?string $phone): string
     {
@@ -527,6 +527,107 @@ class Customer extends Model
         [$countryCode, $localNumber] = Lead::splitPhone($raw);
 
         return Lead::normalizePhone($countryCode, $localNumber);
+    }
+
+    /**
+     * Normalize any phone input into unified E.164 storage format with leading '+':
+     * - Qatar numbers (8-digit local '66485627', '066485627', '97466523384', '+974 6652 3384', '0097466523384')
+     *   all normalize to '+974XXXXXXXX'.
+     * - International numbers ('918010267487', '+91 80102 67487', '00447985461109', '923423670034')
+     *   all normalize to '+<country_code><number>'.
+     */
+    public static function normalizePhoneE164(?string $phone): string
+    {
+        $raw = preg_replace('/\D+/', '', (string) $phone);
+        if ($raw === '') {
+            return '';
+        }
+
+        if (str_starts_with($raw, '00')) {
+            $raw = preg_replace('/^00+/', '', $raw);
+        }
+
+        if ($raw === '') {
+            return '';
+        }
+
+        if (preg_match('/^9740*(\d{8})$/', $raw, $m)) {
+            return '+974' . $m[1];
+        }
+
+        if (preg_match('/^0*(\d{8})$/', $raw, $m)) {
+            return '+974' . $m[1];
+        }
+
+        $cleaned = ltrim($raw, '0');
+        if ($cleaned === '') {
+            return '';
+        }
+
+        return '+' . $cleaned;
+    }
+
+    /**
+     * Whether a stored phone string is already in canonical E.164 format (+974XXXXXXXX / +<cc><number>).
+     */
+    public static function isCanonicalE164(?string $phone): bool
+    {
+        $trimmed = trim((string) $phone);
+        if ($trimmed === '' || !str_starts_with($trimmed, '+')) {
+            return false;
+        }
+
+        return $trimmed === self::normalizePhoneE164($trimmed);
+    }
+
+    /**
+     * Strip '+' and non-digits for wa.me/ deep links while preserving country code.
+     */
+    public static function whatsappDigits(?string $phone): string
+    {
+        $e164 = self::normalizePhoneE164($phone);
+
+        return ltrim($e164, '+');
+    }
+
+    /**
+     * Return all exact stored phone variants (E.164 with '+', bare digits without '+',
+     * 8-digit Qatar local, and 00-prefixed forms) for duplicate-free DB lookups across
+     * normalized and legacy rows.
+     *
+     * @return list<string>
+     */
+    public static function phoneMatchVariants(?string $phone): array
+    {
+        $trimmed = trim((string) $phone);
+        $digits = preg_replace('/\D+/', '', $trimmed);
+        $e164 = self::normalizePhoneE164($trimmed);
+
+        $variants = [];
+        if ($trimmed !== '') {
+            $variants[] = $trimmed;
+        }
+        if ($digits !== '') {
+            $variants[] = $digits;
+        }
+        if ($e164 !== '') {
+            $variants[] = $e164;
+            $bare = ltrim($e164, '+');
+            $variants[] = $bare;
+            $variants[] = '00' . $bare;
+
+            if (preg_match('/^\+974(\d{8})$/', $e164, $m)) {
+                $local8 = $m[1];
+                $variants[] = $local8;
+                $variants[] = '0' . $local8;
+                $variants[] = '974' . $local8;
+                $variants[] = '9740' . $local8;
+                $variants[] = '00974' . $local8;
+                $variants[] = '009740' . $local8;
+            }
+        }
+
+        return array_values(array_unique(array_filter($variants, fn ($v) => $v !== '')));
     }
 
     /**

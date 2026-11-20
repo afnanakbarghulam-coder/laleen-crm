@@ -10,6 +10,7 @@
 /storage/framework/sessions
 /storage/framework/testing
 /storage/framework/views
+/storage/app/imports/
 /vendor
 .env
 /env
