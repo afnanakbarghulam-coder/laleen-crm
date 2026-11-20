@@ -419,7 +419,7 @@ class ServicesProductsKpisDashboardWave5Test extends TestCase
         $expectedPhone = Customer::normalizePhone('+974 7712 3456');
         $this->assertSame($expectedPhone, $adEntry->phone);
 
-        $syncedCustomer = Customer::where('phone', $expectedPhone)->first();
+        $syncedCustomer = Customer::where('phone', Customer::normalizePhoneE164('+974 7712 3456'))->first();
         $this->assertNotNull($syncedCustomer);
 
         $syncedLead = Lead::where('phone', $expectedPhone)->first();

@@ -51,73 +51,126 @@ class SyncAdLeadsAttributionCommand extends Command
         $repairedAppointments = 0;
         $repairedSales = 0;
 
-        // 1. Build canonical Customer map by normalized 8-digit Qatar phone & normalize legacy Customer phone strings where safe
+        // 1. Build canonical Customer map by normalized phone using chunkById(500) to avoid hydrating 11k+ models in RAM.
+        //    Prefer canonical E.164 phones (+974XXXXXXXX / +<cc><number>) over legacy 8-digit strings.
+        /** @var array<string, array{id: int, phone: string, name: string, is_e164: bool}> $canonicalByPhone */
         $canonicalByPhone = [];
         $duplicateToCanonicalId = [];
+        $seenE164Phones = [];
 
-        foreach (Customer::orderBy('id')->get() as $cust) {
-            $norm = Customer::normalizePhone($cust->phone);
-            if ($norm === '') {
-                continue;
-            }
+        Customer::query()
+            ->select(['id', 'phone'])
+            ->orderBy('id')
+            ->chunkById(500, function ($customers) use (&$seenE164Phones) {
+                foreach ($customers as $cust) {
+                    $p = trim((string) $cust->phone);
+                    if ($p !== '' && Customer::isCanonicalE164($p)) {
+                        $seenE164Phones[$p] = (int) $cust->id;
+                    }
+                }
+            });
 
-            if (!isset($canonicalByPhone[$norm])) {
-                if (
-                    !Customer::isCanonicalE164($cust->phone)
-                    && $cust->phone !== $norm
-                    && !Customer::where('phone', $norm)->where('id', '!=', $cust->id)->exists()
-                ) {
-                    $cust->update(['phone' => $norm]);
+        Customer::query()
+            ->select(['id', 'phone', 'name'])
+            ->orderBy('id')
+            ->chunkById(500, function ($customers) use (&$canonicalByPhone, &$duplicateToCanonicalId, &$seenE164Phones) {
+                foreach ($customers as $cust) {
+                    $norm = Customer::normalizePhone($cust->phone);
+                    if ($norm === '') {
+                        continue;
+                    }
+
+                    $e164 = Customer::normalizePhoneE164($cust->phone);
+                    $storedPhone = (string) $cust->phone;
+                    $isE164 = Customer::isCanonicalE164($storedPhone);
+
+                    if (!isset($canonicalByPhone[$norm])) {
+                        if (
+                            $e164 !== ''
+                            && !$isE164
+                            && !isset($seenE164Phones[$e164])
+                        ) {
+                            Customer::where('id', $cust->id)->update(['phone' => $e164]);
+                            $storedPhone = $e164;
+                            $isE164 = true;
+                            $seenE164Phones[$e164] = (int) $cust->id;
+                        }
+
+                        $canonicalByPhone[$norm] = [
+                            'id' => (int) $cust->id,
+                            'phone' => $storedPhone,
+                            'name' => (string) ($cust->name ?? ''),
+                            'is_e164' => $isE164,
+                        ];
+                    } else {
+                        $currentCanonical = $canonicalByPhone[$norm];
+                        $preferNew = ($e164 !== '' && $storedPhone === $e164 && $currentCanonical['phone'] !== $e164)
+                            || ($isE164 && !$currentCanonical['is_e164']);
+
+                        if ($preferNew) {
+                            $duplicateToCanonicalId[$currentCanonical['id']] = (int) $cust->id;
+                            $canonicalByPhone[$norm] = [
+                                'id' => (int) $cust->id,
+                                'phone' => $storedPhone,
+                                'name' => (string) ($cust->name ?? ''),
+                                'is_e164' => $isE164,
+                            ];
+                        } else {
+                            $duplicateToCanonicalId[(int) $cust->id] = $currentCanonical['id'];
+                        }
+                    }
                 }
-                $canonicalByPhone[$norm] = $cust;
-            } else {
-                // If this duplicate holds the exact normalized string while the earlier one didn't, prefer the exact normalized one
-                $currentCanonical = $canonicalByPhone[$norm];
-                if ($cust->phone === $norm && $currentCanonical->phone !== $norm) {
-                    $duplicateToCanonicalId[$currentCanonical->id] = $cust->id;
-                    $canonicalByPhone[$norm] = $cust;
-                } else {
-                    $duplicateToCanonicalId[$cust->id] = $currentCanonical->id;
-                }
-            }
-        }
+            });
 
         // 2. Repair ad_lead_entries customer_id & normalized phone
+        //    When --month is specified, include prior-month leads within the 14-day spillover window.
+        $leadWindowStart = $monthStart ? $monthStart->copy()->subDays(AdLeadEntry::SPILLOVER_DAYS)->startOfDay() : null;
+        $apptWindowEnd = $monthEnd ? $monthEnd->copy()->addDays(AdLeadEntry::SPILLOVER_DAYS)->endOfDay() : null;
+
         $entriesQuery = AdLeadEntry::query()->orderBy('date')->orderBy('id');
-        if ($monthStart && $monthEnd) {
-            $entriesQuery->whereBetween('date', [$monthStart, $monthEnd]);
+        if ($leadWindowStart && $monthEnd) {
+            $entriesQuery->whereBetween('date', [$leadWindowStart, $monthEnd]);
         }
         $entries = $entriesQuery->get();
 
         foreach ($entries as $entry) {
             $normPhone = Customer::normalizePhone($entry->phone ?: $entry->customer?->phone);
-            $canonicalCustomer = null;
+            $canonicalCustomerId = null;
 
             if ($normPhone !== '' && isset($canonicalByPhone[$normPhone])) {
-                $canonicalCustomer = $canonicalByPhone[$normPhone];
-                $existingNameLower = strtolower(trim((string) $canonicalCustomer->name));
+                $canonicalCustomerId = $canonicalByPhone[$normPhone]['id'];
+                $existingNameLower = strtolower(trim($canonicalByPhone[$normPhone]['name']));
                 $entryName = trim((string) $entry->customer_name);
                 if (
                     $entryName !== ''
                     && strtolower($entryName) !== 'ad lead client'
                     && ($existingNameLower === '' || $existingNameLower === 'walk-in' || $existingNameLower === 'ad lead client')
                 ) {
-                    $canonicalCustomer->update(['name' => $entryName]);
+                    Customer::where('id', $canonicalCustomerId)->update(['name' => $entryName]);
+                    $canonicalByPhone[$normPhone]['name'] = $entryName;
                 }
             } elseif ($normPhone !== '' || $entry->customer_id) {
-                $canonicalCustomer = AdLeadEntry::resolveOrCreateCanonicalCustomer(
+                $resolved = AdLeadEntry::resolveOrCreateCanonicalCustomer(
                     rawPhone: $entry->phone,
                     customerName: $entry->customer_name,
                     hintCustomer: $entry->customer_id ? Customer::find($entry->customer_id) : null
                 );
-                if ($canonicalCustomer && $normPhone !== '') {
-                    $canonicalByPhone[$normPhone] = $canonicalCustomer;
+                if ($resolved) {
+                    $canonicalCustomerId = (int) $resolved->id;
+                    if ($normPhone !== '') {
+                        $canonicalByPhone[$normPhone] = [
+                            'id' => (int) $resolved->id,
+                            'phone' => (string) $resolved->phone,
+                            'name' => (string) ($resolved->name ?? ''),
+                            'is_e164' => Customer::isCanonicalE164($resolved->phone),
+                        ];
+                    }
                 }
             }
 
             $entryUpdates = [];
-            if ($canonicalCustomer && Schema::hasColumn('ad_lead_entries', 'customer_id') && (int) $entry->customer_id !== (int) $canonicalCustomer->id) {
-                $entryUpdates['customer_id'] = $canonicalCustomer->id;
+            if ($canonicalCustomerId && Schema::hasColumn('ad_lead_entries', 'customer_id') && (int) $entry->customer_id !== $canonicalCustomerId) {
+                $entryUpdates['customer_id'] = $canonicalCustomerId;
             }
             if ($normPhone !== '' && $entry->phone !== $normPhone) {
                 $entryUpdates['phone'] = $normPhone;
@@ -129,79 +182,88 @@ class SyncAdLeadsAttributionCommand extends Command
             }
         }
 
-        // 3. Repair appointments customer_id links (matching +974 / spaced / 8-digit phone variants & consolidating duplicate customers)
+        // 3. Repair appointments customer_id links (including 14-day spillover range when --month is set)
         if (Schema::hasTable('appointments') && Schema::hasColumn('appointments', 'customer_id')) {
-            $appointmentsQuery = Appointment::query();
-            if ($monthStart && $monthEnd) {
-                $appointmentsQuery->where(function ($q) use ($monthStart, $monthEnd) {
-                    $q->whereBetween('appointment_datetime', [$monthStart, $monthEnd])
-                        ->orWhere(function ($sq) use ($monthStart, $monthEnd) {
+            $appointmentsQuery = Appointment::query()->orderBy('id');
+            if ($leadWindowStart && $apptWindowEnd) {
+                $appointmentsQuery->where(function ($q) use ($leadWindowStart, $apptWindowEnd) {
+                    $q->whereBetween('appointment_datetime', [$leadWindowStart, $apptWindowEnd])
+                        ->orWhere(function ($sq) use ($leadWindowStart, $apptWindowEnd) {
                             $sq->whereNull('appointment_datetime')
-                                ->whereBetween('booking_date', [$monthStart->toDateString(), $monthEnd->toDateString()]);
+                                ->whereBetween('booking_date', [$leadWindowStart->toDateString(), $apptWindowEnd->toDateString()]);
                         });
                 });
             }
 
-            foreach ($appointmentsQuery->get() as $appt) {
-                $targetCustomerId = null;
+            $appointmentsQuery->chunkById(500, function ($appointments) use (&$canonicalByPhone, $duplicateToCanonicalId, &$repairedAppointments) {
+                foreach ($appointments as $appt) {
+                    $targetCustomerId = null;
 
-                if ($appt->customer_id && isset($duplicateToCanonicalId[(int) $appt->customer_id])) {
-                    $targetCustomerId = $duplicateToCanonicalId[(int) $appt->customer_id];
-                } elseif (!$appt->customer_id) {
-                    $normApptPhone = Customer::normalizePhone($appt->phone);
-                    if ($normApptPhone !== '') {
-                        if (!isset($canonicalByPhone[$normApptPhone])) {
-                            $resolved = AdLeadEntry::resolveOrCreateCanonicalCustomer($appt->phone, $appt->customer_name);
-                            if ($resolved) {
-                                $canonicalByPhone[$normApptPhone] = $resolved;
+                    if ($appt->customer_id && isset($duplicateToCanonicalId[(int) $appt->customer_id])) {
+                        $targetCustomerId = $duplicateToCanonicalId[(int) $appt->customer_id];
+                    } elseif (!$appt->customer_id) {
+                        $normApptPhone = Customer::normalizePhone($appt->phone);
+                        if ($normApptPhone !== '') {
+                            if (!isset($canonicalByPhone[$normApptPhone])) {
+                                $resolved = AdLeadEntry::resolveOrCreateCanonicalCustomer($appt->phone, $appt->customer_name);
+                                if ($resolved) {
+                                    $canonicalByPhone[$normApptPhone] = [
+                                        'id' => (int) $resolved->id,
+                                        'phone' => (string) $resolved->phone,
+                                        'name' => (string) ($resolved->name ?? ''),
+                                        'is_e164' => Customer::isCanonicalE164($resolved->phone),
+                                    ];
+                                }
                             }
+                            $targetCustomerId = $canonicalByPhone[$normApptPhone]['id'] ?? null;
                         }
-                        $targetCustomerId = $canonicalByPhone[$normApptPhone]->id ?? null;
+                    }
+
+                    if ($targetCustomerId && (int) $appt->customer_id !== (int) $targetCustomerId) {
+                        $appt->update(['customer_id' => $targetCustomerId]);
+                        $repairedAppointments++;
                     }
                 }
-
-                if ($targetCustomerId && (int) $appt->customer_id !== (int) $targetCustomerId) {
-                    $appt->update(['customer_id' => $targetCustomerId]);
-                    $repairedAppointments++;
-                }
-            }
+            });
         }
 
         // 4. Repair sales customer_id links (from linked Appointment or duplicate Customer mapping)
         if (Schema::hasTable('sales') && Schema::hasColumn('sales', 'customer_id')) {
-            $salesQuery = Sale::with('appointment');
-            if ($monthStart && $monthEnd) {
-                $salesQuery->where(function ($q) use ($monthStart, $monthEnd) {
-                    $q->whereBetween('created_at', [$monthStart, $monthEnd])
-                        ->orWhereHas('appointment', function ($aq) use ($monthStart, $monthEnd) {
-                            $aq->whereBetween('appointment_datetime', [$monthStart, $monthEnd])
-                                ->orWhereBetween('booking_date', [$monthStart->toDateString(), $monthEnd->toDateString()]);
+            $salesQuery = Sale::with('appointment')->orderBy('id');
+            if ($leadWindowStart && $apptWindowEnd) {
+                $salesQuery->where(function ($q) use ($leadWindowStart, $apptWindowEnd) {
+                    $q->whereBetween('created_at', [$leadWindowStart, $apptWindowEnd])
+                        ->orWhereHas('appointment', function ($aq) use ($leadWindowStart, $apptWindowEnd) {
+                            $aq->whereBetween('appointment_datetime', [$leadWindowStart, $apptWindowEnd])
+                                ->orWhereBetween('booking_date', [$leadWindowStart->toDateString(), $apptWindowEnd->toDateString()]);
                         });
                 });
             }
 
-            foreach ($salesQuery->get() as $sale) {
-                $targetCustomerId = null;
+            $salesQuery->chunkById(500, function ($sales) use ($canonicalByPhone, $duplicateToCanonicalId, &$repairedSales) {
+                foreach ($sales as $sale) {
+                    $targetCustomerId = null;
 
-                if ($sale->customer_id && isset($duplicateToCanonicalId[(int) $sale->customer_id])) {
-                    $targetCustomerId = $duplicateToCanonicalId[(int) $sale->customer_id];
-                } elseif (!$sale->customer_id && $sale->appointment) {
-                    if ($sale->appointment->customer_id) {
-                        $apptCustId = (int) $sale->appointment->customer_id;
-                        $targetCustomerId = $duplicateToCanonicalId[$apptCustId] ?? $apptCustId;
-                    } else {
-                        $normSalePhone = Customer::normalizePhone($sale->appointment->phone);
-                        if ($normSalePhone !== '' && isset($canonicalByPhone[$normSalePhone])) {
-                            $targetCustomerId = $canonicalByPhone[$normSalePhone]->id;
+                    if ($sale->customer_id && isset($duplicateToCanonicalId[(int) $sale->customer_id])) {
+                        $targetCustomerId = $duplicateToCanonicalId[(int) $sale->customer_id];
+                    } elseif (!$sale->customer_id && $sale->appointment) {
+                        if ($sale->appointment->customer_id) {
+                            $apptCustId = (int) $sale->appointment->customer_id;
+                            $targetCustomerId = $duplicateToCanonicalId[$apptCustId] ?? $apptCustId;
+                        } else {
+                            $normSalePhone = Customer::normalizePhone($sale->appointment->phone);
+                            if ($normSalePhone !== '' && isset($canonicalByPhone[$normSalePhone])) {
+                                $targetCustomerId = $canonicalByPhone[$normSalePhone]['id'];
+                            }
                         }
                     }
-                }
 
-                if ($targetCustomerId && (int) $sale->customer_id !== (int) $targetCustomerId) {
-                    $sale->update(['customer_id' => $targetCustomerId]);
-                    $repairedSales++;
+                    if ($targetCustomerId && (int) $sale->customer_id !== (int) $targetCustomerId) {
+                        $sale->update(['customer_id' => $targetCustomerId]);
+                        $repairedSales++;
+                    }
                 }
-            }
+            });
         }
 
         // Also consolidate duplicate customer_id pointers on leads if present
@@ -211,7 +273,7 @@ class SyncAdLeadsAttributionCommand extends Command
             }
         }
 
-        // 5. Re-sync same-month customer revenue across all target AdLeadEntry cohorts
+        // 5. Re-sync Enhanced Calendar booking attribution across all target AdLeadEntry cohorts
         $syncedCohortKeys = [];
         foreach ($entries->fresh() as $entry) {
             $entryMonth = Carbon::parse($entry->date)->format('Y-m');

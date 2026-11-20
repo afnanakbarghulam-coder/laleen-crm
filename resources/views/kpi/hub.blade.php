@@ -38,7 +38,6 @@
         $adConv = (float) ($ayan['ad_conversion_pct'] ?? 0);
         $adConvBarPct = (float) ($ayan['ad_conversion_achievement_pct'] ?? min(100.0, ($adConv / 20.0) * 100));
         $adConvPass = $adConv >= 20.0;
-        $pipelineScheduledLeads = (int) ($ayan['pipeline_booked_ad_leads'] ?? 0);
 
         $ayanOversightPct = (float) ($ayan['social_oversight_pct'] ?? 0);
         $ayanOversightPass = !empty($ayan['social_oversight_passing']);
@@ -640,7 +639,7 @@
                 </div>
 
                 <div class="luxe-card-delta">
-                    Target: <span class="{{ $adConvPass ? 'hl-emerald' : 'hl-ruby' }}">&ge; 20.0%</span> paid ({{ $ayan['booked_ad_leads'] ?? 0 }}/{{ $ayan['total_ad_leads'] ?? 0 }})@if($pipelineScheduledLeads > 0) &bull; <span class="hl-champagne">{{ $pipelineScheduledLeads }} scheduled on calendar</span>@endif
+                    Target: <span class="{{ $adConvPass ? 'hl-emerald' : 'hl-ruby' }}">&ge; 20.0%</span> booked ({{ $ayan['booked_ad_leads'] ?? 0 }}/{{ $ayan['total_ad_leads'] ?? 0 }})
                 </div>
 
                 <div class="luxe-card-viz viz-bar">

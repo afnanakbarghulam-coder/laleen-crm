@@ -187,7 +187,7 @@
             <div class="laleen-slim-kpi">
                 <span class="laleen-slim-kpi-label">Booked Visits</span>
                 <div class="laleen-slim-kpi-val">{{ number_format($analyticsTotals['total_bookings']) }}</div>
-                <div class="laleen-slim-kpi-sub">Paid / verified conversions</div>
+                <div class="laleen-slim-kpi-sub">Enhanced Calendar bookings</div>
             </div>
         </div>
 

@@ -257,7 +257,7 @@ class LadenKpiPipelineAuditFixesTest extends TestCase
         $this->assertNotNull($adEntry->customer_id);
         $this->assertNull($adEntry->lead_id);
         $sharedCustomer = Customer::findOrFail($adEntry->customer_id);
-        $this->assertSame('55441234', $sharedCustomer->phone);
+        $this->assertSame('+97455441234', $sharedCustomer->phone);
 
         // Update AdLeadEntry -> still 0 rows in `leads`
         $this->actingAs($this->admin)

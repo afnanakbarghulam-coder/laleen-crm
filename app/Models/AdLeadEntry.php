@@ -80,25 +80,46 @@ class AdLeadEntry extends Model
     }
 
     /**
-     * Legacy constant retained for backward compatibility; attribution now strictly
-     * enforces same-calendar-month boundaries [entry.date, endOfMonth(entry.date)].
+     * Rolling spillover days past `entry.date` when a lead arrives near month-end.
+     * Window end is `max(endOfMonth(entry.date), entry.date + SPILLOVER_DAYS)`.
+     */
+    public const SPILLOVER_DAYS = 14;
+
+    /**
+     * Legacy constant retained for backward compatibility; attribution now enforces
+     * same-month + 14-day rolling spillover via attributionWindowFor().
      */
     public const ATTRIBUTION_WINDOW_DAYS = 30;
 
     /**
-     * A lead is ONLY counted as booked/converted once it has a valid branch
-     * AND a positive paid ticket_amount (> 0) from a completed/paid sale.
+     * Compute the inclusive attribution window [windowStart, windowEnd] for an AdLeadEntry date:
+     * start = entry.date, end = max(endOfMonth(entry.date), entry.date + 14 days).
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    public static function attributionWindowFor(Carbon|string $entryDate): array
+    {
+        $start = ($entryDate instanceof Carbon ? $entryDate->copy() : Carbon::parse($entryDate))->startOfDay();
+        $endOfMonth = $start->copy()->endOfMonth()->startOfDay();
+        $rollingEnd = $start->copy()->addDays(self::SPILLOVER_DAYS)->startOfDay();
+        $end = $rollingEnd->greaterThan($endOfMonth) ? $rollingEnd : $endOfMonth;
+
+        return [$start, $end];
+    }
+
+    /**
+     * A lead is counted as booked/converted whenever it has a valid assigned branch
+     * from an active Enhanced Calendar appointment — including 0 QAR ("Decide in Salon") bookings.
      */
     public function isBooked(): bool
     {
-        return in_array($this->branch, array_keys(self::BRANCHES), true)
-            && (float) $this->ticket_amount > 0;
+        return in_array($this->branch, array_keys(self::BRANCHES), true);
     }
 
     /**
      * Return exact attributed net revenue for a specific branch ('old_airport' or 'wakrah'),
-     * supporting dual-branch visits in the same month while falling back to branch/ticket_amount
-     * when legacy/manual rows do not have explicit per-branch split columns populated.
+     * supporting dual-branch visits in the same attribution window while falling back to branch/ticket_amount
+     * when legacy rows do not have explicit per-branch split columns populated.
      */
     public function branchRevenue(string $branch): float
     {
@@ -120,11 +141,11 @@ class AdLeadEntry extends Model
     }
 
     /**
-     * True when this entry has positive attributed paid revenue at the given branch.
+     * True when this entry is booked at the given branch or has positive attributed revenue at it.
      */
     public function hasBranchConversion(string $branch): bool
     {
-        return $this->branchRevenue($branch) > 0;
+        return $this->isBooked() && ($this->branch === $branch || $this->branchRevenue($branch) > 0);
     }
 
     /**
@@ -238,7 +259,9 @@ class AdLeadEntry extends Model
 
     /**
      * Resolve or create the single canonical Customer profile for a phone number,
-     * normalizing Qatar +974 / 974 / 00974 / spaced / dashed phones to the 8-digit local number.
+     * storing new and upgraded `customers.phone` values in canonical E.164 format
+     * (+974XXXXXXXX for Qatar, +<cc><number> for international) and preferring E.164 rows
+     * over legacy 8-digit rows when duplicates exist.
      */
     public static function resolveOrCreateCanonicalCustomer(
         ?string $rawPhone,
@@ -250,19 +273,22 @@ class AdLeadEntry extends Model
         }
 
         $effectiveRaw = trim((string) ($rawPhone ?: $hintCustomer?->phone));
-        $canonicalPhone = Customer::normalizePhone($effectiveRaw);
+        $e164Phone = Customer::normalizePhoneE164($effectiveRaw);
+        $matchPhone = Customer::normalizePhone($effectiveRaw);
+        $storagePhone = $e164Phone !== '' ? $e164Phone : $matchPhone;
 
-        if ($canonicalPhone === '' && $hintCustomer) {
+        if ($storagePhone === '' && $hintCustomer) {
             return $hintCustomer;
         }
 
-        if ($canonicalPhone === '') {
+        if ($storagePhone === '') {
             return null;
         }
 
         [, $exactVariants, $strippedDigits] = self::buildPhoneLookupSets([
             $effectiveRaw,
-            $canonicalPhone,
+            $e164Phone,
+            $matchPhone,
             $hintCustomer?->phone,
         ]);
 
@@ -276,24 +302,28 @@ class AdLeadEntry extends Model
             ->orderBy('id')
             ->get();
 
-        // Prefer the Customer row already holding the canonical 8-digit phone; else earliest Customer record
-        $canonical = $matches->firstWhere('phone', $canonicalPhone) ?: $matches->first();
+        // Prefer a Customer row already holding canonical E.164 phone; fall back to normalized match, then earliest row
+        $canonical = ($e164Phone !== '' ? $matches->firstWhere('phone', $e164Phone) : null)
+            ?: $matches->first(fn (Customer $c) => Customer::isCanonicalE164($c->phone))
+            ?: ($matchPhone !== '' ? $matches->firstWhere('phone', $matchPhone) : null)
+            ?: $matches->first();
         $cleanName = trim((string) $customerName);
 
         if (!$canonical) {
             return Customer::create([
-                'phone' => $canonicalPhone,
+                'phone' => $storagePhone,
                 'name' => $cleanName !== '' ? $cleanName : 'Ad Lead Client',
             ]);
         }
 
         $updates = [];
         if (
-            !Customer::isCanonicalE164($canonical->phone)
-            && $canonical->phone !== $canonicalPhone
-            && !Customer::where('phone', $canonicalPhone)->where('id', '!=', $canonical->id)->exists()
+            $e164Phone !== ''
+            && !Customer::isCanonicalE164($canonical->phone)
+            && $canonical->phone !== $e164Phone
+            && !Customer::where('phone', $e164Phone)->where('id', '!=', $canonical->id)->exists()
         ) {
-            $updates['phone'] = $canonicalPhone;
+            $updates['phone'] = $e164Phone;
         }
 
         $existingNameLower = strtolower(trim((string) $canonical->name));
@@ -344,7 +374,8 @@ class AdLeadEntry extends Model
     }
 
     /**
-     * Return a real non-cancelled / non-no-show Appointment for this client in the same month if one exists.
+     * Return a real non-cancelled / non-no-show Appointment for this client within
+     * the entry's attribution window [entry.date, max(endOfMonth(entry.date), entry.date + 14 days)].
      */
     public function resolveVerifiedAppointment(): ?Appointment
     {
@@ -357,9 +388,9 @@ class AdLeadEntry extends Model
             return null;
         }
 
-        $entryDate = $this->date ? Carbon::parse($this->date) : today();
-        $minDateStr = $entryDate->toDateString();
-        $maxDateStr = $entryDate->copy()->endOfMonth()->toDateString();
+        [$windowStart, $windowEnd] = self::attributionWindowFor($this->date ?: today());
+        $minDateStr = $windowStart->toDateString();
+        $maxDateStr = $windowEnd->toDateString();
 
         $appointments = Appointment::query()
             ->whereNotIn('status', ['cancelled', 'no_show'])
@@ -385,67 +416,12 @@ class AdLeadEntry extends Model
     }
 
     /**
-     * True ONLY if the client has a real non-cancelled/non-no-show Appointment
-     * OR a verified paid Sale record in the same calendar month on or after $this->date.
+     * True ONLY if the client has an active Enhanced Calendar Appointment (not cancelled/no_show)
+     * within this entry's attribution window.
      */
     public function hasVerifiedCustomerConversion(): bool
     {
-        if ($this->resolveVerifiedAppointment() !== null) {
-            return true;
-        }
-
-        [$customerIds, $phoneCandidates, $strippedDigits] = $this->resolveIdentityCohort();
-        if ((empty($customerIds) && empty($phoneCandidates) && empty($strippedDigits)) || !Schema::hasTable('sales')) {
-            return false;
-        }
-
-        $entryDate = $this->date ? Carbon::parse($this->date) : today();
-        $minDateStr = $entryDate->toDateString();
-        $maxDateStr = $entryDate->copy()->endOfMonth()->toDateString();
-
-        $appointmentIds = [];
-        if (Schema::hasTable('appointments')) {
-            $appointmentIds = Appointment::query()
-                ->whereNotIn('status', ['cancelled', 'no_show'])
-                ->where(function ($q) use ($customerIds, $phoneCandidates, $strippedDigits) {
-                    if (!empty($customerIds)) {
-                        $q->orWhereIn('customer_id', $customerIds);
-                    }
-                    self::applyPhoneCohortClause($q, $phoneCandidates, $strippedDigits, 'or', 'phone');
-                })
-                ->pluck('id')
-                ->all();
-        }
-
-        if (empty($customerIds) && empty($appointmentIds)) {
-            return false;
-        }
-
-        $sales = Sale::with('appointment')
-            ->where(function ($q) use ($customerIds, $appointmentIds) {
-                if (!empty($customerIds)) {
-                    $q->orWhereIn('customer_id', $customerIds);
-                }
-                if (!empty($appointmentIds)) {
-                    $q->orWhereIn('appointment_id', $appointmentIds);
-                }
-            })
-            ->get();
-
-        foreach ($sales as $sale) {
-            if ($sale->appointment && in_array(strtolower((string) $sale->appointment->status), ['cancelled', 'no_show'], true)) {
-                continue;
-            }
-            $saleDateStr = self::resolveSaleDate($sale)->toDateString();
-            if ($saleDateStr < $minDateStr || $saleDateStr > $maxDateStr) {
-                continue;
-            }
-            if (self::netSaleAmount($sale) > 0) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->resolveVerifiedAppointment() !== null;
     }
 
     public static function resolveCategoryFromLead(Lead $lead): string
@@ -533,11 +509,14 @@ class AdLeadEntry extends Model
 
     /**
      * Synchronize AdLeadEntry attribution for a client cohort using:
-     * - Canonical Customer Profile bridge (8-digit normalized Qatar phone across +974/974/00974/spaces/dashes)
-     * - Strict same-calendar-month attribution window: [entry.date, endOfMonth(entry.date)]
-     * - Last-touch single-winner attribution: each Sale (and standalone paid Appointment)
-     *   attributes to at most ONE AdLeadEntry — the most recent entry in that calendar month
-     *   on or before the conversion date — with exact per-branch revenue splits.
+     * - Canonical E.164 Customer Profile bridge (matching +974/974/00974/8-digit/international variants)
+     * - Enhanced Calendar Appointments as the single source of truth (no standalone walk-in sales):
+     *   active appointments (`status NOT IN ('cancelled','no_show')`) credit immediately on booking
+     *   (including 0 QAR "Decide in Salon" bookings) using `appointmentBookedAmount()` while unpaid,
+     *   and automatically upgrade to `netSaleAmount($appt->sale)` once checked out.
+     * - Attribution window: `[entry.date, max(endOfMonth(entry.date), entry.date + 14 days)]`
+     * - Last-touch single-winner per appointment across overlapping lead windows, with exact
+     *   per-branch revenue splits (`old_airport_amount`, `wakrah_amount`).
      */
     public static function syncFromCustomerActivity(
         ?Customer $customer,
@@ -611,6 +590,7 @@ class AdLeadEntry extends Model
         $hasSplitColumns = Schema::hasColumn('ad_lead_entries', 'old_airport_amount')
             && Schema::hasColumn('ad_lead_entries', 'wakrah_amount');
 
+        // Load all AdLeadEntry rows for this client cohort (covers same-month AND prior-month 14-day spillover leads)
         $clientEntries = self::query()
             ->where(function ($q) use ($customerIds, $phoneCandidates, $strippedDigits, $hasCustomerIdColumn, $targetEntry) {
                 if ($hasCustomerIdColumn && !empty($customerIds)) {
@@ -626,13 +606,13 @@ class AdLeadEntry extends Model
             ->get();
 
         $activityDateStr = $activityCarbon->toDateString();
-        $activityMonthStartStr = $activityCarbon->copy()->startOfMonth()->toDateString();
 
         $coveringEntry = $clientEntries
-            ->filter(function (self $e) use ($activityMonthStartStr, $activityDateStr) {
-                $d = Carbon::parse($e->date)->toDateString();
+            ->filter(function (self $e) use ($activityDateStr) {
+                [$winStart, $winEnd] = self::attributionWindowFor($e->date);
 
-                return $d >= $activityMonthStartStr && $d <= $activityDateStr;
+                return $activityDateStr >= $winStart->toDateString()
+                    && $activityDateStr <= $winEnd->toDateString();
             })
             ->sortBy([
                 [fn (self $e) => Carbon::parse($e->date)->toDateString(), 'desc'],
@@ -648,7 +628,7 @@ class AdLeadEntry extends Model
             $canonicalCustomer = Customer::find($customerIds[0]);
         }
 
-        // Order descending by (date, id) so the first matching entry in that month is the last-touch winner
+        // Order descending by (date, id) so the first matching entry whose window covers the appointment wins (last-touch)
         $entriesDesc = $clientEntries
             ->sortBy([
                 [fn (self $e) => Carbon::parse($e->date)->toDateString(), 'desc'],
@@ -656,10 +636,11 @@ class AdLeadEntry extends Model
             ])
             ->values();
 
-        // Collect all appointments for this client cohort and repair missing customer_id links
+        // Collect all Enhanced Calendar appointments for this client cohort (including spillover dates) and repair links
         $allClientAppointments = collect();
+        $hasSalesTable = Schema::hasTable('sales');
         if (Schema::hasTable('appointments') && (!empty($customerIds) || !empty($phoneCandidates) || !empty($strippedDigits) || $appointmentId)) {
-            $allClientAppointments = Appointment::query()
+            $apptQuery = Appointment::query()
                 ->where(function ($q) use ($customerIds, $phoneCandidates, $strippedDigits, $appointmentId) {
                     if (!empty($customerIds)) {
                         $q->orWhereIn('customer_id', $customerIds);
@@ -668,104 +649,71 @@ class AdLeadEntry extends Model
                     if ($appointmentId) {
                         $q->orWhere('id', $appointmentId);
                     }
-                })
-                ->get();
+                });
+
+            if ($hasSalesTable) {
+                $apptQuery->with('sale');
+            }
+
+            $allClientAppointments = $apptQuery->get();
 
             if ($canonicalCustomer && Schema::hasColumn('appointments', 'customer_id')) {
                 foreach ($allClientAppointments as $apptRow) {
                     if (!$apptRow->customer_id) {
                         $apptRow->update(['customer_id' => $canonicalCustomer->id]);
                     }
+                    if ($hasSalesTable && $apptRow->sale && !$apptRow->sale->customer_id && Schema::hasColumn('sales', 'customer_id')) {
+                        $apptRow->sale->update(['customer_id' => $canonicalCustomer->id]);
+                    }
                 }
             }
         }
 
-        $allClientAppointmentIds = $allClientAppointments->pluck('id')->all();
-
-        // Build unified list of valid paid conversions (Sales + standalone paid Appointments without a Sale)
+        // Single source of truth: active Enhanced Calendar appointments ONLY (standalone walk-in sales excluded).
+        // Unpaid appointments credit appointmentBookedAmount() (including 0 QAR Decide in Salon);
+        // checked-out appointments with a linked Sale credit netSaleAmount($appt->sale) (excluding tips).
         $conversions = [];
-        $saleAppointmentIds = [];
-
-        if (Schema::hasTable('sales') && (!empty($customerIds) || !empty($allClientAppointmentIds))) {
-            $clientSales = Sale::with('appointment')
-                ->where(function ($q) use ($customerIds, $allClientAppointmentIds) {
-                    if (!empty($customerIds)) {
-                        $q->orWhereIn('customer_id', $customerIds);
-                    }
-                    if (!empty($allClientAppointmentIds)) {
-                        $q->orWhereIn('appointment_id', $allClientAppointmentIds);
-                    }
-                })
-                ->get();
-
-            foreach ($clientSales as $sale) {
-                if ($canonicalCustomer && !$sale->customer_id && Schema::hasColumn('sales', 'customer_id')) {
-                    $sale->update(['customer_id' => $canonicalCustomer->id]);
-                }
-                if ($sale->appointment_id) {
-                    $saleAppointmentIds[] = (int) $sale->appointment_id;
-                }
-                if ($sale->appointment && in_array(strtolower((string) $sale->appointment->status), ['cancelled', 'no_show'], true)) {
-                    continue;
-                }
-                $amount = self::netSaleAmount($sale);
-                if ($amount <= 0) {
-                    continue;
-                }
-                $convDate = self::resolveSaleDate($sale);
-                $convBranch = $sale->appointment?->branch ?: $sale->branch;
-
-                $conversions[] = [
-                    'date_str' => $convDate->toDateString(),
-                    'timestamp' => $convDate->timestamp,
-                    'amount' => $amount,
-                    'branch' => in_array($convBranch, array_keys(self::BRANCHES), true) ? $convBranch : null,
-                    'appointment_id' => $sale->appointment_id ? (int) $sale->appointment_id : null,
-                ];
-            }
-        }
-
-        $saleAppointmentIds = array_values(array_unique($saleAppointmentIds));
 
         foreach ($allClientAppointments as $appt) {
-            if (in_array((int) $appt->id, $saleAppointmentIds, true)) {
-                continue;
-            }
             $statusLower = strtolower((string) ($appt->status ?? 'pending'));
             if (in_array($statusLower, ['cancelled', 'no_show'], true)) {
                 continue;
             }
-            if ($statusLower !== 'completed' && $appt->paid_at === null) {
+
+            $linkedSale = $hasSalesTable ? $appt->sale : null;
+            $convBranch = Customer::normalizeBranch($appt->branch)
+                ?: ($linkedSale ? Customer::normalizeBranch($linkedSale->branch) : null);
+
+            if (!$convBranch || !in_array($convBranch, array_keys(self::BRANCHES), true)) {
                 continue;
             }
-            $amount = self::appointmentBookedAmount($appt);
-            if ($amount <= 0) {
-                continue;
-            }
+
+            $amount = $linkedSale
+                ? self::netSaleAmount($linkedSale)
+                : self::appointmentBookedAmount($appt);
+
             $convDate = $appt->appointment_date;
-            $convBranch = $appt->branch;
 
             $conversions[] = [
                 'date_str' => $convDate->toDateString(),
                 'timestamp' => $convDate->timestamp,
-                'amount' => $amount,
-                'branch' => in_array($convBranch, array_keys(self::BRANCHES), true) ? $convBranch : null,
+                'amount' => round(max(0.0, (float) $amount), 2),
+                'branch' => $convBranch,
                 'appointment_id' => (int) $appt->id,
             ];
         }
 
-        // Strict same-calendar-month last-touch single-winner attribution: [entry.date, endOfMonth(entry.date)]
+        // Same-month + 14-day rolling spillover, last-touch single-winner attribution per appointment
         $attributedByEntryId = [];
         $claimedConversionDates = [];
 
         foreach ($conversions as $conv) {
             $convDateStr = $conv['date_str'];
             $winner = $entriesDesc->first(function (self $candidate) use ($convDateStr) {
-                $entryStart = Carbon::parse($candidate->date);
-                $entryStartStr = $entryStart->toDateString();
-                $entryEndStr = $entryStart->copy()->endOfMonth()->toDateString();
+                [$winStart, $winEnd] = self::attributionWindowFor($candidate->date);
 
-                return $convDateStr >= $entryStartStr && $convDateStr <= $entryEndStr;
+                return $convDateStr >= $winStart->toDateString()
+                    && $convDateStr <= $winEnd->toDateString();
             });
 
             if ($winner) {
@@ -778,9 +726,9 @@ class AdLeadEntry extends Model
         }
 
         foreach ($entriesDesc as $entry) {
-            $entryStart = Carbon::parse($entry->date)->startOfDay();
-            $entryStartStr = $entryStart->toDateString();
-            $entryEndStr = $entryStart->copy()->endOfMonth()->toDateString();
+            [$winStart, $winEnd] = self::attributionWindowFor($entry->date);
+            $entryStartStr = $winStart->toDateString();
+            $entryEndStr = $winEnd->toDateString();
 
             $myConversions = $attributedByEntryId[$entry->id] ?? [];
             $newBranch = $entry->branch;
@@ -793,7 +741,7 @@ class AdLeadEntry extends Model
                 $newOaAmount = 0.0;
                 $newWkAmount = 0.0;
 
-                // Attribute primary branch from majority revenue among THIS entry's conversions (tie-break: earliest conversion),
+                // Attribute primary branch from majority revenue among THIS entry's appointments (tie-break: earliest appointment),
                 // while storing exact per-branch net revenue in old_airport_amount and wakrah_amount.
                 $branchTotals = [];
                 $branchFirstTs = [];

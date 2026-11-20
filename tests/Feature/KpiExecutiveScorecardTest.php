@@ -664,18 +664,18 @@ class KpiExecutiveScorecardTest extends TestCase
         ]);
         $this->assertFalse($autoEntry->isBooked(), 'Unbooked AdLeadEntry with 0 ticket_amount must not count as booked');
 
-        // Even if branch is set with ticket_amount = 0 and not booked, isBooked() must be false
-        $unbookedWithBranch = AdLeadEntry::create([
+        // A 0 QAR Decide-in-Salon booking with valid branch counts as Booked under the booking-driven rule
+        $zeroTicketBooked = AdLeadEntry::create([
             'date' => $now->toDateString(),
-            'customer_name' => 'Zero Ticket Inquiry',
+            'customer_name' => 'Zero Ticket Decide In Salon',
             'phone' => '55889900',
             'category' => 'Facial',
             'branch' => 'old_airport',
             'ticket_amount' => 0,
         ]);
-        $this->assertFalse($unbookedWithBranch->isBooked());
+        $this->assertTrue($zeroTicketBooked->isBooked());
 
-        // Standalone Sale via SaleController::store() syncs revenue & branch to the Paid Ad Lead's AdLeadEntry
+        // Standalone walk-in Sale via SaleController::store() (no appointment_id) must NOT credit AdLeadEntry
         $this->actingAs($this->admin)
             ->post(route('sales.store'), [
                 'customer_id' => $autoEntry->customer_id,
@@ -688,9 +688,9 @@ class KpiExecutiveScorecardTest extends TestCase
             ->assertRedirect(route('appointments.revenue.index'));
 
         $autoEntry->refresh();
-        $this->assertTrue($autoEntry->isBooked());
-        $this->assertSame('wakrah', $autoEntry->branch);
-        $this->assertSame(500.0, (float) $autoEntry->ticket_amount);
+        $this->assertFalse($autoEntry->isBooked());
+        $this->assertNull($autoEntry->branch);
+        $this->assertSame(0.0, (float) $autoEntry->ticket_amount);
 
         // Fix #7: Open overdue follow-up lead with category = 'cancel' IS counted in Laden's overdue_followups_count (P0-8), while closed ('no') cancelled lead is excluded
         Lead::create([

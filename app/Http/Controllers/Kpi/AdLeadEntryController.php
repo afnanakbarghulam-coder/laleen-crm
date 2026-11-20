@@ -16,12 +16,13 @@ class AdLeadEntryController extends Controller
 {
     public function store(Request $request)
     {
-        $hasManualBranch = $request->filled('branch');
         $validated = $this->validated($request);
+        $validated['branch'] = null;
+        $validated['ticket_amount'] = 0;
 
-        if (!$hasManualBranch) {
-            $validated['branch'] = null;
-            $validated['ticket_amount'] = 0;
+        if (Schema::hasColumn('ad_lead_entries', 'old_airport_amount')) {
+            $validated['old_airport_amount'] = 0;
+            $validated['wakrah_amount'] = 0;
         }
 
         $entry = AdLeadEntry::create($validated + ['created_by' => auth()->id()]);
@@ -32,7 +33,7 @@ class AdLeadEntryController extends Controller
             activityDate: Carbon::parse($entry->date),
             phone: $entry->phone,
             targetEntry: $entry,
-            resetIfNoActivity: !$hasManualBranch
+            resetIfNoActivity: true
         );
 
         return redirect()->route('kpi.ads.index')->with('success', 'Ad lead logged.');
@@ -40,23 +41,36 @@ class AdLeadEntryController extends Controller
 
     public function update(Request $request, AdLeadEntry $adLeadEntry)
     {
-        $hasManualBranch = $request->filled('branch');
-        $validated = $this->validated($request);
+        $previousCustomer = $adLeadEntry->customer;
+        $previousCustomerId = $adLeadEntry->customer_id ? (int) $adLeadEntry->customer_id : null;
+        $previousPhone = $adLeadEntry->phone;
+        $previousDate = $adLeadEntry->date ? Carbon::parse($adLeadEntry->date) : now();
 
-        if (!$hasManualBranch) {
-            $validated['branch'] = null;
-            $validated['ticket_amount'] = 0;
-        }
+        $validated = $this->validated($request);
 
         $adLeadEntry->update($validated);
         $entry = $adLeadEntry->fresh();
+
+        $oldNorm = Customer::normalizePhone($previousPhone);
+        $newNorm = Customer::normalizePhone($entry->phone);
+        $identityChanged = ($previousCustomerId && (int) $entry->customer_id !== $previousCustomerId)
+            || ($oldNorm !== '' && $oldNorm !== $newNorm);
+
+        if ($identityChanged && ($previousCustomer || $previousPhone)) {
+            AdLeadEntry::syncFromCustomerActivity(
+                customer: $previousCustomer,
+                activityDate: $previousDate,
+                phone: $previousPhone,
+                resetIfNoActivity: true
+            );
+        }
 
         AdLeadEntry::syncFromCustomerActivity(
             customer: $entry->customer,
             activityDate: Carbon::parse($entry->date),
             phone: $entry->phone,
             targetEntry: $entry,
-            resetIfNoActivity: !$hasManualBranch
+            resetIfNoActivity: true
         );
 
         return redirect()->route('kpi.ads.index')->with('success', 'Ad lead updated.');
@@ -97,8 +111,6 @@ class AdLeadEntryController extends Controller
             'category' => $isCreateNew
                 ? ['required', 'string']
                 : ['required', 'string', 'max:255', Rule::in(AdLeadEntry::availableCategories())],
-            'ticket_amount' => 'nullable|numeric|min:0',
-            'branch' => ['nullable', Rule::in(array_keys(AdLeadEntry::BRANCHES))],
             'remarks' => 'nullable|string|max:255',
         ]);
 
@@ -126,10 +138,11 @@ class AdLeadEntryController extends Controller
         $validated['phone'] = $phone;
 
         $customerName = trim($validated['customer_name']);
-        $customer = AdLeadEntry::resolveOrCreateCanonicalCustomer($phone, $customerName);
+        $customer = AdLeadEntry::resolveOrCreateCanonicalCustomer($rawCombined, $customerName);
         if (!$customer) {
+            $e164Phone = Customer::normalizePhoneE164($rawCombined);
             $customer = Customer::create([
-                'phone' => $phone,
+                'phone' => $e164Phone !== '' ? $e164Phone : $phone,
                 'name' => $customerName,
             ]);
         }
@@ -142,11 +155,6 @@ class AdLeadEntryController extends Controller
         } else {
             unset($validated['customer_name']);
         }
-        if (Schema::hasColumn('ad_lead_entries', 'old_airport_amount')) {
-            $validated['old_airport_amount'] = null;
-            $validated['wakrah_amount'] = null;
-        }
-        $validated['ticket_amount'] = $validated['ticket_amount'] ?? 0;
 
         return $validated;
     }

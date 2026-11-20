@@ -171,7 +171,8 @@ class LeadsModulePatchesTest extends TestCase
 
         $response->assertRedirect();
 
-        $customer = Customer::where('phone', '55592353')->firstOrFail();
+        $customer = Customer::whereIn('phone', Customer::phoneMatchVariants('+97455592353'))->firstOrFail();
+        $this->assertSame('+97455592353', $customer->phone);
         $appointment = Appointment::where('customer_id', $customer->id)->latest('id')->firstOrFail();
 
         // Both open leads for 55592353 are consolidated into the single latest lead (contactedLead) so 1 booking = 1 conversion

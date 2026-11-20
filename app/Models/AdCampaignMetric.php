@@ -375,11 +375,11 @@ class AdCampaignMetric extends Model
 
         $nowQatar = Carbon::now('Asia/Qatar');
         $from = $this->date_from
-            ? Carbon::parse($this->date_from)->toDateString()
-            : $nowQatar->copy()->startOfMonth()->toDateString();
+            ? Carbon::parse($this->date_from)->startOfDay()
+            : $nowQatar->copy()->startOfMonth()->startOfDay();
         $to = $this->date_to
-            ? Carbon::parse($this->date_to)->toDateString()
-            : $nowQatar->toDateString();
+            ? Carbon::parse($this->date_to)->endOfDay()
+            : $nowQatar->copy()->endOfDay();
 
         $entries = AdLeadEntry::query()
             ->whereBetween('date', [$from, $to])
@@ -398,16 +398,13 @@ class AdCampaignMetric extends Model
 
             if ($branchFilter !== null) {
                 $branchRev = $entry->branchRevenue($branchFilter);
-                if ($branchRev > 0) {
-                    $revenueQar += $branchRev;
+                $revenueQar += $branchRev;
+                if ($entry->branch === $branchFilter) {
                     $bookingsCount++;
                 }
             } else {
-                $rev = (float) $entry->ticket_amount;
-                if ($rev > 0) {
-                    $revenueQar += $rev;
-                    $bookingsCount++;
-                }
+                $revenueQar += (float) $entry->ticket_amount;
+                $bookingsCount++;
             }
         }
 

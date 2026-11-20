@@ -262,10 +262,10 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
         $this->assertSame('booked', $standaloneLead->needful_done);
         $this->assertNull($standaloneLead->next_followup_date);
 
-        // 4. Command Center marketing pulse ignores 0 QAR row with only a branch set
+        // 4. Command Center marketing pulse counts 0 QAR Decide-in-Salon booked row (branch set) as booked with 0 revenue
         AdLeadEntry::create([
             'date' => now()->toDateString(),
-            'customer_name' => 'Unpaid Branch Row',
+            'customer_name' => 'Decide In Salon Booked Row',
             'phone' => '55009988',
             'category' => 'Facial',
             'branch' => 'old_airport',
@@ -274,7 +274,8 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
 
         $pulse = app(LaleenCommandCenterService::class)->read_marketing_and_ads_pulse();
         $this->assertSame(1, $pulse['ad_leads_total']);
-        $this->assertSame(0, $pulse['ad_leads_booked']);
+        $this->assertSame(1, $pulse['ad_leads_booked']);
+        $this->assertSame(0.0, (float) $pulse['attributed_ad_revenue_qar']);
     }
 
     public function test_reschedule_reactivates_cancelled_booking_and_preserves_multi_stylist_service_splits(): void
@@ -469,7 +470,10 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
 
     public function test_same_calendar_month_window_and_last_touch_single_winner_prevent_double_counting_and_branch_hijack(): void
     {
-        // Scenario A: Strict same-month boundary (Nov 29 Ad Lead -> Dec 02 Checkout stays isolated; Nov 30 Checkout attributes)
+        // Scenario A: Same-month + 14-day rolling spillover boundary
+        // Nov 29 Ad Lead -> window is [2026-11-29, 2026-12-13]:
+        //   - Dec 14 appointment is OUTSIDE the 14-day spillover window (must NOT credit Nov 29 lead)
+        //   - Nov 30 appointment IS inside the window (credits Nov 29 lead)
         $this->actingAs($this->admin)
             ->post(route('kpi.ad-leads.store'), [
                 'date' => '2026-11-29',
@@ -477,8 +481,6 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
                 'country_code' => '+974',
                 'phone_number' => '5599 1100',
                 'category' => 'Facial',
-                'ticket_amount' => 0,
-                'branch' => null,
             ]);
 
         $nov29Entry = AdLeadEntry::where('phone', '55991100')->firstOrFail();
@@ -488,21 +490,21 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
                 'customer_name' => 'Cross Month Client',
                 'phone' => '55991100',
                 'service_name' => [$this->facialService->name],
-                'appointment_datetime' => '2026-12-02 14:00:00',
+                'appointment_datetime' => '2026-12-14 14:00:00',
                 'branch' => 'old_airport',
                 'staff_id' => $this->primaryStylist->id,
                 'status' => 'confirmed',
                 'price' => 300,
             ]);
 
-        $dec2Appt = Appointment::where('customer_id', $nov29Entry->customer_id)->firstOrFail();
+        $dec14Appt = Appointment::where('customer_id', $nov29Entry->customer_id)->firstOrFail();
         $this->actingAs($this->admin)
-            ->post(route('appointments.revenue.storePayment', $dec2Appt->id), [
+            ->post(route('appointments.revenue.storePayment', $dec14Appt->id), [
                 'payments' => ['card' => 300],
             ]);
 
         $nov29Entry->refresh();
-        $this->assertNull($nov29Entry->branch, 'December checkout must NOT bleed back into November AdLeadEntry');
+        $this->assertNull($nov29Entry->branch, 'Booking past 14-day spillover window (Dec 14) must NOT bleed back into Nov 29 AdLeadEntry');
         $this->assertSame(0.0, (float) $nov29Entry->ticket_amount);
 
         // Same-month checkout on Nov 30 DOES attribute to Nov 29 AdLeadEntry

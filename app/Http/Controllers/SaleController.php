@@ -101,11 +101,17 @@ class SaleController extends Controller
 
         if (!$customer && $request->filled('customer_phone')) {
             $rawPhone = preg_replace('/\D/', '', $request->customer_phone);
+            $e164Phone = \App\Models\Customer::normalizePhoneE164($request->customer_phone);
             $normalizedPhone = \App\Models\Customer::normalizePhone($request->customer_phone);
             $phoneCandidates = \App\Models\Customer::phoneMatchVariants($request->customer_phone);
             if (!empty($phoneCandidates)) {
-                $customer = \App\Models\Customer::whereIn('phone', $phoneCandidates)->first()
-                    ?: new \App\Models\Customer(['phone' => $normalizedPhone !== '' ? $normalizedPhone : $rawPhone]);
+                $matches = \App\Models\Customer::whereIn('phone', $phoneCandidates)->orderBy('id')->get();
+                $customer = ($e164Phone !== '' ? $matches->firstWhere('phone', $e164Phone) : null)
+                    ?: $matches->first(fn ($c) => \App\Models\Customer::isCanonicalE164($c->phone))
+                    ?: $matches->first()
+                    ?: new \App\Models\Customer([
+                        'phone' => $e164Phone !== '' ? $e164Phone : ($normalizedPhone !== '' ? $normalizedPhone : $rawPhone),
+                    ]);
                 if ($request->customer_name) {
                     $customer->name = $request->customer_name;
                 }
@@ -169,11 +175,6 @@ class SaleController extends Controller
 
             if ($customer) {
                 $customer->earnPointsForSale($sale);
-                \App\Models\AdLeadEntry::syncFromCustomerActivity(
-                    customer: $customer,
-                    activityDate: $sale->created_at ?? now(),
-                    phone: $customer->phone
-                );
             }
         });
 

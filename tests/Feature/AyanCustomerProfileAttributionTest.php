@@ -104,7 +104,7 @@ class AyanCustomerProfileAttributionTest extends TestCase
 
         $this->assertSame(1, Customer::count(), 'Must reuse canonical Customer instead of creating a duplicate');
         $legacyCustomer->refresh();
-        $this->assertSame('55112233', $legacyCustomer->phone);
+        $this->assertSame('+97455112233', $legacyCustomer->phone);
         $this->assertSame('Fatima Al-Thani', $legacyCustomer->name);
 
         $adEntry = AdLeadEntry::firstOrFail();
@@ -240,14 +240,14 @@ class AyanCustomerProfileAttributionTest extends TestCase
         $this->travelTo(Carbon::parse('2026-11-12 15:00:00', 'Asia/Qatar'));
 
         // Seed legacy fragmented records BEFORE running kpi:sync-ad-leads:
-        // - Duplicate Customer #1 with '+974 6677 8899' and Canonical Customer #2 with '66778899'
+        // - Duplicate Customer #1 with legacy 8-digit '66778899' and Canonical E.164 Customer #2 with '+97466778899'
         $dupCustomer = Customer::create([
             'name' => 'Noora Legacy',
-            'phone' => '+974 6677 8899',
+            'phone' => '66778899',
         ]);
         $canonicalCustomer = Customer::create([
             'name' => 'Noora Al-Kuwari',
-            'phone' => '66778899',
+            'phone' => '+97466778899',
         ]);
 
         // Unlinked November AdLeadEntry with spaced +974 phone, customer_id = null, ticket_amount = 0
@@ -261,7 +261,7 @@ class AyanCustomerProfileAttributionTest extends TestCase
             'ticket_amount' => 0,
         ]);
 
-        // Pre-existing October AdLeadEntry & November Sale for a different Oct-only lead (must NOT cross-credit into Oct!)
+        // Pre-existing October AdLeadEntry (Oct 29 -> 14-day spillover ends Nov 12) with a Nov 15 appointment (beyond 14-day spillover -> must reset!)
         $octOnlyEntry = AdLeadEntry::create([
             'date' => '2026-10-29',
             'customer_id' => null,
@@ -269,19 +269,19 @@ class AyanCustomerProfileAttributionTest extends TestCase
             'phone' => '55443322',
             'category' => 'Facial',
             'branch' => 'old_airport',
-            'ticket_amount' => 350, // stale 30-day cross-month credit from a Nov 04 sale
+            'ticket_amount' => 350, // stale beyond-spillover credit from a Nov 15 booking
         ]);
         $octOnlyApptInNov = Appointment::create([
             'customer_id' => null,
             'customer_name' => 'Oct Only Lead',
             'phone' => '+974 5544 3322',
             'service_name' => $this->facialService->name,
-            'appointment_datetime' => '2026-11-04 12:00:00',
-            'booking_date' => '2026-11-04',
+            'appointment_datetime' => '2026-11-15 12:00:00',
+            'booking_date' => '2026-11-15',
             'branch' => 'old_airport',
             'staff_id' => $this->oaStylist->id,
             'status' => 'completed',
-            'paid_at' => Carbon::parse('2026-11-04 13:00:00'),
+            'paid_at' => Carbon::parse('2026-11-15 13:00:00'),
             'price' => 350,
         ]);
         Sale::create([
@@ -494,15 +494,14 @@ class AyanCustomerProfileAttributionTest extends TestCase
         $ayan = $scorecard['ayan'];
         $sana = $scorecard['sana'];
 
-        // Card 3 assertions: 1/3 paid (33.3%), 1 scheduled on calendar, link to /kpis/ads?month=2026-11
+        // Card 3 assertions: 1/3 booked (33.3%), no redundant pipeline_booked_ad_leads key, link to /kpis/ads?month=2026-11
         $this->assertSame(3, $ayan['total_ad_leads']);
         $this->assertSame(1, $ayan['booked_ad_leads']);
-        $this->assertSame(1, $ayan['pipeline_booked_ad_leads']);
+        $this->assertArrayNotHasKey('pipeline_booked_ad_leads', $ayan);
         $this->assertSame(33.3, (float) $ayan['ad_conversion_pct']);
 
-        $response->assertSee('paid (1/3)');
-        $response->assertSee('1 scheduled on calendar');
-        $response->assertDontSee('booked (1/3)');
+        $response->assertSee('booked (1/3)');
+        $response->assertDontSee('scheduled on calendar');
         $response->assertSee(route('kpi.ads.index', ['month' => '2026-11']), false);
 
         // Card 4 & Sana assertions: Day 12 (completedDays = 11 -> 11 Stories + floor(44/7)=6 Reels = 17 MTD target) -> '0/17 Content' & '0.0%'

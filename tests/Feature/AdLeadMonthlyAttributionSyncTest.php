@@ -100,10 +100,10 @@ class AdLeadMonthlyAttributionSyncTest extends TestCase
             ->assertRedirect();
 
         $novEntry->refresh();
-        // Paid-Only Rule: While appointment is merely scheduled/confirmed (unpaid), ticket_amount stays 0 and isBooked() is false
-        $this->assertNull($novEntry->branch);
-        $this->assertSame(0.0, (float) $novEntry->ticket_amount);
-        $this->assertFalse($novEntry->isBooked());
+        // Booking-Driven Rule: Active Enhanced Calendar appointment immediately marks the lead as Booked + Branch with booked amount
+        $this->assertSame('old_airport', $novEntry->branch);
+        $this->assertSame(300.0, (float) $novEntry->ticket_amount);
+        $this->assertTrue($novEntry->isBooked());
         $this->assertSame(0, Lead::count());
 
         $novAppointment = Appointment::where('customer_id', $novEntry->customer_id)->first();

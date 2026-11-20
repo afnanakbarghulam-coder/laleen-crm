@@ -1252,6 +1252,8 @@ class AppointmentController extends Controller
         $oldStaffId = $appointment->staff_id;
         $oldStatus = $appointment->status;
         $oldApptDate = Carbon::parse($appointment->appointment_datetime ?: $appointment->booking_date ?: now());
+        $previousCustomerId = $appointment->customer_id ? (int) $appointment->customer_id : null;
+        $previousPhone = $appointment->phone;
         $hasSale = $appointment->sale()->exists();
         $requestedStatus = $request->status ?: $appointment->status;
         $redirectToCheckout = ($requestedStatus === 'completed' && !$hasSale);
@@ -1759,7 +1761,7 @@ class AppointmentController extends Controller
             $this->markAppointmentLeadsAsBooked($appointment);
         }
 
-        $this->syncAdLeadAttributionForAppointment($appointment, $oldApptDate);
+        $this->syncAdLeadAttributionForAppointment($appointment, $oldApptDate, $previousCustomerId, $previousPhone);
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
@@ -6488,14 +6490,34 @@ class AppointmentController extends Controller
     }
 
     /**
-     * Synchronize the client's matching AdLeadEntry in the SAME calendar month
-     * as the appointment (or its previous month if rescheduled across months).
+     * Synchronize the client's matching AdLeadEntry rows across the appointment's
+     * attribution window (including cross-month 14-day spillover, reschedules,
+     * and customer/phone reassignments).
      */
-    private function syncAdLeadAttributionForAppointment(Appointment $appointment, ?Carbon $previousDate = null): void
-    {
+    private function syncAdLeadAttributionForAppointment(
+        Appointment $appointment,
+        ?Carbon $previousDate = null,
+        ?int $previousCustomerId = null,
+        ?string $previousPhone = null
+    ): void {
         $appointment->refresh();
         $customer = $appointment->customer ?: ($appointment->customer_id ? Customer::find($appointment->customer_id) : null);
         $apptDate = Carbon::parse($appointment->appointment_datetime ?: $appointment->booking_date ?: now());
+
+        $prevNorm = Customer::normalizePhone($previousPhone);
+        $currNorm = Customer::normalizePhone($appointment->phone);
+        $identityChanged = ($previousCustomerId && (int) $appointment->customer_id !== $previousCustomerId)
+            || ($prevNorm !== '' && $prevNorm !== $currNorm);
+
+        if ($identityChanged) {
+            $previousCustomer = $previousCustomerId ? Customer::find($previousCustomerId) : null;
+            if ($previousDate) {
+                AdLeadEntry::syncFromCustomerActivity($previousCustomer, $previousDate, $previousPhone);
+            }
+            if (!$previousDate || $previousDate->toDateString() !== $apptDate->toDateString()) {
+                AdLeadEntry::syncFromCustomerActivity($previousCustomer, $apptDate, $previousPhone);
+            }
+        }
 
         if ($previousDate && ($previousDate->year !== $apptDate->year || $previousDate->month !== $apptDate->month || $previousDate->toDateString() !== $apptDate->toDateString())) {
             AdLeadEntry::syncFromCustomerActivity($customer, $previousDate, $appointment->phone, $appointment->id);

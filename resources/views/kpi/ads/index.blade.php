@@ -158,9 +158,9 @@
                                     @endif
                                 </td>
                                 <td>{{ $entry->category }}</td>
-                                <td class="text-end">{{ $entry->ticket_amount > 0 ? number_format($entry->ticket_amount, 2) : '—' }}</td>
+                                <td class="text-end">{{ $entry->ticket_amount > 0 ? number_format($entry->ticket_amount, 2) : ($entry->isBooked() ? '0.00' : '—') }}</td>
                                 <td>
-                                    @if ($entry->branch)
+                                    @if ($entry->isBooked())
                                         <span class="kpi-badge kpi-badge-green">{{ $branches[$entry->branch] }}</span>
                                     @else
                                         <span class="text-muted small">Unbooked</span>
@@ -169,7 +169,7 @@
                                 <td class="text-muted small">{{ $entry->remarks ?? '—' }}</td>
                                 <td class="text-end" @click.stop>
                                     <div class="d-flex gap-1 justify-content-end align-items-center">
-                                        @if (!$entry->isBooked() && empty($entry->branch))
+                                        @if (!$entry->isBooked())
                                             <button type="button"
                                                 class="btn btn-sm btn-primary"
                                                 @click="generateScript()"
@@ -196,7 +196,7 @@
                                     </div>
                                 </td>
                             </tr>
-                            @if (!$entry->isBooked() && empty($entry->branch))
+                            @if (!$entry->isBooked())
                                 <tr x-show="showAiPanel" x-cloak class="bg-dark bg-opacity-10">
                                     <td colspan="7" class="p-3">
                                         <div class="d-flex flex-column gap-2 p-3 rounded border border-secondary border-opacity-25" style="background: rgba(20, 16, 14, 0.45);">
@@ -241,7 +241,7 @@
                                                         <i class="bx bxl-whatsapp me-1"></i>
                                                         <span x-text="copied ? 'Copied to Clipboard!' : 'Copy to WhatsApp'"></span>
                                                     </button>
-                                                    <a :href="'https://wa.me/{{ preg_replace('/[^0-9]/', '', $entry->phone) }}?text=' + encodeURIComponent(script)"
+                                                    <a :href="'https://wa.me/{{ \App\Models\Customer::whatsappDigits($entry->phone) }}?text=' + encodeURIComponent(script)"
                                                        target="_blank"
                                                        rel="noopener"
                                                        class="btn btn-sm btn-outline-success">

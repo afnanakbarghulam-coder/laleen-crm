@@ -39,22 +39,23 @@
                             </select>
                             <input type="text" name="new_category" id="adLeadNewCategory" placeholder="Enter new category name..." class="form-control form-input mt-2" x-show="selectedCategory === 'create_new'" :required="selectedCategory === 'create_new'" x-cloak>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Ticket / Revenue Amount (QAR)</label>
-                            <input type="number" name="ticket_amount" id="adLeadTicket" class="form-control" min="0" step="0.01" value="0">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Branch <span class="text-muted">(leave blank if unbooked)</span></label>
-                            <select name="branch" id="adLeadBranch" class="form-select">
-                                <option value="">— Unbooked —</option>
-                                @foreach ($branches as $value => $label)
-                                    <option value="{{ $value }}">{{ $label }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="col-md-6">
+                        <div class="col-12">
                             <label class="form-label">Remarks</label>
                             <input type="text" name="remarks" id="adLeadRemarks" class="form-control" placeholder="e.g. will let u know" maxlength="255">
+                        </div>
+                        <div class="col-12 d-none" id="adLeadAttributionReadonlyBox">
+                            <div class="p-3 rounded border border-secondary border-opacity-25 d-flex justify-content-between align-items-center flex-wrap gap-3" style="background: rgba(20, 16, 14, 0.35);">
+                                <div>
+                                    <div class="small text-muted text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.04em;">Branch (Auto-Synced from Calendar)</div>
+                                    <div class="mt-1" id="adLeadBranchReadonly">
+                                        <span class="text-muted small">Unbooked</span>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <div class="small text-muted text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.04em;">Ticket / Revenue (QAR)</div>
+                                    <div class="mt-1 fw-semibold" id="adLeadTicketReadonly">—</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="col-12 mt-3" id="adLeadModalAiBox" x-data="{
                             leadId: null,
@@ -167,6 +168,8 @@
 </div>
 
 <script>
+    const adLeadBranchLabels = @json($branches);
+
     window.resetAdLeadEntryForm = function () {
         document.getElementById('adLeadEntryModalTitle').innerText = 'Add Ad Lead';
         document.getElementById('adLeadEntryForm').action = '{{ route('kpi.ad-leads.store') }}';
@@ -175,6 +178,8 @@
         document.getElementById('adLeadDate').value = new Date().toISOString().slice(0, 10);
         document.getElementById('adLeadCustomerName').value = '';
         document.getElementById('adLeadCountryCode').value = '974';
+        const attrBox = document.getElementById('adLeadAttributionReadonlyBox');
+        if (attrBox) attrBox.classList.add('d-none');
         const catSelect = document.getElementById('adLeadCategory');
         const newCatInput = document.getElementById('adLeadNewCategory');
         if (newCatInput) newCatInput.value = '';
@@ -206,9 +211,20 @@
             catSelect.dispatchEvent(new Event('change', { bubbles: true }));
             catSelect.dispatchEvent(new Event('input', { bubbles: true }));
         }
-        document.getElementById('adLeadTicket').value = entry.ticket_amount || 0;
-        document.getElementById('adLeadBranch').value = entry.branch || '';
         document.getElementById('adLeadRemarks').value = entry.remarks || '';
+
+        const attrBox = document.getElementById('adLeadAttributionReadonlyBox');
+        const branchEl = document.getElementById('adLeadBranchReadonly');
+        const ticketEl = document.getElementById('adLeadTicketReadonly');
+        if (attrBox && branchEl && ticketEl) {
+            attrBox.classList.remove('d-none');
+            const branchLabel = entry.branch && adLeadBranchLabels[entry.branch] ? adLeadBranchLabels[entry.branch] : null;
+            branchEl.innerHTML = branchLabel
+                ? `<span class="kpi-badge kpi-badge-green">${branchLabel}</span>`
+                : '<span class="text-muted small">Unbooked</span>';
+            const amt = parseFloat(entry.ticket_amount || 0);
+            ticketEl.textContent = amt > 0 ? `${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} QAR` : (branchLabel ? '0.00 QAR' : '—');
+        }
 
         new bootstrap.Modal(document.getElementById('adLeadEntryModal')).show();
     };

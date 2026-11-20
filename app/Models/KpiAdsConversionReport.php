@@ -64,16 +64,18 @@ class KpiAdsConversionReport extends Model
     /**
      * Bookings/revenue for one branch within this report's date range,
      * computed from Ad Lead Data Entry rows.
+     *
+     * Each booked lead is counted once under its primary `branch` so
+     * `old_airport_bookings + wakrah_bookings === totals()['total_bookings']`,
+     * while revenue preserves exact per-branch splits (`old_airport_amount` vs `wakrah_amount`).
      */
     private function branchStats(string $branch): array
     {
-        $booked = AdLeadEntry::whereBetween('date', $this->dateRangeBounds())
-            ->get()
-            ->filter(fn (AdLeadEntry $e) => $e->hasBranchConversion($branch));
+        $entries = AdLeadEntry::whereBetween('date', $this->dateRangeBounds())->get();
 
         return [
-            'bookings' => $booked->count(),
-            'revenue' => round((float) $booked->sum(fn (AdLeadEntry $e) => $e->branchRevenue($branch)), 2),
+            'bookings' => $entries->filter(fn (AdLeadEntry $e) => $e->isBooked() && $e->branch === $branch)->count(),
+            'revenue' => round((float) $entries->sum(fn (AdLeadEntry $e) => $e->branchRevenue($branch)), 2),
         ];
     }
 
