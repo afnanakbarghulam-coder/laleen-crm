@@ -8,6 +8,7 @@ use App\Models\Staff;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class StaffEvaluationController extends Controller
 {
@@ -185,6 +186,40 @@ class StaffEvaluationController extends Controller
         ]);
 
         return redirect()->route('kpi.evaluations.index')->with('success', 'Evaluation saved.');
+    }
+
+    public function destroy(Request $request, KpiStaffEvaluation $staffEvaluation)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        DB::transaction(function () use ($staffEvaluation) {
+            $staffEvaluation->delete();
+        });
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Staff evaluation deleted.',
+            ]);
+        }
+
+        $redirectParams = [];
+        $period = trim((string) $request->input('period', ''));
+        if (in_array($period, ['current', 'previous'], true)) {
+            $redirectParams['period'] = $period;
+        }
+        $branch = trim((string) $request->input('branch', ''));
+        if ($branch !== '' && array_key_exists($branch, KpiStaffEvaluation::BRANCHES)) {
+            $redirectParams['branch'] = $branch;
+        }
+        $month = trim((string) $request->input('month', ''));
+        if (preg_match('/^\d{4}-\d{2}$/', $month)) {
+            $redirectParams['month'] = $month;
+        }
+
+        return redirect()
+            ->route('kpi.evaluations.index', $redirectParams)
+            ->with('success', 'Staff evaluation deleted.');
     }
 
     /**

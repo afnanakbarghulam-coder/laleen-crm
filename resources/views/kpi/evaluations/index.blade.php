@@ -102,6 +102,9 @@
                                     fn ($field) => [$field => (int) $evaluation->$field]
                                 ),
                             ];
+                            if (auth()->user()?->isAdmin()) {
+                                $viewData['delete_url'] = route('kpi.evaluations.destroy', $evaluation);
+                            }
                         @endphp
                         <tr>
                             <td>{{ $evaluation->evaluation_date->format('d M Y') }}</td>
@@ -111,9 +114,23 @@
                             <td class="text-end"><span class="kpi-badge {{ $badge }}">{{ number_format($avg, 2) }} / 5</span></td>
                             <td class="text-muted small">{{ \Illuminate\Support\Str::limit($evaluation->leader_notes, 40) ?: '—' }}</td>
                             <td class="text-end">
-                                <button type="button" class="btn btn-sm btn-outline-secondary se-view-btn" data-evaluation='@json($viewData)'>
-                                    👁️ View Details
-                                </button>
+                                <div class="d-flex gap-1 justify-content-end align-items-center">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary se-view-btn" data-evaluation='@json($viewData)'>
+                                        👁️ View Details
+                                    </button>
+                                    @if (auth()->user()?->isAdmin())
+                                        <button type="button"
+                                                class="se-delete-icon-btn"
+                                                title="Delete Evaluation"
+                                                aria-label="Delete Evaluation"
+                                                data-delete-url="{{ route('kpi.evaluations.destroy', $evaluation) }}"
+                                                data-delete-staff="{{ $evaluation->staff->name ?? 'this staff member' }}"
+                                                data-delete-date="{{ $evaluation->evaluation_date->format('d M Y') }}"
+                                                onclick="openStaffEvalDeleteModal(this)">
+                                            <i class="bx bx-trash"></i>
+                                        </button>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @empty
@@ -258,12 +275,105 @@
                         <p class="se-view-notes" id="viewEvalNotes"></p>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer d-flex justify-content-between align-items-center">
+                    @if (auth()->user()?->isAdmin())
+                        <button type="button"
+                                class="se-delete-icon-btn"
+                                id="viewEvalDeleteBtn"
+                                title="Delete Evaluation"
+                                aria-label="Delete Evaluation"
+                                data-delete-url=""
+                                data-delete-staff=""
+                                data-delete-date="">
+                            <i class="bx bx-trash"></i>
+                        </button>
+                    @else
+                        <span></span>
+                    @endif
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
     </div>
+
+    @if (auth()->user()?->isAdmin())
+        <div class="modal fade se-delete-modal" id="seDeleteConfirmModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+                <form method="POST" action="" id="seDeleteConfirmForm" class="modal-content m-0">
+                    @csrf
+                    @method('DELETE')
+                    @if (in_array($period, ['current', 'previous'], true))
+                        <input type="hidden" name="period" value="{{ $period }}">
+                    @endif
+                    @if (!empty($branchFilter))
+                        <input type="hidden" name="branch" value="{{ $branchFilter }}">
+                    @endif
+                    @if (!empty($monthFilter))
+                        <input type="hidden" name="month" value="{{ $monthFilter }}">
+                    @endif
+                    <div class="modal-header d-flex justify-content-between align-items-center">
+                        <h6 class="modal-title fw-bold mb-0" style="color: #f8efe6;">Delete Staff Evaluation</h6>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-0" id="seDeleteConfirmMessage" style="color: #dfd0ca; font-size: 13.5px; line-height: 1.55;"></p>
+                    </div>
+                    <div class="modal-footer d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-sm btn-danger rounded-pill px-3 fw-semibold">
+                            <i class="bx bx-trash me-1"></i>Delete
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <style>
+            .se-delete-icon-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 31px;
+                height: 31px;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(217, 143, 131, 0.22);
+                color: #b8a29a;
+                font-size: 15px;
+                cursor: pointer;
+                transition: all 0.15s ease;
+                padding: 0;
+            }
+
+            .se-delete-icon-btn:hover {
+                background: rgba(244, 63, 94, 0.16);
+                border-color: rgba(244, 63, 94, 0.45);
+                color: #fda4af;
+            }
+
+            .se-delete-modal .modal-content {
+                background: linear-gradient(180deg, rgba(34, 22, 27, 0.98) 0%, rgba(20, 13, 17, 0.99) 100%);
+                border: 1px solid rgba(229, 184, 168, 0.22);
+                border-radius: 16px;
+                color: #f8efe6;
+                box-shadow: 0 24px 56px rgba(0, 0, 0, 0.62);
+            }
+
+            .se-delete-modal .modal-header {
+                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+                padding: 15px 20px;
+            }
+
+            .se-delete-modal .modal-body {
+                padding: 18px 20px;
+            }
+
+            .se-delete-modal .modal-footer {
+                border-top: 1px solid rgba(255, 255, 255, 0.06);
+                padding: 13px 20px;
+            }
+        </style>
+    @endif
 
     <style>
         /* The modal's <form> sits between .modal-content and .modal-header/
@@ -501,8 +611,49 @@
                     scoresEl.appendChild(row);
                 });
 
-                new bootstrap.Modal(document.getElementById('viewEvaluationModal')).show();
+                var viewDeleteBtn = document.getElementById('viewEvalDeleteBtn');
+                if (viewDeleteBtn) {
+                    viewDeleteBtn.setAttribute('data-delete-url', data.delete_url || '');
+                    viewDeleteBtn.setAttribute('data-delete-staff', data.staff || 'this staff member');
+                    viewDeleteBtn.setAttribute('data-delete-date', data.date || '');
+                }
+
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('viewEvaluationModal')).show();
             });
         });
+
+        @if (auth()->user()?->isAdmin())
+            function openStaffEvalDeleteModal(btn) {
+                var form = document.getElementById('seDeleteConfirmForm');
+                var msg = document.getElementById('seDeleteConfirmMessage');
+                var modalEl = document.getElementById('seDeleteConfirmModal');
+                if (!form || !msg || !modalEl) return;
+
+                var staffName = btn.getAttribute('data-delete-staff') || 'this staff member';
+                var date = btn.getAttribute('data-delete-date') || '';
+                form.action = btn.getAttribute('data-delete-url') || '';
+                msg.textContent = 'Delete staff evaluation for ' + staffName + ' from ' + date + '? This cannot be undone.';
+
+                if (window.bootstrap && window.bootstrap.Modal) {
+                    window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                } else if (window.confirm(msg.textContent)) {
+                    form.submit();
+                }
+            }
+
+            var viewEvalDeleteBtnEl = document.getElementById('viewEvalDeleteBtn');
+            if (viewEvalDeleteBtnEl) {
+                viewEvalDeleteBtnEl.addEventListener('click', function () {
+                    var viewModalEl = document.getElementById('viewEvaluationModal');
+                    if (viewModalEl && window.bootstrap && window.bootstrap.Modal) {
+                        var viewInst = window.bootstrap.Modal.getInstance(viewModalEl);
+                        if (viewInst) {
+                            viewInst.hide();
+                        }
+                    }
+                    openStaffEvalDeleteModal(viewEvalDeleteBtnEl);
+                });
+            }
+        @endif
     </script>
 @endsection

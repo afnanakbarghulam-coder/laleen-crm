@@ -445,6 +445,9 @@ Route::middleware(['auth'])->group(function () {
 
         Route::middleware('module:kpis')->get('/evaluations', [StaffEvaluationController::class, 'index'])->name('evaluations.index');
         Route::middleware('module:kpis,edit')->post('/evaluations', [StaffEvaluationController::class, 'store'])->name('evaluations.store');
+        Route::middleware(['role:admin,owner,super_admin', 'module:kpis,edit'])
+            ->delete('/evaluations/{staffEvaluation}', [StaffEvaluationController::class, 'destroy'])
+            ->name('evaluations.destroy');
 
         Route::middleware('module:kpis')->get('/salon-staff/branch-evaluation', [BranchEvaluationController::class, 'index'])->name('branch-evaluation.index');
         Route::middleware(['role:admin,owner,super_admin', 'module:kpis,edit'])->group(function () {

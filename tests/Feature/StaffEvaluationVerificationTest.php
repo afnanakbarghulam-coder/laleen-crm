@@ -416,4 +416,122 @@ class StaffEvaluationVerificationTest extends TestCase
         $response->assertSee('Mixed performance this week', false);
         $response->assertSee('👁️ View Details', false);
     }
+
+    public function test_non_admin_users_do_not_see_delete_button_and_receive_403_on_delete(): void
+    {
+        Carbon::setTestNow(self::A_MONDAY);
+
+        $admin = User::factory()->create(['role' => 'admin', 'is_active' => true]);
+        $staff = Staff::create(['name' => 'Arpana', 'branch' => 'old_airport']);
+
+        $currentEval = $this->makeEvaluation($staff, $admin, 'old_airport', now('Asia/Qatar'), [5, 5, 5, 1, 5, 5], 'This week note');
+        $previousEval = $this->makeEvaluation($staff, $admin, 'old_airport', now('Asia/Qatar')->subWeeks(2), [5, 5, 5, 5, 5, 5], 'Previous week note');
+
+        $nonAdmins = [
+            User::factory()->create([
+                'name' => 'Ahana Manager',
+                'role' => 'manager',
+                'is_active' => true,
+                'permissions' => ['kpis' => 'edit'],
+            ]),
+            User::factory()->create([
+                'name' => 'Chat Agent',
+                'role' => 'agent',
+                'is_active' => true,
+                'permissions' => ['kpis' => 'edit'],
+            ]),
+            User::factory()->create([
+                'name' => 'Salon Staff',
+                'role' => 'staff',
+                'is_active' => true,
+                'permissions' => ['kpis' => 'view'],
+            ]),
+        ];
+
+        $destroyUrl = route('kpi.evaluations.destroy', $currentEval);
+
+        foreach ($nonAdmins as $user) {
+            foreach (['current', 'previous'] as $period) {
+                $this->actingAs($user)
+                    ->get(route('kpi.evaluations.index', ['period' => $period]))
+                    ->assertOk()
+                    ->assertDontSee('se-delete-icon-btn')
+                    ->assertDontSee('id="seDeleteConfirmModal"', false)
+                    ->assertDontSee('id="viewEvalDeleteBtn"', false)
+                    ->assertDontSee('data-delete-url=', false)
+                    ->assertDontSee('Delete Evaluation');
+            }
+
+            $this->actingAs($user)
+                ->delete($destroyUrl)
+                ->assertForbidden();
+        }
+
+        $this->assertDatabaseHas('kpi_staff_evaluations', ['id' => $currentEval->id]);
+        $this->assertDatabaseHas('kpi_staff_evaluations', ['id' => $previousEval->id]);
+    }
+
+    public function test_admin_can_delete_staff_evaluation_and_weekly_summary_cards_update_accurately(): void
+    {
+        Carbon::setTestNow(self::A_MONDAY);
+
+        $admin = User::factory()->create(['role' => 'admin', 'is_active' => true]);
+        $arpana = Staff::create(['name' => 'Arpana', 'branch' => 'old_airport']);
+        $maya = Staff::create(['name' => 'Maya', 'branch' => 'old_airport']);
+
+        // Both Old Airport staff evaluated this week -> "2 / 2" & "Fully Evaluated", Sales Focus weakest metric (1 of 2)
+        $arpanaCurrent = $this->makeEvaluation($arpana, $admin, 'old_airport', now('Asia/Qatar'), [5, 5, 5, 1, 5, 5], 'Arpana weekly review');
+        $mayaCurrent = $this->makeEvaluation($maya, $admin, 'old_airport', now('Asia/Qatar'), [5, 5, 5, 5, 5, 5], 'Maya weekly review');
+        $arpanaPrev = $this->makeEvaluation($arpana, $admin, 'old_airport', now('Asia/Qatar')->subWeeks(2), [5, 5, 5, 5, 5, 5], 'Arpana older review');
+
+        $destroyCurrentUrl = route('kpi.evaluations.destroy', $arpanaCurrent);
+        $destroyPrevUrl = route('kpi.evaluations.destroy', $arpanaPrev);
+
+        // 1. Before deletion: Admin sees delete buttons on both This Week and Previous Weeks, and card shows 2 / 2 (Fully Evaluated)
+        $this->actingAs($admin)
+            ->get(route('kpi.evaluations.index', ['period' => 'current', 'branch' => 'old_airport']))
+            ->assertOk()
+            ->assertSee('se-delete-icon-btn')
+            ->assertSee('id="seDeleteConfirmModal"', false)
+            ->assertSee('id="viewEvalDeleteBtn"', false)
+            ->assertSee($destroyCurrentUrl, false)
+            ->assertSee('2 / 2')
+            ->assertSee('Fully Evaluated')
+            ->assertSee('Sales Focus')
+            ->assertSee('Arpana weekly review');
+
+        $this->actingAs($admin)
+            ->get(route('kpi.evaluations.index', ['period' => 'previous']))
+            ->assertOk()
+            ->assertSee('se-delete-icon-btn')
+            ->assertSee($destroyPrevUrl, false)
+            ->assertSee('Arpana older review');
+
+        // 2. Delete Arpana's current-week evaluation -> preserves period & branch filter on redirect with flash message
+        $this->actingAs($admin)
+            ->delete($destroyCurrentUrl, ['period' => 'current', 'branch' => 'old_airport'])
+            ->assertRedirect(route('kpi.evaluations.index', ['period' => 'current', 'branch' => 'old_airport']))
+            ->assertSessionHas('success', 'Staff evaluation deleted.');
+
+        $this->assertDatabaseMissing('kpi_staff_evaluations', ['id' => $arpanaCurrent->id]);
+        $this->assertDatabaseHas('kpi_staff_evaluations', ['id' => $mayaCurrent->id]);
+
+        // 3. Index immediately reflects updated counts: 1 / 2, 1 Remaining, no Sales Focus weakest metric, row gone
+        $this->actingAs($admin)
+            ->get(route('kpi.evaluations.index', ['period' => 'current', 'branch' => 'old_airport']))
+            ->assertOk()
+            ->assertDontSee('Arpana weekly review')
+            ->assertSee('Maya weekly review')
+            ->assertSee('1 / 2')
+            ->assertSee('1 Remaining')
+            ->assertDontSee('1 of 2 evaluations scored a 1 here this week');
+
+        // 4. Delete previous-week evaluation -> preserves period=previous cleanly
+        $this->actingAs($admin)
+            ->delete($destroyPrevUrl, ['period' => 'previous'])
+            ->assertRedirect(route('kpi.evaluations.index', ['period' => 'previous']))
+            ->assertSessionHas('success', 'Staff evaluation deleted.');
+
+        $this->assertDatabaseMissing('kpi_staff_evaluations', ['id' => $arpanaPrev->id]);
+    }
 }
