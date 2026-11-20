@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BranchEvaluation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class BranchEvaluationController extends Controller
 {
@@ -94,6 +95,26 @@ class BranchEvaluationController extends Controller
         ]);
 
         return redirect()->route('kpi.branch-evaluation.show', $branchEvaluation)->with('success', 'Branch evaluation updated.');
+    }
+
+    public function destroy(Request $request, BranchEvaluation $branchEvaluation)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        DB::transaction(function () use ($branchEvaluation) {
+            $branchEvaluation->delete();
+        });
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Branch evaluation deleted.',
+            ]);
+        }
+
+        return redirect()
+            ->route('kpi.branch-evaluation.index')
+            ->with('success', 'Branch evaluation deleted.');
     }
 
     /** Shared by store() and update() so both validate the 27 binary answers identically. */

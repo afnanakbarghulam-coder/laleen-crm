@@ -452,6 +452,7 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/salon-staff/branch-evaluation', [BranchEvaluationController::class, 'store'])->name('branch-evaluation.store');
             Route::get('/salon-staff/branch-evaluation/{branchEvaluation}/edit', [BranchEvaluationController::class, 'edit'])->name('branch-evaluation.edit');
             Route::put('/salon-staff/branch-evaluation/{branchEvaluation}', [BranchEvaluationController::class, 'update'])->name('branch-evaluation.update');
+            Route::delete('/salon-staff/branch-evaluation/{branchEvaluation}', [BranchEvaluationController::class, 'destroy'])->name('branch-evaluation.destroy');
         });
         Route::middleware('module:kpis')->get('/salon-staff/branch-evaluation/{branchEvaluation}', [BranchEvaluationController::class, 'show'])->name('branch-evaluation.show');
     });

@@ -351,4 +351,121 @@ class BranchEvaluationTest extends TestCase
             ->assertSee('Edit Report')
             ->assertSee(route('kpi.branch-evaluation.edit', $evaluation), false);
     }
+
+    public function test_non_admin_users_do_not_see_delete_button_and_receive_403_on_delete(): void
+    {
+        $evaluation = BranchEvaluation::create([
+            'branch' => 'old_airport',
+            'manager' => 'Ahana',
+            'evaluation_date' => '2026-11-20',
+            'answers' => $this->answersWithFails(),
+            'total_score' => 135,
+            'percentage' => 100,
+            'grade' => 'Excellent',
+        ]);
+
+        $nonAdmins = [
+            User::factory()->create([
+                'role' => 'manager',
+                'is_active' => true,
+                'permissions' => ['kpis' => 'edit'],
+            ]),
+            User::factory()->create([
+                'role' => 'agent',
+                'is_active' => true,
+                'permissions' => ['kpis' => 'edit'],
+            ]),
+            User::factory()->create([
+                'role' => 'staff',
+                'is_active' => true,
+                'permissions' => ['kpis' => 'view'],
+            ]),
+        ];
+
+        $destroyUrl = route('kpi.branch-evaluation.destroy', $evaluation);
+
+        foreach ($nonAdmins as $user) {
+            $this->actingAs($user)
+                ->get(route('kpi.branch-evaluation.index'))
+                ->assertOk()
+                ->assertDontSee('be-delete-icon-btn')
+                ->assertDontSee('id="beDeleteConfirmModal"', false)
+                ->assertDontSee('data-delete-url=', false)
+                ->assertDontSee('Delete Evaluation');
+
+            $this->actingAs($user)
+                ->get(route('kpi.branch-evaluation.show', $evaluation))
+                ->assertOk()
+                ->assertDontSee('be-delete-icon-btn')
+                ->assertDontSee('id="beShowDeleteConfirmModal"', false)
+                ->assertDontSee('Delete Evaluation')
+                ->assertDontSee('name="_method" value="DELETE"', false);
+
+            $this->actingAs($user)
+                ->delete($destroyUrl)
+                ->assertForbidden();
+        }
+
+        $this->assertDatabaseHas('branch_evaluations', ['id' => $evaluation->id]);
+    }
+
+    public function test_admin_sees_delete_button_and_can_delete_branch_evaluation(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'is_active' => true]);
+
+        $toDelete = BranchEvaluation::create([
+            'branch' => 'old_airport',
+            'manager' => 'Ahana',
+            'evaluation_date' => '2026-11-20',
+            'answers' => $this->answersWithFails(),
+            'total_score' => 135,
+            'percentage' => 100,
+            'grade' => 'Excellent',
+        ]);
+
+        $toKeep = BranchEvaluation::create([
+            'branch' => 'wakrah',
+            'manager' => 'Rhea',
+            'evaluation_date' => '2026-11-18',
+            'answers' => $this->answersWithFails(),
+            'total_score' => 135,
+            'percentage' => 100,
+            'grade' => 'Excellent',
+        ]);
+
+        $destroyUrl = route('kpi.branch-evaluation.destroy', $toDelete);
+
+        // Index & Show pages both expose Admin-only delete button and confirmation modal
+        $this->actingAs($admin)
+            ->get(route('kpi.branch-evaluation.index'))
+            ->assertOk()
+            ->assertSee('be-delete-icon-btn')
+            ->assertSee('id="beDeleteConfirmModal"', false)
+            ->assertSee($destroyUrl, false)
+            ->assertSee('20 Nov 2026');
+
+        $this->actingAs($admin)
+            ->get(route('kpi.branch-evaluation.show', $toDelete))
+            ->assertOk()
+            ->assertSee('be-delete-icon-btn')
+            ->assertSee('id="beShowDeleteConfirmModal"', false)
+            ->assertSee('Delete Old Airport evaluation from 20 Nov 2026? This cannot be undone.')
+            ->assertSee($destroyUrl, false);
+
+        // Admin deletes evaluation -> redirects to index with success flash
+        $this->actingAs($admin)
+            ->delete($destroyUrl)
+            ->assertRedirect(route('kpi.branch-evaluation.index'))
+            ->assertSessionHas('success', 'Branch evaluation deleted.');
+
+        $this->assertDatabaseMissing('branch_evaluations', ['id' => $toDelete->id]);
+        $this->assertDatabaseHas('branch_evaluations', ['id' => $toKeep->id]);
+
+        // Deleted row no longer appears on index
+        $this->actingAs($admin)
+            ->get(route('kpi.branch-evaluation.index'))
+            ->assertOk()
+            ->assertDontSee('20 Nov 2026')
+            ->assertSee('18 Nov 2026');
+    }
 }
