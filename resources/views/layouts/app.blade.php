@@ -27,7 +27,6 @@
 
     {{-- CSS Files --}}
     <link rel="stylesheet" href="{{ asset('design/sneat-admin-template/assets/vendor/css/core.css') }}">
-    <link rel="stylesheet" href="{{ asset('design/sneat-admin-template/assets/vendor/css/theme-default.css') }}">
     <link rel="stylesheet" href="{{ asset('design/sneat-admin-template/assets/css/demo.css') }}">
     <link rel="stylesheet"
         href="{{ asset('design/sneat-admin-template/assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css') }}">

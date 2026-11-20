@@ -202,7 +202,7 @@
                 <div class="laleen-slim-kpi-val" style="color: {{ $analyticsTotals['overall_met_target'] ? '#34D399' : '#f8efe6' }};">
                     {{ $analyticsTotals['overall_conversion'] }}%
                 </div>
-                <div class="laleen-slim-kpi-sub">Lead-to-paid visit rate</div>
+                <div class="laleen-slim-kpi-sub">Lead-to-booking conversion rate</div>
             </div>
         </div>
     </div>

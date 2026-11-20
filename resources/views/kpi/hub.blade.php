@@ -620,7 +620,7 @@
                 </div>
             </article>
 
-            {{-- AYAN CARD 3: Paid Ad Conversion --}}
+            {{-- AYAN CARD 3: Ad Booking Conversion --}}
             <article class="luxe-kpi-card is-hidden" data-owner="ayan">
                 <div class="luxe-card-top">
                     <div class="luxe-icon-orb orb-emerald">
@@ -632,7 +632,7 @@
                     <a href="{{ route('kpi.ads.index', ['month' => $selectedMonth ?? now()->format('Y-m')]) }}" class="luxe-owner-tag tag-ayan" title="Open Ads Conversion">AYAN &nearr;</a>
                 </div>
 
-                <div class="luxe-card-label">Paid Ad Conversion</div>
+                <div class="luxe-card-label">Ad Booking Conversion</div>
 
                 <div class="luxe-card-hero">
                     {{ number_format($adConv, 1) }}%

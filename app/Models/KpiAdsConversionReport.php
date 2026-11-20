@@ -171,10 +171,10 @@ class KpiAdsConversionReport extends Model
             'booking_gap' => abs($bookingGap),
             'revenue_gap' => round(abs($revenueGap), 2),
             'leading_branch' => match (true) {
-                $bookingGap > 0 => 'Old Airport',
-                $bookingGap < 0 => 'Al Wakrah',
                 $revenueGap > 0 => 'Old Airport',
                 $revenueGap < 0 => 'Al Wakrah',
+                $bookingGap > 0 => 'Old Airport',
+                $bookingGap < 0 => 'Al Wakrah',
                 default => null,
             },
         ];

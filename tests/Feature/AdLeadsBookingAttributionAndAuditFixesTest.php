@@ -500,4 +500,81 @@ class AdLeadsBookingAttributionAndAuditFixesTest extends TestCase
         $this->assertSame(1, $stats['bookings_count']);
         $this->assertSame(500.0, (float) $stats['revenue_qar']);
     }
+
+    public function test_leading_branch_ranks_by_revenue_first_and_layouts_omit_404_sneat_css_with_aligned_booking_copy(): void
+    {
+        $this->travelTo(Carbon::parse('2026-11-20 12:00:00', 'Asia/Qatar'));
+
+        // Old Airport: 3 bookings totaling 3,850 QAR (higher revenue)
+        foreach ([1500, 1350, 1000] as $i => $amt) {
+            AdLeadEntry::create([
+                'date' => '2026-11-10',
+                'customer_name' => 'OA Client ' . ($i + 1),
+                'phone' => '5570000' . ($i + 1),
+                'category' => 'Facial',
+                'branch' => 'old_airport',
+                'ticket_amount' => $amt,
+                'old_airport_amount' => $amt,
+                'wakrah_amount' => 0,
+            ]);
+        }
+
+        // Al Wakrah: 5 bookings totaling 3,800 QAR (more bookings, lower revenue)
+        foreach ([1000, 900, 800, 600, 500] as $i => $amt) {
+            AdLeadEntry::create([
+                'date' => '2026-11-10',
+                'customer_name' => 'WK Client ' . ($i + 1),
+                'phone' => '5580000' . ($i + 1),
+                'category' => 'Facial',
+                'branch' => 'wakrah',
+                'ticket_amount' => $amt,
+                'old_airport_amount' => 0,
+                'wakrah_amount' => $amt,
+            ]);
+        }
+
+        $report = new KpiAdsConversionReport([
+            'date_from' => Carbon::parse('2026-11-01'),
+            'date_to' => Carbon::parse('2026-11-20'),
+        ]);
+
+        $comparison = $report->branchComparison();
+        $this->assertSame(3, $comparison['old_airport']['bookings']);
+        $this->assertSame(3850.0, (float) $comparison['old_airport']['revenue']);
+        $this->assertSame(5, $comparison['wakrah']['bookings']);
+        $this->assertSame(3800.0, (float) $comparison['wakrah']['revenue']);
+        $this->assertSame('Old Airport', $comparison['leading_branch'], 'Higher revenue branch must lead even with fewer bookings');
+
+        // Tie-breaker check: when revenue is equal (3,850 vs 3,850), booking count decides (Al Wakrah 6 > Old Airport 3)
+        AdLeadEntry::create([
+            'date' => '2026-11-11',
+            'customer_name' => 'WK Tie Breaker',
+            'phone' => '55800009',
+            'category' => 'Facial',
+            'branch' => 'wakrah',
+            'ticket_amount' => 50,
+            'old_airport_amount' => 0,
+            'wakrah_amount' => 50,
+        ]);
+
+        $tiedComparison = $report->branchComparison();
+        $this->assertSame(3850.0, (float) $tiedComparison['old_airport']['revenue']);
+        $this->assertSame(3850.0, (float) $tiedComparison['wakrah']['revenue']);
+        $this->assertSame('Al Wakrah', $tiedComparison['leading_branch'], 'Booking count must break ties when revenue is equal');
+
+        // Verify dead Sneat theme-default.css 404 link is removed and updated booking copy renders cleanly
+        $this->actingAs($this->admin)
+            ->get(route('kpi.ads.index', ['tab' => 'analytics', 'analytics_from' => '2026-11-01', 'analytics_to' => '2026-11-20']))
+            ->assertOk()
+            ->assertDontSee('theme-default.css', false)
+            ->assertSee('Lead-to-booking conversion rate')
+            ->assertDontSee('Lead-to-paid visit rate');
+
+        $this->actingAs($this->admin)
+            ->get(route('kpi.hub', ['month' => '2026-11']))
+            ->assertOk()
+            ->assertDontSee('theme-default.css', false)
+            ->assertSee('Ad Booking Conversion')
+            ->assertDontSee('Paid Ad Conversion');
+    }
 }

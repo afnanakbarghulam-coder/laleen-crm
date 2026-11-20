@@ -339,7 +339,7 @@ class KpiExecutiveScorecardTest extends TestCase
         $response->assertSee('Back to All Staff Scorecards');
         $response->assertSee('Old Airport Ad Revenue');
         $response->assertSee('Wakrah Ad Revenue');
-        $response->assertSee('Paid Ad Conversion');
+        $response->assertSee('Ad Booking Conversion');
         $response->assertSee('Daily Booking Quota');
         $response->assertSee('Agent Chat Quality');
         $response->assertSee('Lead Conversion Rate');
