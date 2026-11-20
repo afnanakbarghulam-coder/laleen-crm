@@ -749,4 +749,65 @@ class ClientImportTest extends TestCase
         $this->assertSame('active', $blankName->status);
         $this->assertSame('legacy_excel_2026_11', $blankName->import_source);
     }
+
+    public function test_four_byte_emojis_in_name_and_whatsapp_service_prefixes_import_cleanly(): void
+    {
+        $csv = $this->writeTempCsv([
+            [
+                'phone' => '97455123456',
+                'phone_local_8' => '55123456',
+                'name' => 'Noora 🌸✨',
+                'branch' => 'Old Airport',
+                'visited_branches' => 'Old Airport',
+                'total_bookings' => '6',
+                'last_booking_date' => '2026-10-20',
+                'last_service' => '💆‍♀️ Service: Haircut',
+                'est_booking_spend_qar' => '450.0',
+                'status' => 'Active',
+            ],
+            [
+                'phone' => '97455654321',
+                'phone_local_8' => '55654321',
+                'name' => 'Maya 💖',
+                'branch' => 'Al Wakrah',
+                'visited_branches' => 'Al Wakrah',
+                'total_bookings' => '3',
+                'last_booking_date' => '2026-10-25',
+                'last_service' => '💆♀️ Complimentary Service: Collage hair spa',
+                'est_booking_spend_qar' => '210.0',
+                'status' => 'Active',
+            ],
+            [
+                'phone' => '918010267487',
+                'name' => 'Priya 💅',
+                'branch' => 'Old Airport',
+                'visited_branches' => 'Old Airport',
+                'total_bookings' => '2',
+                'last_booking_date' => '2026-10-28',
+                'last_service' => 'Service: Blow dry',
+                'status' => 'Active',
+            ],
+        ], withBom: true);
+
+        $summary = app(ClientImportService::class)->importFromCsv($csv, dryRun: false, normalizeExisting: true);
+
+        $this->assertSame(3, $summary['created']);
+        $this->assertSame(0, $summary['skipped']);
+
+        $noora = Customer::where('phone', '+97455123456')->firstOrFail();
+        $this->assertSame('Noora 🌸✨', $noora->name);
+        $this->assertStringContainsString('Last Service: Haircut', (string) $noora->notes);
+        $this->assertStringNotContainsString('💆', (string) $noora->notes);
+        $this->assertStringNotContainsString('Last Service: Service:', (string) $noora->notes);
+
+        $maya = Customer::where('phone', '+97455654321')->firstOrFail();
+        $this->assertSame('Maya 💖', $maya->name);
+        $this->assertStringContainsString('Last Service: Collage hair spa', (string) $maya->notes);
+        $this->assertStringNotContainsString('Complimentary Service:', (string) $maya->notes);
+
+        $priya = Customer::where('phone', '+918010267487')->firstOrFail();
+        $this->assertSame('Priya 💅', $priya->name);
+        $this->assertStringContainsString('Last Service: Blow dry', (string) $priya->notes);
+        $this->assertStringNotContainsString('Last Service: Service:', (string) $priya->notes);
+    }
 }

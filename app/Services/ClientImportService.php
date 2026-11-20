@@ -78,6 +78,31 @@ class ClientImportService
     }
 
     /**
+     * Clean stray WhatsApp card prefixes from CSV `last_service` (e.g., "💆‍♀️ Service: Haircut",
+     * "💆‍♀️ Complimentary Service: Collage hair spa", or "Service: Blow dry").
+     */
+    public static function cleanLegacyService(?string $rawService): string
+    {
+        $clean = trim((string) preg_replace('/\s+/u', ' ', (string) $rawService));
+        if ($clean === '') {
+            return '';
+        }
+
+        $clean = (string) preg_replace(
+            '/^(?:[\p{So}\x{200D}\x{FE0F}\x{2640}\x{2642}\s•\-\*]+)?(?:(?:complimentary|selected|booked)\s+)?services?\s*:\s*/iu',
+            '',
+            $clean
+        );
+        $clean = trim($clean);
+
+        if ($clean === '' || mb_strtolower($clean) === 'pending') {
+            return '';
+        }
+
+        return mb_substr($clean, 0, 120);
+    }
+
+    /**
      * Build a compact, idempotent legacy history note line from CSV columns.
      *
      * @param  array<string, string>  $row
@@ -99,9 +124,9 @@ class ClientImportService
             $parts[] = 'First Visit: ' . $firstDate;
         }
 
-        $lastService = trim((string) ($row['last_service'] ?? ''));
-        if ($lastService !== '' && mb_strtolower($lastService) !== 'pending') {
-            $parts[] = 'Last Service: ' . mb_substr($lastService, 0, 120);
+        $lastService = self::cleanLegacyService($row['last_service'] ?? null);
+        if ($lastService !== '') {
+            $parts[] = 'Last Service: ' . $lastService;
         }
 
         $visitedBranches = trim((string) ($row['visited_branches'] ?? ''));
