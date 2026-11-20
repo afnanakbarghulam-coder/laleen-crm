@@ -9,6 +9,7 @@ use App\Models\Staff;
 use App\Models\User;
 use App\Services\ClientImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class ClientImportTest extends TestCase
@@ -493,5 +494,259 @@ class ClientImportTest extends TestCase
         $tiers = $indexResp->viewData('customerTiers');
         $this->assertSame('97466485627', $tiers[$qatarClient->id]['wa_phone']);
         $this->assertSame('918010267487', $tiers[$intlClient->id]['wa_phone']);
+    }
+
+    public function test_non_admin_users_get_403_on_all_import_endpoints_and_never_see_import_button(): void
+    {
+        $admin = User::create([
+            'name' => 'Afnan Owner',
+            'email' => 'afnan.ui.admin@laleen.qa',
+            'password' => bcrypt('password'),
+            'role' => 'admin',
+            'is_active' => true,
+        ]);
+
+        $nonAdmins = [
+            User::create([
+                'name' => 'Ops Manager',
+                'email' => 'ops.mgr.import@laleen.qa',
+                'password' => bcrypt('password'),
+                'role' => 'manager',
+                'is_active' => true,
+                'permissions' => ['clients' => 'edit'],
+            ]),
+            User::create([
+                'name' => 'Chat Agent',
+                'email' => 'chat.agent.import@laleen.qa',
+                'password' => bcrypt('password'),
+                'role' => 'agent',
+                'is_active' => true,
+                'permissions' => ['clients' => 'edit'],
+            ]),
+            User::create([
+                'name' => 'Salon Staff',
+                'email' => 'salon.staff.import@laleen.qa',
+                'password' => bcrypt('password'),
+                'role' => 'staff',
+                'is_active' => true,
+                'permissions' => ['clients' => 'view'],
+            ]),
+            User::create([
+                'name' => 'Marketing Specialist',
+                'email' => 'mkt.spec.import@laleen.qa',
+                'password' => bcrypt('password'),
+                'role' => 'marketing_specialist',
+                'is_active' => true,
+                'permissions' => ['clients' => 'edit'],
+            ]),
+        ];
+
+        // Admin sees Import CSV button on Clients index and can access /customers/import
+        $this->actingAs($admin)
+            ->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee('id="clientsImportCsvBtn"', false)
+            ->assertSee('Import CSV');
+
+        $this->actingAs($admin)
+            ->get(route('customers.import.index'))
+            ->assertOk()
+            ->assertSee('Import Clients (CSV)');
+
+        $fakeCsv = UploadedFile::fake()->createWithContent('clients.csv', "phone,name\n97455112233,Test\n");
+        $fakeToken = '11111111-1111-4111-8111-111111111111';
+
+        foreach ($nonAdmins as $user) {
+            $this->actingAs($user)
+                ->get(route('customers.index'))
+                ->assertOk()
+                ->assertDontSee('id="clientsImportCsvBtn"', false)
+                ->assertDontSee(route('customers.import.index'));
+
+            $this->actingAs($user)->get(route('customers.import.index'))->assertForbidden();
+            $this->actingAs($user)->postJson(route('customers.import.dry-run'), ['csv_file' => $fakeCsv])->assertForbidden();
+            $this->actingAs($user)->postJson(route('customers.import.normalize'), ['token' => $fakeToken])->assertForbidden();
+            $this->actingAs($user)->postJson(route('customers.import.chunk'), ['token' => $fakeToken, 'offset' => 0])->assertForbidden();
+            $this->actingAs($user)->deleteJson(route('customers.import.cancel'), ['token' => $fakeToken])->assertForbidden();
+        }
+    }
+
+    public function test_admin_browser_dry_run_makes_zero_db_writes_and_cancel_deletes_uploaded_file(): void
+    {
+        $admin = User::create([
+            'name' => 'Afnan Owner',
+            'email' => 'afnan.ui.dryrun@laleen.qa',
+            'password' => bcrypt('password'),
+            'role' => 'admin',
+            'is_active' => true,
+        ]);
+
+        $existing = Customer::create([
+            'name' => ',',
+            'phone' => '66485627',
+            'branch' => null,
+        ]);
+
+        $csvContent = "\xEF\xBB\xBFphone,phone_local_8,name,branch,visited_branches,total_bookings,last_booking_date,last_service,est_booking_spend_qar,status\n"
+            . "97466485627,66485627,Fatima QA,Old Airport,Old Airport,4,2026-10-01,Facial,450,Active\n"
+            . "918010267487,,Priya India,Al Wakrah,Al Wakrah,1,2026-10-05,Manicure,120,Active\n";
+
+        $upload = UploadedFile::fake()->createWithContent('laleen_test_dry.csv', $csvContent);
+
+        $dryResp = $this->actingAs($admin)
+            ->postJson(route('customers.import.dry-run'), [
+                'csv_file' => $upload,
+                'source' => 'legacy_excel_2026_11',
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('summary.dry_run', true)
+            ->assertJsonPath('summary.total_csv_rows', 2)
+            ->assertJsonPath('summary.normalized', 1)
+            ->assertJsonPath('summary.updated', 1)
+            ->assertJsonPath('summary.created', 1)
+            ->assertJsonPath('summary.skipped', 0);
+
+        $token = (string) $dryResp->json('token');
+        $storedPath = storage_path('app/imports/uploads/' . $token . '.csv');
+        $this->assertFileExists($storedPath);
+
+        // Zero DB writes occurred during dry-run
+        $this->assertSame(1, Customer::count());
+        $this->assertSame('66485627', $existing->fresh()->phone);
+        $this->assertSame(',', $existing->fresh()->name);
+
+        // Cancel & Delete removes private uploaded CSV file immediately
+        $this->actingAs($admin)
+            ->deleteJson(route('customers.import.cancel'), ['token' => $token])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('file_deleted', true);
+
+        $this->assertFileDoesNotExist($storedPath);
+    }
+
+    public function test_admin_browser_chunked_live_import_normalizes_deduplicates_and_auto_deletes_uploaded_file(): void
+    {
+        $admin = User::create([
+            'name' => 'Afnan Owner',
+            'email' => 'afnan.ui.live@laleen.qa',
+            'password' => bcrypt('password'),
+            'role' => 'admin',
+            'is_active' => true,
+        ]);
+
+        // Existing 8-digit Qatar client with placeholder name
+        $legacy8 = Customer::create([
+            'name' => '.',
+            'phone' => '66485627',
+            'branch' => null,
+            'loyalty_points' => 110,
+        ]);
+
+        // Existing 11-digit Qatar client without '+' with real name & Old Airport branch
+        $legacy11 = Customer::create([
+            'name' => 'Reem Al-Kuwari',
+            'phone' => '97466523384',
+            'branch' => 'old_airport',
+            'loyalty_points' => 300,
+        ]);
+
+        // 5-row CSV processed in small 2-row chunks (3 sequential chunk requests)
+        $csvContent = "\xEF\xBB\xBFphone,phone_local_8,name,branch,visited_branches,total_bookings,last_booking_date,last_service,est_booking_spend_qar,status\n"
+            . "97466485627,66485627,Amrita Nair,Al Wakrah,Al Wakrah,12,2026-10-18,Keratin,1500,Active\n"
+            . "97466523384,66523384,Different CSV Name,Al Wakrah,Old Airport,3,2026-09-20,Blow dry,240,Active\n"
+            . "918010267487,,Ananya India,Old Airport,Old Airport,2,2026-10-02,Facial,400,Active\n"
+            . "447985461109,,Claire UK,,Old Airport,1,2026-08-14,Haircut,180,Active\n"
+            . "97471949259,71949259,,,Old Airport,0,,,0,Active\n";
+
+        $upload = UploadedFile::fake()->createWithContent('laleen_test_live.csv', $csvContent);
+
+        // Stage 1: Dry-Run upload
+        $dryResp = $this->actingAs($admin)
+            ->postJson(route('customers.import.dry-run'), [
+                'csv_file' => $upload,
+                'source' => 'legacy_excel_2026_11',
+            ])
+            ->assertOk()
+            ->assertJsonPath('summary.total_csv_rows', 5)
+            ->assertJsonPath('summary.created', 3)
+            ->assertJsonPath('summary.updated', 2);
+
+        $token = (string) $dryResp->json('token');
+        $storedPath = storage_path('app/imports/uploads/' . $token . '.csv');
+        $this->assertFileExists($storedPath);
+
+        // Stage 2A: Normalize existing CRM clients once
+        $this->actingAs($admin)
+            ->postJson(route('customers.import.normalize'), ['token' => $token])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('summary.normalized', 2);
+
+        $this->assertSame('+97466485627', $legacy8->fresh()->phone);
+        $this->assertSame('+97466523384', $legacy11->fresh()->phone);
+
+        // Stage 2B: Loop sequential chunks (2 rows per request -> 3 requests)
+        $offset = 0;
+        $hasMore = true;
+        $chunkCalls = 0;
+        $lastFileDeleted = false;
+
+        while ($hasMore) {
+            $chunkResp = $this->actingAs($admin)
+                ->postJson(route('customers.import.chunk'), [
+                    'token' => $token,
+                    'offset' => $offset,
+                    'limit' => 2,
+                    'source' => 'legacy_excel_2026_11',
+                ])
+                ->assertOk()
+                ->assertJsonPath('success', true);
+
+            $chunkCalls++;
+            $offset = (int) $chunkResp->json('chunk.next_offset');
+            $hasMore = (bool) $chunkResp->json('chunk.has_more');
+            $lastFileDeleted = (bool) $chunkResp->json('file_deleted');
+
+            if ($hasMore) {
+                $this->assertFalse($lastFileDeleted);
+                $this->assertFileExists($storedPath);
+            }
+        }
+
+        $this->assertSame(3, $chunkCalls);
+        $this->assertTrue($lastFileDeleted);
+        $this->assertFileDoesNotExist($storedPath, 'Uploaded CSV must be auto-deleted after final chunk');
+
+        // Verify exact final DB state (2 existing updated without duplicates + 3 net-new = 5 total)
+        $this->assertSame(5, Customer::count());
+
+        $legacy8->refresh();
+        $this->assertSame('+97466485627', $legacy8->phone);
+        $this->assertSame('Amrita Nair', $legacy8->name);
+        $this->assertSame('wakrah', $legacy8->branch);
+        $this->assertSame(110, $legacy8->loyalty_points);
+
+        $legacy11->refresh();
+        $this->assertSame('+97466523384', $legacy11->phone);
+        $this->assertSame('Reem Al-Kuwari', $legacy11->name);
+        $this->assertSame('old_airport', $legacy11->branch);
+        $this->assertSame(300, $legacy11->loyalty_points);
+
+        $intlIndia = Customer::where('phone', '+918010267487')->firstOrFail();
+        $this->assertSame('Ananya India', $intlIndia->name);
+        $this->assertSame('old_airport', $intlIndia->branch);
+        $this->assertSame('active', $intlIndia->status);
+        $this->assertSame('legacy_excel_2026_11', $intlIndia->import_source);
+
+        $intlUk = Customer::where('phone', '+447985461109')->firstOrFail();
+        $this->assertSame('Claire UK', $intlUk->name);
+        $this->assertNull($intlUk->branch);
+
+        $blankName = Customer::where('phone', '+97471949259')->firstOrFail();
+        $this->assertSame('Unknown', $blankName->name);
+        $this->assertSame('active', $blankName->status);
+        $this->assertSame('legacy_excel_2026_11', $blankName->import_source);
     }
 }

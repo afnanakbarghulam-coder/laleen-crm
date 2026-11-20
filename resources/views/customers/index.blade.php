@@ -510,6 +510,12 @@
             <div class="text-muted small">Manage client profiles, loyalty points, and repeat bookings</div>
         </div>
         <div class="d-flex align-items-center flex-wrap gap-2">
+            @if (auth()->user()?->isAdmin())
+                <a href="{{ route('customers.import.index') }}" class="btn-header-subtle" id="clientsImportCsvBtn">
+                    <i class="bx bx-upload"></i>
+                    <span>Import CSV</span>
+                </a>
+            @endif
             <form action="{{ route('customers.sync-retention-leads') }}" method="POST" class="m-0">
                 @csrf
                 @if ($currentBranch)

@@ -7,6 +7,7 @@ use App\Http\Controllers\CommandCenterController;
 use App\Http\Controllers\CrmIdeaController;
 use App\Http\Controllers\CrmPresentationController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\CustomerImportController;
 use App\Http\Controllers\Ecommerce\EcommerceAiAgentController;
 use App\Http\Controllers\Ecommerce\EcommerceContentCalendarController;
 use App\Http\Controllers\Ecommerce\EcommerceController;
@@ -326,6 +327,18 @@ Route::middleware(['auth'])->group(function () {
             ->whereNumber('customer')
             ->name('customers.freebieCredits');
     });
+
+    // Admin-only chunked CSV Client Importer (registered before /customers/{customer} wildcard)
+    Route::middleware(['role:admin,owner,super_admin'])
+        ->prefix('customers/import')
+        ->name('customers.import.')
+        ->group(function () {
+            Route::get('/', [CustomerImportController::class, 'index'])->name('index');
+            Route::post('/dry-run', [CustomerImportController::class, 'dryRun'])->name('dry-run');
+            Route::post('/normalize', [CustomerImportController::class, 'normalizeExisting'])->name('normalize');
+            Route::post('/chunk', [CustomerImportController::class, 'processChunk'])->name('chunk');
+            Route::delete('/cancel', [CustomerImportController::class, 'cancel'])->name('cancel');
+        });
 
     Route::middleware('module:clients')->group(function () {
         Route::get('/customers-lookup', [CustomerController::class, 'lookup'])->name('customers.lookup');

@@ -452,6 +452,182 @@ class ClientImportService
     }
 
     /**
+     * Process a single offset/limit slice of a CSV file for timeout-proof sequential AJAX imports.
+     * Assumes existing clients have already been normalized via normalizeExistingCustomers() before
+     * chunk 0, while still matching legacy variants safely via Customer::phoneMatchVariants().
+     *
+     * @return array{
+     *     offset: int,
+     *     next_offset: int,
+     *     limit: int,
+     *     processed_in_chunk: int,
+     *     has_more: bool,
+     *     normalized: int,
+     *     updated: int,
+     *     created: int,
+     *     skipped: int,
+     *     skipped_unchanged: int,
+     *     skipped_invalid: int,
+     *     skipped_duplicate_in_csv: int
+     * }
+     */
+    public function importCsvChunk(
+        string $filePath,
+        int $offset = 0,
+        int $limit = self::CHUNK_SIZE,
+        string $importSource = self::DEFAULT_IMPORT_SOURCE
+    ): array {
+        if (!is_file($filePath) || !is_readable($filePath)) {
+            throw new RuntimeException("CSV file not found or not readable: {$filePath}");
+        }
+
+        $offset = max(0, $offset);
+        $limit = max(1, min(self::CHUNK_SIZE, $limit));
+
+        $hasBranchCol = Schema::hasColumn('customers', 'branch');
+        $hasStatusCol = Schema::hasColumn('customers', 'status');
+        $hasImportSourceCol = Schema::hasColumn('customers', 'import_source');
+
+        $handle = fopen($filePath, 'rb');
+        if ($handle === false) {
+            throw new RuntimeException("Unable to open CSV file: {$filePath}");
+        }
+
+        $chunk = [];
+        $hasMore = false;
+
+        try {
+            $rawHeader = fgetcsv($handle);
+            if (!is_array($rawHeader) || empty($rawHeader)) {
+                throw new RuntimeException("CSV file is empty or missing header row: {$filePath}");
+            }
+
+            $rawHeader[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $rawHeader[0]);
+            $headers = array_map(fn ($h) => strtolower(trim((string) $h)), $rawHeader);
+
+            if (!in_array('phone', $headers, true)) {
+                throw new RuntimeException('CSV header row is missing required "phone" column.');
+            }
+
+            $headerCount = count($headers);
+            $dataRowIndex = 0;
+
+            while (($rawRow = fgetcsv($handle)) !== false) {
+                if ($rawRow === [null] || (count($rawRow) === 1 && trim((string) $rawRow[0]) === '')) {
+                    continue;
+                }
+
+                if ($dataRowIndex < $offset) {
+                    $dataRowIndex++;
+                    continue;
+                }
+
+                if (count($chunk) >= $limit) {
+                    $hasMore = true;
+                    break;
+                }
+
+                if (count($rawRow) < $headerCount) {
+                    $rawRow = array_pad($rawRow, $headerCount, '');
+                } elseif (count($rawRow) > $headerCount) {
+                    $rawRow = array_slice($rawRow, 0, $headerCount);
+                }
+
+                $chunk[] = array_combine($headers, $rawRow);
+                $dataRowIndex++;
+            }
+        } finally {
+            fclose($handle);
+        }
+
+        $processedInChunk = count($chunk);
+        $updated = 0;
+        $created = 0;
+        $skippedUnchanged = 0;
+        $skippedInvalid = 0;
+        $skippedDuplicateInCsv = 0;
+        $phoneUpgradedDuringImport = 0;
+
+        if ($processedInChunk > 0) {
+            // Collect all exact + legacy phone variants ONLY for the rows in this chunk
+            $lookupVariants = [];
+            foreach ($chunk as $row) {
+                $rawPhone = trim((string) ($row['phone'] ?? ''));
+                $digitsOnly = preg_replace('/\D+/', '', $rawPhone);
+                if ($digitsOnly === '') {
+                    continue;
+                }
+                foreach (Customer::phoneMatchVariants('+' . ltrim($digitsOnly, '+')) as $variant) {
+                    $lookupVariants[$variant] = true;
+                }
+            }
+
+            $selectCols = ['id', 'name', 'phone', 'notes'];
+            if ($hasBranchCol) {
+                $selectCols[] = 'branch';
+            }
+
+            $existingByE164 = [];
+            foreach (array_chunk(array_keys($lookupVariants), 300) as $variantSlice) {
+                $rows = DB::table('customers')
+                    ->whereIn('phone', $variantSlice)
+                    ->orderBy('id')
+                    ->get($selectCols);
+
+                foreach ($rows as $row) {
+                    $e164 = Customer::normalizePhoneE164($row->phone);
+                    if ($e164 === '') {
+                        continue;
+                    }
+                    if (!isset($existingByE164[$e164]) || (string) $row->phone === $e164) {
+                        $existingByE164[$e164] = [
+                            'id' => (int) $row->id,
+                            'phone' => (string) $row->phone,
+                            'name' => $row->name !== null ? (string) $row->name : null,
+                            'branch' => $hasBranchCol ? Customer::normalizeBranch($row->branch ?? null) : null,
+                            'notes' => $row->notes !== null ? (string) $row->notes : null,
+                        ];
+                    }
+                }
+            }
+
+            $seenCsvPhones = [];
+            $this->processChunk(
+                $chunk,
+                $existingByE164,
+                $seenCsvPhones,
+                false,
+                false,
+                $importSource,
+                $hasBranchCol,
+                $hasStatusCol,
+                $hasImportSourceCol,
+                $updated,
+                $created,
+                $skippedUnchanged,
+                $skippedInvalid,
+                $skippedDuplicateInCsv,
+                $phoneUpgradedDuringImport
+            );
+        }
+
+        return [
+            'offset' => $offset,
+            'next_offset' => $offset + $processedInChunk,
+            'limit' => $limit,
+            'processed_in_chunk' => $processedInChunk,
+            'has_more' => $hasMore,
+            'normalized' => $phoneUpgradedDuringImport,
+            'updated' => $updated,
+            'created' => $created,
+            'skipped' => $skippedUnchanged + $skippedInvalid + $skippedDuplicateInCsv,
+            'skipped_unchanged' => $skippedUnchanged,
+            'skipped_invalid' => $skippedInvalid,
+            'skipped_duplicate_in_csv' => $skippedDuplicateInCsv,
+        ];
+    }
+
+    /**
      * Process a single 500-row CSV chunk: compute non-destructive updates for matched clients
      * and bulk-insert net-new clients in one transaction per chunk.
      *
