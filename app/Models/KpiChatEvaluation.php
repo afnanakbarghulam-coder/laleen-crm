@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class KpiChatEvaluation extends Model
 {
@@ -49,6 +52,9 @@ class KpiChatEvaluation extends Model
 
     protected $fillable = [
         'agent_id',
+        'agent_ids',
+        'agent_names',
+        'all_agents',
         'evaluator_id',
         'evaluation_date',
         'answers',
@@ -58,6 +64,9 @@ class KpiChatEvaluation extends Model
     ];
 
     protected $casts = [
+        'agent_ids' => 'array',
+        'agent_names' => 'array',
+        'all_agents' => 'boolean',
         'evaluation_date' => 'date',
         'answers' => 'array',
         'percentage' => 'decimal:2',
@@ -68,9 +77,221 @@ class KpiChatEvaluation extends Model
         return $this->belongsTo(User::class, 'agent_id');
     }
 
+    public function agents(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'kpi_chat_evaluation_agents', 'kpi_chat_evaluation_id', 'user_id')
+            ->withTimestamps();
+    }
+
     public function evaluator()
     {
         return $this->belongsTo(User::class, 'evaluator_id');
+    }
+
+    /**
+     * Query all staff selectable in Chat Evaluations:
+     * all users with role === 'agent' PLUS Areeba, Zoya, and Laden explicitly
+     * (so Laden is always selectable even when assigned a lead/manager role).
+     */
+    public static function selectableAgentsQuery(): Builder
+    {
+        return User::query()
+            ->where(function (Builder $query) {
+                $query->where('role', 'agent')
+                    ->orWhereRaw('LOWER(name) LIKE ?', ['%areeba%'])
+                    ->orWhereRaw('LOWER(name) LIKE ?', ['%zoya%'])
+                    ->orWhereRaw('LOWER(name) LIKE ?', ['%laden%']);
+            })
+            ->orderByRaw("
+                CASE
+                    WHEN LOWER(name) LIKE '%areeba%' THEN 1
+                    WHEN LOWER(name) LIKE '%zoya%' THEN 2
+                    WHEN LOWER(name) LIKE '%laden%' THEN 3
+                    ELSE 4
+                END
+            ")
+            ->orderBy('name');
+    }
+
+    public static function selectableAgents(): Collection
+    {
+        return self::selectableAgentsQuery()->get(['id', 'name', 'role']);
+    }
+
+    /**
+     * Filter evaluations belonging to any of the given agent user IDs,
+     * matching both legacy single-agent `agent_id` and the multi-agent pivot.
+     *
+     * @param  array<int|string>|Collection<int, int|string>  $agentIds
+     */
+    public function scopeForAgentIds(Builder $query, array|Collection $agentIds): Builder
+    {
+        $ids = collect($agentIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($ids)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(function (Builder $q) use ($ids) {
+            $q->whereIn('agent_id', $ids)
+                ->orWhereHas('agents', fn (Builder $sub) => $sub->whereIn('users.id', $ids));
+        });
+    }
+
+    /**
+     * Return all evaluated agent IDs for this evaluation (pivot -> JSON -> legacy agent_id).
+     *
+     * @return array<int, int>
+     */
+    public function evaluatedAgentIds(): array
+    {
+        if ($this->relationLoaded('agents') && $this->agents->isNotEmpty()) {
+            return $this->agents->pluck('id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+        }
+
+        if (is_array($this->agent_ids) && count($this->agent_ids) > 0) {
+            return collect($this->agent_ids)->map(fn ($id) => (int) $id)->filter()->unique()->values()->all();
+        }
+
+        if ($this->exists) {
+            $pivotIds = $this->agents()->pluck('users.id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+            if (! empty($pivotIds)) {
+                return $pivotIds;
+            }
+        }
+
+        return $this->agent_id ? [(int) $this->agent_id] : [];
+    }
+
+    /**
+     * Return evaluated agent display names for this evaluation.
+     *
+     * @return array<int, string>
+     */
+    public function evaluatedAgentNames(): array
+    {
+        if ($this->relationLoaded('agents') && $this->agents->isNotEmpty()) {
+            return $this->agents->pluck('name')->filter()->values()->all();
+        }
+
+        if (is_array($this->agent_names) && count($this->agent_names) > 0) {
+            return collect($this->agent_names)->filter()->values()->all();
+        }
+
+        if ($this->exists) {
+            $pivotNames = $this->agents()->pluck('users.name')->filter()->values()->all();
+            if (! empty($pivotNames)) {
+                return $pivotNames;
+            }
+        }
+
+        $legacyName = $this->agent?->name;
+
+        return $legacyName ? [$legacyName] : [];
+    }
+
+    public function isAllAgents(): bool
+    {
+        return (bool) $this->all_agents;
+    }
+
+    /**
+     * Order names in canonical Laleen chat-team order (Areeba, Zoya, Laden, then alphabetical).
+     *
+     * @param  array<int, string>  $names
+     * @return array<int, string>
+     */
+    private static function orderCanonicalNames(array $names): array
+    {
+        usort($names, function (string $a, string $b): int {
+            $rank = function (string $name): int {
+                $lower = mb_strtolower($name);
+                if (str_contains($lower, 'areeba')) {
+                    return 1;
+                }
+                if (str_contains($lower, 'zoya')) {
+                    return 2;
+                }
+                if (str_contains($lower, 'laden')) {
+                    return 3;
+                }
+
+                return 4;
+            };
+
+            $cmp = $rank($a) <=> $rank($b);
+
+            return $cmp !== 0 ? $cmp : strcasecmp($a, $b);
+        });
+
+        return array_values($names);
+    }
+
+    /**
+     * Human-readable formatted evaluated agents label:
+     * - Single: "Zoya"
+     * - Multiple: "Laden + Zoya" / "Areeba + Zoya"
+     * - All Agents: "All Agents (Areeba, Zoya, Laden)"
+     */
+    public function formattedAgentsLabel(): string
+    {
+        $names = $this->evaluatedAgentNames();
+
+        if (empty($names)) {
+            return '—';
+        }
+
+        if ($this->isAllAgents()) {
+            $ordered = self::orderCanonicalNames($names);
+
+            return 'All Agents (' . implode(', ', $ordered) . ')';
+        }
+
+        if (count($names) === 1) {
+            return $names[0];
+        }
+
+        $alphabetical = $names;
+        natcasesort($alphabetical);
+
+        return implode(' + ', array_values($alphabetical));
+    }
+
+    /**
+     * Filename-safe slug for evaluated agent(s):
+     * - All Agents -> "all-agents"
+     * - Single -> "zoya"
+     * - Multiple -> "laden-zoya"
+     */
+    public function agentsSlug(): string
+    {
+        if ($this->isAllAgents()) {
+            return 'all-agents';
+        }
+
+        $names = $this->evaluatedAgentNames();
+        if (empty($names)) {
+            return 'evaluation';
+        }
+
+        $alphabetical = $names;
+        natcasesort($alphabetical);
+
+        $slug = Str::slug(implode('-', array_values($alphabetical)));
+
+        return $slug !== '' ? $slug : 'evaluation';
+    }
+
+    public function pdfFilename(): string
+    {
+        $date = $this->evaluation_date ? $this->evaluation_date->format('Y-m-d') : now()->format('Y-m-d');
+
+        return "chat-evaluation-{$date}-{$this->agentsSlug()}.pdf";
     }
 
     /** Max achievable score — always the live sum of question weights, not a magic number. */
@@ -170,7 +391,10 @@ class KpiChatEvaluation extends Model
      */
     public function consecutiveExcellent(): int
     {
-        $history = self::where('agent_id', $this->agent_id)
+        $agentIds = $this->evaluatedAgentIds();
+
+        $history = self::query()
+            ->when(! empty($agentIds), fn (Builder $q) => $q->forAgentIds($agentIds), fn (Builder $q) => $q->where('agent_id', $this->agent_id))
             ->where('evaluation_date', '<=', $this->evaluation_date)
             ->orderByDesc('evaluation_date')
             ->orderByDesc('id')

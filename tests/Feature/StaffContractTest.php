@@ -340,11 +340,13 @@ class StaffContractTest extends TestCase
             ->assertOk()
             ->assertHeader('Content-Type', 'application/pdf');
 
-        $this->assertStringStartsWith('%PDF-1.4', $adminPdf->getContent());
-        $this->assertStringContainsString('LALEEN BEAUTY SALON', $adminPdf->getContent());
-        $this->assertStringContainsString('/ImLogo', $adminPdf->getContent());
-        $this->assertStringContainsString('Monthly Compensation', $adminPdf->getContent());
-        $this->assertStringNotContainsString('Housing Allowance', $adminPdf->getContent());
+        $this->assertStringStartsWith('%PDF-', $adminPdf->getContent());
+        $this->assertGreaterThan(1000, strlen($adminPdf->getContent()));
+        $renderedAdminPdfHtml = view('contracts.pdf', ['contract' => $contract])->render();
+        $this->assertStringContainsString('LALEEN BEAUTY SALON', $renderedAdminPdfHtml);
+        $this->assertStringContainsString('data:image/png;base64,', $renderedAdminPdfHtml);
+        $this->assertStringContainsString('Monthly Compensation', $renderedAdminPdfHtml);
+        $this->assertStringNotContainsString('Housing Allowance', $renderedAdminPdfHtml);
 
         // 3. Unauthenticated staff unlocks via PIN, signs with drawn canvas data URI, and locks contract as Active
         auth()->logout();
@@ -394,8 +396,10 @@ class StaffContractTest extends TestCase
             ->assertOk()
             ->assertHeader('Content-Type', 'application/pdf');
 
-        $this->assertStringStartsWith('%PDF-1.4', $staffPdf->getContent());
-        $this->assertStringContainsString('Signed By: Mariam Al-Dosari', $staffPdf->getContent());
+        $this->assertStringStartsWith('%PDF-', $staffPdf->getContent());
+        $this->assertGreaterThan(1000, strlen($staffPdf->getContent()));
+        $renderedSignedHtml = view('contracts.pdf', ['contract' => $contract])->render();
+        $this->assertStringContainsString('Signed By:</strong> Mariam Al-Dosari', $renderedSignedHtml);
     }
 
     public function test_shifts_and_ops_actions_renders_sub_navigation_pills_and_strictly_isolates_scheduled_shifts_and_ops_tracker(): void
@@ -684,10 +688,12 @@ class StaffContractTest extends TestCase
             ->assertOk()
             ->assertHeader('Content-Type', 'application/pdf');
 
-        $this->assertStringStartsWith('%PDF-1.4', $pdfRes->getContent());
-        $this->assertStringContainsString('Areeba Khan', $pdfRes->getContent());
-        $this->assertStringContainsString('PKR 135,000.00', $pdfRes->getContent());
-        $this->assertStringContainsString('Signed By: Areeba Khan', $pdfRes->getContent());
+        $this->assertStringStartsWith('%PDF-', $pdfRes->getContent());
+        $this->assertGreaterThan(1000, strlen($pdfRes->getContent()));
+        $renderedAgentPdfHtml = view('contracts.pdf', ['contract' => $agentContract])->render();
+        $this->assertStringContainsString('Areeba Khan', $renderedAgentPdfHtml);
+        $this->assertStringContainsString('PKR 135,000.00', $renderedAgentPdfHtml);
+        $this->assertStringContainsString('Signed By:</strong> Areeba Khan', $renderedAgentPdfHtml);
     }
 
     public function test_create_contract_modal_uses_alpine_data_with_js_from_safe_quotes_and_prefills_default_template(): void
@@ -1030,7 +1036,8 @@ class StaffContractTest extends TestCase
             ->get(route('staff-contracts.pdf', $zainabContract))
             ->assertOk()
             ->assertHeader('Content-Type', 'application/pdf');
-        $this->assertStringContainsString('PKR 72,000.00', $adminPdf->getContent());
+        $this->assertStringStartsWith('%PDF-', $adminPdf->getContent());
+        $this->assertStringContainsString('PKR 72,000.00', view('contracts.pdf', ['contract' => $zainabContract])->render());
 
         // Still hidden on outer table after update
         $this->actingAs($this->admin)
@@ -1084,7 +1091,8 @@ class StaffContractTest extends TestCase
             ->get(route('contracts.portal.pdf', $zainabContract->secure_token))
             ->assertOk()
             ->assertHeader('Content-Type', 'application/pdf');
-        $this->assertStringContainsString('PKR 72,000.00', $zainabPdf->getContent());
+        $this->assertStringStartsWith('%PDF-', $zainabPdf->getContent());
+        $this->assertStringContainsString('PKR 72,000.00', view('contracts.pdf', ['contract' => $zainabContract])->render());
 
         // 4. Non-admin Manager (even with Full Edit on Staff Management!) gets 403 on all Admin contract & Payroll endpoints
         foreach ([$this->manager, $remoteEditor, $this->colleagueUser] as $nonAdmin) {

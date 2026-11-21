@@ -21,17 +21,14 @@
         @method('PUT')
 
         <div class="kpi-panel mb-3">
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label">Agent</label>
-                    <select name="agent_id" class="form-select" required>
-                        <option value="">Select agent&hellip;</option>
-                        @foreach ($agents as $agent)
-                            <option value="{{ $agent->id }}" @selected((string) old('agent_id', $report->agent_id) === (string) $agent->id)>{{ $agent->name }}</option>
-                        @endforeach
-                    </select>
+            <div class="row g-3 align-items-start">
+                <div class="col-md-8">
+                    @include('kpi.chat-eval._agent-picker', [
+                        'agents' => $agents,
+                        'selectedAgentIds' => old('agent_ids', $report->evaluatedAgentIds()),
+                    ])
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="form-label">Evaluation Date</label>
                     <input type="date" name="evaluation_date" class="form-control" value="{{ old('evaluation_date', $report->evaluation_date->format('Y-m-d')) }}" required>
                 </div>

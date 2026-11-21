@@ -19,9 +19,9 @@
                 <input type="month" id="chat-eval-month" name="month" value="{{ $selectedMonth ?? '' }}" class="form-control form-control-sm" style="width: 165px;">
                 <button type="submit" class="btn btn-sm btn-outline-primary">Filter</button>
                 @if(empty($showAll))
-                    <a href="{{ route('kpi.chat-eval.index', ['all' => 1]) }}" class="btn btn-sm btn-outline-secondary">All Time</a>
+                    <a href="{{ route('kpi.chat-eval.index', array_filter(['all' => 1, 'agent_id' => $selectedAgentId ?? null])) }}" class="btn btn-sm btn-outline-secondary">All Time</a>
                 @else
-                    <a href="{{ route('kpi.chat-eval.index') }}" class="btn btn-sm btn-outline-secondary">Current Month MTD</a>
+                    <a href="{{ route('kpi.chat-eval.index', array_filter(['agent_id' => $selectedAgentId ?? null])) }}" class="btn btn-sm btn-outline-secondary">Current Month MTD</a>
                 @endif
             </div>
             <div class="small text-muted">
@@ -60,13 +60,20 @@
                         @endphp
                         <tr>
                             <td><a href="{{ route('kpi.chat-eval.show', $report) }}">{{ $report->evaluation_date->format('d M Y') }}</a></td>
-                            <td>{{ $report->agent->name ?? '—' }}</td>
+                            <td>
+                                @if ($report->isAllAgents())
+                                    <span class="kpi-badge" style="background:rgba(200,157,124,.16);color:var(--luxe-accent);border:1px solid rgba(200,157,124,.35);">{{ $report->formattedAgentsLabel() }}</span>
+                                @else
+                                    {{ $report->formattedAgentsLabel() }}
+                                @endif
+                            </td>
                             <td>{{ $report->evaluator->name ?? '—' }}</td>
                             <td class="text-end">{{ $report->total_score }}/{{ \App\Models\KpiChatEvaluation::maxScore() }} ({{ rtrim(rtrim(number_format((float) $report->percentage, 2), '0'), '.') }}%)</td>
                             <td><span class="kpi-badge {{ $badge }}">{{ $grade }}</span></td>
                             <td class="text-end">
                                 <div class="d-flex gap-1 justify-content-end">
                                     <a href="{{ route('kpi.chat-eval.show', $report) }}" class="btn btn-sm btn-outline-secondary">View Report</a>
+                                    <a href="{{ route('kpi.chat-eval.download', $report) }}" class="btn btn-sm btn-outline-secondary" title="Download PDF" aria-label="Download PDF"><i class="bx bxs-file-pdf"></i></a>
                                     @if(auth()->user()?->isAdmin())
                                         <a href="{{ route('kpi.chat-eval.edit', $report) }}" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="bx bx-pencil"></i></a>
                                         <form action="{{ route('kpi.chat-eval.destroy', $report) }}" method="POST" onsubmit="return confirm('Delete this evaluation?')">

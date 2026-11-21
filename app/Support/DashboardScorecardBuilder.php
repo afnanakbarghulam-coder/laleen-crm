@@ -488,7 +488,7 @@ class DashboardScorecardBuilder
 
         $chatEvals = $agentUserIds->isNotEmpty()
             ? KpiChatEvaluation::query()
-                ->whereIn('agent_id', $agentUserIds)
+                ->forAgentIds($agentUserIds)
                 ->whereBetween('evaluation_date', [$this->from->copy()->startOfDay(), $this->to->copy()->endOfDay()])
                 ->get(['id', 'percentage'])
             : collect();

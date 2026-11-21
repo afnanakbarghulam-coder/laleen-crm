@@ -443,4 +443,213 @@ class ChatEvaluationTest extends TestCase
         $this->assertSame(1, substr_count($html, 'data-remark-open="true"'));
         $this->assertSame(count(KpiChatEvaluation::QUESTIONS) - 1, substr_count($html, 'data-remark-open="false"'));
     }
+
+    public function test_selectable_agents_include_areeba_zoya_and_laden_regardless_of_laden_role(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'name' => 'Afnan']);
+        $areeba = User::factory()->create(['role' => 'agent', 'name' => 'Areeba']);
+        $zoya = User::factory()->create(['role' => 'agent', 'name' => 'Zoya']);
+        $laden = User::factory()->create(['role' => 'manager', 'name' => 'Laden']);
+        $otherManager = User::factory()->create(['role' => 'manager', 'name' => 'Ahana']);
+        $regularUser = User::factory()->create(['role' => 'user', 'name' => 'Client User']);
+
+        $selectable = KpiChatEvaluation::selectableAgents();
+
+        $this->assertSame(
+            [$areeba->id, $zoya->id, $laden->id],
+            $selectable->pluck('id')->all()
+        );
+        $this->assertNotContains($otherManager->id, $selectable->pluck('id')->all());
+        $this->assertNotContains($regularUser->id, $selectable->pluck('id')->all());
+
+        $response = $this->actingAs($admin)->get(route('kpi.chat-eval.create'));
+        $response->assertOk();
+        $response->assertSee('All Agents');
+        $response->assertSee('Areeba');
+        $response->assertSee('Zoya');
+        $response->assertSee('Laden');
+        $response->assertDontSee('Ahana');
+    }
+
+    public function test_store_and_edit_support_single_pair_and_all_agents_multi_selection(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'name' => 'Afnan']);
+        $areeba = User::factory()->create(['role' => 'agent', 'name' => 'Areeba']);
+        $zoya = User::factory()->create(['role' => 'agent', 'name' => 'Zoya']);
+        $laden = User::factory()->create(['role' => 'manager', 'name' => 'Laden']);
+
+        // (a) Single agent: Zoya
+        $this->actingAs($admin)->post(route('kpi.chat-eval.store'), [
+            'agent_ids' => [$zoya->id],
+            'evaluation_date' => '2026-11-10',
+            'answers' => $this->submittedAnswers([14]),
+        ])->assertRedirect();
+
+        $singleReport = KpiChatEvaluation::latest('id')->first();
+        $this->assertFalse($singleReport->isAllAgents());
+        $this->assertSame([$zoya->id], $singleReport->evaluatedAgentIds());
+        $this->assertSame('Zoya', $singleReport->formattedAgentsLabel());
+        $this->assertSame('chat-evaluation-2026-11-10-zoya.pdf', $singleReport->pdfFilename());
+
+        // (b) Two agents: Laden + Zoya
+        $this->actingAs($admin)->post(route('kpi.chat-eval.store'), [
+            'agent_ids' => [$zoya->id, $laden->id],
+            'evaluation_date' => '2026-11-11',
+            'answers' => $this->submittedAnswers([4], [4 => 'Delayed follow-up']),
+        ])->assertRedirect();
+
+        $pairReport = KpiChatEvaluation::latest('id')->first();
+        $this->assertFalse($pairReport->isAllAgents());
+        $this->assertEqualsCanonicalizing([$zoya->id, $laden->id], $pairReport->evaluatedAgentIds());
+        $this->assertSame('Laden + Zoya', $pairReport->formattedAgentsLabel());
+        $this->assertSame('chat-evaluation-2026-11-11-laden-zoya.pdf', $pairReport->pdfFilename());
+
+        // Verify Edit page pre-checks Laden & Zoya, and leaves Areeba unchecked
+        $editHtml = $this->actingAs($admin)->get(route('kpi.chat-eval.edit', $pairReport))->assertOk()->getContent();
+        $this->assertMatchesRegularExpression('/value="' . $zoya->id . '"[^>]*checked/s', $editHtml);
+        $this->assertMatchesRegularExpression('/value="' . $laden->id . '"[^>]*checked/s', $editHtml);
+        $this->assertDoesNotMatchRegularExpression('/value="' . $areeba->id . '"[^>]*checked/s', $editHtml);
+
+        // (c) Update pair report -> All Agents (Areeba, Zoya, Laden)
+        $this->actingAs($admin)->put(route('kpi.chat-eval.update', $pairReport), [
+            'agent_ids' => [$areeba->id, $zoya->id, $laden->id],
+            'evaluation_date' => '2026-11-11',
+            'answers' => $this->submittedAnswers(),
+            'notes' => 'Full team QA audit.',
+        ])->assertRedirect(route('kpi.chat-eval.show', $pairReport));
+
+        $pairReport->refresh()->load('agents');
+        $this->assertTrue($pairReport->isAllAgents());
+        $this->assertEqualsCanonicalizing([$areeba->id, $zoya->id, $laden->id], $pairReport->evaluatedAgentIds());
+        $this->assertSame('All Agents (Areeba, Zoya, Laden)', $pairReport->formattedAgentsLabel());
+        $this->assertSame('chat-evaluation-2026-11-11-all-agents.pdf', $pairReport->pdfFilename());
+
+        // Verify Edit page pre-checks all three and activates All Agents checkbox
+        $editAllHtml = $this->actingAs($admin)->get(route('kpi.chat-eval.edit', $pairReport))->assertOk()->getContent();
+        $this->assertMatchesRegularExpression('/data-all-agents-checkbox[^>]*checked/', $editAllHtml);
+
+        // Verify index & show render formatted labels and MTD/agent filtering cleanly
+        $this->actingAs($admin)
+            ->get(route('kpi.chat-eval.show', $pairReport))
+            ->assertOk()
+            ->assertSee('All Agents (Areeba, Zoya, Laden)')
+            ->assertSee('Download PDF');
+
+        $this->actingAs($admin)
+            ->get(route('kpi.chat-eval.index', ['month' => '2026-11', 'agent_id' => $laden->id]))
+            ->assertOk()
+            ->assertSee('All Agents (Areeba, Zoya, Laden)')
+            ->assertDontSee('chat-evaluation-2026-11-10-zoya.pdf')
+            ->assertSee('1 graded');
+    }
+
+    public function test_store_requires_at_least_one_valid_agent_in_agent_ids(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $areeba = User::factory()->create(['role' => 'agent', 'name' => 'Areeba']);
+        $ineligible = User::factory()->create(['role' => 'user', 'name' => 'Random User']);
+
+        // Missing / empty agent_ids
+        $this->actingAs($admin)
+            ->post(route('kpi.chat-eval.store'), [
+                'agent_ids' => [],
+                'evaluation_date' => '2026-11-12',
+                'answers' => $this->submittedAnswers(),
+            ])
+            ->assertSessionHasErrors(['agent_ids']);
+
+        // Contains an ineligible user ID alongside valid agent
+        $this->actingAs($admin)
+            ->post(route('kpi.chat-eval.store'), [
+                'agent_ids' => [$areeba->id, $ineligible->id],
+                'evaluation_date' => '2026-11-12',
+                'answers' => $this->submittedAnswers(),
+            ])
+            ->assertSessionHasErrors(['agent_ids.1']);
+
+        $this->assertDatabaseCount('kpi_chat_evaluations', 0);
+    }
+
+    public function test_download_pdf_generates_valid_pdf_with_expected_filename_content_and_permissions(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'name' => 'Afnan Akbar']);
+        $areeba = User::factory()->create(['role' => 'agent', 'name' => 'Areeba']);
+        $zoya = User::factory()->create(['role' => 'agent', 'name' => 'Zoya']);
+        $laden = User::factory()->create(['role' => 'manager', 'name' => 'Laden']);
+
+        // Non-admin WITH kpis view access (same permission level as View Report)
+        $kpiViewer = User::factory()->create([
+            'role' => 'agent',
+            'name' => 'KPI Viewer',
+            'permissions' => ['kpis' => 'view'],
+        ]);
+
+        // User with NO KPIs permission
+        $noAccessUser = User::factory()->create([
+            'role' => 'staff',
+            'permissions' => ['kpis' => 'none'],
+        ]);
+
+        // Create a multi-agent evaluation (Laden + Zoya) with fails, remarks, and notes
+        // Fails: Q1(15), Q5(25), Q6(15), Q7(15) -> lost 70 -> 100/170 (58.82% - Fail)
+        $this->actingAs($admin)->post(route('kpi.chat-eval.store'), [
+            'agent_ids' => [$laden->id, $zoya->id],
+            'evaluation_date' => '2026-11-15',
+            'answers' => $this->submittedAnswers(
+                [1, 5, 6, 7],
+                [
+                    1 => 'Missed direct closing opportunity.',
+                    5 => 'Response felt rushed and impersonal.',
+                ]
+            ),
+            'notes' => 'Coach on empathetic discovery before quoting prices.',
+        ])->assertRedirect();
+
+        $report = KpiChatEvaluation::with(['agent', 'agents', 'evaluator'])->latest('id')->first();
+        $this->assertSame(100, $report->total_score);
+        $this->assertEquals(58.82, (float) $report->percentage);
+
+        // 1. Render the PDF Blade template directly and verify all 15 questions, remarks, notes, agents & totals
+        $pdfHtml = view('kpi.chat-eval.pdf', ['report' => $report])->render();
+        $this->assertStringContainsString('Laleen Ops &mdash; Chat Evaluation Report', $pdfHtml);
+        $this->assertStringContainsString('15 Nov 2026', $pdfHtml);
+        $this->assertStringContainsString('Laden + Zoya', $pdfHtml);
+        $this->assertStringContainsString('Afnan Akbar', $pdfHtml);
+        $this->assertStringContainsString('100/170 (58.82%)', $pdfHtml);
+        $this->assertStringContainsString('Missed direct closing opportunity.', $pdfHtml);
+        $this->assertStringContainsString('Response felt rushed and impersonal.', $pdfHtml);
+        $this->assertStringContainsString('Coach on empathetic discovery before quoting prices.', $pdfHtml);
+
+        foreach (KpiChatEvaluation::QUESTIONS as $question) {
+            $this->assertStringContainsString(e($question['text']), $pdfHtml);
+        }
+        foreach (array_keys(KpiChatEvaluation::BREAKDOWN_GROUPS) as $category) {
+            $this->assertStringContainsString(e($category), $pdfHtml);
+        }
+
+        // 2. Hit the real HTTP PDF download endpoint as admin
+        $response = $this->actingAs($admin)->get(route('kpi.chat-eval.download', $report));
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', (string) $response->headers->get('Content-Type'));
+        $this->assertStringContainsString(
+            'chat-evaluation-2026-11-15-laden-zoya.pdf',
+            (string) $response->headers->get('Content-Disposition')
+        );
+        $pdfBytes = $response->getContent();
+        $this->assertStringStartsWith('%PDF-', $pdfBytes);
+        $this->assertGreaterThan(2000, strlen($pdfBytes));
+
+        // 3. Non-admin WITH kpis view access CAN view and download PDF (same middleware as View Report)
+        $this->actingAs($kpiViewer)
+            ->get(route('kpi.chat-eval.show', $report))
+            ->assertOk();
+        $this->actingAs($kpiViewer)
+            ->get(route('kpi.chat-eval.download', $report))
+            ->assertOk();
+
+        // 4. User WITHOUT kpis permission gets 403 Forbidden
+        $this->actingAs($noAccessUser)
+            ->get(route('kpi.chat-eval.download', $report))
+            ->assertForbidden();
+    }
 }

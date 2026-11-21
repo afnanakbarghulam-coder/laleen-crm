@@ -18,10 +18,11 @@
     <div class="kpi-header">
         <div>
             <h4>Chat Evaluation Report</h4>
-            <p>{{ $report->agent->name ?? '—' }} &middot; {{ $report->evaluation_date->format('d M Y') }} &middot; Evaluated by {{ $report->evaluator->name ?? '—' }}</p>
+            <p>{{ $report->formattedAgentsLabel() }} &middot; {{ $report->evaluation_date->format('d M Y') }} &middot; Evaluated by {{ $report->evaluator->name ?? '—' }}</p>
         </div>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex flex-wrap align-items-center gap-2">
             <a href="{{ route('kpi.chat-eval.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Chat Evaluations</a>
+            <a href="{{ route('kpi.chat-eval.download', $report) }}" class="btn btn-sm btn-outline-primary"><i class="bx bxs-file-pdf me-1"></i>Download PDF</a>
             @if(auth()->user()?->isAdmin())
                 <a href="{{ route('kpi.chat-eval.edit', $report) }}" class="btn btn-sm btn-primary"><i class="bx bx-pencil me-1"></i>Edit Report</a>
             @endif
