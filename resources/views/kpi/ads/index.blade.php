@@ -2,6 +2,48 @@
 @section('title', 'Ads Conversion Reports')
 
 @section('content')
+    <style>
+        .ad-followup-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            text-decoration: none;
+            white-space: nowrap;
+            line-height: 1.35;
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+        .ad-followup-pill:hover {
+            opacity: 0.9;
+            transform: translateY(-0.5px);
+        }
+        .ad-followup-pill.is-active {
+            background: rgba(217, 143, 131, 0.16);
+            border: 1px solid rgba(217, 143, 131, 0.38);
+            color: #f4c4bc;
+        }
+        .ad-followup-pill.is-booked {
+            background: rgba(74, 222, 128, 0.14);
+            border: 1px solid rgba(74, 222, 128, 0.35);
+            color: #86efac;
+        }
+        .ad-followup-pill.is-lost {
+            background: rgba(168, 82, 74, 0.16);
+            border: 1px solid rgba(168, 82, 74, 0.35);
+            color: #e2a299;
+        }
+        .ad-status-caption {
+            display: block;
+            font-size: 10.5px;
+            color: rgba(255, 255, 255, 0.55);
+            margin-top: 2px;
+            line-height: 1.25;
+        }
+    </style>
+
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
         <div class="d-flex flex-wrap gap-2">
             <a href="{{ route('kpi.ads.index', ['tab' => 'leads']) }}" class="btn btn-sm {{ $activeTab === 'leads' ? 'btn-dark' : 'btn-outline-secondary' }}">Ad Leads Log</a>
@@ -69,6 +111,10 @@
                         @php
                             [$entryCountryCode, $entryPhoneNumber] = \App\Models\Lead::splitPhone($entry->phone);
                             $entryCustomerName = $entry->customer_name ?: ($entry->customer->name ?? null);
+                            $entryFollowUpDate = $entry->effectiveFollowUpDate();
+                            $entryStatusKey = $entry->effectiveStatusKey();
+                            $entryStatusLabel = $entry->effectiveStatusLabel();
+                            $entryFollowUpUrl = $entry->followUpUrl();
                             $entryPayload = [
                                 'id' => $entry->id,
                                 'date' => $entry->date?->format('Y-m-d'),
@@ -80,6 +126,11 @@
                                 'category' => $entry->category,
                                 'ticket_amount' => $entry->ticket_amount,
                                 'branch' => $entry->branch,
+                                'status' => $entry->status,
+                                'follow_up_date' => $entryFollowUpDate?->format('Y-m-d'),
+                                'assigned_agent_id' => $entry->assigned_agent_id ?: $entry->lead?->assigned_agent_id,
+                                'lead_id' => $entry->lead_id,
+                                'follow_up_url' => $entryFollowUpUrl,
                                 'remarks' => $entry->remarks,
                             ];
                         @endphp
@@ -159,19 +210,60 @@
                                 </td>
                                 <td>{{ $entry->category }}</td>
                                 <td class="text-end">{{ $entry->ticket_amount > 0 ? number_format($entry->ticket_amount, 2) : ($entry->isBooked() ? '0.00' : '—') }}</td>
-                                <td>
+                                <td data-ad-lead-status-cell="{{ $entry->id }}">
                                     @if ($entry->isBooked())
                                         <span class="kpi-badge kpi-badge-green">{{ $branches[$entry->branch] }}</span>
+                                        @if ($entryFollowUpUrl)
+                                            <div class="mt-1">
+                                                <a href="{{ $entryFollowUpUrl }}" class="ad-followup-pill is-booked" @click.stop title="View synced lead in Lead Management">
+                                                    <i class="bx bx-link-alt"></i> In Follow-Ups &middot; Booked
+                                                </a>
+                                            </div>
+                                        @endif
+                                    @elseif ($entry->isSyncedToFollowUps() && $entryFollowUpUrl)
+                                        @php
+                                            $pillClass = match ($entryStatusKey) {
+                                                'lost' => 'is-lost',
+                                                'booked' => 'is-booked',
+                                                default => 'is-active',
+                                            };
+                                            $pillText = match (true) {
+                                                $entryStatusKey === 'lost' => 'In Follow-Ups · Lost',
+                                                $entryStatusKey === 'booked' => 'In Follow-Ups · Booked',
+                                                $entryFollowUpDate !== null => 'In Follow-Ups · Due ' . $entryFollowUpDate->format('d M'),
+                                                default => 'In Follow-Ups',
+                                            };
+                                        @endphp
+                                        <a href="{{ $entryFollowUpUrl }}" class="ad-followup-pill {{ $pillClass }}" @click.stop title="Open synced record in Lead Management">
+                                            <i class="bx bx-calendar-check"></i> {{ $pillText }}
+                                        </a>
+                                        @if ($entryStatusLabel && ! in_array($entryStatusKey, ['follow_up', 'lost', 'booked'], true))
+                                            <span class="ad-status-caption">{{ $entryStatusLabel }}</span>
+                                        @endif
                                     @else
                                         <span class="text-muted small">Unbooked</span>
+                                        @if ($entryStatusLabel && $entryStatusKey === 'lost')
+                                            <div><span class="ad-followup-pill is-lost mt-1">{{ $entryStatusLabel }}</span></div>
+                                        @endif
                                     @endif
                                 </td>
-                                <td class="text-muted small">{{ $entry->remarks ?? '—' }}</td>
+                                <td class="text-muted small" data-ad-lead-remarks-cell="{{ $entry->id }}">{{ $entry->remarks ?? '—' }}</td>
                                 <td class="text-end" @click.stop>
-                                    <div class="d-flex gap-1 justify-content-end align-items-center">
+                                    <div class="d-flex gap-1 justify-content-end align-items-center flex-nowrap">
                                         @if (!$entry->isBooked())
+                                            @moduleEdit('kpis')
+                                                @if (!$entry->isSyncedToFollowUps())
+                                                    <button type="button"
+                                                        class="btn btn-sm btn-outline-info text-nowrap ad-lead-send-followup-btn"
+                                                        data-entry='@json($entryPayload)'
+                                                        data-send-url="{{ route('kpi.ad-leads.send-to-followups', $entry) }}"
+                                                        title="Send to Lead Management Follow-Ups">
+                                                        <i class="bx bx-calendar-plus me-1"></i>Send to Follow-Ups
+                                                    </button>
+                                                @endif
+                                            @endmoduleEdit
                                             <button type="button"
-                                                class="btn btn-sm btn-primary"
+                                                class="btn btn-sm btn-primary text-nowrap"
                                                 @click="generateScript()"
                                                 :disabled="isLoading"
                                                 title="Generate AI Closing Script">
@@ -184,11 +276,12 @@
                                         @endif
                                         @moduleEdit('kpis')
                                             <button type="button" class="btn btn-sm btn-outline-warning ad-lead-edit-btn"
+                                                data-ad-lead-edit-btn="{{ $entry->id }}"
                                                 data-entry='@json($entryPayload)'
                                                 title="Edit">
                                                 <i class="bi bi-pencil-square"></i>
                                             </button>
-                                            <form action="{{ route('kpi.ad-leads.destroy', $entry) }}" method="POST" onsubmit="return confirm('Delete this ad lead entry?')">
+                                            <form action="{{ route('kpi.ad-leads.destroy', $entry) }}" method="POST" class="d-inline m-0" onsubmit="return confirm('Delete this ad lead entry?')">
                                                 @csrf @method('DELETE')
                                                 <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
                                             </form>
@@ -271,6 +364,7 @@
 
         @moduleEdit('kpis')
             @include('kpi.ads._lead-entry-modal', ['uid' => 'new', 'entry' => null])
+            @include('kpi.ads._send-to-followups-modal')
         @endmoduleEdit
     </div>
 

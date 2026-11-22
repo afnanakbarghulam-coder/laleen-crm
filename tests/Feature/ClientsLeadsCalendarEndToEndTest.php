@@ -338,6 +338,7 @@ class ClientsLeadsCalendarEndToEndTest extends TestCase
         $futureDate = now()->addDays(2)->setTime(14, 0);
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Sara Al-Kuwari',
                 'phone' => '+97455800001',
                 'appointment_datetime' => $futureDate->format('Y-m-d\TH:i'),

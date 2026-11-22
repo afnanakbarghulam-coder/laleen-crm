@@ -99,6 +99,7 @@ class DecideInSalonBookingTest extends TestCase
         ]);
 
         $res = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Fatima Arrival',
             'phone' => '+97455112233',
             'appointment_datetime' => $visitDate->format('Y-m-d\TH:i'),
@@ -167,6 +168,7 @@ class DecideInSalonBookingTest extends TestCase
         $visitDate = now()->addDays(2)->setTime(14, 0, 0);
 
         $res = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Empty Client',
             'phone' => '+97455998877',
             'appointment_datetime' => $visitDate->format('Y-m-d\TH:i'),
@@ -190,6 +192,7 @@ class DecideInSalonBookingTest extends TestCase
 
         // 1. Untrained stylist (0 assigned service skills) succeeds with decide_in_salon = true
         $okRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Noor Consultation',
             'phone' => '+97455223344',
             'appointment_datetime' => $visitDate->format('Y-m-d\TH:i'),
@@ -201,6 +204,7 @@ class DecideInSalonBookingTest extends TestCase
 
         // 2. Overlapping within the 60-minute hold window (12:45 PM overlaps 12:00-13:00 hold!) returns 422 staff_busy
         $busyRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Second Caller',
             'phone' => '+97455334455',
             'appointment_datetime' => $visitDate->copy()->setTime(12, 45, 0)->format('Y-m-d\TH:i'),
@@ -222,6 +226,7 @@ class DecideInSalonBookingTest extends TestCase
         ]);
 
         $blockOverlapRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Lunch Overlap Client',
             'phone' => '+97455445566',
             'appointment_datetime' => $visitDate->copy()->setTime(14, 30, 0)->format('Y-m-d\TH:i'),
@@ -242,6 +247,7 @@ class DecideInSalonBookingTest extends TestCase
         ]);
 
         $offRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Off Duty Caller',
             'phone' => '+97455667788',
             'appointment_datetime' => $visitDate->copy()->setTime(16, 0, 0)->format('Y-m-d\TH:i'),
@@ -255,6 +261,7 @@ class DecideInSalonBookingTest extends TestCase
 
         // 5. Unscheduled Queue ("Pending time") bypasses time-overlap and blocked-slot checks cleanly
         $unschedRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Queue Consultation',
             'phone' => '+97455778899',
             'booking_date' => $visitDate->toDateString(),
@@ -272,6 +279,7 @@ class DecideInSalonBookingTest extends TestCase
 
         // Case A: Saved Decide in Salon booking updated via Bookings Edit (PUT) with a real service
         $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Mariam Upgrade',
             'phone' => '+97466112233',
             'appointment_datetime' => $visitDate->format('Y-m-d\TH:i'),
@@ -303,6 +311,7 @@ class DecideInSalonBookingTest extends TestCase
         // Case B: Saved Decide in Salon booking updated via Calendar Drawer "+ Add service" (POST /appointments/{id}/services)
         $visitDateB = now()->addDays(2)->setTime(17, 0, 0);
         $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Huda Drawer Add',
             'phone' => '+97466223344',
             'appointment_datetime' => $visitDateB->format('Y-m-d\TH:i'),
@@ -328,6 +337,7 @@ class DecideInSalonBookingTest extends TestCase
         // Case C: Booking payload submitting both a Combo Package AND decide_in_salon=true automatically forces decide_in_salon=false
         $visitDateC = now()->addDays(2)->setTime(19, 0, 0);
         $comboRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Combo Arrival Client',
             'phone' => '+97466334455',
             'appointment_datetime' => $visitDateC->format('Y-m-d\TH:i'),
@@ -353,6 +363,7 @@ class DecideInSalonBookingTest extends TestCase
         $visitDate = now()->addDays(1)->setTime(14, 0, 0);
 
         $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Unresolved Checkout Client',
             'phone' => '+97477112233',
             'appointment_datetime' => $visitDate->format('Y-m-d\TH:i'),

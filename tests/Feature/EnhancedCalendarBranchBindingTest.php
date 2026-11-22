@@ -99,6 +99,7 @@ class EnhancedCalendarBranchBindingTest extends TestCase
 
         // 1. Create scheduled booking on Al Wakrah (passing display label or active_branch fallback)
         $storeRes = $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Mariam Al-Thani',
             'phone' => '+97455112233',
             'appointment_datetime' => $dateStr . 'T13:00',
@@ -142,6 +143,7 @@ class EnhancedCalendarBranchBindingTest extends TestCase
 
         // 2. Create Unscheduled Queue booking on Old Airport and drag/schedule it onto Aisha Khan's column
         $unschedRes = $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Dana Al-Sulaiti',
             'phone' => '+97455443322',
             'booking_date' => $dateStr,
@@ -219,6 +221,7 @@ class EnhancedCalendarBranchBindingTest extends TestCase
 
         // Cross-branch booking guard: Aisha Khan (Old Airport only) cannot be booked on Al Wakrah
         $crossBranchRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Cross Branch Client',
             'phone' => '+97455998877',
             'appointment_datetime' => $dateStr . 'T13:00',

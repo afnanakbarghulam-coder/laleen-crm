@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AdCampaignMetric;
 use App\Models\AdLeadEntry;
 use App\Models\KpiAdsConversionReport;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -39,9 +40,17 @@ class AdsConversionController extends Controller
         $entriesTo = $request->date('entries_to') ?? $defaultTo->copy();
 
         $hasCustomerId = Schema::hasColumn('ad_lead_entries', 'customer_id');
+        $hasLeadId = Schema::hasColumn('ad_lead_entries', 'lead_id');
+        $hasAssignedAgentId = Schema::hasColumn('ad_lead_entries', 'assigned_agent_id');
+
+        $eagerRelations = array_values(array_filter([
+            $hasCustomerId ? 'customer' : null,
+            $hasLeadId ? 'lead:id,needful_done,next_followup_date,assigned_agent_id,customer_remarks' : null,
+            $hasAssignedAgentId ? 'assignedAgent:id,name' : null,
+        ]));
 
         $adLeadEntries = AdLeadEntry::query()
-            ->when($hasCustomerId, fn ($q) => $q->with('customer'))
+            ->when(! empty($eagerRelations), fn ($q) => $q->with($eagerRelations))
             ->when($entriesFrom, fn ($q) => $q->whereDate('date', '>=', $entriesFrom))
             ->when($entriesTo, fn ($q) => $q->whereDate('date', '<=', $entriesTo))
             ->orderByDesc('date')
@@ -56,6 +65,7 @@ class AdsConversionController extends Controller
 
         $categories = AdLeadEntry::availableCategories();
         $branches = AdLeadEntry::BRANCHES;
+        $agents = User::where('role', 'agent')->orderBy('name')->get(['id', 'name']);
 
         // Ads Analytics: when opened without explicit ?analytics_from/?from or ?month filters,
         // automatically align to the active Salon `ad_campaign_metrics` snapshot date range if one exists.
@@ -126,7 +136,7 @@ class AdsConversionController extends Controller
             : [];
 
         return view('kpi.ads.index', array_merge(compact(
-            'reports', 'adLeadEntries', 'categories', 'branches', 'entriesFrom', 'entriesTo',
+            'reports', 'adLeadEntries', 'categories', 'branches', 'agents', 'entriesFrom', 'entriesTo',
             'analyticsReport', 'analyticsFrom', 'analyticsTo', 'activeTab', 'analyticsFinancials'
         ), $trackerViewData));
     }

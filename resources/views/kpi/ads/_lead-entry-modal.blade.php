@@ -1,9 +1,32 @@
 {{-- Shared Add/Edit modal for Ad Lead Data Entry rows. JS toggles it between
      "create" (form posts to ad-leads.store) and "edit" (posts to ad-leads.update
      for the clicked row) — see resetAdLeadEntryForm()/editAdLeadEntry() below. --}}
+<style>
+    #adLeadEntryModal.modal.show {
+        opacity: 1 !important;
+    }
+
+    #adLeadEntryModal .modal-content {
+        background: #241e1c !important;
+        background-color: #241e1c !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        border: 1px solid rgba(217, 143, 131, 0.24) !important;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.72) !important;
+        opacity: 1 !important;
+    }
+
+    #adLeadEntryModal .modal-body,
+    #adLeadEntryModal .modal-header,
+    #adLeadEntryModal .modal-footer {
+        background: #241e1c !important;
+        background-color: #241e1c !important;
+    }
+</style>
+
 <div class="modal fade" id="adLeadEntryModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
+        <div class="modal-content" style="background: #241e1c !important; background-color: #241e1c !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;">
             <form method="POST" id="adLeadEntryForm" action="{{ route('kpi.ad-leads.store') }}">
                 @csrf
                 <input type="hidden" name="_method" id="adLeadEntryFormMethod">
@@ -41,10 +64,10 @@
                         </div>
                         <div class="col-12">
                             <label class="form-label">Remarks</label>
-                            <input type="text" name="remarks" id="adLeadRemarks" class="form-control" placeholder="e.g. will let u know" maxlength="255">
+                            <input type="text" name="remarks" id="adLeadRemarks" class="form-control" placeholder="e.g. will let u know" maxlength="2000">
                         </div>
                         <div class="col-12 d-none" id="adLeadAttributionReadonlyBox">
-                            <div class="p-3 rounded border border-secondary border-opacity-25 d-flex justify-content-between align-items-center flex-wrap gap-3" style="background: rgba(20, 16, 14, 0.35);">
+                            <div class="p-3 rounded border border-secondary border-opacity-25 d-flex justify-content-between align-items-center flex-wrap gap-3" style="background: #1b1614;">
                                 <div>
                                     <div class="small text-muted text-uppercase fw-semibold" style="font-size: 0.7rem; letter-spacing: 0.04em;">Branch (Auto-Synced from Calendar)</div>
                                     <div class="mt-1" id="adLeadBranchReadonly">
@@ -123,7 +146,7 @@
                                 });
                             }
                         }" @ad-lead-modal-reset.window="resetAiState($event.detail.id)">
-                            <div class="p-3 rounded border border-secondary border-opacity-25" style="background: rgba(20, 16, 14, 0.35);">
+                            <div class="p-3 rounded border border-secondary border-opacity-25" style="background: #1b1614;">
                                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                                     <span class="small fw-bold text-uppercase text-muted">Sales Consultant</span>
                                     <button type="button"

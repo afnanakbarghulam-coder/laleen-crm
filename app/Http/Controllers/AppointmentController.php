@@ -365,6 +365,15 @@ class AppointmentController extends Controller
             }
         }
 
+        $rawBookingAgentInput = $request->input('booking_agent_id');
+        if (($rawBookingAgentInput === null || $rawBookingAgentInput === '') && $request->filled('booking_agent')) {
+            $rawBookingAgentInput = $request->input('booking_agent');
+        }
+        if (($rawBookingAgentInput === null || $rawBookingAgentInput === '') && $request->input('booking_agent_type') === Appointment::BOOKING_AGENT_SALON_STAFF) {
+            $rawBookingAgentInput = Appointment::BOOKING_AGENT_SALON_STAFF;
+        }
+        $request->merge(['booking_agent_id' => $rawBookingAgentInput ?? '']);
+
         $rules = [
             'customer_name' => 'required|string|max:255',
             'phone' => ['required', 'string', 'max:20', 'regex:/^\+?[1-9]\d{6,14}$/'],
@@ -385,7 +394,14 @@ class AppointmentController extends Controller
             'service_is_parallel' => 'nullable|array',
             'branch' => 'required|in:old_airport,wakrah',
             'price' => 'nullable|numeric',
-            'booking_agent_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'agent')],
+            'booking_agent_id' => [
+                'required',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    if (Appointment::resolveBookingAgentSelection($value, $request->input('booking_agent_type')) === null) {
+                        $fail(Appointment::BOOKING_AGENT_VALIDATION_ERROR);
+                    }
+                },
+            ],
             'staff_id' => 'nullable|exists:staff,id',
             'decide_in_salon' => 'nullable|boolean',
             'packages' => 'nullable|array',
@@ -427,13 +443,19 @@ class AppointmentController extends Controller
             'branch.in' => 'Selected branch is invalid.',
             'staff_id.required' => 'Please select a staff member.',
             'staff_id.exists' => 'Selected staff does not exist.',
-            'booking_agent_id.exists' => 'Selected booking agent does not exist.',
+            'booking_agent_id.required' => Appointment::BOOKING_AGENT_VALIDATION_ERROR,
+            'booking_agent_id.exists' => Appointment::BOOKING_AGENT_VALIDATION_ERROR,
             'service_name.*.string' => 'Each service must be a valid string.',
             'service_name.*.max' => 'Each service name cannot exceed 255 characters.',
             'phone.regex' => 'Enter a valid phone number with country code, e.g. +974XXXXXXXX.'
         ];
 
         $request->validate($rules, $messages);
+
+        $bookingAgentSelection = Appointment::resolveBookingAgentSelection(
+            $request->input('booking_agent_id'),
+            $request->input('booking_agent_type')
+        );
 
         $rawServiceNames = array_values(array_filter(
             array_map('trim', (array) $request->input('service_name', [])),
@@ -775,9 +797,13 @@ class AppointmentController extends Controller
             $comboScheduleByPlanAndSvc,
             $freebieAnchorScheduleByPlan,
             $freebieSlotScheduleByPlanAndSlot,
-            $freebieRedeemScheduleByIdx
+            $freebieRedeemScheduleByIdx,
+            $bookingAgentSelection
         ) {
             $baseAttributes = $request->except([
+                'booking_agent_id',
+                'booking_agent',
+                'booking_agent_type',
                 'freebie_package_id',
                 'freebie_slots',
                 'freebie_packages',
@@ -799,6 +825,8 @@ class AppointmentController extends Controller
                     'booking_date' => $appointmentDate,
                     'start_time' => $startTime ? $startTime->format('H:i:s') : null,
                     'staff_id' => $staffId ? (int) $staffId : null,
+                    'booking_agent_id' => $bookingAgentSelection['booking_agent_id'] ?? null,
+                    'booking_agent_type' => $bookingAgentSelection['booking_agent_type'] ?? null,
                     'lifetime_revenue' => $lifetimeRevenue,
                     'service_name' => $services,
                     'combo_id' => $resolvedComboId,
@@ -1101,6 +1129,9 @@ class AppointmentController extends Controller
 
         // Defensively merge and remove any older duplicate open rows so 1 booking = 1 conversion
         foreach ($openLeads->slice(1) as $duplicateLead) {
+            if (! $primaryLead->ad_lead_id && $duplicateLead->ad_lead_id) {
+                $primaryLead->ad_lead_id = $duplicateLead->ad_lead_id;
+            }
             AdLeadEntry::where('lead_id', $duplicateLead->id)->update(['lead_id' => $primaryLead->id]);
             $duplicateLead->delete();
         }
@@ -1190,7 +1221,23 @@ class AppointmentController extends Controller
                 $q->whereNotNull('freebie_package_id')->orWhere('is_freebie_redemption', true);
             })->exists();
 
-        $request->validate([
+        $hasSubmittedBookingAgent = $request->exists('booking_agent_id')
+            || $request->exists('booking_agent')
+            || $request->exists('booking_agent_type');
+        $mustValidateBookingAgent = $hasSubmittedBookingAgent;
+
+        if ($mustValidateBookingAgent) {
+            $rawUpdateBookingAgent = $request->input('booking_agent_id');
+            if (($rawUpdateBookingAgent === null || $rawUpdateBookingAgent === '') && $request->filled('booking_agent')) {
+                $rawUpdateBookingAgent = $request->input('booking_agent');
+            }
+            if (($rawUpdateBookingAgent === null || $rawUpdateBookingAgent === '') && $request->input('booking_agent_type') === Appointment::BOOKING_AGENT_SALON_STAFF) {
+                $rawUpdateBookingAgent = Appointment::BOOKING_AGENT_SALON_STAFF;
+            }
+            $request->merge(['booking_agent_id' => $rawUpdateBookingAgent ?? '']);
+        }
+
+        $updateRules = [
             'customer_name' => 'nullable|string|max:255',
             'phone' => ['nullable', 'string', 'max:20', 'regex:/^\+?[1-9]\d{6,14}$/'],
             'appointment_datetime' => 'required|date',
@@ -1211,11 +1258,24 @@ class AppointmentController extends Controller
             'redeem_service_staff' => 'nullable|array',
             'branch' => 'required|in:old_airport,wakrah',
             'price' => 'nullable|numeric',
-            'booking_agent_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'agent')],
             'staff_id' => 'nullable|exists:staff,id',
             'status' => 'nullable|in:pending,arrived,in_progress,completed,no_show,cancelled',
-        ], [
-            'phone.regex' => 'Enter a valid phone number with country code, e.g. +974XXXXXXXX.'
+        ];
+
+        if ($mustValidateBookingAgent) {
+            $updateRules['booking_agent_id'] = [
+                'required',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    if (Appointment::resolveBookingAgentSelection($value, $request->input('booking_agent_type')) === null) {
+                        $fail(Appointment::BOOKING_AGENT_VALIDATION_ERROR);
+                    }
+                },
+            ];
+        }
+
+        $request->validate($updateRules, [
+            'phone.regex' => 'Enter a valid phone number with country code, e.g. +974XXXXXXXX.',
+            'booking_agent_id.required' => Appointment::BOOKING_AGENT_VALIDATION_ERROR,
         ]);
 
         $rawServiceNamesInput = array_values(array_filter(
@@ -1520,21 +1580,30 @@ class AppointmentController extends Controller
             }
 
             $resolvedBookingAgentId = $appointment->booking_agent_id;
-            if ($request->exists('booking_agent_id')) {
+            $resolvedBookingAgentType = $appointment->booking_agent_type;
+            if ($request->exists('booking_agent_id') || $request->exists('booking_agent') || $request->exists('booking_agent_type')) {
                 $actor = $request->user();
-                $submittedAgentId = $request->filled('booking_agent_id') ? (int) $request->input('booking_agent_id') : null;
-                $canAdminOrManagerEdit = $actor && ($actor->isAdmin() || $actor->role === 'manager');
-                $canSelfAgentEdit = $actor && $actor->role === 'agent'
-                    && ($appointment->booking_agent_id === null || (int) $appointment->booking_agent_id === (int) $actor->id)
-                    && ($submittedAgentId === null || $submittedAgentId === (int) $actor->id);
+                $resolvedSelection = Appointment::resolveBookingAgentSelection(
+                    $request->input('booking_agent_id', $request->input('booking_agent')),
+                    $request->input('booking_agent_type')
+                );
+                if ($resolvedSelection !== null) {
+                    $submittedAgentId = $resolvedSelection['booking_agent_id'];
+                    $submittedAgentType = $resolvedSelection['booking_agent_type'];
+                    $canAdminOrManagerEdit = $actor && ($actor->isAdmin() || $actor->role === 'manager');
+                    $canSelfAgentEdit = $actor && $actor->role === 'agent'
+                        && ($appointment->booking_agent_id === null || (int) $appointment->booking_agent_id === (int) $actor->id)
+                        && ($submittedAgentId === null || $submittedAgentId === (int) $actor->id);
 
-                if ($canAdminOrManagerEdit || $canSelfAgentEdit) {
-                    $resolvedBookingAgentId = $submittedAgentId;
+                    if ($canAdminOrManagerEdit || $canSelfAgentEdit) {
+                        $resolvedBookingAgentId = $submittedAgentId;
+                        $resolvedBookingAgentType = $submittedAgentType;
+                    }
                 }
             }
 
             $payload = $request->all();
-            unset($payload['booking_agent_id'], $payload['combo_packages'], $payload['redeem_service_ids'], $payload['redeem_service_staff']);
+            unset($payload['booking_agent_id'], $payload['booking_agent'], $payload['booking_agent_type'], $payload['combo_packages'], $payload['redeem_service_ids'], $payload['redeem_service_staff']);
             if ($hasComboContext || $hasFreebieContext || $isDecideInSalon) {
                 unset($payload['price']);
             }
@@ -1543,6 +1612,7 @@ class AppointmentController extends Controller
 
             $extraFields = [
                 'booking_agent_id' => $resolvedBookingAgentId,
+                'booking_agent_type' => $resolvedBookingAgentType,
                 'booking_date' => $startTime->toDateString(),
                 'start_time' => $startTime->format('H:i:s'),
                 'service_name' => $services,
@@ -1893,6 +1963,9 @@ class AppointmentController extends Controller
                     if ($extraRemark !== '' && !in_array($extraRemark, $remarksParts, true)) {
                         $remarksParts[] = $extraRemark;
                     }
+                    if (! $primaryLead->ad_lead_id && $extra->ad_lead_id) {
+                        $primaryLead->ad_lead_id = $extra->ad_lead_id;
+                    }
                     AdLeadEntry::where('lead_id', $extra->id)->update(['lead_id' => $primaryLead->id]);
                     $extra->delete();
                 }
@@ -2129,6 +2202,7 @@ class AppointmentController extends Controller
         $services = Service::orderBy('name')->get();
         $products = Product::orderBy('name')->get();
         $agents = User::where('role', 'agent')->select('id', 'name')->get();
+        $bookingAgentOptions = Appointment::bookingAgentOptions();
 
         $servicesCatalog = $services->map(function ($s) {
             return [
@@ -2259,7 +2333,7 @@ class AppointmentController extends Controller
                 : $rawServiceNames,
         ];
 
-        return view('appointments.calendar', compact('staffs', 'activeStaffs', 'services', 'products', 'agents', 'servicesCatalog', 'productsCatalog', 'combosCatalog', 'freebiePackagesCatalog', 'pendingTimeBookings', 'bookingPrefill'));
+        return view('appointments.calendar', compact('staffs', 'activeStaffs', 'services', 'products', 'agents', 'bookingAgentOptions', 'servicesCatalog', 'productsCatalog', 'combosCatalog', 'freebiePackagesCatalog', 'pendingTimeBookings', 'bookingPrefill'));
     }
 
     /**
@@ -3377,6 +3451,9 @@ class AppointmentController extends Controller
 
         foreach ($leads as $row) {
             if ($row->id !== $primaryLead->id && !in_array($row->needful_done, Lead::CLOSED_STATUSES, true)) {
+                if (! $primaryLead->ad_lead_id && $row->ad_lead_id) {
+                    $primaryLead->ad_lead_id = $row->ad_lead_id;
+                }
                 AdLeadEntry::where('lead_id', $row->id)->update(['lead_id' => $primaryLead->id]);
                 $row->delete();
             }
@@ -3543,6 +3620,9 @@ class AppointmentController extends Controller
                 if ($extraRemark !== '' && !in_array($extraRemark, $remarksParts, true)) {
                     $remarksParts[] = $extraRemark;
                 }
+                if (! $lead->ad_lead_id && $extra->ad_lead_id) {
+                    $lead->ad_lead_id = $extra->ad_lead_id;
+                }
                 AdLeadEntry::where('lead_id', $extra->id)->update(['lead_id' => $lead->id]);
                 $extra->delete();
             }
@@ -3699,7 +3779,11 @@ class AppointmentController extends Controller
             'branch_raw' => $canonicalBranch,
             'staff_id' => $appointment->staff_id,
             'staff_name' => $appointment->staff->name ?? 'Unassigned',
-            'agent_name' => $appointment->agent->name ?? null,
+            'booking_agent_id' => $appointment->booking_agent_id,
+            'booking_agent_type' => $appointment->booking_agent_type,
+            'booking_agent_select_value' => $appointment->booking_agent_select_value,
+            'booking_agent_label' => $appointment->booking_agent_display_name,
+            'agent_name' => $appointment->booking_agent_display_name,
             'status' => $appointment->status,
             'is_paid' => $isPaid,
             'price' => (float) $appointment->price,

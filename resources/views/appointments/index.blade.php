@@ -824,7 +824,7 @@
                                     {{ ucwords(str_replace('_', ' ', $appointment->status)) }}
                                 </span>
                             </td>
-                            <td>{{ $appointment->agent->name ?? '—' }}</td>
+                            <td>{{ $appointment->booking_agent_display_name ?? '—' }}</td>
                             <td>
                                 @if (auth()->user()->canEdit('bookings') || auth()->user()->canEdit('finance'))
                                     @php

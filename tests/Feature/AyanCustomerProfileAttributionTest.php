@@ -116,6 +116,7 @@ class AyanCustomerProfileAttributionTest extends TestCase
         //    350 service + 100 product - 50 flat discount = 400 QAR net (+ 30 tip excluded)
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Fatima Al-Thani',
                 'phone' => '+974 5511 2233',
                 'service_name' => [$this->facialService->name],
@@ -145,6 +146,7 @@ class AyanCustomerProfileAttributionTest extends TestCase
         // 3. Visit #2: Same customer visits Al Wakrah in the SAME month (Nov 09) for 250 QAR net
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Fatima Al-Thani',
                 'phone' => '97455112233',
                 'service_name' => [$this->nailsService->name],
@@ -204,6 +206,7 @@ class AyanCustomerProfileAttributionTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Fatima Al-Thani',
                 'phone' => '55112233',
                 'service_name' => [$this->nailsService->name],

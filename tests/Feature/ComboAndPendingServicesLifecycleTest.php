@@ -132,6 +132,7 @@ class ComboAndPendingServicesLifecycleTest extends TestCase
 
         // Book Visit 1 10 days in advance (2026-11-11 14:00) with 2 immediate services and 2 pending
         $storeResp = $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $customer->name,
             'phone' => $customer->phone,
             'appointment_datetime' => '2026-11-11T14:00',
@@ -246,6 +247,7 @@ class ComboAndPendingServicesLifecycleTest extends TestCase
 
         // Visit 1 at Old Airport: Stylist A performs 2 services; client pays 180 QAR
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $customer->name,
             'phone' => $customer->phone,
             'appointment_datetime' => '2026-11-11T14:00',
@@ -278,6 +280,7 @@ class ComboAndPendingServicesLifecycleTest extends TestCase
         $token4 = "{$pkg->id}:{$f['svc4']->id}";
 
         $visit2StoreResp = $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $customer->name,
             'phone' => $customer->phone,
             'appointment_datetime' => '2026-11-14T15:00',
@@ -355,6 +358,7 @@ class ComboAndPendingServicesLifecycleTest extends TestCase
 
         // Visit 1 booked + paid (redeeming svc1 & svc2)
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $customer->name,
             'phone' => $customer->phone,
             'appointment_datetime' => '2026-11-11T14:00',
@@ -380,6 +384,7 @@ class ComboAndPendingServicesLifecycleTest extends TestCase
         $dupResp = $this->from(route('appointments.calendar'))
             ->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => $customer->name,
                 'phone' => $customer->phone,
                 'appointment_datetime' => '2026-11-13T14:00',
@@ -396,6 +401,7 @@ class ComboAndPendingServicesLifecycleTest extends TestCase
         $token3 = "{$pkg->id}:{$f['svc3']->id}";
         $token4 = "{$pkg->id}:{$f['svc4']->id}";
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $customer->name,
             'phone' => $customer->phone,
             'appointment_datetime' => '2026-11-13T15:00',

@@ -8,6 +8,19 @@ use Illuminate\Support\Facades\Schema;
 
 class Lead extends Model
 {
+    /**
+     * Built-in non-catalog Service Interest options for general inquiries before a
+     * customer picks a specific salon treatment or hairstyle.
+     * Never inserted into the master `services` catalog table.
+     */
+    public const GENERAL_INQUIRY_OPTION = 'Offer Inquiry / General Inquiry';
+    public const GENERAL_HAIRSTYLE_OPTION = 'Hairstyling / General Hairstyle';
+
+    public const GENERAL_SERVICE_INTERESTS = [
+        self::GENERAL_INQUIRY_OPTION,
+        self::GENERAL_HAIRSTYLE_OPTION,
+    ];
+
     const CATEGORIES = [
         'inquiry' => 'Inquiry',
         'follow_up' => 'Follow up',
@@ -78,6 +91,7 @@ class Lead extends Model
     protected $fillable = [
         'phone',
         'customer_id',
+        'ad_lead_id',
         'appointment_id',
         'assigned_agent_id',
         'category',
@@ -172,7 +186,96 @@ class Lead extends Model
                     $branch
                 );
             }
+
+            if (! \App\Services\AdLeadFollowUpSyncService::isSyncing()) {
+                \App\Services\AdLeadFollowUpSyncService::syncFromLead($lead);
+            }
         });
+    }
+
+    /**
+     * Resolve a service_interest label to its canonical non-catalog option from
+     * GENERAL_SERVICE_INTERESTS, or null if it represents a concrete salon service/combo.
+     */
+    public static function canonicalGeneralInterestLabel(?string $label): ?string
+    {
+        $norm = mb_strtolower(trim((string) $label));
+        if ($norm === '') {
+            return null;
+        }
+
+        foreach (self::GENERAL_SERVICE_INTERESTS as $option) {
+            if ($norm === mb_strtolower($option)) {
+                return $option;
+            }
+        }
+
+        if (in_array($norm, ['offer inquiry', 'general inquiry'], true)) {
+            return self::GENERAL_INQUIRY_OPTION;
+        }
+
+        if (in_array($norm, ['hairstyling', 'general hairstyle', 'hairstyle', 'hair styling'], true)) {
+            return self::GENERAL_HAIRSTYLE_OPTION;
+        }
+
+        return null;
+    }
+
+    /**
+     * Determine whether a service_interest label represents any built-in general inquiry
+     * option from GENERAL_SERVICE_INTERESTS rather than a concrete salon service or combo.
+     */
+    public static function isGeneralInquiryLabel(?string $label): bool
+    {
+        return self::canonicalGeneralInterestLabel($label) !== null;
+    }
+
+    /**
+     * Determine whether a service_interest label represents the built-in general hairstyling option.
+     */
+    public static function isHairstylingInquiryLabel(?string $label): bool
+    {
+        return self::canonicalGeneralInterestLabel($label) === self::GENERAL_HAIRSTYLE_OPTION;
+    }
+
+    /**
+     * Clean, deduplicate, and normalize a service_interest list.
+     * Whenever a concrete service/combo is present alongside any general inquiry
+     * option from GENERAL_SERVICE_INTERESTS, automatically remove the general option(s)
+     * so concrete services take over cleanly.
+     *
+     * @param  array<int, mixed>  $items
+     * @return list<string>
+     */
+    public static function normalizeServiceInterests(array $items): array
+    {
+        $concrete = [];
+        $general = [];
+
+        foreach ($items as $item) {
+            $trimmed = trim((string) $item);
+            if ($trimmed === '') {
+                continue;
+            }
+
+            $canonicalGeneral = self::canonicalGeneralInterestLabel($trimmed);
+            if ($canonicalGeneral !== null) {
+                if (! in_array($canonicalGeneral, $general, true)) {
+                    $general[] = $canonicalGeneral;
+                }
+                continue;
+            }
+
+            if (! in_array($trimmed, $concrete, true)) {
+                $concrete[] = $trimmed;
+            }
+        }
+
+        if (! empty($concrete)) {
+            return $concrete;
+        }
+
+        return $general;
     }
 
     /**
@@ -269,30 +372,22 @@ class Lead extends Model
     }
 
     /**
-     * Find the single active (open) Lead row for a given phone number (or customer ID).
+     * Find the single active (open) Lead row for a given phone number (or customer ID),
+     * deduplicating across E.164 (+974XXXXXXXX), local 8-digit, spaced, dashed, and international variants.
      */
     public static function findOpenLeadByPhone(?string $phone, ?int $customerId = null, ?int $excludeLeadId = null): ?self
     {
-        $rawDigits = preg_replace('/\D+/', '', (string) $phone);
-        [$countryCode, $localNumber] = self::splitPhone($rawDigits);
-        $normalizedPhone = self::normalizePhone($countryCode, $localNumber);
-        $candidates = array_values(array_unique(array_filter([$normalizedPhone, $rawDigits])));
+        [, $exactVariants, $strippedDigits] = AdLeadEntry::buildPhoneLookupSets([$phone]);
 
-        if (empty($candidates) && !$customerId) {
+        if (empty($exactVariants) && empty($strippedDigits) && ! $customerId) {
             return null;
         }
 
         return static::query()
             ->open()
-            ->where(function ($q) use ($candidates, $customerId) {
-                if (!empty($candidates)) {
-                    $q->whereIn('phone', $candidates);
-                    foreach ($candidates as $cand) {
-                        $q->orWhereRaw(
-                            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'(',''),')',''),'+','') = ?",
-                            [$cand]
-                        );
-                    }
+            ->where(function ($q) use ($exactVariants, $strippedDigits, $customerId) {
+                if (! empty($exactVariants) || ! empty($strippedDigits)) {
+                    AdLeadEntry::applyPhoneCohortClause($q, $exactVariants, $strippedDigits, 'or', 'phone');
                 }
                 if ($customerId) {
                     $q->orWhere('customer_id', $customerId);
@@ -311,6 +406,55 @@ class Lead extends Model
             $q->whereIn('category', $cats);
             foreach ($cats as $cat) {
                 $q->orWhereJsonContains('categories', $cat);
+            }
+        });
+    }
+
+    /**
+     * Filter leads whose `service_interest` JSON array matches any of the requested
+     * services, combos, or centralized GENERAL_SERVICE_INTERESTS options.
+     */
+    public function scopeWhereHasServiceInterest($query, string|array $services)
+    {
+        $wanted = array_values(array_filter(array_map(
+            fn ($item) => trim((string) $item),
+            (array) $services
+        )));
+
+        if (empty($wanted)) {
+            return $query;
+        }
+
+        return $query->where(function ($q) use ($wanted) {
+            foreach ($wanted as $service) {
+                $candidates = [$service];
+                $canonicalGeneral = self::canonicalGeneralInterestLabel($service);
+
+                if ($canonicalGeneral === self::GENERAL_INQUIRY_OPTION) {
+                    $candidates = array_values(array_unique(array_merge($candidates, [
+                        self::GENERAL_INQUIRY_OPTION,
+                        'General Inquiry',
+                        'Offer Inquiry',
+                    ])));
+                } elseif ($canonicalGeneral === self::GENERAL_HAIRSTYLE_OPTION) {
+                    $candidates = array_values(array_unique(array_merge($candidates, [
+                        self::GENERAL_HAIRSTYLE_OPTION,
+                        'Hairstyling',
+                        'General Hairstyle',
+                    ])));
+                }
+
+                foreach ($candidates as $candidate) {
+                    $q->orWhereJsonContains('service_interest', $candidate);
+                }
+
+                // Also match stored combo label variants (e.g. "[Combo] Name" vs "[Combo] Name (450 QAR)")
+                if (str_starts_with($service, '[Combo] ')) {
+                    $baseCombo = trim(preg_replace('/\s*\([^)]*QAR\)\s*$/i', '', $service) ?? $service);
+                    if ($baseCombo !== '') {
+                        $q->orWhere('service_interest', 'like', '%' . $baseCombo . '%');
+                    }
+                }
             }
         });
     }
@@ -463,6 +607,47 @@ class Lead extends Model
     public function customer()
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function adLeadEntry()
+    {
+        return $this->belongsTo(AdLeadEntry::class, 'ad_lead_id');
+    }
+
+    public function adLeadEntries()
+    {
+        return $this->hasMany(AdLeadEntry::class, 'lead_id');
+    }
+
+    public function isFromAds(): bool
+    {
+        if ($this->ad_lead_id !== null) {
+            return true;
+        }
+
+        if ($this->relationLoaded('adLeadEntries') && $this->adLeadEntries->isNotEmpty()) {
+            return true;
+        }
+
+        return $this->isPaidAdLead();
+    }
+
+    public function adsCampaignLabel(): ?string
+    {
+        $linked = $this->relationLoaded('adLeadEntry') ? $this->adLeadEntry : null;
+        if (! $linked && $this->relationLoaded('adLeadEntries')) {
+            $linked = $this->adLeadEntries->sortByDesc('id')->first();
+        }
+        if ($linked && trim((string) $linked->category) !== '') {
+            return trim((string) $linked->category);
+        }
+
+        $source = trim((string) ($this->source ?? ''));
+        if ($source !== '' && $this->isPaidAdLead()) {
+            return $source;
+        }
+
+        return null;
     }
 
     public function getCustomerNameAttribute($value): ?string

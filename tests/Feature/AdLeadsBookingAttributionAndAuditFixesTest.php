@@ -163,6 +163,7 @@ class AdLeadsBookingAttributionAndAuditFixesTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Noura Al-Kuwari',
                 'phone' => '+97466001122',
                 'service_name' => [$this->facialService->name],
@@ -225,6 +226,7 @@ class AdLeadsBookingAttributionAndAuditFixesTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Reem Decide In Salon',
                 'phone' => '+97466003344',
                 'decide_in_salon' => 1,
@@ -313,6 +315,7 @@ class AdLeadsBookingAttributionAndAuditFixesTest extends TestCase
 
         // Book Client Alpha
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Client Alpha',
             'phone' => '+97455110001',
             'service_name' => [$this->facialService->name],
@@ -393,6 +396,7 @@ class AdLeadsBookingAttributionAndAuditFixesTest extends TestCase
 
         // Booking #1 on Oct 10 (inside 14-day spillover) -> 300 QAR Old Airport
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Spillover Client',
             'phone' => '+97455994411',
             'service_name' => [$this->facialService->name],
@@ -410,6 +414,7 @@ class AdLeadsBookingAttributionAndAuditFixesTest extends TestCase
 
         // Booking #2 on Oct 12 (exact day 14 boundary) -> 200 QAR Al Wakrah (sums to 500 QAR!)
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Spillover Client',
             'phone' => '+97455994411',
             'service_name' => [$this->nailsService->name],
@@ -422,6 +427,7 @@ class AdLeadsBookingAttributionAndAuditFixesTest extends TestCase
 
         // Booking #3 on Oct 13 (day 15 — OUTSIDE window) -> must NOT be summed into Sep 28 lead!
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Spillover Client',
             'phone' => '+97455994411',
             'service_name' => [$this->facialService->name],

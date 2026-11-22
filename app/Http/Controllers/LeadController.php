@@ -28,7 +28,7 @@ class LeadController extends Controller
         $today = Lead::salonToday();
         $todayDateStr = $today->toDateString();
 
-        $query = Lead::query()->with(['agent', 'customer', 'appointment:id,status']);
+        $query = Lead::query()->with(['agent', 'customer', 'appointment:id,status', 'adLeadEntry:id,category,date', 'adLeadEntries:id,lead_id,category,date']);
         $tab = $request->input('tab');
         $alertFilter = $request->input('alert_filter');
         if (!$alertFilter && $request->input('followup_filter') === 'pending') {
@@ -37,7 +37,7 @@ class LeadController extends Controller
 
         $hasExplicitNonDefaultParams = !empty($alertFilter)
             || $tab === 'all'
-            || $request->hasAny(['category', 'followup_date', 'phone_number', 'start_date', 'end_date', 'agent_id', 'alert_filter', 'followup_filter']);
+            || $request->hasAny(['category', 'service_interest', 'followup_date', 'phone_number', 'start_date', 'end_date', 'agent_id', 'alert_filter', 'followup_filter']);
 
         $isDueTodayView = (!$hasExplicitNonDefaultParams)
             || ($tab === 'due_today' && empty($alertFilter) && !$request->filled('followup_date'));
@@ -100,6 +100,10 @@ class LeadController extends Controller
 
         if ($request->filled('category')) {
             $query->whereHasCategory((array) $request->category);
+        }
+
+        if ($request->filled('service_interest')) {
+            $query->whereHasServiceInterest($request->input('service_interest'));
         }
 
         if ($request->filled('followup_date')) {
@@ -226,6 +230,11 @@ class LeadController extends Controller
             $normalizedCat = Lead::normalizeCategories([$request->input('category')])[0] ?? $request->input('category');
             $request->merge(['category' => $normalizedCat]);
         }
+        if (is_array($request->input('service_interest'))) {
+            $request->merge([
+                'service_interest' => Lead::normalizeServiceInterests($request->input('service_interest')),
+            ]);
+        }
 
         $request->validate(array_merge(Lead::phoneValidationRules($request->input('country_code')), [
             'customer_name' => 'required|string|max:255',
@@ -241,14 +250,14 @@ class LeadController extends Controller
         ]);
 
         $normalizedPhone = Lead::normalizePhone($request->country_code, $request->phone_number);
+        $normalizedServiceInterests = Lead::normalizeServiceInterests((array) $request->service_interest);
         $customer = $this->resolveOrCreateCustomer($normalizedPhone, $request->customer_id, $request->customer_name);
 
-        $existingLead = $this->findDuplicateLead($normalizedPhone, $request->category, $request->service_interest);
+        $existingLead = $this->findDuplicateLead($normalizedPhone, $request->category, $normalizedServiceInterests);
 
         if ($existingLead) {
             $existingServices = is_array($existingLead->service_interest) ? $existingLead->service_interest : [];
-            $incomingServices = is_array($request->service_interest) ? $request->service_interest : [];
-            $mergedServices = array_values(array_unique(array_filter(array_map('trim', array_merge($existingServices, $incomingServices)))));
+            $mergedServices = Lead::normalizeServiceInterests(array_merge($existingServices, $normalizedServiceInterests));
 
             $existingRemarks = trim((string) $existingLead->customer_remarks);
             $incomingRemarks = trim((string) $request->customer_remarks);
@@ -295,7 +304,7 @@ class LeadController extends Controller
             'category' => Lead::resolvePrimaryCategory($initialCategories) ?? $request->category,
             'categories' => $initialCategories,
             'customer_remarks' => $request->customer_remarks,
-            'service_interest' => $request->service_interest,
+            'service_interest' => $normalizedServiceInterests,
             'next_followup_date' => $request->next_followup_date,
         ];
         if ($request->filled('source') && \Illuminate\Support\Facades\Schema::hasColumn('leads', 'source')) {
@@ -333,6 +342,11 @@ class LeadController extends Controller
         if ($request->filled('categories') && is_array($request->input('categories'))) {
             $request->merge(['categories' => Lead::normalizeCategories($request->input('categories'))]);
         }
+        if (is_array($request->input('service_interest'))) {
+            $request->merge([
+                'service_interest' => Lead::normalizeServiceInterests($request->input('service_interest')),
+            ]);
+        }
 
         $allowedCategories = array_unique(array_merge(
             array_keys(Lead::CATEGORIES),
@@ -356,6 +370,7 @@ class LeadController extends Controller
         ]);
 
         $normalizedPhone = Lead::normalizePhone($request->country_code, $request->phone_number);
+        $normalizedServiceInterests = Lead::normalizeServiceInterests((array) $request->service_interest);
         $customer = $this->resolveOrCreateCustomer($normalizedPhone, $request->customer_id, $request->customer_name);
 
         if ($request->filled('categories') && is_array($request->categories)) {
@@ -376,7 +391,7 @@ class LeadController extends Controller
             'category' => $primaryCategory,
             'categories' => $updatedCategories,
             'customer_remarks' => $request->customer_remarks,
-            'service_interest' => $request->service_interest,
+            'service_interest' => $normalizedServiceInterests,
             'next_followup_date' => $request->next_followup_date,
         ];
         if ($request->has('source') && \Illuminate\Support\Facades\Schema::hasColumn('leads', 'source')) {
@@ -390,18 +405,24 @@ class LeadController extends Controller
             }
         }
 
-        $existingLead = $this->findDuplicateLead($normalizedPhone, $primaryCategory, $request->service_interest, $lead->id);
+        $existingLead = $this->findDuplicateLead($normalizedPhone, $primaryCategory, $normalizedServiceInterests, $lead->id);
 
         // If another open lead already exists for this phone, merge into that one and remove the duplicate row.
         if ($existingLead) {
             $existingServices = is_array($existingLead->service_interest) ? $existingLead->service_interest : [];
-            $incomingServices = is_array($request->service_interest) ? $request->service_interest : [];
             $mergedCats = $existingLead->mergeCategories($updatedCategories);
 
-            $data['service_interest'] = array_values(array_unique(array_filter(array_map('trim', array_merge($existingServices, $incomingServices)))));
+            $data['service_interest'] = Lead::normalizeServiceInterests(array_merge($existingServices, $normalizedServiceInterests));
             $data['assigned_agent_id'] = $request->assigned_agent_id ?: $existingLead->assigned_agent_id;
             $data['categories'] = $mergedCats;
             $data['category'] = Lead::resolvePrimaryCategory($mergedCats);
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('leads', 'ad_lead_id') && ! $existingLead->ad_lead_id && $lead->ad_lead_id) {
+                $data['ad_lead_id'] = $lead->ad_lead_id;
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('ad_lead_entries') && \Illuminate\Support\Facades\Schema::hasColumn('ad_lead_entries', 'lead_id')) {
+                AdLeadEntry::where('lead_id', $lead->id)->update(['lead_id' => $existingLead->id]);
+            }
 
             $existingLead->update($data);
             $lead->delete();
@@ -427,7 +448,7 @@ class LeadController extends Controller
             return [];
         }
 
-        $allowed = ['tab', 'alert_filter', 'followup_date', 'category', 'agent_id', 'start_date', 'end_date', 'country_code', 'phone_number'];
+        $allowed = ['tab', 'alert_filter', 'followup_date', 'category', 'service_interest', 'agent_id', 'start_date', 'end_date', 'country_code', 'phone_number'];
         $clean = [];
 
         foreach ($allowed as $key) {
@@ -694,7 +715,7 @@ class LeadController extends Controller
     public static function resolveServicePrice(string $serviceName, array $servicePriceMap): int
     {
         $norm = strtolower(trim($serviceName));
-        if ($norm === '') {
+        if ($norm === '' || Lead::isGeneralInquiryLabel($serviceName)) {
             return 150;
         }
 
@@ -1047,16 +1068,7 @@ class LeadController extends Controller
      */
     private function findDuplicateLead(string $normalizedPhone, ?string $category = null, array $serviceInterest = [], ?int $excludeLeadId = null)
     {
-        return Lead::whereRaw(
-            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'(',''),')',''),'+','') = ?",
-            [$normalizedPhone]
-        )
-            ->where(function ($q) {
-                $q->whereNull('needful_done')->orWhereNotIn('needful_done', Lead::CLOSED_STATUSES);
-            })
-            ->when($excludeLeadId, fn($q) => $q->where('id', '!=', $excludeLeadId))
-            ->orderByDesc('id')
-            ->first();
+        return Lead::findOpenLeadByPhone($normalizedPhone, null, $excludeLeadId);
     }
 
     /**

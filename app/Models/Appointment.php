@@ -12,6 +12,19 @@ class Appointment extends Model
     use HasFactory;
     protected $table = 'appointments';
 
+    public const BOOKING_AGENT_SALON_STAFF = 'salon_staff';
+    public const BOOKING_AGENT_TYPE_AGENT = 'agent';
+    public const BOOKING_AGENT_SALON_STAFF_LABEL = 'Salon Staff';
+    public const BOOKING_AGENT_VALIDATION_ERROR = 'Please select a Booking Agent (Salon Staff, Areeba, or Zoya) before saving.';
+
+    /**
+     * Exact allowed Chat Agents selectable in the Booking Agent dropdown (in display order).
+     */
+    public const ALLOWED_BOOKING_AGENT_SLUGS = [
+        'areeba' => 'Areeba',
+        'zoya' => 'Zoya',
+    ];
+
     protected $fillable = [
         'customer_name',
         'phone',
@@ -32,6 +45,7 @@ class Appointment extends Model
         'price',
         'lifetime_revenue',
         'booking_agent_id',
+        'booking_agent_type',
         'created_by',
         'staff_id',
         'status',
@@ -86,6 +100,175 @@ class Appointment extends Model
     public function agent()
     {
         return $this->belongsTo(User::class, 'booking_agent_id');
+    }
+
+    /**
+     * Build the exact ordered Booking Agent options for the Enhanced Calendar dropdown:
+     * Salon Staff, Areeba, Zoya.
+     *
+     * @return list<array{value: string, label: string, type: string, user_id: int|null}>
+     */
+    public static function bookingAgentOptions(): array
+    {
+        $options = [
+            [
+                'value' => self::BOOKING_AGENT_SALON_STAFF,
+                'label' => self::BOOKING_AGENT_SALON_STAFF_LABEL,
+                'type' => self::BOOKING_AGENT_SALON_STAFF,
+                'user_id' => null,
+            ],
+        ];
+
+        $agentUsers = User::where('role', 'agent')
+            ->where(function ($q) {
+                $q->where('is_active', true)->orWhereNull('is_active');
+            })
+            ->orderBy('id')
+            ->get(['id', 'name']);
+
+        foreach (self::ALLOWED_BOOKING_AGENT_SLUGS as $needle => $label) {
+            $matched = $agentUsers->first(
+                fn (User $u) => str_contains(mb_strtolower(trim((string) $u->name)), $needle)
+            );
+            if ($matched) {
+                $options[] = [
+                    'value' => (string) $matched->id,
+                    'label' => $label,
+                    'type' => self::BOOKING_AGENT_TYPE_AGENT,
+                    'user_id' => (int) $matched->id,
+                ];
+            }
+        }
+
+        return $options;
+    }
+
+    public static function isAllowedBookingAgentUser(?User $user): bool
+    {
+        if (! $user || $user->role !== 'agent') {
+            return false;
+        }
+
+        $norm = mb_strtolower(trim((string) $user->name));
+        foreach (array_keys(self::ALLOWED_BOOKING_AGENT_SLUGS) as $needle) {
+            if (str_contains($norm, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function canonicalAgentShortName(?string $name): ?string
+    {
+        $trimmed = trim((string) $name);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $lower = mb_strtolower($trimmed);
+        foreach (self::ALLOWED_BOOKING_AGENT_SLUGS as $needle => $label) {
+            if (str_contains($lower, $needle)) {
+                return $label;
+            }
+        }
+
+        return $trimmed;
+    }
+
+    /**
+     * Resolve and validate a Booking Agent selection from form/API input.
+     * Accepts:
+     * - "salon_staff" or "Salon Staff" -> booking_agent_id = null, booking_agent_type = 'salon_staff'
+     * - Numeric User ID for Areeba or Zoya (role = 'agent') -> booking_agent_id = user.id, booking_agent_type = 'agent'
+     * - "Areeba" or "Zoya" string name resolved to the corresponding role = 'agent' User
+     *
+     * Returns null when empty or invalid.
+     *
+     * @return array{booking_agent_id: int|null, booking_agent_type: string, label: string}|null
+     */
+    public static function resolveBookingAgentSelection(mixed $rawValue, ?string $rawType = null): ?array
+    {
+        $strVal = is_scalar($rawValue) ? trim((string) $rawValue) : '';
+        $normVal = mb_strtolower($strVal);
+        $normType = mb_strtolower(trim((string) $rawType));
+
+        if (
+            in_array($normVal, [self::BOOKING_AGENT_SALON_STAFF, 'salon staff'], true)
+            || ($strVal === '' && $normType === self::BOOKING_AGENT_SALON_STAFF)
+        ) {
+            return [
+                'booking_agent_id' => null,
+                'booking_agent_type' => self::BOOKING_AGENT_SALON_STAFF,
+                'label' => self::BOOKING_AGENT_SALON_STAFF_LABEL,
+            ];
+        }
+
+        if ($strVal === '') {
+            return null;
+        }
+
+        if (ctype_digit($strVal)) {
+            $user = User::where('id', (int) $strVal)
+                ->where('role', 'agent')
+                ->first(['id', 'name', 'role']);
+
+            if (! self::isAllowedBookingAgentUser($user)) {
+                return null;
+            }
+
+            return [
+                'booking_agent_id' => (int) $user->id,
+                'booking_agent_type' => self::BOOKING_AGENT_TYPE_AGENT,
+                'label' => self::canonicalAgentShortName($user->name) ?? $user->name,
+            ];
+        }
+
+        foreach (self::ALLOWED_BOOKING_AGENT_SLUGS as $needle => $label) {
+            if ($normVal === $needle || str_contains($normVal, $needle)) {
+                $user = User::where('role', 'agent')
+                    ->get(['id', 'name', 'role'])
+                    ->first(fn (User $u) => str_contains(mb_strtolower(trim((string) $u->name)), $needle));
+
+                if ($user) {
+                    return [
+                        'booking_agent_id' => (int) $user->id,
+                        'booking_agent_type' => self::BOOKING_AGENT_TYPE_AGENT,
+                        'label' => $label,
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public function hasAssignedBookingAgent(): bool
+    {
+        return $this->booking_agent_id !== null
+            || $this->booking_agent_type === self::BOOKING_AGENT_SALON_STAFF;
+    }
+
+    public function getBookingAgentDisplayNameAttribute(): ?string
+    {
+        if ($this->booking_agent_type === self::BOOKING_AGENT_SALON_STAFF) {
+            return self::BOOKING_AGENT_SALON_STAFF_LABEL;
+        }
+
+        if ($this->booking_agent_id) {
+            return self::canonicalAgentShortName($this->agent?->name);
+        }
+
+        return null;
+    }
+
+    public function getBookingAgentSelectValueAttribute(): string
+    {
+        if ($this->booking_agent_type === self::BOOKING_AGENT_SALON_STAFF) {
+            return self::BOOKING_AGENT_SALON_STAFF;
+        }
+
+        return $this->booking_agent_id ? (string) $this->booking_agent_id : '';
     }
 
     /**

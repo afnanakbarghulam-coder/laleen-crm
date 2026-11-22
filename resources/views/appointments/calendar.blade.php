@@ -2208,6 +2208,7 @@
                     <div class="text-muted small mb-1"><i class="bx bx-calendar"></i> <span id="drawerDatetime"></span></div>
                     <div class="text-muted small mb-1"><i class="bx bx-map-pin"></i> <span id="drawerBranch"></span></div>
                     <div class="text-muted small"><i class="bx bx-user-voice"></i> with <span id="drawerStaff"></span></div>
+                    <div class="text-muted small mt-1 d-none" id="drawerBookingAgentWrap"><i class="bx bx-user-check"></i> Booked by <strong id="drawerBookingAgent" style="color: #f3e5e0;"></strong></div>
                 </div>
 
                 <div class="drawer-section px-3 d-none" id="drawerVisitsSection">
@@ -3695,6 +3696,19 @@
             document.getElementById('drawerStaff').textContent = activeSpecialistNames.length > 0
                 ? activeSpecialistNames.join(', ')
                 : a.staff_name;
+
+            const drawerAgentWrap = document.getElementById('drawerBookingAgentWrap');
+            const drawerAgentEl = document.getElementById('drawerBookingAgent');
+            const resolvedAgentLabel = a.booking_agent_label || a.agent_name || '';
+            if (drawerAgentWrap && drawerAgentEl) {
+                if (resolvedAgentLabel) {
+                    drawerAgentEl.textContent = resolvedAgentLabel;
+                    drawerAgentWrap.classList.remove('d-none');
+                } else {
+                    drawerAgentEl.textContent = '';
+                    drawerAgentWrap.classList.add('d-none');
+                }
+            }
 
             if (window.LaleenSliceEngine && a.date) {
                 const dBranch = normalizeCalendarBranch(a.branch_raw) || state.branch;

@@ -129,7 +129,7 @@ class ChatAgentKpiPipelineAuditFixesTest extends TestCase
                 ])
                 ->assertSessionHasErrors('booking_agent_id');
 
-            // 1. Open lead assigned to Areeba, booked by Zoya WITHOUT selecting booking_agent_id -> MUST stay null (0 credit for both!)
+            // 1. Open lead assigned to Areeba, booked by Zoya selecting Salon Staff -> MUST stay null booking_agent_id (0 credit for both!)
             $hijackCustomer = Customer::create(['name' => 'Open Lead Client', 'phone' => '55100002']);
             Lead::create([
                 'phone' => '55100002',
@@ -148,7 +148,7 @@ class ChatAgentKpiPipelineAuditFixesTest extends TestCase
                     'service_name' => ['Haircut'],
                     'branch' => 'old_airport',
                     'staff_id' => $this->oaStylist->id,
-                    // booking_agent_id omitted / left blank
+                    'booking_agent_id' => 'salon_staff',
                 ])
                 ->assertRedirect();
 

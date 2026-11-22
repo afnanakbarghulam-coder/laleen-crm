@@ -149,6 +149,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
 
         // Assigning Babita (Manicure/Wax only) to Full Body Massage fails with 422 missing_skill naming Putu
         $badComboResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $this->customer->name,
             'phone' => $this->customer->phone,
             'appointment_datetime' => $dateStr . 'T15:00',
@@ -188,6 +189,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
         $this->assertNotContains('Layla Wakrah', $availNames);
 
         $fallbackBookResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $this->customer->name,
             'phone' => $this->customer->phone,
             'appointment_datetime' => $dateStr . 'T15:00',
@@ -204,6 +206,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
         $dateStr = $slot->toDateString();
 
         $storeResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $this->customer->name,
             'phone' => $this->customer->phone,
             'appointment_datetime' => $dateStr . 'T15:00',
@@ -304,6 +307,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
 
         // Putu already has an existing Massage booking from 16:00 to 17:00
         $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Earlier Spa Client',
             'phone' => '+97455990011',
             'appointment_datetime' => $dateStr . 'T16:00',
@@ -314,6 +318,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
 
         // Default order at 15:00: Manicure (15:00-15:45, Babita) -> Massage (15:45-16:45, Putu) overlaps Putu's 16:00-17:00!
         $conflictResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $this->customer->name,
             'phone' => $this->customer->phone,
             'appointment_datetime' => $dateStr . 'T15:00',
@@ -337,6 +342,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
 
         // Reordered via sort_order: Massage FIRST (15:00-16:00, Putu) -> Manicure SECOND (16:00-16:45, Babita) -> 201 OK!
         $reorderedResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $this->customer->name,
             'phone' => $this->customer->phone,
             'appointment_datetime' => $dateStr . 'T15:00',
@@ -379,6 +385,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
 
         // 1. Self-overlap guard: Babita cannot perform Full Manicure + Underarms Wax at the exact same time (`is_parallel = true`)
         $selfOverlapResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $this->customer->name,
             'phone' => $this->customer->phone,
             'appointment_datetime' => $dateStr . 'T15:00',
@@ -406,6 +413,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
         //    - Babita (Wax 20m, sequential: 16:30-16:50)
         //    Total visit span drops from 155m (2h 35m) to 110m (1h 50m)!
         $parallelResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $this->customer->name,
             'phone' => $this->customer->phone,
             'appointment_datetime' => $dateStr . 'T15:00',
@@ -463,6 +471,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
 
         // A) 2 Today + 2 Pending: Pending services add 0 min today & no calendar slices
         $splitResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $this->customer->name,
             'phone' => $this->customer->phone,
             'appointment_datetime' => $dateStr . 'T13:00',
@@ -494,6 +503,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
 
         // B) 0/4 Unpicked ("Decide in Salon") Combo uses single TEAM MEMBER fallback
         $unpickedResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Walk-in Combo Guest',
             'phone' => '+97455887766',
             'appointment_datetime' => $dateStr . 'T17:00',
@@ -520,6 +530,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
         $dateStr = $slot->toDateString();
 
         $storeResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $this->customer->name,
             'phone' => $this->customer->phone,
             'appointment_datetime' => $dateStr . 'T15:00',
@@ -599,6 +610,7 @@ class EnhancedCalendarSkillAssignmentTest extends TestCase
 
         // Book 2 standalone services sequentially at 15:00 (Manicure 45m Babita -> Massage 60m Putu = 105m)
         $standaloneResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $this->customer->name,
             'phone' => $this->customer->phone,
             'appointment_datetime' => $dateStr . 'T15:00',

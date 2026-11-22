@@ -117,6 +117,7 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
         $slotOne = now()->addDays(2)->setTime(13, 0, 0);
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Noor Al-Kuwari',
                 'phone' => '55112233',
                 'service_name' => [$this->facialService->name],
@@ -387,6 +388,7 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
         // Book paid/completed standalone appointment on 2026-11-05 -> attributes 300 QAR to adEntry and marks Lead booked
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Aisha Service Shift',
                 'phone' => '55667788',
                 'service_name' => [$this->facialService->name],
@@ -487,6 +489,7 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Cross Month Client',
                 'phone' => '55991100',
                 'service_name' => [$this->facialService->name],
@@ -510,6 +513,7 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
         // Same-month checkout on Nov 30 DOES attribute to Nov 29 AdLeadEntry
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Cross Month Client',
                 'phone' => '55991100',
                 'service_name' => [$this->facialService->name],
@@ -548,6 +552,7 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Dual Branch Client',
                 'phone' => '66112299',
                 'service_name' => [$this->facialService->name],
@@ -593,6 +598,7 @@ class CrmPhaseTwoHandshakeAndAttributionTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Dual Branch Client',
                 'phone' => '66112299',
                 'service_name' => [$this->nailsService->name],

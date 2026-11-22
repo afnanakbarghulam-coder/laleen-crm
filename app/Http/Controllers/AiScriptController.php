@@ -201,16 +201,32 @@ class AiScriptController extends Controller
             ? $serviceInterest
             : explode(',', (string) $serviceInterest);
 
-        $normalizedNames = array_values(array_unique(array_filter(array_map(
-            fn($n) => strtolower(trim((string) $n)),
+        $allRawNames = array_values(array_unique(array_filter(array_map(
+            fn($n) => trim((string) $n),
             $names
         ))));
 
+        $hasGeneralInquiry = collect($allRawNames)->contains(fn (string $n) => Lead::isGeneralInquiryLabel($n));
+        $isHairstylingInquiry = collect($allRawNames)->contains(fn (string $n) => Lead::isHairstylingInquiryLabel($n));
+
+        $normalizedNames = array_values(array_unique(array_filter(array_map(
+            fn($n) => Lead::isGeneralInquiryLabel($n) ? '' : strtolower($n),
+            $allRawNames
+        ))));
+
         if (empty($normalizedNames)) {
+            $generalFocus = $isHairstylingInquiry ? 'hairstyling' : ($hasGeneralInquiry ? 'offers' : null);
+
             return [
                 'matched_services' => [],
                 'primary_price_qar' => null,
-                'prompt_summary' => 'No specific service price on file — quote starting rates or invite them for a complimentary consultation.',
+                'is_general_inquiry' => $hasGeneralInquiry,
+                'general_inquiry_focus' => $generalFocus,
+                'prompt_summary' => match ($generalFocus) {
+                    'hairstyling' => 'Customer is asking about general hairstyling without selecting a specific hairstyle yet — warmly ask what style or occasion they have in mind (e.g., waves, updo, blowout) without assuming a specific service price or duration.',
+                    'offers' => 'Customer is asking about current salon offers or general information without selecting a specific service yet — warmly invite them to share what they are looking for or view today\'s offers without assuming a specific price or duration.',
+                    default => 'No specific service price on file — quote starting rates or invite them for a complimentary consultation.',
+                },
             ];
         }
 
@@ -385,10 +401,21 @@ class AiScriptController extends Controller
         ?string $clientReply,
         array $servicePricing = []
     ): string {
+        $isGeneralInquiry = !empty($servicePricing['is_general_inquiry'])
+            || Lead::isGeneralInquiryLabel($serviceInterest);
+        $isHairstylingInquiry = ($servicePricing['general_inquiry_focus'] ?? null) === 'hairstyling'
+            || Lead::isHairstylingInquiryLabel($serviceInterest);
+        $serviceLabel = $isHairstylingInquiry
+            ? 'hairstyling options'
+            : ($isGeneralInquiry ? 'current salon offers' : $serviceInterest);
         $primaryPrice = $servicePricing['primary_price_qar'] ?? null;
         $priceClause = $primaryPrice
-            ? "Use our actual salon menu price ({$primaryPrice} for {$serviceInterest})"
-            : "Mention that our {$serviceInterest} pricing starts from a tailored rate based on consultation";
+            ? "Use our actual salon menu price ({$primaryPrice} for {$serviceLabel})"
+            : ($isHairstylingInquiry
+                ? 'Do not invent a specific hairstyle price or duration; mention our hairstyling rates depend on hair length and style and ask what look or occasion they want'
+                : ($isGeneralInquiry
+                    ? 'Do not invent a specific service price or duration; mention our current salon offers vary by treatment and ask which treatment they are interested in'
+                    : "Mention that our {$serviceLabel} pricing starts from a tailored rate based on consultation"));
 
         return match ($objectionType) {
             'price_high' => <<<PLAYBOOK
@@ -398,7 +425,7 @@ OBJECTION PLAYBOOK — "PRICE IS TOO HIGH" (1-2 Punchy Sentences, Max 30 Words):
 PLAYBOOK,
             'busy_later' => <<<PLAYBOOK
 OBJECTION PLAYBOOK — "I'LL LET YOU KNOW / BUSY" (1-2 Punchy Sentences, Max 30 Words):
-- Sentence 1: Take the pressure off ("No rush at all!") and note that weekend and evening slots for {$serviceInterest} fill up days in advance.
+- Sentence 1: Take the pressure off ("No rush at all!") and note that weekend and evening slots for {$serviceLabel} fill up days in advance.
 - Sentence 2: Ask if holding a tentative slot next week or checking back on a specific day works better.
 PLAYBOOK,
             'price_inquiry' => <<<PLAYBOOK
@@ -408,7 +435,7 @@ OBJECTION PLAYBOOK — "ASKING FOR PRICE ONLY" (1-2 Punchy Sentences, Max 30 Wor
 PLAYBOOK,
             'ghosted' => <<<PLAYBOOK
 OBJECTION PLAYBOOK — "GHOSTED FIRST MESSAGE / FOLLOW-UP #2" (1-2 Punchy Sentences, Max 30 Words):
-- Zero guilt-tripping. Warmly check in and mention we still have a spot open for their {$serviceInterest} this week before the schedule locks—morning or evening?
+- Zero guilt-tripping. Warmly check in and mention we still have a spot open for their {$serviceLabel} this week before the schedule locks—morning or evening?
 PLAYBOOK,
             'custom_reply' => <<<PLAYBOOK
 OBJECTION PLAYBOOK — "CLIENT CUSTOM WHATSAPP REPLY" (1-2 Punchy Sentences, Max 30 Words):
@@ -417,7 +444,7 @@ OBJECTION PLAYBOOK — "CLIENT CUSTOM WHATSAPP REPLY" (1-2 Punchy Sentences, Max
 - Sentence 2: 1-sentence low-pressure morning or afternoon time check.
 PLAYBOOK,
             default => <<<PLAYBOOK
-OBJECTION PLAYBOOK — Direct 1-sentence answer regarding {$serviceInterest} ({$priceClause}) + 1-sentence low-pressure time check.
+OBJECTION PLAYBOOK — Direct 1-sentence answer regarding {$serviceLabel} ({$priceClause}) + 1-sentence low-pressure time check.
 PLAYBOOK,
         };
     }
@@ -495,8 +522,20 @@ PROMPT;
                 $salonHistoryPrompt = "Existing salon client ({$remarks})." . ($loyaltyPoints >= 30 ? " Has {$loyaltyPoints} QAR in loyalty points ready to use." : '');
             }
 
+            $isGeneralInquiryPrompt = !empty($servicePricing['is_general_inquiry'])
+                || Lead::isGeneralInquiryLabel($serviceInterest);
+            $isHairstylingPrompt = ($servicePricing['general_inquiry_focus'] ?? null) === 'hairstyling'
+                || Lead::isHairstylingInquiryLabel($serviceInterest);
+            $promptServiceLabel = $isHairstylingPrompt
+                ? 'general hairstyling (no specific hairstyle chosen yet)'
+                : ($isGeneralInquiryPrompt ? 'current salon offers / general inquiry (no specific service chosen yet)' : $serviceInterest);
+
             $retentionHookInstruction = '';
-            $structureRule = "- Sentence 1: Warmly greet {$customerName}, adapt to context [ {$contextModifier} ], reference their interest in {$serviceInterest} (and price/duration if known, or past visit if returning client).\n- Sentence 2: Simple, low-pressure A/B time question (e.g., \"Would a morning or afternoon slot work better for you this week?\").";
+            $structureRule = $isHairstylingPrompt
+                ? "- Sentence 1: Warmly greet {$customerName}, adapt to context [ {$contextModifier} ], acknowledge their interest in hairstyling without assuming a specific hairstyle price or duration.\n- Sentence 2: Ask what style or occasion they have in mind and offer a low-pressure morning or afternoon visit this week."
+                : ($isGeneralInquiryPrompt
+                    ? "- Sentence 1: Warmly greet {$customerName}, adapt to context [ {$contextModifier} ], acknowledge their inquiry about our current salon offers without assuming a specific service price or duration.\n- Sentence 2: Ask which treatment they are interested in and offer a low-pressure morning or afternoon visit this week."
+                    : "- Sentence 1: Warmly greet {$customerName}, adapt to context [ {$contextModifier} ], reference their interest in {$promptServiceLabel} (and price/duration if known, or past visit if returning client).\n- Sentence 2: Simple, low-pressure A/B time question (e.g., \"Would a morning or afternoon slot work better for you this week?\").");
 
             if (str_contains($remarks, '[Refill Due]')) {
                 $retentionHookInstruction = "RETENTION HOOK ([Refill Due]): This client is due/overdue for their {$serviceInterest} maintenance refresh ({$remarks}). Invite them back for their {$serviceInterest} refresh.{$pointsDirective}";
@@ -697,76 +736,123 @@ PROMPT;
         $pointsBonusEn = $loyaltyPoints >= 30 ? " (plus {$loyaltyPoints} QAR in loyalty points ready)" : '';
         $pointsBonusAr = $loyaltyPoints >= 30 ? " وعندك {$loyaltyPoints} نقطة ولاء ({$loyaltyPoints} ريال) جاهزة للاستخدام" : '';
 
+        $isGeneralInquiry = !empty($servicePricing['is_general_inquiry'])
+            || Lead::isGeneralInquiryLabel($serviceInterest);
+        $isHairstylingInquiry = ($servicePricing['general_inquiry_focus'] ?? null) === 'hairstyling'
+            || Lead::isHairstylingInquiryLabel($serviceInterest);
+        $serviceLabelEn = $isHairstylingInquiry
+            ? 'hairstyling options'
+            : ($isGeneralInquiry ? 'current salon offers' : $serviceInterest);
+        $serviceLabelAr = $isHairstylingInquiry
+            ? 'تسريحات الشعر لدينا'
+            : ($isGeneralInquiry ? 'عروضنا الحالية في الصالون' : $serviceInterest);
+
         if ($language === 'ar') {
             $priceAr = !empty($firstMatched['price_clean'])
                 ? "{$firstMatched['price_clean']} ريال ({$firstMatched['price_clean']} QAR)"
                 : 'سعر مخصص حسب التقييم';
 
+            if ($isGeneralInquiry && $mode !== 'objection') {
+                if ($isHairstylingInquiry) {
+                    return "يا هلا حبيبتي {$nameAr}، شفنا استفسارك عن {$serviceLabelAr}{$pointsBonusAr}. إيش التسريحة أو المناسبة اللي ببالك، أو يناسبك نرتب لك موعد الصباح أو المساء هالأسبوع؟";
+                }
+
+                return "يا هلا حبيبتي {$nameAr}، شفنا استفسارك عن {$serviceLabelAr}{$pointsBonusAr}. تحبين نرسل لك تفاصيل العروض أو نرتب لك موعد الصباح أو المساء هالأسبوع؟";
+            }
+
             if ($mode === 'objection') {
                 return match ($objectionType) {
-                    'price_high' => "يا هلا حبيبتي {$nameAr}، جلسة {$serviceInterest} ({$priceAr}) تتم مع أخصائياتنا بمواد أصلية آمنة ونتيجتها تدوم. تحبين نرتب استشارة مجانية سريعة الصباح أو المساء؟",
-                    'busy_later' => "ولا يهمك حبيبتي {$nameAr}، بس مواعيد الويكند والمساء لخدمة {$serviceInterest} تكتمل بسرعة. نحجز لك موعد مبدئي الأسبوع الجاي أو نذكرك بيوم يناسبك؟",
-                    'price_inquiry' => "يا هلا حبيبتي {$nameAr}، سعر {$serviceInterest} هو {$priceAr}{$durationText} شامل الفحص والجلسة كاملة مع الأخصائية. يناسبك موعد الصباح أو المساء هالأسبوع؟",
-                    'ghosted' => "يا هلا حبيبتي {$nameAr}، باقي عندنا موعد متاح لخدمة {$serviceInterest} هالأسبوع قبل لا يقفل الجدول. يناسبك الصباح أو المساء؟",
-                    'custom_reply' => "يا هلا حبيبتي {$nameAr}، بخصوص {$serviceInterest} ({$priceAr}) أخصائياتنا يضمنون لك نتيجة آمنة ومناسبة لك تماماً. تفضلين موعد الصباح أو المساء هالأسبوع؟",
-                    default => "يا هلا حبيبتي {$nameAr}، يسعدنا نحجز لك {$serviceInterest} ({$priceAr}). يناسبك الصباح أو المساء هالأسبوع؟",
+                    'price_high' => "يا هلا حبيبتي {$nameAr}، جلسة {$serviceLabelAr} ({$priceAr}) تتم مع أخصائياتنا بمواد أصلية آمنة ونتيجتها تدوم. تحبين نرتب استشارة مجانية سريعة الصباح أو المساء؟",
+                    'busy_later' => "ولا يهمك حبيبتي {$nameAr}، بس مواعيد الويكند والمساء لخدمة {$serviceLabelAr} تكتمل بسرعة. نحجز لك موعد مبدئي الأسبوع الجاي أو نذكرك بيوم يناسبك؟",
+                    'price_inquiry' => $isHairstylingInquiry
+                        ? "يا هلا حبيبتي {$nameAr}، أسعار تسريحات الشعر عندنا تختلف حسب التسريحة وطول الشعر. أي ستايل ببالك عشان نرسل لك السعر الدقيق ونرتب لك موعد الصباح أو المساء؟"
+                        : ($isGeneralInquiry
+                            ? "يا هلا حبيبتي {$nameAr}، عندنا عروض متنوعة في الصالون حسب الخدمة اللي تفضلينها. أي خدمة ببالك عشان نرسل لك السعر الدقيق ونرتب لك موعد الصباح أو المساء؟"
+                            : "يا هلا حبيبتي {$nameAr}، سعر {$serviceLabelAr} هو {$priceAr}{$durationText} شامل الفحص والجلسة كاملة مع الأخصائية. يناسبك موعد الصباح أو المساء هالأسبوع؟"),
+                    'ghosted' => "يا هلا حبيبتي {$nameAr}، باقي عندنا موعد متاح لخدمة {$serviceLabelAr} هالأسبوع قبل لا يقفل الجدول. يناسبك الصباح أو المساء؟",
+                    'custom_reply' => "يا هلا حبيبتي {$nameAr}، بخصوص {$serviceLabelAr} ({$priceAr}) أخصائياتنا يضمنون لك نتيجة آمنة ومناسبة لك تماماً. تفضلين موعد الصباح أو المساء هالأسبوع؟",
+                    default => "يا هلا حبيبتي {$nameAr}، يسعدنا نحجز لك {$serviceLabelAr} ({$priceAr}). يناسبك الصباح أو المساء هالأسبوع؟",
                 };
             }
 
             if (str_contains($remarks, '[Refill Due]')) {
-                return "يا هلا حبيبتي {$nameAr}، حان موعد تجديد جلسة {$serviceInterest}{$pointsBonusAr}. يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟";
+                return "يا هلا حبيبتي {$nameAr}، حان موعد تجديد جلسة {$serviceLabelAr}{$pointsBonusAr}. يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟";
             }
             if (str_contains($remarks, '[Package Ending]')) {
-                return "يا هلا حبيبتي {$nameAr}، باقي لك جلسات في باقة {$serviceInterest} قبل انتهاء صلاحيتها{$pointsBonusAr}. يناسبك موعد الصباح أو المساء هالأسبوع؟";
+                return "يا هلا حبيبتي {$nameAr}، باقي لك جلسات في باقة {$serviceLabelAr} قبل انتهاء صلاحيتها{$pointsBonusAr}. يناسبك موعد الصباح أو المساء هالأسبوع؟";
             }
             if (str_contains($remarks, '[Missing VIP]')) {
-                return "يا هلا حبيبتي {$nameAr}، اشتقنا لك في الصالون لجلستك {$serviceInterest}{$pointsBonusAr}. يناسبك موعد الصباح أو المساء هالأسبوع؟";
+                return "يا هلا حبيبتي {$nameAr}، اشتقنا لك في الصالون لجلستك {$serviceLabelAr}{$pointsBonusAr}. يناسبك موعد الصباح أو المساء هالأسبوع؟";
             }
 
-            return "يا هلا حبيبتي {$nameAr}، شفنا استفسارك عن {$serviceInterest} ({$priceAr}). يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟";
+            return "يا هلا حبيبتي {$nameAr}، شفنا استفسارك عن {$serviceLabelAr} ({$priceAr}). يناسبك نحجز لك موعد الصباح أو المساء هالأسبوع؟";
         }
 
         $priceTagEn = $primaryPrice ? " ({$primaryPrice}{$durationText})" : '';
 
         if ($mode === 'objection') {
             $priceStateEn = $primaryPrice
-                ? "our {$serviceInterest} is {$primaryPrice}{$durationText}"
-                : "our {$serviceInterest} starts from a tailored rate";
+                ? "our {$serviceLabelEn} is {$primaryPrice}{$durationText}"
+                : ($isHairstylingInquiry
+                    ? 'our hairstyling rates depend on hair length and the style you choose'
+                    : ($isGeneralInquiry
+                        ? 'our current salon offers vary by treatment'
+                        : "our {$serviceLabelEn} starts from a tailored rate"));
 
             return match ($objectionType) {
-                'price_high' => "Hi {$nameEn}! Our {$serviceInterest}{$priceTagEn} is done by senior specialists with safe, long-lasting formulas—would you like a quick free consultation this morning or afternoon?",
-                'busy_later' => "No rush at all {$nameEn}—our weekend and evening slots for {$serviceInterest} fill up fast, so should I hold a tentative slot next week or check back later?",
-                'price_inquiry' => "Hi {$nameEn}! Currently {$priceStateEn}, including a full specialist assessment—would a morning or afternoon slot work better for you this week?",
-                'ghosted' => "Hi {$nameEn}! Just checking in—we still have one spot open for your {$serviceInterest} this week before our schedule locks, does morning or evening suit you?",
-                'custom_reply' => "Hi {$nameEn}! For our {$serviceInterest}{$priceTagEn}, our senior specialists tailor every step safely to your needs—would a morning or afternoon slot work this week?",
-                default => "Hi {$nameEn}! We'd love to book your {$serviceInterest}{$priceTagEn}—would a morning or afternoon slot work better this week?",
+                'price_high' => "Hi {$nameEn}! Our {$serviceLabelEn}{$priceTagEn} is done by senior specialists with safe, long-lasting formulas—would you like a quick free consultation this morning or afternoon?",
+                'busy_later' => "No rush at all {$nameEn}—our weekend and evening slots for {$serviceLabelEn} fill up fast, so should I hold a tentative slot next week or check back later?",
+                'price_inquiry' => $isHairstylingInquiry
+                    ? "Hi {$nameEn}! Our hairstyling rates depend on the look and hair length—what style or occasion do you have in mind, and would morning or afternoon work this week?"
+                    : ($isGeneralInquiry
+                        ? "Hi {$nameEn}! We have several current salon offers depending on the treatment you'd like—which service are you thinking of, and would morning or afternoon work this week?"
+                        : "Hi {$nameEn}! Currently {$priceStateEn}, including a full specialist assessment—would a morning or afternoon slot work better for you this week?"),
+                'ghosted' => "Hi {$nameEn}! Just checking in—we still have spots open this week for {$serviceLabelEn} before our schedule locks, does morning or evening suit you?",
+                'custom_reply' => "Hi {$nameEn}! For our {$serviceLabelEn}{$priceTagEn}, our senior specialists tailor every step safely to your needs—would a morning or afternoon slot work this week?",
+                default => "Hi {$nameEn}! We'd love to help with {$serviceLabelEn}{$priceTagEn}—would a morning or afternoon slot work better this week?",
             };
         }
 
         if (str_contains($remarks, '[Refill Due]')) {
-            return "Hi {$nameEn}! You're due for your {$serviceInterest} refresh{$pointsBonusEn}. Does morning or afternoon work better this week?";
+            return "Hi {$nameEn}! You're due for your {$serviceLabelEn} refresh{$pointsBonusEn}. Does morning or afternoon work better this week?";
         }
         if (str_contains($remarks, '[Package Ending]')) {
             $sessionPhrase = str_contains($remarks, '1 session left') ? '1 package session left' : 'package sessions left';
-            return "Hi {$nameEn}! You still have {$sessionPhrase} for {$serviceInterest} before it expires{$pointsBonusEn}. Does morning or afternoon work this week?";
+            return "Hi {$nameEn}! You still have {$sessionPhrase} for {$serviceLabelEn} before it expires{$pointsBonusEn}. Does morning or afternoon work this week?";
         }
         if (str_contains($remarks, '[Missing VIP]')) {
-            return "Hi {$nameEn}! We've missed seeing you at the salon for your {$serviceInterest}{$pointsBonusEn}. Does morning or afternoon work better this week?";
+            return "Hi {$nameEn}! We've missed seeing you at the salon for your {$serviceLabelEn}{$pointsBonusEn}. Does morning or afternoon work better this week?";
         }
 
         $catNorm = strtolower(trim($categoryLabel));
         $completedVisits = (int) ($salonHistory['completed_visits'] ?? 0);
         $lastService = $salonHistory['last_service'] ?? null;
 
+        if ($isGeneralInquiry) {
+            $askPromptEn = $isHairstylingInquiry
+                ? 'What style or occasion do you have in mind, or would a morning or afternoon visit work this week?'
+                : 'Which treatment are you interested in, or would a morning or afternoon visit work this week?';
+
+            if (in_array($catNorm, ['no show', 'no-show', 'no_show', 'cancelled', 'cancel', 'canceled'], true)) {
+                return "Hi {$nameEn}! We missed you at your last visit and saw you were asking about our {$serviceLabelEn}{$pointsBonusEn}. {$askPromptEn}";
+            }
+
+            if ($completedVisits > 0 && $lastService) {
+                return "Hi {$nameEn}! Loved seeing you for your {$lastService} and saw you asked about our {$serviceLabelEn}{$pointsBonusEn}. {$askPromptEn}";
+            }
+
+            return "Hi {$nameEn}! Saw you were asking about our {$serviceLabelEn}{$pointsBonusEn}. {$askPromptEn}";
+        }
+
         if (in_array($catNorm, ['no show', 'no-show', 'no_show', 'cancelled', 'cancel', 'canceled'], true)) {
-            return "Hi {$nameEn}! We missed you at your last visit and saw you were asking about our {$serviceInterest}{$priceTagEn}. Would a morning or afternoon slot work better for you this week?";
+            return "Hi {$nameEn}! We missed you at your last visit and saw you were asking about our {$serviceLabelEn}{$priceTagEn}. Would a morning or afternoon slot work better for you this week?";
         }
 
         if ($completedVisits > 0 && $lastService) {
-            return "Hi {$nameEn}! Loved seeing you for your {$lastService} and saw you asked about our {$serviceInterest}{$priceTagEn}. Would a morning or afternoon slot work better this week?";
+            return "Hi {$nameEn}! Loved seeing you for your {$lastService} and saw you asked about our {$serviceLabelEn}{$priceTagEn}. Would a morning or afternoon slot work better this week?";
         }
 
-        return "Hi {$nameEn}! Saw you were asking about our {$serviceInterest}{$priceTagEn}. Would a morning or afternoon slot work better for you this week?";
+        return "Hi {$nameEn}! Saw you were asking about our {$serviceLabelEn}{$priceTagEn}. Would a morning or afternoon slot work better for you this week?";
     }
 
     /**

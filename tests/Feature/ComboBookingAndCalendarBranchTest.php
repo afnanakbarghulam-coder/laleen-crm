@@ -132,6 +132,7 @@ class ComboBookingAndCalendarBranchTest extends TestCase
 
         // 2. Creating a booking from Enhanced Calendar with active_branch='Al Wakrah' normalizes & saves as 'wakrah'
         $storeRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Fatima Al-Kuwari',
             'phone' => '+97455001122',
             'appointment_datetime' => $dateStr . 'T13:00',
@@ -151,6 +152,7 @@ class ComboBookingAndCalendarBranchTest extends TestCase
 
         // 3. Cross-branch staff assignment is blocked cleanly
         $crossRes = $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Cross Branch Check',
             'phone' => '+97455009988',
             'appointment_datetime' => $dateStr . 'T15:00',
@@ -170,6 +172,7 @@ class ComboBookingAndCalendarBranchTest extends TestCase
 
         // Book Combo ONLY with 0 immediate services selected ("Choose Services in Salon")
         $res = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Noora Al-Mannai',
             'phone' => '+97455223344',
             'appointment_datetime' => $dateStr . 'T13:00',
@@ -253,6 +256,7 @@ class ComboBookingAndCalendarBranchTest extends TestCase
         $dateStr = $slot->toDateString();
 
         $res = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Sara Al-Sulaiti',
             'phone' => '+97455667788',
             'appointment_datetime' => $dateStr . 'T14:00',
@@ -320,6 +324,7 @@ class ComboBookingAndCalendarBranchTest extends TestCase
 
         // Step 1: Book Combo Only (0 sub-services chosen upfront)
         $storeRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Reem Al-Dosari',
             'phone' => '+97455889900',
             'appointment_datetime' => $dateStr . 'T13:00',
@@ -491,6 +496,7 @@ class ComboBookingAndCalendarBranchTest extends TestCase
         $dateStr = $slot->toDateString();
 
         $storeRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Maryam Al-Kuwari',
             'phone' => '+97455123456',
             'appointment_datetime' => $dateStr . 'T11:00',

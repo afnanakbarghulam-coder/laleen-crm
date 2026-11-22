@@ -158,6 +158,7 @@ class ServiceFreebiesWorkflowTest extends TestCase
         $sameDayMini = $f['eligibleServices'][0]; // Eyebrow Threading (15 min)
 
         $bookResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $f['customer']->name,
             'phone' => $f['customer']->phone,
             'appointment_datetime' => '2026-11-20T12:00',
@@ -213,6 +214,7 @@ class ServiceFreebiesWorkflowTest extends TestCase
 
         // Cannot redeem Slot #2 while anchor booking is still unpaid (locked_until_paid)
         $prematureRedeem = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $f['customer']->name,
             'phone' => $f['customer']->phone,
             'appointment_datetime' => '2026-11-22T14:00',
@@ -292,6 +294,7 @@ class ServiceFreebiesWorkflowTest extends TestCase
 
         // Book with both slots Saved for Later and pay 299 QAR on Anchor Date 2026-11-20 (expires 2026-11-27 23:59:59)
         $bookResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $f['customer']->name,
             'phone' => $f['customer']->phone,
             'appointment_datetime' => '2026-11-20T13:00',
@@ -316,6 +319,7 @@ class ServiceFreebiesWorkflowTest extends TestCase
 
         // 1) Reject service NOT in the 6 eligible mini-services with 422
         $ineligibleResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $f['customer']->name,
             'phone' => $f['customer']->phone,
             'appointment_datetime' => '2026-11-26T15:00',
@@ -335,6 +339,7 @@ class ServiceFreebiesWorkflowTest extends TestCase
         // 2) Succeed on Day 6 at 0.00 QAR for an eligible mini-service
         $eligibleMini = $f['eligibleServices'][2]; // Express Manicure (25 min)
         $validRedeemResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $f['customer']->name,
             'phone' => $f['customer']->phone,
             'appointment_datetime' => '2026-11-26T15:00',
@@ -366,6 +371,7 @@ class ServiceFreebiesWorkflowTest extends TestCase
 
         // Re-book Slot #1 on Day 6 and mark Completed -> flips to 'redeemed' with 0.00 QAR Finance impact
         $rebookRedeemResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $f['customer']->name,
             'phone' => $f['customer']->phone,
             'appointment_datetime' => '2026-11-26T16:00',
@@ -406,6 +412,7 @@ class ServiceFreebiesWorkflowTest extends TestCase
         $this->assertFalse($slot2->canRedeem());
 
         $day8Resp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $f['customer']->name,
             'phone' => $f['customer']->phone,
             'appointment_datetime' => '2026-11-28T13:00',
@@ -438,6 +445,7 @@ class ServiceFreebiesWorkflowTest extends TestCase
         $package->eligibleServices()->sync($f['eligibleServices']->pluck('id')->all());
 
         $bookResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => $f['customer']->name,
             'phone' => $f['customer']->phone,
             'appointment_datetime' => '2026-11-20T14:00',

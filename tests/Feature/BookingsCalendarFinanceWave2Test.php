@@ -95,6 +95,7 @@ class BookingsCalendarFinanceWave2Test extends TestCase
         // Line 1 (14:00 - 15:00): HydraFacial 60 with Staff A
         // Line 2 (15:00 - 16:00): Hair Spa 60 with Staff B
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Layla Client',
             'phone' => '+97455112233',
             'appointment_datetime' => $dateStr . ' 14:00:00',
@@ -117,6 +118,7 @@ class BookingsCalendarFinanceWave2Test extends TestCase
 
         // 1) Staff B is busy from 15:00 to 16:00 on Line 2 -> trying to book Staff B at 15:15 MUST be rejected
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Second Client',
             'phone' => '+97455223344',
             'appointment_datetime' => $dateStr . ' 15:15:00',
@@ -128,6 +130,7 @@ class BookingsCalendarFinanceWave2Test extends TestCase
 
         // 2) Staff A is only busy 14:00-15:00 (not 15:00-16:00!) -> booking Staff A at 15:15 MUST succeed
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Third Client',
             'phone' => '+97455334455',
             'appointment_datetime' => $dateStr . ' 15:15:00',
@@ -156,6 +159,7 @@ class BookingsCalendarFinanceWave2Test extends TestCase
         // 4) End-of-day closing time check: Old Airport closes at 22:00.
         // Booking a 60-minute service at 21:30 (ends at 22:30 > 22:00) must be rejected!
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Late Client',
             'phone' => '+97455445566',
             'appointment_datetime' => $dateStr . ' 21:30:00',
@@ -238,6 +242,7 @@ class BookingsCalendarFinanceWave2Test extends TestCase
 
         // Attempting to book Staff A on their StaffTimeOff date must be rejected
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'TimeOff Test',
             'phone' => '+97455667788',
             'appointment_datetime' => $dateStr . ' 13:00:00',
@@ -249,6 +254,7 @@ class BookingsCalendarFinanceWave2Test extends TestCase
 
         // Attempting to book Staff B at 17:00 (outside their 12:00-16:00 shift) must be rejected
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Shift Test',
             'phone' => '+97455667788',
             'appointment_datetime' => $dateStr . ' 17:00:00',
@@ -260,6 +266,7 @@ class BookingsCalendarFinanceWave2Test extends TestCase
 
         // Booking Staff B at 13:00 (inside their 12:00-16:00 shift) succeeds
         $this->actingAs($this->admin)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Shift Valid Test',
             'phone' => '+97455667788',
             'appointment_datetime' => $dateStr . ' 13:00:00',

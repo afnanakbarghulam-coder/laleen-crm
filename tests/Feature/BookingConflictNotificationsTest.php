@@ -124,6 +124,7 @@ class BookingConflictNotificationsTest extends TestCase
         ]);
 
         $createOffRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Mariam Al-Thani',
             'phone' => '+97455110011',
             'appointment_datetime' => $dateStr . 'T13:00',
@@ -139,6 +140,7 @@ class BookingConflictNotificationsTest extends TestCase
 
         // Create a valid booking on Noor so we can test editing & rescheduling onto off-duty / blocked / outside-shift slots
         $validCreate = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Mariam Al-Thani',
             'phone' => '+97455110011',
             'appointment_datetime' => $dateStr . 'T13:00',
@@ -172,6 +174,7 @@ class BookingConflictNotificationsTest extends TestCase
         ]);
 
         $createBlocked = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Dana Client',
             'phone' => '+97455110022',
             'appointment_datetime' => $dateStr . 'T15:00',
@@ -240,6 +243,7 @@ class BookingConflictNotificationsTest extends TestCase
 
         // 1. Booking Signature Haircut on Sara (unskilled) returns 422 `missing_skill` + lists Aisha, Noor
         $createUnskilled = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Huda Client',
             'phone' => '+97455220011',
             'appointment_datetime' => $dateStr . 'T12:00',
@@ -258,6 +262,7 @@ class BookingConflictNotificationsTest extends TestCase
 
         // 2. Booking a valid appointment on Aisha, then editing or rescheduling onto Sara triggers `missing_skill`
         $created = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Huda Client',
             'phone' => '+97455220011',
             'appointment_datetime' => $dateStr . 'T12:00',
@@ -301,6 +306,7 @@ class BookingConflictNotificationsTest extends TestCase
         // 3. Bypass Rule: Combo booked in "Choose Services in Salon" mode (0 specific sub-services selected yet)
         // skips `missing_skill` even on Sara (who has 0 service skills) until actual services are selected!
         $comboTbdCreate = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Reem Combo Guest',
             'phone' => '+97455229900',
             'appointment_datetime' => $dateStr . 'T15:00',
@@ -352,6 +358,7 @@ class BookingConflictNotificationsTest extends TestCase
 
         // 1. Existing active booking for Aisha from 1:00 PM to 2:00 PM (Signature Haircut = 60 min)
         $firstCreate = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Existing Guest',
             'phone' => '+97455330011',
             'appointment_datetime' => $dateStr . 'T13:00',
@@ -364,6 +371,7 @@ class BookingConflictNotificationsTest extends TestCase
 
         // 2. Creating an overlapping booking on Aisha at 1:30 PM returns 422 `staff_busy` with exact conflict window
         $busyCreate = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Overlap Guest',
             'phone' => '+97455330022',
             'appointment_datetime' => $dateStr . 'T13:30',
@@ -383,6 +391,7 @@ class BookingConflictNotificationsTest extends TestCase
         // 3. Create a non-overlapping booking at 12:15 PM (Luxury Manicure = 30 min -> 12:15 PM to 12:45 PM),
         // then test drag-drop reschedule AND duration-resize collision into 1:00 PM–2:00 PM!
         $secondCreate = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Morning Guest',
             'phone' => '+97455330033',
             'appointment_datetime' => $dateStr . 'T12:15',
@@ -460,6 +469,7 @@ class BookingConflictNotificationsTest extends TestCase
         // 5. Cancelled and No Show appointments are ignored during overlap checks
         $firstAppt->update(['status' => 'cancelled']);
         $bookOverCancelled = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Rebooked Slot Guest',
             'phone' => '+97455330044',
             'appointment_datetime' => $dateStr . 'T13:00',
@@ -472,6 +482,7 @@ class BookingConflictNotificationsTest extends TestCase
         $rebookedAppt->update(['status' => 'no_show']);
 
         $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'After No Show Guest',
             'phone' => '+97455330055',
             'appointment_datetime' => $dateStr . 'T13:00',
@@ -482,6 +493,7 @@ class BookingConflictNotificationsTest extends TestCase
 
         // 6. Bypass Rule: `Pending time — add to Unscheduled Queue` skips time-overlap and shift-hour checks
         $unschedRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Unscheduled Queue Guest',
             'phone' => '+97455330066',
             'unscheduled' => '1',
@@ -496,6 +508,7 @@ class BookingConflictNotificationsTest extends TestCase
 
         // 7. Bypass Rule: Unassigned (`staff_id` empty/null) skips all staff-specific checks on create and edit
         $unassignedCreate = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Unassigned Walk-in',
             'phone' => '+97455330077',
             'appointment_datetime' => $dateStr . 'T13:00',

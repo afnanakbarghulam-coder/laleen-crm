@@ -29,6 +29,36 @@ class AdLeadEntry extends Model
         'wakrah' => 'Al Wakrah',
     ];
 
+    /**
+     * Ad Lead statuses that automatically trigger syncing/creating a linked Follow-Up in Lead Management.
+     */
+    const FOLLOW_UP_TRIGGER_STATUSES = [
+        'follow_up',
+        'will_let_you_know',
+        'pending',
+    ];
+
+    /**
+     * Statuses an agent can manually choose in the Ads List modal.
+     * 'booked' is reserved for automatic Enhanced Calendar attribution.
+     */
+    const MANUAL_STATUSES = [
+        'follow_up' => 'Follow-Up',
+        'will_let_you_know' => 'Will Let You Know',
+        'pending' => 'Pending',
+        'contacted' => 'Contacted / In Progress',
+        'lost' => 'Not Interested / Lost',
+    ];
+
+    const STATUSES = [
+        'follow_up' => 'Follow-Up',
+        'will_let_you_know' => 'Will Let You Know',
+        'pending' => 'Pending',
+        'contacted' => 'Contacted / In Progress',
+        'booked' => 'Booked',
+        'lost' => 'Not Interested / Lost',
+    ];
+
     protected $fillable = [
         'date',
         'customer_id',
@@ -40,12 +70,16 @@ class AdLeadEntry extends Model
         'old_airport_amount',
         'wakrah_amount',
         'branch',
+        'status',
+        'follow_up_date',
+        'assigned_agent_id',
         'remarks',
         'created_by',
     ];
 
     protected $casts = [
         'date' => 'date',
+        'follow_up_date' => 'date',
         'ticket_amount' => 'decimal:2',
         'old_airport_amount' => 'decimal:2',
         'wakrah_amount' => 'decimal:2',
@@ -62,6 +96,12 @@ class AdLeadEntry extends Model
                 );
             }
         });
+
+        static::deleting(function (self $entry): void {
+            if (Schema::hasTable('leads') && Schema::hasColumn('leads', 'ad_lead_id')) {
+                Lead::where('ad_lead_id', $entry->id)->update(['ad_lead_id' => null]);
+            }
+        });
     }
 
     public function customer()
@@ -74,9 +114,85 @@ class AdLeadEntry extends Model
         return $this->belongsTo(Lead::class);
     }
 
+    public function assignedAgent()
+    {
+        return $this->belongsTo(User::class, 'assigned_agent_id');
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function isSyncedToFollowUps(): bool
+    {
+        return $this->lead_id !== null;
+    }
+
+    public function effectiveFollowUpDate(): ?Carbon
+    {
+        $lead = $this->relationLoaded('lead') ? $this->lead : ($this->lead_id ? $this->lead()->first() : null);
+
+        if ($lead) {
+            if (in_array($lead->needful_done, Lead::CLOSED_STATUSES, true)) {
+                return null;
+            }
+
+            return $lead->next_followup_date ?: $this->follow_up_date;
+        }
+
+        return $this->follow_up_date;
+    }
+
+    public function effectiveStatusKey(): ?string
+    {
+        if ($this->isBooked()) {
+            return 'booked';
+        }
+
+        $lead = $this->relationLoaded('lead') ? $this->lead : ($this->lead_id ? $this->lead()->first() : null);
+        if ($lead) {
+            if ($lead->needful_done === 'booked') {
+                return 'booked';
+            }
+            if ($lead->needful_done === 'no') {
+                return 'lost';
+            }
+            if ($lead->needful_done === 'yes') {
+                return 'contacted';
+            }
+        }
+
+        $raw = strtolower(trim((string) ($this->status ?? '')));
+
+        return $raw !== '' ? $raw : null;
+    }
+
+    public function effectiveStatusLabel(): ?string
+    {
+        $key = $this->effectiveStatusKey();
+
+        return $key ? (self::STATUSES[$key] ?? ucfirst(str_replace('_', ' ', $key))) : null;
+    }
+
+    public function followUpUrl(): ?string
+    {
+        if (! $this->lead_id) {
+            return null;
+        }
+
+        $dueDate = $this->effectiveFollowUpDate();
+        if ($dueDate) {
+            return route('leads.index', [
+                'followup_date' => $dueDate->format('Y-m-d'),
+                'focus_lead' => $this->lead_id,
+            ]);
+        }
+
+        return route('leads.index', [
+            'tab' => 'all',
+            'focus_lead' => $this->lead_id,
+        ]);
     }
 
     /**
@@ -802,6 +918,27 @@ class AdLeadEntry extends Model
             $updates = [];
             if ($entry->branch !== $newBranch) {
                 $updates['branch'] = $newBranch;
+            }
+            if (Schema::hasColumn('ad_lead_entries', 'status')) {
+                if ($newBranch !== null) {
+                    if ($entry->status !== 'booked') {
+                        $updates['status'] = 'booked';
+                    }
+                    if (Schema::hasColumn('ad_lead_entries', 'follow_up_date') && $entry->follow_up_date !== null) {
+                        $updates['follow_up_date'] = null;
+                    }
+                } elseif ($entry->status === 'booked') {
+                    $linkedLead = $entry->lead_id ? Lead::find($entry->lead_id) : null;
+                    if ($linkedLead && $linkedLead->needful_done === 'no') {
+                        $updates['status'] = 'lost';
+                    } elseif ($linkedLead && $linkedLead->needful_done === 'yes') {
+                        $updates['status'] = 'contacted';
+                    } elseif ($linkedLead) {
+                        $updates['status'] = 'follow_up';
+                    } else {
+                        $updates['status'] = null;
+                    }
+                }
             }
             if (round((float) $entry->ticket_amount, 2) !== round((float) $newTicketAmount, 2)) {
                 $updates['ticket_amount'] = $newTicketAmount;

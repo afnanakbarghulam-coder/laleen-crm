@@ -125,6 +125,7 @@ class BookingsCalendarFinanceWave1Test extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors('branch');
 
         $this->actingAs($user)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'branch' => 'home_service',
             'appointment_datetime' => now()->addDay()->setTime(14, 0)->toDateTimeString(),
             'decide_in_salon' => true,
@@ -428,6 +429,7 @@ class BookingsCalendarFinanceWave1Test extends TestCase
         // appointments.price locks in the 500 QAR service + 1200 QAR combo = 1700 QAR projected total!
         $slot1 = Carbon::today()->setHour(14)->setMinute(0);
         $this->actingAs($user)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Huda Client',
             'phone' => '+97455440001',
             'appointment_datetime' => $slot1->format('Y-m-d\TH:i'),

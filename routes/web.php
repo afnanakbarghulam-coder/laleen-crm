@@ -404,6 +404,7 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->post('/ad-leads', [AdLeadEntryController::class, 'store'])->name('ad-leads.store');
         Route::middleware(['module:kpis', 'throttle:20,1'])->post('/ad-leads/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script.inline');
         Route::middleware(['module:kpis', 'throttle:20,1'])->post('/ad-leads/{adLeadEntry}/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script');
+        Route::middleware('module:kpis,edit')->post('/ad-leads/{adLeadEntry}/send-to-followups', [AdLeadEntryController::class, 'sendToFollowUps'])->name('ad-leads.send-to-followups');
         Route::middleware('module:kpis,edit')->put('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'update'])->name('ad-leads.update');
         Route::middleware('module:kpis,edit')->delete('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'destroy'])->name('ad-leads.destroy');
 

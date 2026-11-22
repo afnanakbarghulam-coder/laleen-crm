@@ -160,6 +160,7 @@ class LeadsModulePatchesTest extends TestCase
         $bookingDate = now()->addDays(3)->setTime(13, 0, 0);
 
         $response = $this->actingAs($user)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Noor Al-Sulaiti',
             'phone' => '+97455592353',
             'appointment_datetime' => $bookingDate->format('Y-m-d H:i:s'),
@@ -358,7 +359,7 @@ class LeadsModulePatchesTest extends TestCase
     public function test_re_cancellation_trap_booking_then_cancel_reopens_exact_booked_lead_and_clears_followup_date(): void
     {
         $user = $this->createAdminUser();
-        $agent = User::factory()->create(['name' => 'Nadia Youssef', 'role' => 'agent', 'is_active' => true]);
+        $agent = User::factory()->create(['name' => 'Areeba Khan', 'role' => 'agent', 'is_active' => true]);
         $customer = Customer::create(['name' => 'Mona Al-Kuwari', 'phone' => '55544332']);
 
         $lead = Lead::create([
@@ -595,6 +596,7 @@ class LeadsModulePatchesTest extends TestCase
 
         $bookingDate = now()->addDays(3)->setTime(13, 0, 0);
         $this->actingAs($user)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Reem Al-Sulaiti',
             'phone' => '+97477132353',
             'appointment_datetime' => $bookingDate->format('Y-m-d H:i:s'),
@@ -663,6 +665,7 @@ class LeadsModulePatchesTest extends TestCase
 
         $bookingDate = now()->addDays(3)->setTime(13, 0, 0);
         $this->actingAs($user)->post(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Amal Salem',
             'phone' => '+97455592353',
             'appointment_datetime' => $bookingDate->format('Y-m-d H:i:s'),

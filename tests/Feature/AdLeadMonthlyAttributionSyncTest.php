@@ -88,6 +88,7 @@ class AdLeadMonthlyAttributionSyncTest extends TestCase
         // 2. Book her on the Enhanced Calendar in November (2026-11-04) at Old Airport
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Maryam Al-Kuwari',
                 'phone' => '55129988',
                 'service_name' => [$this->facialService->name],
@@ -148,6 +149,7 @@ class AdLeadMonthlyAttributionSyncTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Maryam Al-Kuwari',
                 'phone' => '55129988',
                 'service_name' => [$this->facialService->name],
@@ -203,6 +205,7 @@ class AdLeadMonthlyAttributionSyncTest extends TestCase
         // ONLY her December AdLeadEntry updates to 500 QAR; November AdLeadEntry stays untouched at 380 QAR!
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Maryam Al-Kuwari',
                 'phone' => '55129988',
                 'service_name' => [$this->luxuryPackageService->name],
@@ -257,6 +260,7 @@ class AdLeadMonthlyAttributionSyncTest extends TestCase
         // Book and complete payment on 2026-11-06 -> sets branch = 'old_airport', ticket_amount = 300
         $this->actingAs($this->admin)
             ->post(route('appointments.store'), [
+                'booking_agent_id' => 'salon_staff',
                 'customer_name' => 'Dana Al-Sulaiti',
                 'phone' => '66441122',
                 'service_name' => [$this->facialService->name],

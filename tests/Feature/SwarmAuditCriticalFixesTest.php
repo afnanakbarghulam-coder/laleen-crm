@@ -98,6 +98,7 @@ class SwarmAuditCriticalFixesTest extends TestCase
         $slot = Carbon::today()->addDay()->setTime(13, 0);
 
         $storeRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Noor Al-Thani',
             'phone' => '+97455110011',
             'appointment_datetime' => $slot->format('Y-m-d\TH:i'),
@@ -201,6 +202,7 @@ class SwarmAuditCriticalFixesTest extends TestCase
         $slot = Carbon::today()->addDay()->setTime(12, 0);
 
         $storeRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Hissa Al-Sulaiti',
             'phone' => '+97455220022',
             'appointment_datetime' => $slot->format('Y-m-d\TH:i'),
@@ -263,6 +265,7 @@ class SwarmAuditCriticalFixesTest extends TestCase
         $slot = Carbon::today()->addDay()->setTime(13, 0);
 
         $storeRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Maryam Al-Misnad',
             'phone' => '+97455330033',
             'appointment_datetime' => $slot->format('Y-m-d\TH:i'),
@@ -320,6 +323,7 @@ class SwarmAuditCriticalFixesTest extends TestCase
 
         // Visit 1: Buy 3-service Combo (Haircut + Manicure Today, Facial Pending -> 2 remaining if 1 Today or 1 remaining here)
         $v1Res = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Aisha Al-Kuwari',
             'phone' => '+97455440044',
             'appointment_datetime' => $visit1Slot->format('Y-m-d\TH:i'),
@@ -345,6 +349,7 @@ class SwarmAuditCriticalFixesTest extends TestCase
         // --- PART A: Visit 2 booked with standalone Hydra Facial (150 QAR) + redeemed at Checkout -> 0.00 QAR (NOT 150 QAR!) ---
         $visit2Slot = Carbon::today()->addDays(2)->setTime(14, 0);
         $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Aisha Al-Kuwari',
             'phone' => '+97455440044',
             'appointment_datetime' => $visit2Slot->format('Y-m-d\TH:i'),
@@ -372,6 +377,7 @@ class SwarmAuditCriticalFixesTest extends TestCase
         // --- PART B: Visit 3 booked as Decide in Salon -> resolved via Drawer Redeem Package endpoint ---
         $visit3Slot = Carbon::today()->addDays(4)->setTime(16, 0);
         $v3Res = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
             'customer_name' => 'Aisha Al-Kuwari',
             'phone' => '+97455440044',
             'appointment_datetime' => $visit3Slot->format('Y-m-d\TH:i'),

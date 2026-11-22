@@ -1,4 +1,9 @@
 @php
+    $generalInquiryOptions = \App\Models\Lead::GENERAL_SERVICE_INTERESTS;
+    $generalInquirySubtitles = [
+        \App\Models\Lead::GENERAL_INQUIRY_OPTION => 'General offers & info — replaced automatically once a service is picked',
+        \App\Models\Lead::GENERAL_HAIRSTYLE_OPTION => 'General hairstyling inquiry — replaced automatically once a hairstyle is picked',
+    ];
     $selected = is_array($selected ?? null) ? array_values(array_filter($selected)) : [];
     $combosList = collect($serviceCombos ?? []);
     $servicesList = collect($services ?? []);
@@ -58,6 +63,12 @@
         background: rgba(201, 166, 107, 0.22);
         color: #f3d9a4;
         border: 1px solid rgba(201, 166, 107, 0.35);
+    }
+
+    .service-interest-pill.is-general-pill {
+        background: rgba(138, 166, 171, 0.2);
+        color: #c5e1e6;
+        border: 1px solid rgba(138, 166, 171, 0.42);
     }
 
     .service-interest-pill button {
@@ -160,6 +171,15 @@
         background: rgba(201, 166, 107, 0.14);
     }
 
+    .service-interest-option.is-general-option {
+        border-bottom: 1px solid rgba(217, 143, 131, 0.14);
+    }
+
+    .service-interest-option.is-general-option.is-selected {
+        color: #c5e1e6;
+        background: rgba(138, 166, 171, 0.16);
+    }
+
     .service-interest-option .service-interest-check {
         display: none;
         color: #d98f83;
@@ -206,7 +226,7 @@
 </style>
 @endonce
 
-<div class="service-interest-multiselect" data-uid="{{ $uid }}">
+<div class="service-interest-multiselect" data-uid="{{ $uid }}" data-general-options='@json($generalInquiryOptions)'>
     <label class="form-label">Service Interest <span class="text-danger">*</span></label>
 
     <div class="service-interest-display" id="serviceInterestDisplay-{{ $uid }}" tabindex="0">
@@ -221,9 +241,29 @@
 
     <div class="service-interest-panel" id="serviceInterestPanel-{{ $uid }}">
         <div class="service-interest-search-wrap">
-            <input type="text" id="serviceInterestSearch-{{ $uid }}" placeholder="Search combos or services...">
+            <input type="text" id="serviceInterestSearch-{{ $uid }}" placeholder="Search general inquiries, combos, or services...">
         </div>
         <div class="service-interest-list" id="serviceInterestList-{{ $uid }}">
+            {{-- Section 0: General Inquiries (centralized in Lead::GENERAL_SERVICE_INTERESTS; never in master services catalog) --}}
+            <div class="service-interest-section-header" data-section-header="general">✨ General Inquiries</div>
+            @foreach ($generalInquiryOptions as $generalOption)
+                @php
+                    $isThisGeneralSelected = collect($selected)->contains(
+                        fn ($item) => \App\Models\Lead::canonicalGeneralInterestLabel((string) $item) === $generalOption
+                    );
+                @endphp
+                <div class="service-interest-option is-general-option {{ $isThisGeneralSelected ? 'is-selected' : '' }}"
+                    data-section="general"
+                    data-type="general"
+                    data-value="{{ $generalOption }}">
+                    <div>
+                        <span>{{ $generalOption }}</span>
+                        <small class="service-interest-combo-sub">{{ $generalInquirySubtitles[$generalOption] ?? 'Replaced automatically once a specific service is picked' }}</small>
+                    </div>
+                    <span class="service-interest-check"><i class="bx bx-check"></i></span>
+                </div>
+            @endforeach
+
             {{-- Section 1: 🎁 Service Combos (always visible and selectable alongside individual services) --}}
             <div class="service-interest-section-header" data-section-header="combos">🎁 Service Combos</div>
             @forelse ($combosList as $combo)
@@ -304,6 +344,17 @@
             const search = document.getElementById('serviceInterestSearch-' + uid);
             const list = document.getElementById('serviceInterestList-' + uid);
             const closeBtn = panel.querySelector('.service-interest-close');
+            const generalOptionsList = (function () {
+                try {
+                    const parsed = JSON.parse(container.dataset.generalOptions || '[]');
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        return parsed.map(function (item) {
+                            return String(item || '').trim().toLowerCase();
+                        });
+                    }
+                } catch (e) {}
+                return ['offer inquiry / general inquiry', 'hairstyling / general hairstyle'];
+            })();
 
             function getSelected() {
                 return Array.from(hiddenWrap.querySelectorAll('input[name="service_interest[]"]')).map(function (input) {
@@ -331,11 +382,12 @@
 
                 selected.forEach(function (value) {
                     const pill = document.createElement('span');
-                    const isCombo = value.toLowerCase().startsWith('[combo]') ||
+                    const isGeneral = value.toLowerCase() === 'offer inquiry / general inquiry' || value.toLowerCase() === 'general inquiry';
+                    const isCombo = !isGeneral && (value.toLowerCase().startsWith('[combo]') ||
                         Array.from(list.querySelectorAll('.service-interest-option.is-combo-option')).some(function (opt) {
                             return opt.dataset.value === value || opt.dataset.comboName === value;
-                        });
-                    pill.className = 'service-interest-pill' + (isCombo ? ' is-combo-pill' : '');
+                        }));
+                    pill.className = 'service-interest-pill' + (isGeneral ? ' is-general-pill' : (isCombo ? ' is-combo-pill' : ''));
                     pill.innerHTML = '<span></span><button type="button" aria-label="Remove">&times;</button>';
                     pill.querySelector('span').textContent = value;
                     pill.querySelector('button').addEventListener('click', function (e) {
@@ -344,6 +396,15 @@
                     });
                     display.insertBefore(pill, placeholder);
                 });
+            }
+
+            function isGeneralOptionValue(value) {
+                const lower = String(value || '').trim().toLowerCase();
+                return generalOptionsList.includes(lower)
+                    || lower === 'general inquiry'
+                    || lower === 'offer inquiry'
+                    || lower === 'hairstyling'
+                    || lower === 'general hairstyle';
             }
 
             function syncListSelectedState() {
@@ -355,6 +416,18 @@
             function addValue(value) {
                 if (isSelected(value)) {
                     return;
+                }
+                // Mutually replace general inquiry placeholder <-> concrete services for effortless editing
+                if (isGeneralOptionValue(value)) {
+                    hiddenWrap.querySelectorAll('input[name="service_interest[]"]').forEach(function (input) {
+                        input.remove();
+                    });
+                } else {
+                    hiddenWrap.querySelectorAll('input[name="service_interest[]"]').forEach(function (input) {
+                        if (isGeneralOptionValue(input.value)) {
+                            input.remove();
+                        }
+                    });
                 }
                 const input = document.createElement('input');
                 input.type = 'hidden';
@@ -402,21 +475,13 @@
                     }
                 });
 
-                // Always keep section headers visible when searching is blank or when options in that section match
+                // Always keep section headers visible when search is blank or when options in that section match
                 list.querySelectorAll('[data-section-header]').forEach(function (header) {
                     const sec = header.dataset.sectionHeader;
-                    if (sec === 'combos') {
-                        // Always keep 🎁 Service Combos section visible when search is empty or matches a combo
-                        const hasMatchingCombo = normalized === '' || Array.from(list.querySelectorAll('.service-interest-option[data-section="combos"]')).some(function (o) {
-                            return o.style.display !== 'none';
-                        });
-                        header.style.display = hasMatchingCombo ? '' : 'none';
-                    } else {
-                        const hasMatchingService = normalized === '' || Array.from(list.querySelectorAll('.service-interest-option[data-section="services"]')).some(function (o) {
-                            return o.style.display !== 'none';
-                        });
-                        header.style.display = hasMatchingService ? '' : 'none';
-                    }
+                    const hasMatchingOption = normalized === '' || Array.from(list.querySelectorAll('.service-interest-option[data-section="' + sec + '"]')).some(function (o) {
+                        return o.style.display !== 'none';
+                    });
+                    header.style.display = hasMatchingOption ? '' : 'none';
                 });
 
                 let emptyEl = list.querySelector('.service-interest-no-results');

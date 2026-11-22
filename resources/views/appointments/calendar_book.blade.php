@@ -975,6 +975,19 @@
         border-radius: 7px;
         padding: 4px 8px;
     }
+
+    #bookAgent.fb-agent-invalid {
+        border-color: #ef4444 !important;
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25) !important;
+    }
+
+    .fb-agent-inline-error {
+        margin-top: 6px;
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: #fca5a5;
+        line-height: 1.35;
+    }
 </style>
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="calendarBookModal" aria-labelledby="calendarBookModalLabel">
@@ -1087,13 +1100,19 @@
                         </small>
                     </div>
 
-                    <div class="fb-section-title">Booking Agent</div>
-                    <select id="bookAgent" name="booking_agent_id" class="form-select form-select-sm">
+                    @php
+                        $resolvedBookingAgentOptions = $bookingAgentOptions ?? \App\Models\Appointment::bookingAgentOptions();
+                    @endphp
+                    <div class="fb-section-title">Booking Agent <span class="text-danger">*</span></div>
+                    <select id="bookAgent" name="booking_agent_id" class="form-select form-select-sm" aria-required="true" aria-describedby="bookAgentError">
                         <option value="">-- Select Agent --</option>
-                        @foreach ($agents as $agent)
-                            <option value="{{ $agent->id }}">{{ $agent->name }}</option>
+                        @foreach ($resolvedBookingAgentOptions as $agentOpt)
+                            <option value="{{ $agentOpt['value'] }}">{{ $agentOpt['label'] }}</option>
                         @endforeach
                     </select>
+                    <div id="bookAgentError" class="fb-agent-inline-error d-none" role="alert">
+                        Please select a Booking Agent (Salon Staff, Areeba, or Zoya) before saving the appointment.
+                    </div>
 
                     <div class="fb-section-title">Notes</div>
                     <textarea id="bookNotes" name="notes" class="form-control form-control-sm" rows="2" placeholder="Anything the team should know..."></textarea>
@@ -1335,6 +1354,50 @@
             banner.classList.add('d-none');
             banner.dataset.reason = '';
             if (textEl) textEl.textContent = '';
+        }
+
+        const FB_BOOKING_AGENT_ERROR_MSG = 'Please select a Booking Agent (Salon Staff, Areeba, or Zoya) before saving the appointment.';
+
+        function fbIsValidBookingAgentSelection(val) {
+            const trimmed = String(val || '').trim();
+            if (!trimmed) return false;
+            const bookAgentEl = document.getElementById('bookAgent');
+            if (!bookAgentEl) return false;
+            return Array.from(bookAgentEl.options).some(opt => opt.value !== '' && opt.value === trimmed);
+        }
+
+        function fbShowAgentError(message, showToast = true) {
+            const bookAgentEl = document.getElementById('bookAgent');
+            const errEl = document.getElementById('bookAgentError');
+            const msg = message || FB_BOOKING_AGENT_ERROR_MSG;
+            fbShowPanel('main');
+            if (bookAgentEl) {
+                bookAgentEl.classList.add('fb-agent-invalid', 'is-invalid');
+                bookAgentEl.setAttribute('aria-invalid', 'true');
+            }
+            if (errEl) {
+                errEl.textContent = msg;
+                errEl.classList.remove('d-none');
+            }
+            if (bookAgentEl) {
+                bookAgentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setTimeout(() => bookAgentEl.focus(), 50);
+            }
+            if (showToast && typeof window.showCalToast === 'function') {
+                window.showCalToast(msg, 'error');
+            }
+        }
+
+        function fbClearAgentError() {
+            const bookAgentEl = document.getElementById('bookAgent');
+            const errEl = document.getElementById('bookAgentError');
+            if (bookAgentEl) {
+                bookAgentEl.classList.remove('fb-agent-invalid', 'is-invalid');
+                bookAgentEl.removeAttribute('aria-invalid');
+            }
+            if (errEl) {
+                errEl.classList.add('d-none');
+            }
         }
 
         const fbDismissBtn = document.getElementById('fbBookingErrorDismiss');
@@ -1731,12 +1794,14 @@
             pendingAutoRedeemFreebieCreditId = prefill.redeemFreebieCreditId ? Number(prefill.redeemFreebieCreditId) : null;
             pendingStaffId = prefill.staffId || null;
             fbClearBookingError();
+            fbClearAgentError();
 
             document.getElementById('bookStaffSelect').innerHTML = '<option value="">-- Select Staff (Unassigned) --</option>';
             document.getElementById('bookStaffHelp').classList.add('d-none');
             const bookAgentEl = document.getElementById('bookAgent');
             if (bookAgentEl) {
-                bookAgentEl.value = prefill.bookingAgentId ? String(prefill.bookingAgentId) : '';
+                const prefillAgentVal = prefill.bookingAgentId ? String(prefill.bookingAgentId) : '';
+                bookAgentEl.value = fbIsValidBookingAgentSelection(prefillAgentVal) ? prefillAgentVal : '';
             }
             document.getElementById('bookNotes').value = '';
             document.getElementById('bookThen').value = '';
@@ -1941,6 +2006,16 @@
             fbClearBookingError();
             pendingStaffId = this.value || null;
         });
+
+        const bookAgentSelectEl = document.getElementById('bookAgent');
+        if (bookAgentSelectEl) {
+            bookAgentSelectEl.addEventListener('change', function() {
+                if (fbIsValidBookingAgentSelection(this.value)) {
+                    fbClearAgentError();
+                    fbClearBookingError();
+                }
+            });
+        }
 
         document.getElementById('calendarBookForm').addEventListener('change', function(ev) {
             if (ev.target && (ev.target.matches('.fb-combo-staff-select') || ev.target.matches('.fb-redeem-staff-select'))) {
@@ -4080,6 +4155,7 @@
             if (fbIsSubmitting) return;
 
             fbClearBookingError();
+            fbClearAgentError();
 
             const form = this;
             const dateVal = document.getElementById('bookDateInput').value;
@@ -4094,12 +4170,14 @@
             document.getElementById('bookStaffSelect').required = false;
 
             if (!selectedClient) {
+                document.getElementById('bookThen').value = '';
                 fbShowBookingError('Please select an existing client or add a new client before booking.', 'validation');
                 fbShowPanel('client');
                 return;
             }
 
             if (!selectedServices.length && !decideInSalon && !selectedCombos.length && !selectedRedemptions.length && !selectedFreebiePackages.length && !selectedFreebieRedemptions.length) {
+                document.getElementById('bookThen').value = '';
                 fbShowBookingError('Please add at least one service, combo package, Service + Freebies, or choose Decide in Salon.', 'validation');
                 fbShowPanel('service');
                 return;
@@ -4109,6 +4187,13 @@
                 document.getElementById('bookThen').value = '';
                 fbShowPanel('main');
                 fbShowBookingError('Please add the service(s) or combo performed before completing checkout.', 'decide_in_salon');
+                return;
+            }
+
+            const bookAgentEl = document.getElementById('bookAgent');
+            if (!bookAgentEl || !fbIsValidBookingAgentSelection(bookAgentEl.value)) {
+                document.getElementById('bookThen').value = '';
+                fbShowAgentError(FB_BOOKING_AGENT_ERROR_MSG, true);
                 return;
             }
 
@@ -4136,8 +4221,11 @@
 
                 if (!response.ok || payload.success === false) {
                     let errMsg = payload.message || '';
+                    const hasBookingAgentError = Boolean(payload.errors && payload.errors.booking_agent_id);
                     if (payload.errors && typeof payload.errors === 'object') {
-                        const firstFieldErrors = Object.values(payload.errors)[0];
+                        const firstFieldErrors = hasBookingAgentError
+                            ? payload.errors.booking_agent_id
+                            : Object.values(payload.errors)[0];
                         if (Array.isArray(firstFieldErrors) && firstFieldErrors[0]) {
                             errMsg = firstFieldErrors[0];
                         } else if (typeof firstFieldErrors === 'string') {
@@ -4145,6 +4233,9 @@
                         }
                     }
                     fbShowPanel('main');
+                    if (hasBookingAgentError) {
+                        fbShowAgentError(errMsg || FB_BOOKING_AGENT_ERROR_MSG, true);
+                    }
                     fbShowBookingError(errMsg || 'Unable to save booking due to a schedule or eligibility conflict.', payload.reason || '');
                     return;
                 }

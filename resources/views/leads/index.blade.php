@@ -263,6 +263,8 @@
     .lead-badge.cat-cancel { background: rgba(168,82,74,.15); color: #a8524a; }
     .lead-badge.cat-combos_packages { background: rgba(201,166,107,.20); color: #f3d9a4; border: 1px solid rgba(201,166,107,.35); }
     .lead-badge.cat-more { background: rgba(201,166,107,.18); color: #f3d9a4; padding: 2px 6px; }
+    .lead-badge.source-ads { background: rgba(217,143,131,.20); color: #f4c4bc; border: 1px solid rgba(217,143,131,.42); text-decoration: none; gap: 3px; }
+    .lead-badge.source-ads:hover { background: rgba(217,143,131,.30); color: #fff; }
 
     .leads-compact-table {
         width: 100% !important;
@@ -339,6 +341,13 @@
         background: rgba(201, 166, 107, 0.14);
         border-color: rgba(201, 166, 107, 0.32);
         color: #f3d9a4;
+        font-weight: 600;
+    }
+
+    .lead-service-general {
+        background: rgba(138, 166, 171, 0.16);
+        border-color: rgba(138, 166, 171, 0.38);
+        color: #c5e1e6;
         font-weight: 600;
     }
 
@@ -959,7 +968,7 @@
             </div>
         </div>
 
-        <div class="collapse mt-3 {{ request()->hasAny(['category', 'phone_number', 'start_date', 'end_date', 'agent_id']) ? 'show' : '' }}" id="filterCollapse">
+        <div class="collapse mt-3 {{ request()->hasAny(['category', 'service_interest', 'phone_number', 'start_date', 'end_date', 'agent_id']) ? 'show' : '' }}" id="filterCollapse">
             <div class="card card-body shadow-sm border-0">
                 <form method="GET" action="{{ route('leads.index') }}">
                     @if (($activeTab ?? null) === 'all')
@@ -1001,6 +1010,41 @@
                             <input type="date" name="end_date" class="form-control" value="{{ request('end_date') }}">
                         </div>
 
+                        <div>
+                            <label class="form-label" for="filterLeadServiceInterest">Service Interest</label>
+                            <select name="service_interest" id="filterLeadServiceInterest" class="form-select">
+                                <option value="">All Services</option>
+                                <optgroup label="General Inquiries">
+                                    @foreach (\App\Models\Lead::GENERAL_SERVICE_INTERESTS as $generalInterest)
+                                        <option value="{{ $generalInterest }}" {{ request('service_interest') === $generalInterest ? 'selected' : '' }}>
+                                            {{ $generalInterest }}
+                                        </option>
+                                    @endforeach
+                                </optgroup>
+                                @if (($serviceCombos ?? collect())->isNotEmpty())
+                                    <optgroup label="Service Combos">
+                                        @foreach ($serviceCombos as $comboItem)
+                                            @php
+                                                $comboPriceVal = (float) ($comboItem->price ?? 0);
+                                                $comboPriceClean = rtrim(rtrim(number_format($comboPriceVal, 2, '.', ''), '0'), '.');
+                                                $comboFilterValue = "[Combo] {$comboItem->name}" . ($comboPriceVal > 0 ? " ({$comboPriceClean} QAR)" : '');
+                                            @endphp
+                                            <option value="{{ $comboFilterValue }}" {{ request('service_interest') === $comboFilterValue ? 'selected' : '' }}>
+                                                {{ $comboFilterValue }}
+                                            </option>
+                                        @endforeach
+                                    </optgroup>
+                                @endif
+                                <optgroup label="Individual Services">
+                                    @foreach ($services as $serviceName)
+                                        <option value="{{ $serviceName }}" {{ request('service_interest') === $serviceName ? 'selected' : '' }}>
+                                            {{ $serviceName }}
+                                        </option>
+                                    @endforeach
+                                </optgroup>
+                            </select>
+                        </div>
+
                         <div class="leads-filter-grid-span-2">
                             <label class="form-label" for="filterLeadPhoneNumber">Contact (WhatsApp Number)</label>
                             <div class="input-group">
@@ -1010,7 +1054,7 @@
                             </div>
                         </div>
 
-                        <div class="leads-filter-grid-span-2 d-flex gap-2 align-items-end">
+                        <div class="d-flex gap-2 align-items-end">
                             <button type="submit" class="btn btn-primary w-100">Filter</button>
                             <a href="{{ route('leads.index', ['tab' => 'all']) }}" class="btn btn-secondary w-100">Reset</a>
                         </div>
@@ -1236,9 +1280,21 @@
                             </td>
 
                             <!-- 3. CATEGORY -->
+                            @php
+                                $isFromAds = $lead->isFromAds();
+                                $adsCampaignLabel = $isFromAds ? $lead->adsCampaignLabel() : null;
+                            @endphp
                             <td class="px-2.5 py-2.5 whitespace-nowrap" title="{{ $leadCatLabel }}">
-                                @if (!empty($visibleCategories))
+                                @if (!empty($visibleCategories) || $isFromAds)
                                     <div class="d-inline-flex align-items-center gap-1 flex-nowrap">
+                                        @if ($isFromAds)
+                                            <a href="{{ route('kpi.ads.index', ['tab' => 'leads']) }}"
+                                                class="lead-badge source-ads"
+                                                @click.stop
+                                                title="{{ $adsCampaignLabel ? 'Ads Lead · ' . $adsCampaignLabel : 'Synced from Ads List' }}">
+                                                <i class="bx bx-bullseye" style="font-size: 10px;"></i> Ads
+                                            </a>
+                                        @endif
                                         @foreach ($visibleCategories as $catKey)
                                             <span class="lead-badge cat-{{ $catKey }}">{{ \App\Models\Lead::CATEGORIES[$catKey] ?? $catKey }}</span>
                                         @endforeach
@@ -1256,7 +1312,8 @@
                                 @if (!empty($visibleServices))
                                     <div class="d-flex align-items-center gap-1 flex-nowrap" title="{{ $allServicesTooltip }}">
                                         @foreach ($visibleServices as $srv)
-                                            <span class="lead-service-tag bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[11px]">{{ $srv }}</span>
+                                            @php $isGeneralSrv = \App\Models\Lead::isGeneralInquiryLabel($srv); @endphp
+                                            <span class="lead-service-tag {{ $isGeneralSrv ? 'lead-service-general' : 'bg-white/5 border border-white/10' }} rounded px-1.5 py-0.5 text-[11px]">{{ $srv }}</span>
                                         @endforeach
                                         @if ($extraServicesCount > 0)
                                             <span class="lead-service-tag lead-service-more bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[11px]"
