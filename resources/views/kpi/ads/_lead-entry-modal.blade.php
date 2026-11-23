@@ -1,6 +1,17 @@
 {{-- Shared Add/Edit modal for Ad Lead Data Entry rows. JS toggles it between
      "create" (form posts to ad-leads.store) and "edit" (posts to ad-leads.update
-     for the clicked row) — see resetAdLeadEntryForm()/editAdLeadEntry() below. --}}
+     for the clicked row) — see resetAdLeadEntryForm()/editAdLeadEntry() below.
+     Pass `ajaxMode => true` when reused as a shortcut outside Ad Leads Log (e.g. Lead Management). --}}
+@php
+    $categories = isset($categories) && is_array($categories)
+        ? $categories
+        : \App\Models\AdLeadEntry::availableCategories();
+    $branches = isset($branches) && is_array($branches)
+        ? $branches
+        : \App\Models\AdLeadEntry::BRANCHES;
+    $adLeadAjaxMode = ! empty($ajaxMode);
+    $defaultAdLeadDate = \App\Models\Lead::salonToday()->format('Y-m-d');
+@endphp
 <style>
     #adLeadEntryModal.modal.show {
         opacity: 1 !important;
@@ -27,19 +38,32 @@
 <div class="modal fade" id="adLeadEntryModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="background: #241e1c !important; background-color: #241e1c !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;">
-            <form method="POST" id="adLeadEntryForm" action="{{ route('kpi.ad-leads.store') }}">
+            <form method="POST"
+                id="adLeadEntryForm"
+                action="{{ route('kpi.ad-leads.store') }}"
+                data-ajax-mode="{{ $adLeadAjaxMode ? '1' : '0' }}"
+                data-categories-url="{{ route('kpi.ad-leads.categories') }}"
+                data-default-date="{{ $defaultAdLeadDate }}">
                 @csrf
                 <input type="hidden" name="_method" id="adLeadEntryFormMethod">
+                @if (! $adLeadAjaxMode)
+                    @foreach (request()->only(['tab', 'entries_from', 'entries_to', 'search', 'all_dates', 'month', 'entries_page']) as $rfKey => $rfVal)
+                        @if ($rfVal !== null && $rfVal !== '')
+                            <input type="hidden" name="return_filters[{{ $rfKey }}]" value="{{ $rfVal }}">
+                        @endif
+                    @endforeach
+                @endif
 
                 <div class="modal-header">
                     <h5 class="modal-title" id="adLeadEntryModalTitle">Add Ad Lead</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <div id="adLeadEntryErrorAlert" class="alert alert-danger py-2 px-3 small d-none mb-3" role="alert"></div>
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">Date</label>
-                            <input type="date" name="date" id="adLeadDate" class="form-control" required>
+                            <input type="date" name="date" id="adLeadDate" class="form-control" value="{{ $defaultAdLeadDate }}" required>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Customer Name <span class="text-danger">*</span></label>
@@ -52,7 +76,7 @@
                                 <input type="text" name="phone_number" id="adLeadPhoneNumber" class="form-control" placeholder="e.g. WhatsApp number" required maxlength="25">
                             </div>
                         </div>
-                        <div class="col-md-6" x-data="{ selectedCategory: '{{ $categories[0] ?? '' }}' }">
+                        <div class="col-md-6" x-data="{ selectedCategory: @js($categories[0] ?? '') }">
                             <label class="form-label">Ad Type / Category</label>
                             <select name="category" id="adLeadCategory" class="form-select" x-model="selectedCategory" required>
                                 @foreach ($categories as $cat)
@@ -183,7 +207,13 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="submit" class="btn btn-primary" id="adLeadSaveBtn">
+                        <span id="adLeadSaveLabel">Save</span>
+                        <span id="adLeadSaveSpinner" class="d-none">
+                            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            Saving...
+                        </span>
+                    </button>
                 </div>
             </form>
         </div>
@@ -193,14 +223,92 @@
 <script>
     const adLeadBranchLabels = @json($branches);
 
+    window.syncAdLeadCategoryOptions = function (categoryList, preferredValue = null) {
+        const catSelect = document.getElementById('adLeadCategory');
+        if (!catSelect || !Array.isArray(categoryList)) return;
+
+        const currentVal = preferredValue !== null ? preferredValue : catSelect.value;
+        catSelect.innerHTML = '';
+
+        categoryList.forEach(function (catName) {
+            const opt = document.createElement('option');
+            opt.value = catName;
+            opt.textContent = catName;
+            catSelect.appendChild(opt);
+        });
+
+        const createOpt = document.createElement('option');
+        createOpt.value = 'create_new';
+        createOpt.textContent = '+ Create New Category...';
+        catSelect.appendChild(createOpt);
+
+        if (currentVal && Array.from(catSelect.options).some(o => o.value === currentVal)) {
+            catSelect.value = currentVal;
+        } else if (catSelect.options.length > 0 && catSelect.options[0].value !== 'create_new') {
+            catSelect.value = catSelect.options[0].value;
+        }
+
+        catSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        catSelect.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    window.refreshAdLeadCategories = function () {
+        const form = document.getElementById('adLeadEntryForm');
+        const url = form ? form.dataset.categoriesUrl : '';
+        if (!url) return;
+
+        fetch(url, { headers: { 'Accept': 'application/json' } })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (data && Array.isArray(data.categories) && data.categories.length > 0) {
+                    const catSelect = document.getElementById('adLeadCategory');
+                    const currentVal = catSelect ? catSelect.value : null;
+                    window.syncAdLeadCategoryOptions(data.categories, currentVal === 'create_new' ? 'create_new' : (currentVal || data.categories[0]));
+                }
+            })
+            .catch(() => {});
+    };
+
+    window.setAdLeadModalError = function (msg) {
+        const errEl = document.getElementById('adLeadEntryErrorAlert');
+        if (!errEl) return;
+        if (msg) {
+            errEl.textContent = msg;
+            errEl.classList.remove('d-none');
+        } else {
+            errEl.textContent = '';
+            errEl.classList.add('d-none');
+        }
+    };
+
+    window.setAdLeadModalSaving = function (loading) {
+        const btn = document.getElementById('adLeadSaveBtn');
+        const lbl = document.getElementById('adLeadSaveLabel');
+        const spn = document.getElementById('adLeadSaveSpinner');
+        if (btn) btn.disabled = loading;
+        if (lbl) lbl.classList.toggle('d-none', loading);
+        if (spn) spn.classList.toggle('d-none', !loading);
+    };
+
     window.resetAdLeadEntryForm = function () {
+        const form = document.getElementById('adLeadEntryForm');
         document.getElementById('adLeadEntryModalTitle').innerText = 'Add Ad Lead';
-        document.getElementById('adLeadEntryForm').action = '{{ route('kpi.ad-leads.store') }}';
+        form.action = '{{ route('kpi.ad-leads.store') }}';
         document.getElementById('adLeadEntryFormMethod').value = '';
-        document.getElementById('adLeadEntryForm').reset();
-        document.getElementById('adLeadDate').value = new Date().toISOString().slice(0, 10);
+        form.reset();
+        window.setAdLeadModalError('');
+        window.setAdLeadModalSaving(false);
+
+        const defaultDate = form.dataset.defaultDate || new Date().toISOString().slice(0, 10);
+        document.getElementById('adLeadDate').value = defaultDate;
         document.getElementById('adLeadCustomerName').value = '';
-        document.getElementById('adLeadCountryCode').value = '974';
+
+        const ccEl = document.getElementById('adLeadCountryCode');
+        if (ccEl) {
+            ccEl.value = '974';
+            ccEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
         const attrBox = document.getElementById('adLeadAttributionReadonlyBox');
         if (attrBox) attrBox.classList.add('d-none');
         const catSelect = document.getElementById('adLeadCategory');
@@ -212,6 +320,9 @@
             }
             catSelect.dispatchEvent(new Event('change', { bubbles: true }));
             catSelect.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        if (form.dataset.ajaxMode === '1') {
+            window.refreshAdLeadCategories();
         }
         window.dispatchEvent(new CustomEvent('ad-lead-modal-reset', { detail: { id: null } }));
     };
@@ -226,7 +337,11 @@
 
         document.getElementById('adLeadDate').value = entry.date ? entry.date.slice(0, 10) : '';
         document.getElementById('adLeadCustomerName').value = entry.customer_name || '';
-        document.getElementById('adLeadCountryCode').value = entry.country_code || '974';
+        const ccEl = document.getElementById('adLeadCountryCode');
+        if (ccEl) {
+            ccEl.value = entry.country_code || '974';
+            ccEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
         document.getElementById('adLeadPhoneNumber').value = entry.phone_number || '';
         const catSelect = document.getElementById('adLeadCategory');
         if (catSelect) {
@@ -257,4 +372,63 @@
             editAdLeadEntry(JSON.parse(this.dataset.entry));
         });
     });
+
+    (function bindAdLeadAjaxSubmit() {
+        const form = document.getElementById('adLeadEntryForm');
+        const modalEl = document.getElementById('adLeadEntryModal');
+        if (!form || form.dataset.ajaxMode !== '1') return;
+
+        let isSubmitting = false;
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            if (isSubmitting) return;
+
+            window.setAdLeadModalError('');
+            isSubmitting = true;
+            window.setAdLeadModalSaving(true);
+
+            try {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
+                    || form.querySelector('input[name="_token"]')?.value
+                    || '{{ csrf_token() }}';
+
+                const res = await fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                    body: new FormData(form),
+                });
+
+                const data = await res.json().catch(() => ({}));
+
+                if (!res.ok || !data || data.success === false) {
+                    const firstFieldErr = data && data.errors
+                        ? Object.values(data.errors).flat()[0]
+                        : null;
+                    window.setAdLeadModalError(firstFieldErr || data.message || 'Could not save ad lead. Please check the fields and try again.');
+                    return;
+                }
+
+                if (Array.isArray(data.categories) && data.categories.length > 0) {
+                    window.syncAdLeadCategoryOptions(data.categories, data.categories[0]);
+                }
+
+                if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                    const inst = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+                    inst.hide();
+                }
+
+                window.dispatchEvent(new CustomEvent('ad-lead-saved', { detail: data }));
+            } catch (err) {
+                window.setAdLeadModalError('Network error while saving ad lead. Please try again.');
+            } finally {
+                isSubmitting = false;
+                window.setAdLeadModalSaving(false);
+            }
+        });
+    })();
 </script>

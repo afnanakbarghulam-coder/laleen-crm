@@ -157,27 +157,41 @@ class BookingsCalendarFinanceWave2Test extends TestCase
         $conflictRes->assertStatus(422)->assertJson(['success' => false]);
 
         // 4) End-of-day closing time check: Old Airport closes at 22:00.
-        // Booking a 60-minute service at 21:30 (ends at 22:30 > 22:00) must be rejected!
+        // Starting AT or AFTER closing time (22:00) must still be strictly rejected!
         $this->actingAs($this->admin)->post(route('appointments.store'), [
             'booking_agent_id' => 'salon_staff',
-            'customer_name' => 'Late Client',
+            'customer_name' => 'After Hours Client',
             'phone' => '+97455445566',
+            'appointment_datetime' => $dateStr . ' 22:00:00',
+            'branch' => 'old_airport',
+            'staff_id' => $this->staffA->id,
+            'service_name' => [$this->service60->name],
+        ]);
+        $this->assertEquals(2, Appointment::count(), 'Service starting at/after branch closing time (22:00) must be rejected.');
+
+        // Rescheduling $secondAppt to start AT 22:00 (outside working hours) must also return 422
+        $reschedLate = $this->actingAs($this->admin)->patchJson(
+            route('appointments.reschedule', $secondAppt->id),
+            [
+                'appointment_datetime' => $dateStr . ' 22:00:00',
+                'staff_id' => $this->staffA->id,
+            ]
+        );
+        $reschedLate->assertStatus(422)->assertJson(['success' => false]);
+
+        // Starting INSIDE shift (21:30 -> 22:30) is allowed as Overtime Spillover (+30m past 22:00)
+        $overtimeRes = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
+            'customer_name' => 'Overtime Client',
+            'phone' => '+97455445567',
             'appointment_datetime' => $dateStr . ' 21:30:00',
             'branch' => 'old_airport',
             'staff_id' => $this->staffA->id,
             'service_name' => [$this->service60->name],
         ]);
-        $this->assertEquals(2, Appointment::count(), 'Service extending past branch closing time (22:00) must be rejected.');
-
-        // Rescheduling $secondAppt to 21:30 (ends 22:30 > 22:00) must also return 422
-        $reschedLate = $this->actingAs($this->admin)->patchJson(
-            route('appointments.reschedule', $secondAppt->id),
-            [
-                'appointment_datetime' => $dateStr . ' 21:30:00',
-                'staff_id' => $this->staffA->id,
-            ]
-        );
-        $reschedLate->assertStatus(422)->assertJson(['success' => false]);
+        $overtimeRes->assertStatus(201)
+            ->assertJsonPath('appointment.is_overtime', true)
+            ->assertJsonPath('appointment.overtime_minutes', 30);
     }
 
     public function test_s02_staff_time_off_and_shift_patterns_enforced_across_booking_and_calendar(): void

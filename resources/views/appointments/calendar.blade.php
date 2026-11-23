@@ -521,6 +521,23 @@
         border-color: rgba(229, 184, 168, 0.42);
     }
 
+    .cal-ot-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        font-size: 9.5px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        color: #fcd34d;
+        background: rgba(245, 158, 11, 0.22);
+        border: 1px solid rgba(251, 191, 36, 0.52);
+        border-radius: 999px;
+        padding: 0 5px;
+        line-height: 1.45;
+        vertical-align: middle;
+        flex-shrink: 0;
+    }
+
     /* ---------------- LALEEN MINIMAL UI PER-SLICE CONTROLS ---------------- */
     .laleen-slice-track {
         margin-top: 8px;
@@ -665,7 +682,7 @@
         font-size: 11.5px !important;
         font-weight: 600 !important;
         padding: 3px 24px 3px 10px !important;
-        max-width: 168px;
+        max-width: 224px;
         min-width: 118px;
         line-height: 1.3 !important;
         cursor: pointer;
@@ -683,9 +700,36 @@
         color: #e8c7a1 !important;
     }
 
+    .laleen-specialist-pill.is-overtime {
+        border-color: rgba(251, 191, 36, 0.68) !important;
+        color: #fde68a !important;
+    }
+
     .laleen-specialist-pill.is-conflict {
         border-color: rgba(253, 164, 175, 0.62) !important;
         color: #fda4af !important;
+    }
+
+    .laleen-ot-alert {
+        display: flex;
+        align-items: flex-start;
+        gap: 7px;
+        margin-top: 6px;
+        padding: 7px 10px;
+        border-radius: 8px;
+        background: rgba(245, 158, 11, 0.12);
+        border: 1px solid rgba(251, 191, 36, 0.38);
+        color: #fde68a;
+        font-size: 11.5px;
+        line-height: 1.35;
+        font-weight: 500;
+    }
+
+    .laleen-ot-alert i {
+        font-size: 14px;
+        color: #fbbf24;
+        margin-top: 1px;
+        flex-shrink: 0;
     }
 
     .laleen-pending-summary {
@@ -2550,6 +2594,20 @@
                 return `${m}min`;
             }
 
+            function formatOvertimeDelta(totalMin) {
+                const mins = Math.max(1, Math.round(Number(totalMin) || 0));
+                const h = Math.floor(mins / 60);
+                const m = mins % 60;
+                if (h && m) return `+${h}h ${m}m`;
+                if (h) return `+${h}h`;
+                return `+${m}m`;
+            }
+
+            function renderOvertimeAlert(meta) {
+                if (!meta || !meta.overtimeAlert || !meta.overtimeAlert.message) return '';
+                return `<div class="laleen-ot-alert" role="alert"><i class="bx bx-time-five"></i><span>${esc(meta.overtimeAlert.message)}</span></div>`;
+            }
+
             function esc(str) {
                 return String(str ?? '')
                     .replace(/&/g, '&amp;')
@@ -2658,68 +2716,164 @@
             }
 
             function evaluateStaffAvailability(staff, startMin, endMin, daySnapshot, excludeApptId, priorSameBookingSlices) {
-                if (!staff) return { state: 'off', suffix: ' (Unavailable)' };
+                if (!staff) return { state: 'off', kind: 'day_off', suffix: ' (Unavailable)', isOvertime: false, overtimeMinutes: 0, shiftEnd: null, endHHMM: '' };
                 const sid = String(staff.id);
                 const offMap = (daySnapshot && daySnapshot.off) || {};
                 if (offMap[sid] || offMap[staff.id]) {
-                    return { state: 'off', suffix: ' (Off shift)' };
+                    return { state: 'off', kind: 'day_off', suffix: ' (Day Off)', isOvertime: false, overtimeMinutes: 0, shiftEnd: null, endHHMM: '' };
                 }
 
                 if (startMin === null || endMin === null) {
-                    return { state: 'available', suffix: '' };
+                    return { state: 'available', kind: null, suffix: '', isOvertime: false, overtimeMinutes: 0, shiftEnd: null, endHHMM: '' };
                 }
 
+                const effEndMin = endMin <= startMin ? endMin + 1440 : endMin;
+                const endHHMM = formatHHMM(effEndMin);
+
+                // Branch start-time boundary: overtime spillover past branch close is allowed,
+                // but the service must START strictly within branch opening hours [bStart, bEnd).
+                let branchWindow = null;
                 if (daySnapshot && daySnapshot.working_hours) {
                     const bStart = parseHHMM(daySnapshot.working_hours.start);
                     const bEnd = parseHHMM(daySnapshot.working_hours.end);
-                    if (bStart !== null && bEnd !== null && (startMin < bStart || endMin > bEnd)) {
-                        return { state: 'off', suffix: ' (Off shift)' };
+                    if (bStart !== null && bEnd !== null) {
+                        const effBEnd = bEnd <= bStart ? bEnd + 1440 : bEnd;
+                        branchWindow = {
+                            start: daySnapshot.working_hours.start,
+                            end: daySnapshot.working_hours.end,
+                            start_minutes: bStart,
+                            end_minutes: effBEnd
+                        };
+                        if (startMin < bStart || startMin >= effBEnd) {
+                            return { state: 'off', kind: 'shift_hours', suffix: ' (Off shift)', isOvertime: false, overtimeMinutes: 0, shiftEnd: null, endHHMM };
+                        }
                     }
                 }
 
+                // Resolve effective shift windows (custom ShiftPattern / working_hours, or fallback to branch working hours)
                 const dayStaffMeta = daySnapshot && Array.isArray(daySnapshot.staffs)
                     ? daySnapshot.staffs.find(st => String(st.id) === sid)
                     : null;
                 const shiftWindows = (dayStaffMeta && dayStaffMeta.shift_windows !== undefined)
                     ? dayStaffMeta.shift_windows
                     : staff.shift_windows;
+
+                let effectiveWindows = null;
                 if (Array.isArray(shiftWindows)) {
                     if (shiftWindows.length === 0) {
-                        return { state: 'off', suffix: ' (Off shift)' };
+                        return { state: 'off', kind: 'day_off', suffix: ' (Day Off)', isOvertime: false, overtimeMinutes: 0, shiftEnd: null, endHHMM };
                     }
-                    const fitsShift = shiftWindows.some(w => startMin >= Number(w.start_minutes) && endMin <= Number(w.end_minutes));
-                    if (!fitsShift) {
-                        return { state: 'off', suffix: ' (Off shift)' };
+                    effectiveWindows = shiftWindows;
+                } else if (branchWindow) {
+                    effectiveWindows = [branchWindow];
+                }
+
+                let shiftMode = 'in_shift';
+                let bestOvertime = null;
+
+                if (Array.isArray(effectiveWindows) && effectiveWindows.length > 0) {
+                    let fitsInShift = false;
+                    for (let i = 0; i < effectiveWindows.length; i++) {
+                        const w = effectiveWindows[i];
+                        const wStart = Number(w.start_minutes);
+                        let wEnd = Number(w.end_minutes);
+                        if (wEnd <= wStart) wEnd += 1440;
+
+                        // Tier 1: Available (In Shift) — shift_start <= appt_start AND appt_end <= shift_end
+                        if (startMin >= wStart && effEndMin <= wEnd) {
+                            fitsInShift = true;
+                            break;
+                        }
+
+                        // Tier 2: Available (Overtime Spillover) — shift_start <= appt_start < shift_end AND appt_end > shift_end
+                        if (startMin >= wStart && startMin < wEnd && effEndMin > wEnd) {
+                            const otMins = Math.max(1, Math.round(effEndMin - wEnd));
+                            const wEndStr = w.end || formatHHMM(wEnd);
+                            if (!bestOvertime || otMins < bestOvertime.overtimeMinutes) {
+                                bestOvertime = { overtimeMinutes: otMins, shiftEnd: wEndStr };
+                            }
+                        }
+                    }
+
+                    if (!fitsInShift) {
+                        if (bestOvertime) {
+                            shiftMode = 'overtime';
+                        } else {
+                            // Tier 4: Truly Off Shift (appt_start < shift_start OR appt_start >= shift_end)
+                            return { state: 'off', kind: 'shift_hours', suffix: ' (Off shift)', isOvertime: false, overtimeMinutes: 0, shiftEnd: null, endHHMM };
+                        }
                     }
                 }
 
+                // Staff block check (treated as Off shift / unavailable)
                 const blocks = (daySnapshot && daySnapshot.blocks && (daySnapshot.blocks[sid] || daySnapshot.blocks[staff.id])) || [];
-                const hitBlock = blocks.find(b => startMin < Number(b.end_minutes) && endMin > Number(b.start_minutes));
+                const hitBlock = blocks.find(b => {
+                    const bS = Number(b.start_minutes);
+                    let bE = Number(b.end_minutes);
+                    if (bE <= bS) bE += 1440;
+                    return startMin < bE && effEndMin > bS;
+                });
                 if (hitBlock) {
-                    return { state: 'off', suffix: ' (Off shift)' };
+                    return { state: 'off', kind: 'blocked', suffix: ' (Off shift)', isOvertime: false, overtimeMinutes: 0, shiftEnd: null, endHHMM };
                 }
 
+                // Tier 3: Booked / Busy (overlapping same-booking slice or existing active appointment)
                 if (Array.isArray(priorSameBookingSlices)) {
                     const selfHit = priorSameBookingSlices.find(ps =>
                         ps && String(ps.staff_id || '') === sid
                         && ps.startMin !== null && ps.endMin !== null
-                        && startMin < ps.endMin && endMin > ps.startMin
+                        && startMin < ps.endMin && effEndMin > ps.startMin
                     );
                     if (selfHit) {
-                        return { state: 'busy', suffix: ` (Busy ${formatHHMM(selfHit.startMin)}–${formatHHMM(selfHit.endMin)})` };
+                        return {
+                            state: 'busy',
+                            kind: 'booked',
+                            suffix: ` (Booked ${formatHHMM(selfHit.startMin)}–${formatHHMM(selfHit.endMin)})`,
+                            isOvertime: false,
+                            overtimeMinutes: 0,
+                            shiftEnd: null,
+                            endHHMM
+                        };
                     }
                 }
 
                 const appts = (daySnapshot && daySnapshot.appointments && (daySnapshot.appointments[sid] || daySnapshot.appointments[staff.id])) || [];
                 const hitAppt = appts.find(a => {
                     if (excludeApptId && Number(a.id) === Number(excludeApptId)) return false;
-                    return startMin < Number(a.end_minutes) && endMin > Number(a.start_minutes);
+                    const st = String(a.status || '').toLowerCase();
+                    if (st === 'cancelled' || st === 'no_show') return false;
+                    const aStart = Number(a.start_minutes);
+                    let aEnd = Number(a.end_minutes);
+                    if (aEnd <= aStart) aEnd = aStart + Math.max(1, Number(a.duration) || 30);
+                    return startMin < aEnd && effEndMin > aStart;
                 });
                 if (hitAppt) {
-                    return { state: 'busy', suffix: ` (Busy ${hitAppt.start}–${hitAppt.end})` };
+                    return {
+                        state: 'busy',
+                        kind: 'booked',
+                        suffix: ` (Booked ${hitAppt.start}–${hitAppt.end})`,
+                        isOvertime: false,
+                        overtimeMinutes: 0,
+                        shiftEnd: null,
+                        endHHMM
+                    };
                 }
 
-                return { state: 'available', suffix: '' };
+                if (shiftMode === 'overtime' && bestOvertime) {
+                    const deltaLabel = formatOvertimeDelta(bestOvertime.overtimeMinutes);
+                    return {
+                        state: 'overtime',
+                        kind: 'overtime',
+                        suffix: ` (OT ${deltaLabel} · shift ends ${bestOvertime.shiftEnd})`,
+                        isOvertime: true,
+                        overtimeMinutes: bestOvertime.overtimeMinutes,
+                        shiftEnd: bestOvertime.shiftEnd,
+                        deltaLabel,
+                        endHHMM
+                    };
+                }
+
+                return { state: 'available', kind: null, suffix: '', isOvertime: false, overtimeMinutes: 0, shiftEnd: null, endHHMM };
             }
 
             function buildSpecialistSelectMeta(opts) {
@@ -2737,13 +2891,26 @@
                 } = opts;
 
                 const { candidates, unmappedFallback } = getEligibleStaff(branch, serviceId, serviceName, allStaffs);
-                const orderRank = { available: 0, busy: 1, off: 2 };
+                const orderRank = { available: 0, overtime: 1, busy: 2, off: 3 };
                 const evaluated = candidates.map(staff => {
                     const avail = evaluateStaffAvailability(staff, startMin, endMin, daySnapshot, excludeApptId, priorSlices);
-                    return { staff, state: avail.state, suffix: avail.suffix };
+                    return {
+                        staff,
+                        state: avail.state,
+                        kind: avail.kind || null,
+                        suffix: avail.suffix,
+                        isOvertime: Boolean(avail.isOvertime),
+                        overtimeMinutes: Number(avail.overtimeMinutes) || 0,
+                        shiftEnd: avail.shiftEnd || null,
+                        deltaLabel: avail.deltaLabel || '',
+                        endHHMM: avail.endHHMM || ''
+                    };
                 }).sort((a, b) => {
                     if (orderRank[a.state] !== orderRank[b.state]) {
                         return orderRank[a.state] - orderRank[b.state];
+                    }
+                    if (a.state === 'overtime' && a.overtimeMinutes !== b.overtimeMinutes) {
+                        return a.overtimeMinutes - b.overtimeMinutes;
                     }
                     return String(a.staff.name).localeCompare(String(b.staff.name));
                 });
@@ -2752,15 +2919,16 @@
                 let selectedEntry = evaluated.find(e => String(e.staff.id) === selStr) || null;
 
                 let optionsInner = evaluated.map(e => {
-                    const isSel = String(e.staff.id) === selStr ? 'selected' : '';
-                    return `<option value="${e.staff.id}" ${isSel}>${esc(e.staff.name)}${esc(e.suffix)}</option>`;
+                    const isSel = String(e.staff.id) === selStr;
+                    const isDisabled = (e.state === 'busy' || e.state === 'off') && !isSel;
+                    return `<option value="${e.staff.id}" ${isSel ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}>${esc(e.staff.name)}${esc(e.suffix)}</option>`;
                 }).join('');
 
                 if (selStr && !selectedEntry) {
                     const rawStaff = (Array.isArray(allStaffs) ? allStaffs : []).find(s => String(s.id) === selStr);
                     if (rawStaff) {
                         optionsInner = `<option value="${rawStaff.id}" selected>${esc(rawStaff.name)} (Unskilled)</option>` + optionsInner;
-                        selectedEntry = { staff: rawStaff, state: 'conflict', suffix: ' (Unskilled)' };
+                        selectedEntry = { staff: rawStaff, state: 'conflict', suffix: ' (Unskilled)', isOvertime: false, overtimeMinutes: 0 };
                     }
                 }
 
@@ -2769,14 +2937,37 @@
                     : optionsInner;
 
                 const html = `<option value="" ${!selStr ? 'selected' : ''}>Select specialist</option>${wrappedOptions}`;
-                const hasConflict = Boolean(selStr && selectedEntry && selectedEntry.state !== 'available');
+                const isOvertime = Boolean(selStr && selectedEntry && selectedEntry.state === 'overtime');
+                const hasConflict = Boolean(selStr && selectedEntry && selectedEntry.state !== 'available' && selectedEntry.state !== 'overtime');
+
+                let overtimeAlert = null;
+                if (isOvertime && selectedEntry) {
+                    const deltaLabel = selectedEntry.deltaLabel || formatOvertimeDelta(selectedEntry.overtimeMinutes);
+                    const endTimeLabel = selectedEntry.endHHMM || formatHHMM(endMin);
+                    const shiftEndLabel = selectedEntry.shiftEnd || '';
+                    overtimeAlert = {
+                        staffName: selectedEntry.staff.name,
+                        endTime: endTimeLabel,
+                        shiftEnd: shiftEndLabel,
+                        overtimeMinutes: selectedEntry.overtimeMinutes,
+                        deltaLabel,
+                        message: `Overtime booking: runs until ${endTimeLabel} (${deltaLabel} past ${selectedEntry.staff.name}'s shift end at ${shiftEndLabel}). Confirm overtime with specialist.`
+                    };
+                }
+
+                const inShiftIds = evaluated.filter(e => e.state === 'available').map(e => String(e.staff.id));
+                const overtimeIds = evaluated.filter(e => e.state === 'overtime').map(e => String(e.staff.id));
 
                 return {
                     html,
                     unmappedFallback,
                     hasConflict,
+                    isOvertime,
+                    overtimeAlert,
                     needsSelection: !selStr,
-                    availableIds: evaluated.filter(e => e.state === 'available').map(e => String(e.staff.id)),
+                    inShiftIds,
+                    overtimeIds,
+                    availableIds: inShiftIds.concat(overtimeIds),
                     evaluated
                 };
             }
@@ -2866,6 +3057,8 @@
                 parseHHMM,
                 formatHHMM,
                 formatSpanDuration,
+                formatOvertimeDelta,
+                renderOvertimeAlert,
                 staffHasServiceSkill,
                 getEligibleStaff,
                 computeTimeline,
@@ -3137,22 +3330,30 @@
                         const color = data.status_colors[a.status] || '#c9a39a';
                         const diffMinutes = a.start_minutes - dayStartMinutes;
                         const top = diffMinutes * PPM;
-                        const height = Math.max(a.duration * PPM, a.combo_name ? 58 : 46);
+                        const gridTotalHeight = (data.time_slots.length * SLOT_H);
+                        const rawHeight = Math.max(a.duration * PPM, a.combo_name ? 58 : 46);
+                        const height = Math.max(Math.min(rawHeight, Math.max(46, gridTotalHeight - top)), 46);
                         const displaySvcLabel = a.is_combo_tbd ? 'Services TBD in Salon' : (a.decide_in_salon ? 'Decide in Salon' : a.service_name);
                         const canDragOrResize = CAN_EDIT_BOOKINGS && a.status !== 'completed' && a.status !== 'cancelled';
                         const sliceServiceLineId = (a.is_split_booking && a.appointment_service_id) ? Number(a.appointment_service_id) : 'null';
                         const comboBadgeLabel = a.combo_name
                             ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
                             : '';
+                        const otDelta = (a.is_overtime && Number(a.overtime_minutes) > 0 && window.LaleenSliceEngine)
+                            ? window.LaleenSliceEngine.formatOvertimeDelta(a.overtime_minutes)
+                            : '';
+                        const otBadgeHtml = a.is_overtime
+                            ? ` <span class="cal-ot-badge" title="${escapeHtml(otDelta ? `Overtime (${otDelta} past shift end)` : 'Overtime booking')}">OT</span>`
+                            : '';
 
-                        html += `<div class="cal-appt status-${a.status}" data-id="${a.id}" data-service-line-id="${a.appointment_service_id || ''}" data-is-split="${a.is_split_booking ? '1' : '0'}" data-staff-id="${staff.id}" data-start="${a.start}" data-duration="${a.duration}"
+                        html += `<div class="cal-appt status-${a.status}${a.is_overtime ? ' is-overtime' : ''}" data-id="${a.id}" data-service-line-id="${a.appointment_service_id || ''}" data-is-split="${a.is_split_booking ? '1' : '0'}" data-staff-id="${staff.id}" data-start="${a.start}" data-duration="${a.duration}"
                                 draggable="${canDragOrResize ? 'true' : 'false'}"
                                 ondragstart="onApptDragStart(event, ${a.id}, ${a.start_minutes}, false, ${sliceServiceLineId})" ondragend="onApptDragEnd(event)"
                                 ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
                                 ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${a.start}')"
                                 onclick="event.stopPropagation(); openDrawer(${a.id})"
                                 style="top:${top}px;height:${height}px;background:${tint(color, .14)};border-left-color:${color};color:${color};">
-                                <span class="cust">${escapeHtml(a.customer_name || 'Walk-in')}</span>
+                                <span class="cust">${escapeHtml(a.customer_name || 'Walk-in')}${otBadgeHtml}</span>
                                 ${a.combo_name ? `<span class="cal-combo-badge ${a.is_split_booking ? 'is-split-slice' : ''}">${comboBadgeLabel}</span>` : ''}
                                 <span class="svc">${escapeHtml(displaySvcLabel)}</span>
                                 <span class="svc cal-appt-time-label">${to12Hour(a.start)} - ${to12Hour(a.end)}</span>
@@ -3300,13 +3501,19 @@
                             const comboBadgeLabel = a.combo_name
                                 ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
                                 : '';
-                            html += `<div class="cal-chip status-${a.status}" data-id="${a.id}" data-service-line-id="${a.appointment_service_id || ''}"
+                            const otDelta = (a.is_overtime && Number(a.overtime_minutes) > 0 && window.LaleenSliceEngine)
+                                ? window.LaleenSliceEngine.formatOvertimeDelta(a.overtime_minutes)
+                                : '';
+                            const otBadgeHtml = a.is_overtime
+                                ? ` <span class="cal-ot-badge" title="${escapeHtml(otDelta ? `Overtime (${otDelta} past shift end)` : 'Overtime booking')}">OT</span>`
+                                : '';
+                            html += `<div class="cal-chip status-${a.status}${a.is_overtime ? ' is-overtime' : ''}" data-id="${a.id}" data-service-line-id="${a.appointment_service_id || ''}"
                                 draggable="${(!CAN_EDIT_BOOKINGS || a.status === 'completed' || a.status === 'cancelled') ? 'false' : 'true'}"
                                 ondragstart="event.stopPropagation(); onApptDragStart(event, ${a.id}, ${a.start_minutes}, false, ${sliceServiceLineId})"
                                 ondragend="onApptDragEnd(event)"
                                 onclick="event.stopPropagation(); openDrawer(${a.id})"
                                 style="background:${tint(color, .14)};border-left-color:${color};color:${color};">
-                                <strong>${a.time} · ${escapeHtml(a.customer_name || 'Walk-in')}</strong>
+                                <strong>${a.time} · ${escapeHtml(a.customer_name || 'Walk-in')}${otBadgeHtml}</strong>
                                 ${a.combo_name ? `<div><span class="cal-combo-badge ${a.is_split_booking ? 'is-split-slice' : ''}">${comboBadgeLabel}</span></div>` : ''}
                                 ${escapeHtml(displaySvcLabel)}
                                 ${a.has_upsell ? `<span class="upsell-flag">⬆ Upsell</span>` : ''}
@@ -3347,10 +3554,11 @@
 
                 appts.slice(0, 3).forEach(a => {
                     const color = data.status_colors[a.status] || '#c9a39a';
+                    const otBadge = a.is_overtime ? ` <span class="cal-ot-badge" title="Overtime booking">OT</span>` : '';
                     html += `<div class="cal-month-chip status-${a.status}" data-id="${a.id}"
                         onclick="event.stopPropagation(); openDrawer(${a.id})"
                         style="background:${tint(color, .14)};border-left-color:${color};color:${color};">
-                        ${a.time} ${escapeHtml(a.customer_name || 'Walk-in')}${a.combo_name ? ` · ${escapeHtml(a.combo_name)}` : (a.decide_in_salon ? ' · Decide in Salon' : '')}
+                        ${a.time} ${escapeHtml(a.customer_name || 'Walk-in')}${otBadge}${a.combo_name ? ` · ${escapeHtml(a.combo_name)}` : (a.decide_in_salon ? ' · Decide in Salon' : '')}
                     </div>`;
                 });
 
@@ -3691,7 +3899,12 @@
             const visitSpanSuffix = (!a.is_unscheduled && Number(a.visit_span_minutes) > 0 && window.LaleenSliceEngine)
                 ? ` · ${window.LaleenSliceEngine.formatSpanDuration(a.visit_span_minutes)}`
                 : '';
-            document.getElementById('drawerDatetime').textContent = (a.appointment_datetime || '') + visitSpanSuffix;
+            const drawerOtDelta = (a.is_overtime && Number(a.overtime_minutes) > 0 && window.LaleenSliceEngine)
+                ? window.LaleenSliceEngine.formatOvertimeDelta(a.overtime_minutes)
+                : '';
+            const drawerDtEl = document.getElementById('drawerDatetime');
+            drawerDtEl.innerHTML = escapeHtml((a.appointment_datetime || '') + visitSpanSuffix)
+                + (a.is_overtime ? ` <span class="cal-ot-badge" title="${escapeHtml(drawerOtDelta ? `Overtime (${drawerOtDelta} past shift end)` : 'Overtime booking')}">OT${drawerOtDelta ? ' ' + escapeHtml(drawerOtDelta) : ''}</span>` : '');
             document.getElementById('drawerBranch').textContent = a.branch;
             document.getElementById('drawerStaff').textContent = activeSpecialistNames.length > 0
                 ? activeSpecialistNames.join(', ')
@@ -4086,11 +4299,12 @@
                     todayControlsHtml = `
                         <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
                             ${parallelHtml}
-                            <select class="form-select form-select-sm laleen-specialist-pill drawer-combo-staff-sel ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}"
+                            <select class="form-select form-select-sm laleen-specialist-pill drawer-combo-staff-sel ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.isOvertime ? 'is-overtime' : ''} ${meta.hasConflict ? 'is-conflict' : ''}"
                                 data-svc="${sid}">
                                 ${meta.html}
                             </select>
-                        </div>`;
+                        </div>
+                        ${window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(meta) : ''}`;
                 }
 
                 return `
@@ -4432,27 +4646,32 @@
                         </button>` : (sl.is_parallel ? `<span class="laleen-time-pill" style="color:#6ee7b7;">⇉ Same time</span>` : '');
 
                     const specialistControl = canEditCombo ? `
-                        <select class="form-select form-select-sm laleen-specialist-pill drawer-inline-combo-staff ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}"
+                        <select class="form-select form-select-sm laleen-specialist-pill drawer-inline-combo-staff ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.isOvertime ? 'is-overtime' : ''} ${meta.hasConflict ? 'is-conflict' : ''}"
                             data-pkg="${pkg.client_package_id}" data-svc="${sid}">
                             ${meta.html}
                         </select>` : `<span class="laleen-time-pill">${escapeHtml((poolById.get(sid)?.staff_name) || 'Unassigned')}</span>`;
 
+                    const otAlertHtml = window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(meta) : '';
+
                     return `
-                        <div class="laleen-slice-row">
-                            <div class="laleen-slice-left">
-                                ${reorderBtns}
-                                <div class="laleen-slice-title-wrap">
-                                    <span class="laleen-slice-title">${escapeHtml(sl.name)}</span>
-                                    <span class="laleen-slice-sub">
-                                        <span class="laleen-time-pill">${escapeHtml(sl.timeBadge)}</span>
-                                        ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
-                                    </span>
+                        <div class="laleen-slice-row flex-column align-items-stretch">
+                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                <div class="laleen-slice-left">
+                                    ${reorderBtns}
+                                    <div class="laleen-slice-title-wrap">
+                                        <span class="laleen-slice-title">${escapeHtml(sl.name)}</span>
+                                        <span class="laleen-slice-sub">
+                                            <span class="laleen-time-pill">${escapeHtml(sl.timeBadge)}</span>
+                                            ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="laleen-slice-right">
+                                    ${parallelToggle}
+                                    ${specialistControl}
                                 </div>
                             </div>
-                            <div class="laleen-slice-right">
-                                ${parallelToggle}
-                                ${specialistControl}
-                            </div>
+                            ${otAlertHtml}
                         </div>`;
                 }).join('');
 
@@ -4658,9 +4877,11 @@
                         </button>` : (s.is_parallel ? `<span class="laleen-time-pill" style="color:#6ee7b7;">⇉ Same time</span>` : '');
 
                     const specialistPill = canEditSvc ? `
-                        <select class="form-select form-select-sm laleen-specialist-pill drawer-svc-staff-sel ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-idx="${idx}">
+                        <select class="form-select form-select-sm laleen-specialist-pill drawer-svc-staff-sel ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.isOvertime ? 'is-overtime' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-idx="${idx}">
                             ${meta.html}
                         </select>` : (s.staff_name ? `<span class="laleen-time-pill">${escapeHtml(s.staff_name)}</span>` : '');
+
+                    const otAlertHtml = window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(meta) : '';
 
                     return `
                     <div class="svc-item flex-column align-items-stretch" data-line-id="${s.id}">
@@ -4668,7 +4889,7 @@
                             <div class="d-flex align-items-center gap-1 min-w-0">
                                 ${reorderBtns}
                                 <div class="min-w-0">
-                                    <div class="name text-truncate">${escapeHtml(s.name)}${comboBadge}</div>
+                                    <div class="name text-truncate">${escapeHtml(s.name)}${comboBadge}${s.is_overtime ? ' <span class="cal-ot-badge" title="Overtime service">OT</span>' : ''}</div>
                                     <div class="laleen-slice-sub mt-1">
                                         <span class="laleen-time-pill">${escapeHtml(timeBadgeText)}</span>
                                         ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
@@ -4696,6 +4917,7 @@
                             ${parallelBtn}
                             ${specialistPill}
                         </div>
+                        ${otAlertHtml}
                     </div>
                 `;
                 }).join('');

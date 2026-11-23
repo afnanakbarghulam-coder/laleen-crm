@@ -740,6 +740,61 @@
         border: 1px solid rgba(255, 255, 255, 0.1);
         white-space: nowrap;
     }
+
+    .btn-ad-lead-shortcut {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(217, 143, 131, 0.11);
+        border: 1px solid rgba(217, 143, 131, 0.45);
+        color: #f4c4bc;
+        font-weight: 600;
+        border-radius: 999px;
+        padding: 0.4375rem 1rem;
+        transition: all 0.18s ease;
+        white-space: nowrap;
+    }
+
+    .btn-ad-lead-shortcut:hover,
+    .btn-ad-lead-shortcut:focus {
+        background: rgba(217, 143, 131, 0.22);
+        border-color: #d98f83;
+        color: #fff4f1;
+    }
+
+    .ad-lead-saved-toast {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 1085;
+        max-width: 440px;
+        width: calc(100vw - 32px);
+        background: #241e1c;
+        border: 1px solid rgba(142, 168, 138, 0.55);
+        border-left: 4px solid #8ea88a;
+        border-radius: 14px;
+        padding: 14px 16px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+        color: #f5ebe7;
+    }
+
+    .ad-lead-saved-toast-btn {
+        background: rgba(217, 143, 131, 0.18);
+        border: 1px solid rgba(217, 143, 131, 0.5);
+        color: #f6cec7;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 5px 12px;
+        border-radius: 999px;
+        white-space: nowrap;
+        transition: all 0.16s ease;
+    }
+
+    .ad-lead-saved-toast-btn:hover {
+        background: rgba(217, 143, 131, 0.32);
+        border-color: #d98f83;
+        color: #fff;
+    }
 </style>
 @section('content')
     <!-- Page Navbar with On-Demand Follow-ups Bell & Action Buttons -->
@@ -817,6 +872,14 @@
                 <i class="bx bx-bar-chart-alt-2 me-1"></i> Analytics
             </a>
             @moduleEdit('leads')
+                <button type="button"
+                    id="openAddAdLeadShortcutBtn"
+                    class="btn btn-ad-lead-shortcut"
+                    data-bs-toggle="modal"
+                    data-bs-target="#adLeadEntryModal"
+                    onclick="resetAdLeadEntryForm()">
+                    <i class="bx bx-plus"></i> Add Ad Lead
+                </button>
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addLeadModal">
                     <i class="bx bx-plus me-1"></i> Add Lead
                 </button>
@@ -1595,6 +1658,32 @@
         @endforeach
 
         @include('leads.create')
+        @include('kpi.ads._lead-entry-modal', [
+            'categories' => $adLeadCategories ?? \App\Models\AdLeadEntry::availableCategories(),
+            'branches' => $adLeadBranches ?? \App\Models\AdLeadEntry::BRANCHES,
+            'ajaxMode' => true,
+        ])
+        @include('kpi.ads._send-to-followups-modal')
+
+        {{-- Post-save confirmation toast for Ad Lead shortcut with 1-click Send to Follow-Ups --}}
+        <div id="adLeadSavedToast" class="ad-lead-saved-toast d-none" role="status" aria-live="polite">
+            <div class="d-flex align-items-start justify-content-between gap-2">
+                <div class="d-flex align-items-start gap-2">
+                    <i class="bx bx-check-circle fs-5 mt-0.5" style="color: #8ea88a; flex-shrink: 0;"></i>
+                    <div>
+                        <div class="fw-semibold" style="font-size: 13.5px;" id="adLeadSavedToastTitle">Ad lead saved to Ad Leads Log.</div>
+                        <div class="text-muted small mt-0.5" id="adLeadSavedToastMeta"></div>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white btn-sm" id="adLeadSavedToastClose" aria-label="Close" style="opacity: 0.7;"></button>
+            </div>
+            <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mt-3 pt-2 border-top" style="border-color: rgba(255, 255, 255, 0.08) !important;">
+                <span class="small text-muted">Need to follow up later?</span>
+                <button type="button" class="ad-lead-saved-toast-btn" id="adLeadSavedToastSendBtn">
+                    <i class="bx bx-send me-1"></i> Send to Follow-Ups
+                </button>
+            </div>
+        </div>
     @endmoduleEdit
 
     <script>
@@ -1788,7 +1877,93 @@
             if (focusId) {
                 window.openPendingFollowupLead(focusId);
             }
+
+            const highlightId = params.get('highlight_lead');
+            if (highlightId) {
+                const rowEl = document.getElementById('leadRow' + highlightId);
+                if (rowEl) {
+                    rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    rowEl.classList.add('lead-row-highlight');
+                    setTimeout(() => rowEl.classList.remove('lead-row-highlight'), 2800);
+                }
+            }
         });
+
+        // Post-save toast & 1-click "Send to Follow-Ups" wiring for the "+ Add Ad Lead" shortcut
+        (function initAdLeadShortcutToast() {
+            const toastEl = document.getElementById('adLeadSavedToast');
+            const titleEl = document.getElementById('adLeadSavedToastTitle');
+            const metaEl = document.getElementById('adLeadSavedToastMeta');
+            const sendBtn = document.getElementById('adLeadSavedToastSendBtn');
+            const closeBtn = document.getElementById('adLeadSavedToastClose');
+
+            if (!toastEl) return;
+
+            let latestSavedPayload = null;
+            let autoHideTimer = null;
+
+            function hideToast() {
+                toastEl.classList.add('d-none');
+                if (autoHideTimer) {
+                    clearTimeout(autoHideTimer);
+                    autoHideTimer = null;
+                }
+            }
+
+            function showToast(payload) {
+                latestSavedPayload = payload || null;
+                if (titleEl) {
+                    titleEl.textContent = (payload && payload.message) ? payload.message : 'Ad lead saved to Ad Leads Log.';
+                }
+                if (metaEl && payload && payload.entry) {
+                    const parts = [payload.entry.customer_name, payload.entry.phone, payload.entry.category].filter(Boolean);
+                    metaEl.textContent = parts.join(' · ');
+                }
+                toastEl.classList.remove('d-none');
+
+                if (autoHideTimer) clearTimeout(autoHideTimer);
+                autoHideTimer = setTimeout(hideToast, 15000);
+            }
+
+            window.addEventListener('ad-lead-saved', function (ev) {
+                showToast(ev.detail || {});
+            });
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', hideToast);
+            }
+
+            if (sendBtn) {
+                sendBtn.addEventListener('click', function () {
+                    if (!latestSavedPayload || !latestSavedPayload.entry || !latestSavedPayload.send_to_followups_url) {
+                        return;
+                    }
+                    if (autoHideTimer) {
+                        clearTimeout(autoHideTimer);
+                        autoHideTimer = null;
+                    }
+                    if (typeof window.openSendToFollowUpsModal === 'function') {
+                        window.openSendToFollowUpsModal({
+                            entry: latestSavedPayload.entry,
+                            sendUrl: latestSavedPayload.send_to_followups_url,
+                            onSuccess: function (syncData) {
+                                hideToast();
+                                const targetUrl = new URL('{{ route('leads.index') }}', window.location.origin);
+                                if (syncData && syncData.follow_up_date) {
+                                    targetUrl.searchParams.set('followup_date', syncData.follow_up_date);
+                                } else {
+                                    targetUrl.searchParams.set('tab', 'all');
+                                }
+                                if (syncData && syncData.lead_id) {
+                                    targetUrl.searchParams.set('highlight_lead', String(syncData.lead_id));
+                                }
+                                window.location.href = targetUrl.toString();
+                            },
+                        });
+                    }
+                });
+            }
+        })();
 
         function toggleLeadAlertAccordion(headerEl) {
             const body = headerEl.nextElementSibling;

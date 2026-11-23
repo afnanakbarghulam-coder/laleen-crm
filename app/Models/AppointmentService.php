@@ -24,6 +24,8 @@ class AppointmentService extends Model
         'duration',
         'start_time',
         'slice_end_at',
+        'is_overtime',
+        'overtime_minutes',
         'status',
         'is_pending',
         'discount_type',
@@ -38,6 +40,8 @@ class AppointmentService extends Model
         'is_freebie_redemption' => 'boolean',
         'start_time' => 'datetime',
         'slice_end_at' => 'datetime',
+        'is_overtime' => 'boolean',
+        'overtime_minutes' => 'integer',
         'is_pending' => 'boolean',
     ];
 

@@ -401,10 +401,12 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/kill', [MonthlyAdController::class, 'killAd'])->name('ads-plan.kill');
         Route::middleware('module:kpis,edit')->delete('/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'destroy'])->name('ads-plan.destroy');
 
-        Route::middleware('module:kpis,edit')->post('/ad-leads', [AdLeadEntryController::class, 'store'])->name('ad-leads.store');
-        Route::middleware(['module:kpis', 'throttle:20,1'])->post('/ad-leads/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script.inline');
-        Route::middleware(['module:kpis', 'throttle:20,1'])->post('/ad-leads/{adLeadEntry}/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script');
-        Route::middleware('module:kpis,edit')->post('/ad-leads/{adLeadEntry}/send-to-followups', [AdLeadEntryController::class, 'sendToFollowUps'])->name('ad-leads.send-to-followups');
+        Route::middleware('module:kpis')->get('/ad-leads/suggestions', [AdLeadEntryController::class, 'suggestions'])->name('ad-leads.suggestions');
+        Route::middleware('module:kpis|leads')->get('/ad-leads/categories', [AdLeadEntryController::class, 'categories'])->name('ad-leads.categories');
+        Route::middleware('module:kpis|leads,edit')->post('/ad-leads', [AdLeadEntryController::class, 'store'])->name('ad-leads.store');
+        Route::middleware(['module:kpis|leads', 'throttle:20,1'])->post('/ad-leads/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script.inline');
+        Route::middleware(['module:kpis|leads', 'throttle:20,1'])->post('/ad-leads/{adLeadEntry}/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script');
+        Route::middleware('module:kpis|leads,edit')->post('/ad-leads/{adLeadEntry}/send-to-followups', [AdLeadEntryController::class, 'sendToFollowUps'])->name('ad-leads.send-to-followups');
         Route::middleware('module:kpis,edit')->put('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'update'])->name('ad-leads.update');
         Route::middleware('module:kpis,edit')->delete('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'destroy'])->name('ad-leads.destroy');
 

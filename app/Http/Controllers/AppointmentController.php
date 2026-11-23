@@ -962,6 +962,7 @@ class AppointmentController extends Controller
                 $this->autoCloseOpenLeadsForBooking($appointment, $customer, $phone);
             }
 
+            $this->conflictValidator()->syncAppointmentOvertime($appointment);
             $this->syncAdLeadAttributionForAppointment($appointment);
 
             return $appointment;
@@ -992,6 +993,8 @@ class AppointmentController extends Controller
                     'branch_label' => $appointment->branch_label,
                     'staff_id' => $appointment->staff_id,
                     'status' => $appointment->status,
+                    'is_overtime' => (bool) $appointment->is_overtime,
+                    'overtime_minutes' => (int) ($appointment->overtime_minutes ?? 0),
                 ],
             ], 201);
         }
@@ -1816,6 +1819,7 @@ class AppointmentController extends Controller
             }
 
             $appointment->syncFromServices();
+            $this->conflictValidator()->syncAppointmentOvertime($appointment);
 
             if (!in_array($effectiveStatus, ['cancelled', 'no_show'], true)) {
                 $this->freebieService()->syncAnchorExpiryOnReschedule($appointment);
@@ -1837,6 +1841,8 @@ class AppointmentController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Appointment updated successfully.',
+                'is_overtime' => (bool) $appointment->is_overtime,
+                'overtime_minutes' => (int) ($appointment->overtime_minutes ?? 0),
                 'redirect' => $redirectToCheckout
                     ? route('appointments.revenue.payment', $appointment->id)
                     : null,
@@ -2521,6 +2527,8 @@ class AppointmentController extends Controller
                 'combo_name' => $parentComboName,
                 'is_combo_tbd' => $isTbd,
                 'decide_in_salon' => $isDecide,
+                'is_overtime' => (bool) $appointment->is_overtime,
+                'overtime_minutes' => (int) ($appointment->overtime_minutes ?? 0),
             ]];
         }
 
@@ -2545,6 +2553,8 @@ class AppointmentController extends Controller
             'freebie_package_id' => $line->freebie_package_id,
             'is_combo_tbd' => false,
             'decide_in_salon' => false,
+            'is_overtime' => (bool) $line->is_overtime,
+            'overtime_minutes' => (int) ($line->overtime_minutes ?? 0),
         ])->all();
     }
 
@@ -2664,6 +2674,8 @@ class AppointmentController extends Controller
                     'decide_in_salon' => (bool) $a->decide_in_salon,
                     'status' => $a->status,
                     'staff_id' => $a->staff_id,
+                    'is_overtime' => (bool) $a->is_overtime,
+                    'overtime_minutes' => (int) ($a->overtime_minutes ?? 0),
                 ])->values());
 
             return response()->json([
@@ -2725,6 +2737,8 @@ class AppointmentController extends Controller
                     'combo_name' => $slice['combo_name'] ?? $a->display_combo_name,
                     'is_combo_tbd' => $slice['is_combo_tbd'] ?? $a->is_combo_tbd,
                     'decide_in_salon' => $slice['decide_in_salon'] ?? (bool) $a->decide_in_salon,
+                    'is_overtime' => (bool) ($slice['is_overtime'] ?? $a->is_overtime),
+                    'overtime_minutes' => (int) ($slice['overtime_minutes'] ?? $a->overtime_minutes ?? 0),
                 ]));
 
             $appointments = $weekSlices
@@ -2756,6 +2770,8 @@ class AppointmentController extends Controller
                         'booking_total' => (float) $a->price,
                         'has_upsell'    => (bool) $upsell,
                         'upsell_total'  => $upsell['total'] ?? 0,
+                        'is_overtime'   => (bool) $s->is_overtime,
+                        'overtime_minutes' => (int) $s->overtime_minutes,
                     ];
                 })->values()));
 
@@ -2798,8 +2814,10 @@ class AppointmentController extends Controller
         // ---- DAY VIEW ----
         $workingHours = $this->branchWorkingHours($branch, $anchor);
         $uiStart = Carbon::createFromFormat('H:i', $workingHours['start']);
-        $uiEnd   = Carbon::createFromTime(22, 0);
-        $dayEnd  = $anchor->copy()->setTimeFromTimeString($workingHours['end']);
+        [$uiStartH, $uiStartM] = array_map('intval', explode(':', $workingHours['start']));
+        [$branchEndH, $branchEndM] = array_map('intval', explode(':', $workingHours['end']));
+        $uiStartMinutes = $uiStartH * 60 + $uiStartM;
+        $uiEndMinutes = max(22 * 60, $branchEndH * 60 + $branchEndM);
 
         $dayAppointments = $this->filteredAppointmentQuery($request)
             ->whereDate('appointment_datetime', $anchor->toDateString())
@@ -2808,7 +2826,8 @@ class AppointmentController extends Controller
         $upsellSummaries = $this->upsellSummaries($dayAppointments->pluck('id'));
 
         $appointments = [];
-        $dayAppointments->each(function ($a) use (&$appointments, $dayEnd, $upsellSummaries) {
+        $maxRenderedEndMinutes = $uiEndMinutes;
+        $dayAppointments->each(function ($a) use (&$appointments, &$maxRenderedEndMinutes, $upsellSummaries) {
                 $upsell = $upsellSummaries->get($a->id);
 
                 // A combo split across several team members produces one
@@ -2817,9 +2836,12 @@ class AppointmentController extends Controller
                 // whichever staff the appointment itself was booked under.
                 foreach ($this->appointmentStaffSlices($a) as $slice) {
                     $start = $slice['start'];
-                    $end = $start->copy()->addMinutes($slice['duration']);
-                    if ($end->gt($dayEnd)) {
-                        $end = $dayEnd;
+                    $duration = max(1, (int) $slice['duration']);
+                    $end = $start->copy()->addMinutes($duration);
+                    $startMinutes = $start->hour * 60 + $start->minute;
+                    $endMinutes = $startMinutes + $duration;
+                    if ($endMinutes > $maxRenderedEndMinutes) {
+                        $maxRenderedEndMinutes = $endMinutes;
                     }
 
                     $appointments[$slice['staff_id']][] = [
@@ -2827,9 +2849,9 @@ class AppointmentController extends Controller
                         'appointment_service_id' => $slice['appointment_service_id'] ?? null,
                         'start'         => $start->format('H:i'),
                         'end'           => $end->format('H:i'),
-                        'duration'      => $slice['duration'],
-                        'start_minutes' => $start->hour * 60 + $start->minute,
-                        'end_minutes'   => $end->hour * 60 + $end->minute,
+                        'duration'      => $duration,
+                        'start_minutes' => $startMinutes,
+                        'end_minutes'   => $endMinutes,
                         'sort_order'    => $slice['sort_order'] ?? 0,
                         'is_parallel'   => (bool) ($slice['is_parallel'] ?? false),
                         'slice_index'   => $slice['slice_index'] ?? 0,
@@ -2849,15 +2871,19 @@ class AppointmentController extends Controller
                         'has_upsell'    => (bool) $upsell,
                         'upsell_total'  => $upsell['total'] ?? 0,
                         'upsell_staff_names' => $upsell['staff_names'] ?? '',
+                        'is_overtime'   => (bool) ($slice['is_overtime'] ?? $a->is_overtime),
+                        'overtime_minutes' => (int) ($slice['overtime_minutes'] ?? $a->overtime_minutes ?? 0),
                     ];
                 }
             });
 
+        if ($maxRenderedEndMinutes > $uiEndMinutes) {
+            $uiEndMinutes = min(23 * 60 + 30, (int) ceil($maxRenderedEndMinutes / 30) * 30);
+        }
+
         $slots = [];
-        $slot = $uiStart->copy();
-        while ($slot <= $uiEnd) {
-            $slots[] = $slot->format('H:i');
-            $slot->addMinutes(30);
+        for ($m = $uiStartMinutes; $m <= $uiEndMinutes; $m += 30) {
+            $slots[] = sprintf('%02d:%02d', intdiv($m, 60), $m % 60);
         }
 
         $offInfo = [];
@@ -3214,9 +3240,9 @@ class AppointmentController extends Controller
             ->setDate($appointmentTime->year, $appointmentTime->month, $appointmentTime->day);
         $endBranch = Carbon::createFromFormat('H:i', $workingHours['end'])
             ->setDate($appointmentTime->year, $appointmentTime->month, $appointmentTime->day);
-        $appointmentEnd = $appointmentTime->copy()->addMinutes($duration);
 
-        if ($appointmentTime->lt($startBranch) || $appointmentTime->gt($endBranch) || $appointmentEnd->gt($endBranch)) {
+        // Allow overtime spillover past branch close as long as the booking STARTS within branch hours
+        if ($appointmentTime->lt($startBranch) || $appointmentTime->gte($endBranch)) {
             return response()->json([]);
         }
 
@@ -3246,36 +3272,47 @@ class AppointmentController extends Controller
             }
         }
 
+        $validator = $this->conflictValidator();
+
         $staffs = $staffQuery
             ->where(function ($q) use ($branch) {
                 $q->where('branch', $branch)
                     ->orWhere('branch', 'both');
             })
+            ->orderBy('name')
             ->get()
-            ->filter(function ($staff) use ($appointmentTime, $duration, $excludeAppointmentId) {
-                // ❌ Off / Leave / TimeOff / Weekly Off / Scheduled Shift check
-                $offInfo = $this->staffOffInfo($staff, $appointmentTime, $duration, true);
-                if ($offInfo['off']) {
-                    return false;
+            ->map(function ($staff) use ($validator, $appointmentTime, $duration, $branch, $excludeAppointmentId) {
+                // Tier check: allow in_shift (Tier 1) and overtime spillover (Tier 2); exclude off/day-off (Tier 4)
+                $eval = $validator->evaluateShiftWindow($staff, $appointmentTime, $duration, $branch);
+                if ($eval['status'] === 'off') {
+                    return null;
                 }
 
-                // ❌ Time Conflict
+                // Tier 3: exclude overlapping bookings or staff blocks
                 if ($this->staffHasTimeConflict(
                     $staff->id,
                     $appointmentTime,
                     $duration,
                     $excludeAppointmentId
                 )) {
-                    return false;
+                    return null;
                 }
 
-                return true;
+                return [
+                    'id' => $staff->id,
+                    'name' => $staff->name,
+                    'is_overtime' => (bool) $eval['is_overtime'],
+                    'overtime_minutes' => (int) ($eval['overtime_minutes'] ?? 0),
+                    'shift_end' => $eval['shift_end'],
+                ];
             })
-            ->values()
-            ->map(fn($s) => [
-                'id' => $s->id,
-                'name' => $s->name
-            ]);
+            ->filter()
+            ->sortBy([
+                ['is_overtime', 'asc'],
+                ['overtime_minutes', 'asc'],
+                ['name', 'asc'],
+            ])
+            ->values();
 
         return response()->json($staffs);
     }
@@ -3358,6 +3395,7 @@ class AppointmentController extends Controller
             }
 
             $appointment->update(['status' => $request->status]);
+            $this->conflictValidator()->syncAppointmentOvertime($appointment);
 
             if ($request->status === 'completed') {
                 $this->freebieService()->onAppointmentPaidOrCompleted($appointment);
@@ -3799,6 +3837,8 @@ class AppointmentController extends Controller
             'redeemable_freebie_credits' => $redeemableFreebieCredits,
             'freebie_package_id' => $appointment->freebie_package_id,
             'is_freebie_redemption' => (bool) $appointment->is_freebie_redemption,
+            'is_overtime' => (bool) $appointment->is_overtime,
+            'overtime_minutes' => (int) ($appointment->overtime_minutes ?? 0),
             'notes' => $appointment->notes,
             'services' => $serviceLines,
             'pending_services' => $pendingServiceLines,
@@ -4129,6 +4169,7 @@ class AppointmentController extends Controller
                 $appointment->syncFromServices();
             }
 
+            $this->conflictValidator()->syncAppointmentOvertime($appointment);
             $this->freebieService()->syncAnchorExpiryOnReschedule($appointment);
             $this->markAppointmentLeadsAsBooked($appointment);
             $this->syncAdLeadAttributionForAppointment($appointment, $oldStart);
@@ -4341,12 +4382,13 @@ class AppointmentController extends Controller
         ]);
 
         $appointment->syncFromServices();
+        $this->conflictValidator()->syncAppointmentOvertime($appointment);
         $this->syncAdLeadAttributionForAppointment($appointment);
 
         return response()->json([
             'success' => true,
             'message' => 'Service added.',
-            'service' => $this->formatServiceLine($line),
+            'service' => $this->formatServiceLine($line->fresh()),
         ]);
     }
 
@@ -4473,6 +4515,7 @@ class AppointmentController extends Controller
         }
 
         $appointment->syncFromServices();
+        $this->conflictValidator()->syncAppointmentOvertime($appointment);
         $this->syncAdLeadAttributionForAppointment($appointment, $previousDate);
 
         $this->logPriceOverrideIfDiscounted($appointmentService->fresh(), $request->discount_reason);
@@ -4520,6 +4563,7 @@ class AppointmentController extends Controller
         }
 
         $appointment->syncFromServices();
+        $this->conflictValidator()->syncAppointmentOvertime($appointment);
         $this->syncAdLeadAttributionForAppointment($appointment, $previousDate);
 
         return response()->json(['success' => true, 'message' => 'Service removed.']);
@@ -4556,6 +4600,8 @@ class AppointmentController extends Controller
             'is_freebie_redemption' => (bool) $s->is_freebie_redemption,
             'freebie_package_id' => $s->freebie_package_id,
             'freebie_credit_id' => $s->freebie_credit_id,
+            'is_overtime' => (bool) $s->is_overtime,
+            'overtime_minutes' => (int) ($s->overtime_minutes ?? 0),
             'start_time' => $s->start_time ? $s->start_time->format('H:i') : '',
             'end_time' => $endObj ? $endObj->format('H:i') : '',
             'time_range_label' => (!$s->is_pending && $s->start_time && $endObj)
@@ -4701,6 +4747,7 @@ class AppointmentController extends Controller
 
             $this->persistComboPackageSelection($appointment, $syncPlan, $cursor, $standaloneLines->count());
             $appointment->syncFromServices();
+            $this->conflictValidator()->syncAppointmentOvertime($appointment);
             $this->syncAdLeadAttributionForAppointment($appointment, $previousDate);
         });
 
@@ -4819,6 +4866,7 @@ class AppointmentController extends Controller
                 ]);
             }
             $appointment->syncFromServices();
+            $this->conflictValidator()->syncAppointmentOvertime($appointment);
             $this->syncAdLeadAttributionForAppointment($appointment, $previousDate);
         });
 
@@ -4829,6 +4877,8 @@ class AppointmentController extends Controller
             'message' => 'Service schedule updated.',
             'price' => (float) $appointment->price,
             'visit_span_minutes' => $appointment->visit_span_minutes,
+            'is_overtime' => (bool) $appointment->is_overtime,
+            'overtime_minutes' => (int) ($appointment->overtime_minutes ?? 0),
             'combo_packages' => $this->buildAppointmentComboPackagesPayload($appointment),
             'services' => $appointment->appointmentServices->where('is_pending', false)->map(fn ($s) => $this->formatServiceLine($s))->values()->all(),
             'pending_services' => $appointment->appointmentServices->where('is_pending', true)->map(fn ($s) => $this->formatServiceLine($s))->values()->all(),
@@ -5497,6 +5547,7 @@ class AppointmentController extends Controller
             $appointment->decide_in_salon = false;
             $appointment->hold_duration = null;
             $appointment->syncFromServices();
+            $this->conflictValidator()->syncAppointmentOvertime($appointment);
             $this->syncAdLeadAttributionForAppointment($appointment);
         });
 

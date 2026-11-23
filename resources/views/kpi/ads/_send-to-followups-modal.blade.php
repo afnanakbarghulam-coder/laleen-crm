@@ -136,6 +136,7 @@
         let activeEntryId = null;
         let activeSendUrl = null;
         let activeTriggerBtn = null;
+        let activeOnSuccess = null;
         let isSubmitting = false;
 
         function setSubmitting(loading) {
@@ -157,17 +158,31 @@
             errorEl.classList.add('d-none');
         }
 
-        window.openSendToFollowUpsModal = function (triggerBtn) {
+        window.openSendToFollowUpsModal = function (triggerOrOptions) {
             let entry = {};
-            try {
-                entry = JSON.parse(triggerBtn.dataset.entry || '{}');
-            } catch (e) {
-                entry = {};
+            const isDomElement = triggerOrOptions && typeof triggerOrOptions === 'object' && triggerOrOptions.nodeType === 1;
+
+            if (isDomElement) {
+                try {
+                    entry = JSON.parse(triggerOrOptions.dataset.entry || '{}');
+                } catch (e) {
+                    entry = {};
+                }
+                activeSendUrl = triggerOrOptions.dataset.sendUrl || '';
+                activeTriggerBtn = triggerOrOptions;
+                activeOnSuccess = null;
+            } else if (triggerOrOptions && typeof triggerOrOptions === 'object') {
+                entry = triggerOrOptions.entry || {};
+                activeSendUrl = triggerOrOptions.sendUrl || '';
+                activeTriggerBtn = null;
+                activeOnSuccess = typeof triggerOrOptions.onSuccess === 'function' ? triggerOrOptions.onSuccess : null;
+            } else {
+                activeSendUrl = '';
+                activeTriggerBtn = null;
+                activeOnSuccess = null;
             }
 
             activeEntryId = entry.id || null;
-            activeSendUrl = triggerBtn.dataset.sendUrl || '';
-            activeTriggerBtn = triggerBtn;
 
             formEl.action = activeSendUrl;
             clearError();
@@ -303,6 +318,12 @@
                 // 5. Close modal cleanly
                 const modalInstance = bootstrap.Modal.getInstance(modalEl);
                 if (modalInstance) modalInstance.hide();
+
+                if (typeof activeOnSuccess === 'function') {
+                    activeOnSuccess(data);
+                }
+
+                window.dispatchEvent(new CustomEvent('ad-lead-sent-to-followups', { detail: data }));
             })
             .catch(function (err) {
                 showError(err && err.message ? err.message : 'Network error while pushing to Follow-Ups.');

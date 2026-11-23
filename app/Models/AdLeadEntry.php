@@ -997,4 +997,69 @@ class AdLeadEntry extends Model
 
         return array_values(array_unique(array_filter(array_map('trim', $categories))));
     }
+
+    /**
+     * Shared case-insensitive customer name + normalized digits-only phone search scope
+     * used identically by Ad Leads Log table filtering and live typeahead suggestions.
+     */
+    public function scopeSearchContact($query, string $term)
+    {
+        $clean = trim($term);
+        if ($clean === '') {
+            return $query;
+        }
+
+        $lowerSearch = mb_strtolower($clean);
+        $likeSearch = '%' . $lowerSearch . '%';
+
+        $rawDigits = preg_replace('/\D+/', '', $clean);
+        $digitNeedles = [];
+        if ($rawDigits !== '') {
+            $digitNeedles[] = $rawDigits;
+
+            $withoutLeadingZeros = ltrim($rawDigits, '0');
+            if ($withoutLeadingZeros !== '' && $withoutLeadingZeros !== $rawDigits) {
+                $digitNeedles[] = $withoutLeadingZeros;
+            }
+
+            foreach ([$rawDigits, $withoutLeadingZeros] as $candidate) {
+                if ($candidate !== '' && str_starts_with($candidate, '974') && strlen($candidate) > 3) {
+                    $localPart = ltrim(substr($candidate, 3), '0');
+                    if ($localPart !== '') {
+                        $digitNeedles[] = $localPart;
+                    }
+                }
+            }
+
+            if (strlen($rawDigits) === 8) {
+                $digitNeedles[] = '974' . $rawDigits;
+            }
+
+            $digitNeedles = array_values(array_unique(array_filter($digitNeedles, fn ($d) => $d !== '')));
+        }
+
+        $hasCustomerId = Schema::hasColumn('ad_lead_entries', 'customer_id');
+        $cleanAdPhoneSql = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone, ''), ' ', ''), '+', ''), '-', ''), '(', ''), ')', ''), '.', '')";
+        $cleanCustomerPhoneSql = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(customers.phone, ''), ' ', ''), '+', ''), '-', ''), '(', ''), ')', ''), '.', '')";
+
+        return $query->where(function ($q) use ($likeSearch, $digitNeedles, $cleanAdPhoneSql, $cleanCustomerPhoneSql, $hasCustomerId) {
+            $q->whereRaw("LOWER(COALESCE(customer_name, '')) LIKE ?", [$likeSearch])
+                ->orWhereRaw("LOWER(COALESCE(phone, '')) LIKE ?", [$likeSearch]);
+
+            foreach ($digitNeedles as $needle) {
+                $q->orWhereRaw("{$cleanAdPhoneSql} LIKE ?", ['%' . $needle . '%']);
+            }
+
+            if ($hasCustomerId) {
+                $q->orWhereHas('customer', function ($cq) use ($likeSearch, $digitNeedles, $cleanCustomerPhoneSql) {
+                    $cq->whereRaw("LOWER(COALESCE(customers.name, '')) LIKE ?", [$likeSearch])
+                        ->orWhereRaw("LOWER(COALESCE(customers.phone, '')) LIKE ?", [$likeSearch]);
+
+                    foreach ($digitNeedles as $needle) {
+                        $cq->orWhereRaw("{$cleanCustomerPhoneSql} LIKE ?", ['%' . $needle . '%']);
+                    }
+                });
+            }
+        });
+    }
 }

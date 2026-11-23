@@ -1095,6 +1095,7 @@
                         <select id="bookStaffSelect" name="staff_id" class="form-select form-select-sm">
                             <option value="">-- Select Staff (Unassigned) --</option>
                         </select>
+                        <div id="bookStaffOvertimeAlert"></div>
                         <small id="bookStaffHelp" class="d-none" style="color: #d99b93; font-size: 0.75rem;">
                             No eligible staff free for this slot &mdash; pick another time/stylist or leave unassigned.
                         </small>
@@ -1405,7 +1406,40 @@
             fbDismissBtn.addEventListener('click', fbClearBookingError);
         }
 
-        function fbPopulateBranchStaffOptions(branchKey, preferredId, availableIdsSet) {
+        let fbLatestAvailableStaffMeta = new Map();
+
+        function fbUpdateBookStaffOvertimeAlert() {
+            const alertBox = document.getElementById('bookStaffOvertimeAlert');
+            const staffSelect = document.getElementById('bookStaffSelect');
+            if (!alertBox || !staffSelect) return;
+
+            const sid = String(staffSelect.value || '');
+            const meta = sid ? fbLatestAvailableStaffMeta.get(sid) : null;
+            if (!meta || !meta.is_overtime || !meta.shift_end) {
+                alertBox.innerHTML = '';
+                staffSelect.classList.remove('is-overtime');
+                return;
+            }
+
+            const startVal = document.getElementById('bookTimeInput')?.value || '';
+            const startMin = window.LaleenSliceEngine ? window.LaleenSliceEngine.parseHHMM(startVal) : null;
+            const totalDur = (typeof fbComputeUnifiedTimeline === 'function' ? fbComputeUnifiedTimeline().timeline.spanMinutes : 0) || 60;
+            const endLabel = (startMin !== null && window.LaleenSliceEngine)
+                ? window.LaleenSliceEngine.formatHHMM(startMin + totalDur)
+                : '';
+            const deltaLabel = window.LaleenSliceEngine
+                ? window.LaleenSliceEngine.formatOvertimeDelta(meta.overtime_minutes)
+                : `+${meta.overtime_minutes}m`;
+            const staffName = meta.name || 'Specialist';
+            const message = `Overtime booking: runs until ${endLabel || meta.shift_end} (${deltaLabel} past ${staffName}'s shift end at ${meta.shift_end}). Confirm overtime with specialist.`;
+
+            staffSelect.classList.add('is-overtime');
+            alertBox.innerHTML = window.LaleenSliceEngine
+                ? window.LaleenSliceEngine.renderOvertimeAlert({ overtimeAlert: { message } })
+                : `<div class="laleen-ot-alert" role="alert"><i class="bx bx-time-five"></i><span>${fbEscHtml(message)}</span></div>`;
+        }
+
+        function fbPopulateBranchStaffOptions(branchKey, preferredId, availableMetaMap) {
             const staffSelect = document.getElementById('bookStaffSelect');
             if (!staffSelect) return;
             const normBranch = fbNormalizeBranch(branchKey) || 'old_airport';
@@ -1413,24 +1447,53 @@
 
             staffSelect.innerHTML = '<option value="">-- Select Staff (Unassigned) --</option>';
 
-            const availableList = availableIdsSet
-                ? branchStaff.filter(s => availableIdsSet.has(String(s.id)))
-                : branchStaff;
-            const unavailableList = availableIdsSet
-                ? branchStaff.filter(s => !availableIdsSet.has(String(s.id)))
-                : [];
+            const hasAvailFilter = availableMetaMap instanceof Map;
+            fbLatestAvailableStaffMeta = hasAvailFilter ? availableMetaMap : new Map();
 
-            availableList.forEach(s => {
-                staffSelect.insertAdjacentHTML('beforeend', `<option value="${s.id}">${s.name}</option>`);
-            });
-            unavailableList.forEach(s => {
-                staffSelect.insertAdjacentHTML('beforeend', `<option value="${s.id}">${s.name} · Unavailable</option>`);
-            });
+            if (hasAvailFilter) {
+                const inShiftList = [];
+                const overtimeList = [];
+                const unavailableList = [];
+
+                branchStaff.forEach(s => {
+                    const entry = availableMetaMap.get(String(s.id));
+                    if (!entry) {
+                        unavailableList.push(s);
+                    } else if (entry.is_overtime) {
+                        overtimeList.push({ staff: s, entry });
+                    } else {
+                        inShiftList.push({ staff: s, entry });
+                    }
+                });
+
+                overtimeList.sort((a, b) => (a.entry.overtime_minutes - b.entry.overtime_minutes) || String(a.staff.name).localeCompare(String(b.staff.name)));
+
+                inShiftList.forEach(({ staff }) => {
+                    staffSelect.insertAdjacentHTML('beforeend', `<option value="${staff.id}">${fbEscHtml(staff.name)}</option>`);
+                });
+                overtimeList.forEach(({ staff, entry }) => {
+                    const deltaLabel = window.LaleenSliceEngine
+                        ? window.LaleenSliceEngine.formatOvertimeDelta(entry.overtime_minutes)
+                        : `+${entry.overtime_minutes}m`;
+                    const suffix = entry.shift_end ? ` (OT ${deltaLabel} · shift ends ${entry.shift_end})` : ` (OT ${deltaLabel})`;
+                    staffSelect.insertAdjacentHTML('beforeend', `<option value="${staff.id}">${fbEscHtml(staff.name + suffix)}</option>`);
+                });
+                unavailableList.forEach(s => {
+                    const isPreferred = preferredId && String(s.id) === String(preferredId);
+                    staffSelect.insertAdjacentHTML('beforeend', `<option value="${s.id}" ${isPreferred ? '' : 'disabled'}>${fbEscHtml(s.name)} (Unavailable)</option>`);
+                });
+            } else {
+                branchStaff.forEach(s => {
+                    staffSelect.insertAdjacentHTML('beforeend', `<option value="${s.id}">${fbEscHtml(s.name)}</option>`);
+                });
+            }
+
             staffSelect.disabled = false;
 
             if (preferredId && [...staffSelect.options].some(o => String(o.value) === String(preferredId))) {
                 staffSelect.value = String(preferredId);
             }
+            fbUpdateBookStaffOvertimeAlert();
         }
 
         let selectedServices = [];
@@ -1796,7 +1859,11 @@
             fbClearBookingError();
             fbClearAgentError();
 
+            fbLatestAvailableStaffMeta = new Map();
             document.getElementById('bookStaffSelect').innerHTML = '<option value="">-- Select Staff (Unassigned) --</option>';
+            document.getElementById('bookStaffSelect').classList.remove('is-overtime');
+            const otAlertEl = document.getElementById('bookStaffOvertimeAlert');
+            if (otAlertEl) otAlertEl.innerHTML = '';
             document.getElementById('bookStaffHelp').classList.add('d-none');
             const bookAgentEl = document.getElementById('bookAgent');
             if (bookAgentEl) {
@@ -2005,6 +2072,7 @@
         document.getElementById('bookStaffSelect').addEventListener('change', function() {
             fbClearBookingError();
             pendingStaffId = this.value || null;
+            fbUpdateBookStaffOvertimeAlert();
         });
 
         const bookAgentSelectEl = document.getElementById('bookAgent');
@@ -2469,10 +2537,11 @@
                     </div>
                     <div class="d-flex align-items-center justify-content-end gap-2 pt-1">
                         ${parallelBtn}
-                        <select class="form-select form-select-sm laleen-specialist-pill fb-redeem-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-token="${fbEscHtml(r.id)}">
+                        <select class="form-select form-select-sm laleen-specialist-pill fb-redeem-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.isOvertime ? 'is-overtime' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-token="${fbEscHtml(r.id)}">
                             ${meta.html}
                         </select>
                     </div>
+                    ${window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(meta) : ''}
                 </div>
             `;
             }).join('');
@@ -2764,10 +2833,11 @@
                     </div>
                     <div class="d-flex align-items-center justify-content-end gap-2 pt-1">
                         ${parallelBtn}
-                        <select class="form-select form-select-sm laleen-specialist-pill fb-svc-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-idx="${i}">
+                        <select class="form-select form-select-sm laleen-specialist-pill fb-svc-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.isOvertime ? 'is-overtime' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-idx="${i}">
                             ${meta.html}
                         </select>
                     </div>
+                    ${window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(meta) : ''}
                     ${discount > 0 ? `
                     <div class="fb-discount-row">
                         <span class="fb-discount-badge">−${discount.toFixed(2)} QAR off ${s.original_price.toFixed(2)}</span>
@@ -3083,25 +3153,30 @@
                         ${sl.is_parallel ? '⇉ Same time' : 'Same time'}
                     </button>` : '';
 
+                const otAlertHtml = window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(meta) : '';
+
                 return `
-                    <div class="laleen-slice-row" onclick="event.stopPropagation()">
-                        <div class="laleen-slice-left">
-                            ${reorderBtns}
-                            <div class="laleen-slice-title-wrap">
-                                <span class="laleen-slice-title">${fbEscHtml(cs.name)}</span>
-                                <span class="laleen-slice-sub">
-                                    <span class="laleen-time-pill">${fbEscHtml(sl ? sl.timeBadge : `${cs.duration}m`)}</span>
-                                    ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
-                                </span>
+                    <div class="laleen-slice-row flex-column align-items-stretch" onclick="event.stopPropagation()">
+                        <div class="d-flex align-items-center justify-content-between gap-2">
+                            <div class="laleen-slice-left">
+                                ${reorderBtns}
+                                <div class="laleen-slice-title-wrap">
+                                    <span class="laleen-slice-title">${fbEscHtml(cs.name)}</span>
+                                    <span class="laleen-slice-sub">
+                                        <span class="laleen-time-pill">${fbEscHtml(sl ? sl.timeBadge : `${cs.duration}m`)}</span>
+                                        ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="laleen-slice-right">
+                                ${parallelBtn}
+                                <select class="form-select form-select-sm laleen-specialist-pill fb-combo-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.isOvertime ? 'is-overtime' : ''} ${meta.hasConflict ? 'is-conflict' : ''}"
+                                    data-row="${row.id}" data-svc="${sid}">
+                                    ${meta.html}
+                                </select>
                             </div>
                         </div>
-                        <div class="laleen-slice-right">
-                            ${parallelBtn}
-                            <select class="form-select form-select-sm laleen-specialist-pill fb-combo-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}"
-                                data-row="${row.id}" data-svc="${sid}">
-                                ${meta.html}
-                            </select>
-                        </div>
+                        ${otAlertHtml}
                     </div>`;
             }).join('');
 
@@ -3381,6 +3456,7 @@
                 let reorderHtml = '';
                 let timeHtml = `<div class="fb-combo-svc-meta">${s.duration} min</div>`;
                 let staffAndParallelHtml = '';
+                let draftOtAlertHtml = '';
 
                 if (isToday) {
                     const sl = sliceBySvcId.get(sid);
@@ -3416,34 +3492,38 @@
                     staffAndParallelHtml = `
                         <div class="d-flex align-items-center gap-2 mt-1 flex-wrap justify-content-end">
                             ${parallelHtml}
-                            <select class="form-select form-select-sm laleen-specialist-pill fb-combo-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-draft-svc="${sid}">
+                            <select class="form-select form-select-sm laleen-specialist-pill fb-combo-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.isOvertime ? 'is-overtime' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-draft-svc="${sid}">
                                 ${meta.html}
                             </select>
                         </div>`;
+                    draftOtAlertHtml = window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(meta) : '';
                 }
 
                 return `
-                    <div class="fb-combo-svc-row ${isRowDimmed ? 'is-dimmed' : ''}" data-svc-id="${sid}">
-                        <div class="d-flex align-items-center gap-1 min-w-0">
-                            ${reorderHtml}
-                            <div class="min-w-0">
-                                <div class="fb-combo-svc-title">${fbEscHtml(s.name)}</div>
-                                ${timeHtml}
+                    <div class="fb-combo-svc-row flex-column align-items-stretch ${isRowDimmed ? 'is-dimmed' : ''}" data-svc-id="${sid}">
+                        <div class="d-flex align-items-center justify-content-between gap-2">
+                            <div class="d-flex align-items-center gap-1 min-w-0">
+                                ${reorderHtml}
+                                <div class="min-w-0">
+                                    <div class="fb-combo-svc-title">${fbEscHtml(s.name)}</div>
+                                    ${timeHtml}
+                                </div>
+                            </div>
+                            <div class="d-flex flex-column align-items-end ms-auto">
+                                <div class="fb-combo-mode-group">
+                                    <button type="button"
+                                        class="fb-combo-mode-btn fb-draft-today-btn ${isToday ? 'is-today' : ''}"
+                                        data-svc="${sid}"
+                                        ${disablePills ? 'disabled' : ''}>Today</button>
+                                    <button type="button"
+                                        class="fb-combo-mode-btn fb-draft-pending-btn ${isPending ? 'is-pending' : ''}"
+                                        data-svc="${sid}"
+                                        ${disablePills ? 'disabled' : ''}>Pending</button>
+                                </div>
+                                ${staffAndParallelHtml}
                             </div>
                         </div>
-                        <div class="d-flex flex-column align-items-end ms-auto">
-                            <div class="fb-combo-mode-group">
-                                <button type="button"
-                                    class="fb-combo-mode-btn fb-draft-today-btn ${isToday ? 'is-today' : ''}"
-                                    data-svc="${sid}"
-                                    ${disablePills ? 'disabled' : ''}>Today</button>
-                                <button type="button"
-                                    class="fb-combo-mode-btn fb-draft-pending-btn ${isPending ? 'is-pending' : ''}"
-                                    data-svc="${sid}"
-                                    ${disablePills ? 'disabled' : ''}>Pending</button>
-                            </div>
-                            ${staffAndParallelHtml}
-                        </div>
+                        ${draftOtAlertHtml}
                     </div>`;
             }).join('');
 
@@ -3773,12 +3853,13 @@
                                 </span>
                                 <div class="d-flex align-items-center gap-2 ms-auto">
                                     ${parallelBtn}
-                                    <select class="form-select form-select-sm laleen-specialist-pill fb-freebie-slot-staff ${slMeta.needsSelection ? 'is-needs-specialist' : ''} ${slMeta.hasConflict ? 'is-conflict' : ''}"
+                                    <select class="form-select form-select-sm laleen-specialist-pill fb-freebie-slot-staff ${slMeta.needsSelection ? 'is-needs-specialist' : ''} ${slMeta.isOvertime ? 'is-overtime' : ''} ${slMeta.hasConflict ? 'is-conflict' : ''}"
                                         data-row="${fpRow.rowId}" data-slot="${slotObj.slotNumber}">
                                         ${slMeta.html}
                                     </select>
                                 </div>
-                            </div>`;
+                            </div>
+                            ${window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(slMeta) : ''}`;
                     }
 
                     return `
@@ -3794,6 +3875,8 @@
                         </div>`;
                 }).join('');
 
+                const anchorOtAlertHtml = window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(anchorMeta) : '';
+
                 return `
                     <div class="fb-svc-row fb-combo-card" data-freebie-row="${fpRow.rowId}">
                         <div class="fb-svc-row-main">
@@ -3806,21 +3889,24 @@
                                 <button type="button" class="remove-btn fb-freebie-remove-btn" data-row="${fpRow.rowId}" title="Remove package"><i class="bx bx-x"></i></button>
                             </div>
                         </div>
-                        <div class="laleen-slice-row mt-1">
-                            <div class="laleen-slice-left">
-                                <div class="laleen-slice-title-wrap">
-                                    <span class="laleen-slice-title">Anchor: ${fbEscHtml(pkg.anchor_service_name)}</span>
-                                    <span class="laleen-slice-sub">
-                                        <span class="laleen-time-pill">${fbEscHtml(anchorSl ? anchorSl.timeBadge : `${pkg.anchor_duration}m`)}</span>
-                                    </span>
+                        <div class="laleen-slice-row flex-column align-items-stretch mt-1">
+                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                <div class="laleen-slice-left">
+                                    <div class="laleen-slice-title-wrap">
+                                        <span class="laleen-slice-title">Anchor: ${fbEscHtml(pkg.anchor_service_name)}</span>
+                                        <span class="laleen-slice-sub">
+                                            <span class="laleen-time-pill">${fbEscHtml(anchorSl ? anchorSl.timeBadge : `${pkg.anchor_duration}m`)}</span>
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="laleen-slice-right">
+                                    <select class="form-select form-select-sm laleen-specialist-pill fb-freebie-anchor-staff ${anchorMeta.needsSelection ? 'is-needs-specialist' : ''} ${anchorMeta.isOvertime ? 'is-overtime' : ''} ${anchorMeta.hasConflict ? 'is-conflict' : ''}"
+                                        data-row="${fpRow.rowId}">
+                                        ${anchorMeta.html}
+                                    </select>
                                 </div>
                             </div>
-                            <div class="laleen-slice-right">
-                                <select class="form-select form-select-sm laleen-specialist-pill fb-freebie-anchor-staff ${anchorMeta.needsSelection ? 'is-needs-specialist' : ''} ${anchorMeta.hasConflict ? 'is-conflict' : ''}"
-                                    data-row="${fpRow.rowId}">
-                                    ${anchorMeta.html}
-                                </select>
-                            </div>
+                            ${anchorOtAlertHtml}
                         </div>
                         ${slotsHtml}
                     </div>`;
@@ -3977,10 +4063,11 @@
                             <select class="form-select form-select-sm fb-freebie-slot-select fb-freebie-redeem-svc flex-grow-1" data-idx="${idx}">
                                 ${optionsHtml}
                             </select>
-                            <select class="form-select form-select-sm laleen-specialist-pill fb-freebie-redeem-staff ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-idx="${idx}">
+                            <select class="form-select form-select-sm laleen-specialist-pill fb-freebie-redeem-staff ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.isOvertime ? 'is-overtime' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-idx="${idx}">
                                 ${meta.html}
                             </select>
                         </div>
+                        ${window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(meta) : ''}
                     </div>`;
             }).join('');
 
@@ -4135,9 +4222,9 @@
                 .then(data => {
                     if (requestId !== staffRequestSeq) return;
                     const list = Array.isArray(data) ? data : [];
-                    const availSet = new Set(list.map(s => String(s.id)));
+                    const availMetaMap = new Map(list.map(s => [String(s.id), s]));
 
-                    fbPopulateBranchStaffOptions(branch, pendingStaffId || desiredStaffId, availSet);
+                    fbPopulateBranchStaffOptions(branch, pendingStaffId || desiredStaffId, availMetaMap);
 
                     if (!list.length) {
                         staffHelp.classList.remove('d-none');

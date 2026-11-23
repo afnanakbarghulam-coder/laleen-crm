@@ -67,8 +67,13 @@ class BookingConflictValidator
      * - kind: null | 'full_day' | 'shift_hours'
      * - reason: ?string (display label for calendar UI, e.g. 'On Leave', 'Sick', 'Weekly Off')
      */
-    public function staffOffInfo(Staff $staff, Carbon $date, ?int $duration = null, bool $enforceShiftHours = false): array
-    {
+    public function staffOffInfo(
+        Staff $staff,
+        Carbon $date,
+        ?int $duration = null,
+        bool $enforceShiftHours = false,
+        bool $allowOvertimeSpillover = true
+    ): array {
         $rawAvail = strtolower(trim((string) ($staff->availability_status ?? 'present')));
 
         if ($rawAvail === 'sick') {
@@ -141,9 +146,17 @@ class BookingConflictValidator
             if ($enforceShiftHours) {
                 $reqStart = $date->copy();
                 $reqEnd = $date->copy()->addMinutes(max((int) ($duration ?? 30), 1));
-                $fitsBlock = $dayBlocks->contains(function ($block) use ($dateStr, $reqStart, $reqEnd) {
+                $fitsBlock = $dayBlocks->contains(function ($block) use ($dateStr, $reqStart, $reqEnd, $allowOvertimeSpillover) {
                     $bStart = Carbon::parse($dateStr . ' ' . $block->start_time);
                     $bEnd = Carbon::parse($dateStr . ' ' . $block->end_time);
+                    if ($bEnd->lte($bStart)) {
+                        $bEnd->addDay();
+                    }
+
+                    if ($allowOvertimeSpillover) {
+                        return $reqStart->gte($bStart) && $reqStart->lt($bEnd);
+                    }
+
                     return $reqStart->gte($bStart) && $reqEnd->lte($bEnd);
                 });
 
@@ -159,12 +172,207 @@ class BookingConflictValidator
             if ($wEnd->lte($wStart)) {
                 $wEnd->addDay();
             }
-            if ($reqStart->lt($wStart) || $reqEnd->gt($wEnd)) {
+            $outside = $allowOvertimeSpillover
+                ? ($reqStart->lt($wStart) || $reqStart->gte($wEnd))
+                : ($reqStart->lt($wStart) || $reqEnd->gt($wEnd));
+            if ($outside) {
                 return ['off' => true, 'kind' => 'shift_hours', 'reason' => 'Outside working hours'];
             }
         }
 
         return ['off' => false, 'kind' => null, 'reason' => null];
+    }
+
+    /**
+     * Evaluate a specialist's shift window for [$apptStart, $apptStart + $duration] using full Carbon datetimes
+     * (safely handling late-running or midnight-crossing services).
+     *
+     * Returns:
+     * - status: 'in_shift' | 'overtime' | 'off'
+     * - kind: null | 'full_day' | 'shift_hours'
+     * - reason: ?string
+     * - is_overtime: bool
+     * - overtime_minutes: int
+     * - shift_end: ?string (HH:MM)
+     * - shift_end_at: ?Carbon
+     */
+    public function evaluateShiftWindow(Staff $staff, Carbon $apptStart, int $duration, string $branch): array
+    {
+        $fullDayOff = $this->staffOffInfo($staff, $apptStart, $duration, false);
+        if ($fullDayOff['off']) {
+            return [
+                'status' => 'off',
+                'kind' => $fullDayOff['kind'] ?? 'full_day',
+                'reason' => $fullDayOff['reason'] ?? 'Day Off',
+                'is_overtime' => false,
+                'overtime_minutes' => 0,
+                'shift_end' => null,
+                'shift_end_at' => null,
+            ];
+        }
+
+        $apptEnd = $apptStart->copy()->addMinutes(max($duration, 1));
+        $windows = $this->staffShiftWindowsForDate($staff, $apptStart);
+
+        if (is_array($windows)) {
+            if (empty($windows)) {
+                return [
+                    'status' => 'off',
+                    'kind' => 'full_day',
+                    'reason' => 'Off Shift',
+                    'is_overtime' => false,
+                    'overtime_minutes' => 0,
+                    'shift_end' => null,
+                    'shift_end_at' => null,
+                ];
+            }
+            $effectiveWindows = $windows;
+        } else {
+            // Staff has no custom pattern / working_hours -> falls back to branch shift hours
+            $branchHours = $this->branchWorkingHours($branch, $apptStart);
+            [$bsh, $bsm] = array_map('intval', explode(':', $branchHours['start']));
+            [$beh, $bem] = array_map('intval', explode(':', $branchHours['end']));
+            $endMins = $beh * 60 + $bem;
+            if ($endMins <= ($bsh * 60 + $bsm)) {
+                $endMins += 1440;
+            }
+            $effectiveWindows = [[
+                'start' => $branchHours['start'],
+                'end' => $branchHours['end'],
+                'start_minutes' => $bsh * 60 + $bsm,
+                'end_minutes' => $endMins,
+            ]];
+        }
+
+        $dayStart = $apptStart->copy()->startOfDay();
+        $bestOvertime = null;
+
+        foreach ($effectiveWindows as $w) {
+            $wStart = $dayStart->copy()->addMinutes((int) $w['start_minutes']);
+            $wEnd = $dayStart->copy()->addMinutes((int) $w['end_minutes']);
+            if ($wEnd->lte($wStart)) {
+                $wEnd->addDay();
+            }
+
+            // Tier 1: Strictly In Shift (shift_start <= appt_start AND appt_end <= shift_end)
+            if ($apptStart->gte($wStart) && $apptEnd->lte($wEnd)) {
+                return [
+                    'status' => 'in_shift',
+                    'kind' => null,
+                    'reason' => null,
+                    'is_overtime' => false,
+                    'overtime_minutes' => 0,
+                    'shift_end' => $w['end'],
+                    'shift_end_at' => $wEnd,
+                ];
+            }
+
+            // Tier 2: Overtime Spillover (shift_start <= appt_start < shift_end AND appt_end > shift_end)
+            if ($apptStart->gte($wStart) && $apptStart->lt($wEnd) && $apptEnd->gt($wEnd)) {
+                $otMinutes = max(1, (int) round($wEnd->diffInMinutes($apptEnd)));
+                if ($bestOvertime === null || $otMinutes < $bestOvertime['overtime_minutes']) {
+                    $bestOvertime = [
+                        'status' => 'overtime',
+                        'kind' => null,
+                        'reason' => null,
+                        'is_overtime' => true,
+                        'overtime_minutes' => $otMinutes,
+                        'shift_end' => $w['end'],
+                        'shift_end_at' => $wEnd,
+                    ];
+                }
+            }
+        }
+
+        if ($bestOvertime !== null) {
+            return $bestOvertime;
+        }
+
+        return [
+            'status' => 'off',
+            'kind' => 'shift_hours',
+            'reason' => 'Outside scheduled shift',
+            'is_overtime' => false,
+            'overtime_minutes' => 0,
+            'shift_end' => null,
+            'shift_end_at' => null,
+        ];
+    }
+
+    /**
+     * Recompute and persist `is_overtime` and `overtime_minutes` across an Appointment
+     * and every active AppointmentService line item. Automatically clears overtime flags
+     * when rescheduled/edited back inside normal shift hours or when unscheduled/cancelled.
+     */
+    public function syncAppointmentOvertime(Appointment $appointment): void
+    {
+        if (
+            ! \Illuminate\Support\Facades\Schema::hasColumn('appointments', 'is_overtime')
+            || ! \Illuminate\Support\Facades\Schema::hasColumn('appointment_services', 'is_overtime')
+        ) {
+            return;
+        }
+
+        $appointment->load([
+            'staff.shiftPatterns.blocks',
+            'staff.timeOffs',
+            'appointmentServices.staff.shiftPatterns.blocks',
+            'appointmentServices.staff.timeOffs',
+        ]);
+
+        $isInactiveOrUnscheduled = $appointment->start_time === null
+            || in_array(strtolower((string) $appointment->status), ['cancelled', 'no_show'], true);
+
+        $branch = (string) ($appointment->branch ?: 'old_airport');
+        $activeLines = $appointment->appointmentServices->where('is_pending', false);
+        $maxOvertimeMinutes = 0;
+
+        foreach ($appointment->appointmentServices as $line) {
+            $lineIsOt = false;
+            $lineOtMins = 0;
+
+            if (! $isInactiveOrUnscheduled && ! $line->is_pending) {
+                $lineStaff = $line->staff ?: $appointment->staff;
+                $lineStart = $line->start_time
+                    ? Carbon::parse($line->start_time)
+                    : ($appointment->appointment_datetime ? Carbon::parse($appointment->appointment_datetime) : null);
+                $lineDuration = max(1, (int) ($line->duration ?: 30));
+
+                if ($lineStaff && $lineStart) {
+                    $eval = $this->evaluateShiftWindow($lineStaff, $lineStart, $lineDuration, $branch);
+                    if ($eval['status'] === 'overtime') {
+                        $lineIsOt = true;
+                        $lineOtMins = (int) $eval['overtime_minutes'];
+                        $maxOvertimeMinutes = max($maxOvertimeMinutes, $lineOtMins);
+                    }
+                }
+            }
+
+            if ((bool) $line->is_overtime !== $lineIsOt || (int) $line->overtime_minutes !== $lineOtMins) {
+                $line->forceFill([
+                    'is_overtime' => $lineIsOt,
+                    'overtime_minutes' => $lineOtMins,
+                ])->saveQuietly();
+            }
+        }
+
+        // Bare holds with 0 active appointment_services lines (e.g. Decide in Salon / Combo TBD)
+        if (! $isInactiveOrUnscheduled && $activeLines->isEmpty() && $appointment->staff && $appointment->appointment_datetime) {
+            $holdStart = Carbon::parse($appointment->appointment_datetime);
+            $holdDuration = (int) ($appointment->hold_duration ?: 60);
+            $eval = $this->evaluateShiftWindow($appointment->staff, $holdStart, $holdDuration, $branch);
+            if ($eval['status'] === 'overtime') {
+                $maxOvertimeMinutes = max($maxOvertimeMinutes, (int) $eval['overtime_minutes']);
+            }
+        }
+
+        $apptIsOt = $maxOvertimeMinutes > 0;
+        if ((bool) $appointment->is_overtime !== $apptIsOt || (int) $appointment->overtime_minutes !== $maxOvertimeMinutes) {
+            $appointment->forceFill([
+                'is_overtime' => $apptIsOt,
+                'overtime_minutes' => $maxOvertimeMinutes,
+            ])->saveQuietly();
+        }
     }
 
     /**
@@ -222,12 +430,16 @@ class BookingConflictValidator
                 $e = substr((string) $b->end_time, 0, 5);
                 [$sh, $sm] = array_map('intval', explode(':', $s));
                 [$eh, $em] = array_map('intval', explode(':', $e));
+                $endMins = $eh * 60 + $em;
+                if ($endMins <= ($sh * 60 + $sm)) {
+                    $endMins += 1440;
+                }
 
                 return [
                     'start' => $s,
                     'end' => $e,
                     'start_minutes' => $sh * 60 + $sm,
-                    'end_minutes' => $eh * 60 + $em,
+                    'end_minutes' => $endMins,
                 ];
             })->all();
         }
@@ -447,14 +659,15 @@ class BookingConflictValidator
         ?int $ignoreAppointmentServiceId = null
     ): ?array {
         $newEnd = $newStart->copy()->addMinutes(max($newDuration, 1));
-        $dateStr = $newStart->toDateString();
+        $windowStart = $newStart->copy()->subDay()->startOfDay();
+        $windowEnd = $newEnd->copy()->endOfDay();
 
-        // 1. Active per-service lines (appointment_services)
+        // 1. Active per-service lines (appointment_services) across surrounding days (handles midnight spillover)
         $lineQuery = AppointmentService::query()
             ->where('staff_id', $staffId)
             ->where('is_pending', false)
             ->whereNotNull('start_time')
-            ->whereDate('start_time', $dateStr)
+            ->whereBetween('start_time', [$windowStart, $windowEnd])
             ->whereHas('appointment', function ($q) {
                 $q->whereNotIn('status', ['cancelled', 'no_show'])
                     ->whereNotNull('start_time');
@@ -487,7 +700,7 @@ class BookingConflictValidator
         $apptQuery = Appointment::where('staff_id', $staffId)
             ->whereNotIn('status', ['cancelled', 'no_show'])
             ->whereNotNull('start_time')
-            ->whereDate('appointment_datetime', $dateStr)
+            ->whereBetween('appointment_datetime', [$windowStart, $windowEnd])
             ->whereDoesntHave('appointmentServices', fn ($q) => $q->where('is_pending', false))
             ->with(['combo', 'clientPackages'])
             ->orderBy('appointment_datetime');
@@ -605,12 +818,13 @@ class BookingConflictValidator
                 $endBranch = Carbon::createFromFormat('H:i', $workingHours['end'])
                     ->setDate($sliceStart->year, $sliceStart->month, $sliceStart->day);
 
-                if ($sliceStart->lt($startBranch) || $sliceStart->gt($endBranch) || $sliceEnd->gt($endBranch)) {
+                // Allow overtime spillover past branch close as long as the service STARTS strictly within branch working hours
+                if ($sliceStart->lt($startBranch) || $sliceStart->gte($endBranch)) {
                     $branchLabel = self::BRANCH_LABELS[$canonicalBranch] ?? $canonicalBranch;
                     return [
                         'reason' => self::REASON_OUTSIDE_HOURS,
                         'field' => 'appointment_datetime',
-                        'message' => "{$prefix}: Appointment must be within {$branchLabel} working hours ({$startBranch->format('g:i A')} – {$endBranch->format('g:i A')}).",
+                        'message' => "{$prefix}: Appointment must start within {$branchLabel} working hours ({$startBranch->format('g:i A')} – {$endBranch->format('g:i A')}).",
                     ];
                 }
             }
@@ -680,23 +894,36 @@ class BookingConflictValidator
                 ];
             }
 
-            // 2b. Staff Off / Shift Hours / Blocked Slot (`staff_off`)
-            $offInfo = $this->staffOffInfo($staff, $effectiveMoment, $duration, !$isUnscheduled && $sliceStart !== null);
-            if ($offInfo['off']) {
-                if ($offInfo['kind'] === 'shift_hours' && $sliceStart !== null) {
-                    $sliceEnd = $sliceStart->copy()->addMinutes($duration);
+            // 2b. Staff Off / Shift Hours / Overtime Spillover / Blocked Slot (`staff_off`)
+            // Overtime spillover (shift_start <= appt_start < shift_end AND appt_end > shift_end) is ALLOWED;
+            // day off, before-shift-start, and at/after-shift-end remain strictly blocked.
+            if (!$isUnscheduled && $sliceStart !== null) {
+                $shiftEval = $this->evaluateShiftWindow($staff, $sliceStart, $duration, $canonicalBranch);
+                if ($shiftEval['status'] === 'off') {
+                    if ($shiftEval['kind'] === 'shift_hours') {
+                        $sliceEnd = $sliceStart->copy()->addMinutes($duration);
+                        return [
+                            'reason' => self::REASON_STAFF_OFF,
+                            'field' => 'staff_id',
+                            'message' => "{$prefix}: {$staff->name} is unavailable / blocked from {$sliceStart->format('g:i A')} to {$sliceEnd->format('g:i A')}.",
+                        ];
+                    }
+
                     return [
                         'reason' => self::REASON_STAFF_OFF,
                         'field' => 'staff_id',
-                        'message' => "{$prefix}: {$staff->name} is unavailable / blocked from {$sliceStart->format('g:i A')} to {$sliceEnd->format('g:i A')}.",
+                        'message' => "{$prefix}: {$staff->name} is off duty on {$effectiveMoment->format('d M Y')}.",
                     ];
                 }
-
-                return [
-                    'reason' => self::REASON_STAFF_OFF,
-                    'field' => 'staff_id',
-                    'message' => "{$prefix}: {$staff->name} is off duty on {$effectiveMoment->format('d M Y')}.",
-                ];
+            } else {
+                $offInfo = $this->staffOffInfo($staff, $effectiveMoment, $duration, false);
+                if ($offInfo['off']) {
+                    return [
+                        'reason' => self::REASON_STAFF_OFF,
+                        'field' => 'staff_id',
+                        'message' => "{$prefix}: {$staff->name} is off duty on {$effectiveMoment->format('d M Y')}.",
+                    ];
+                }
             }
 
             if (!$isUnscheduled && $sliceStart !== null) {

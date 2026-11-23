@@ -177,6 +177,8 @@ class LeadController extends Controller
         $pendingOverdueCount = $pendingFollowupsSummary['overdue_count'];
         $pendingFollowupItems = $pendingFollowupsSummary['items'];
         $pendingFollowupModels = $pendingFollowupsSummary['models'];
+        $adLeadCategories = AdLeadEntry::availableCategories();
+        $adLeadBranches = AdLeadEntry::BRANCHES;
 
         return view('leads.index', compact(
             'leads',
@@ -202,7 +204,9 @@ class LeadController extends Controller
             'pendingDueTodayCount',
             'pendingOverdueCount',
             'pendingFollowupItems',
-            'pendingFollowupModels'
+            'pendingFollowupModels',
+            'adLeadCategories',
+            'adLeadBranches'
         ));
     }
 

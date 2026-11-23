@@ -36,8 +36,13 @@ class AdsConversionController extends Controller
             $defaultTo = now()->copy()->endOfDay();
         }
 
-        $entriesFrom = $request->date('entries_from') ?? $defaultFrom->copy();
-        $entriesTo = $request->date('entries_to') ?? $defaultTo->copy();
+        $entriesSearch = trim((string) $request->query('search', ''));
+        $searchAllDates = $request->boolean('all_dates')
+            && ! $request->filled('entries_from')
+            && ! $request->filled('entries_to');
+
+        $entriesFrom = $searchAllDates ? null : ($request->date('entries_from') ?? $defaultFrom->copy());
+        $entriesTo = $searchAllDates ? null : ($request->date('entries_to') ?? $defaultTo->copy());
 
         $hasCustomerId = Schema::hasColumn('ad_lead_entries', 'customer_id');
         $hasLeadId = Schema::hasColumn('ad_lead_entries', 'lead_id');
@@ -49,19 +54,24 @@ class AdsConversionController extends Controller
             $hasAssignedAgentId ? 'assignedAgent:id,name' : null,
         ]));
 
-        $adLeadEntries = AdLeadEntry::query()
+        $adLeadQuery = AdLeadEntry::query()
             ->when(! empty($eagerRelations), fn ($q) => $q->with($eagerRelations))
             ->when($entriesFrom, fn ($q) => $q->whereDate('date', '>=', $entriesFrom))
             ->when($entriesTo, fn ($q) => $q->whereDate('date', '<=', $entriesTo))
+            ->when($entriesSearch !== '', fn ($q) => $q->searchContact($entriesSearch));
+
+        $adLeadEntries = $adLeadQuery
             ->orderByDesc('date')
             ->orderByDesc('id')
             ->paginate(20, ['*'], 'entries_page')
             ->appends(array_filter([
                 'entries_from' => $entriesFrom?->format('Y-m-d'),
                 'entries_to' => $entriesTo?->format('Y-m-d'),
+                'search' => $entriesSearch !== '' ? $entriesSearch : null,
+                'all_dates' => $searchAllDates ? '1' : null,
                 'month' => $rawMonth !== '' ? $rawMonth : null,
                 'tab' => 'leads',
-            ]));
+            ], fn ($v) => $v !== null && $v !== ''));
 
         $categories = AdLeadEntry::availableCategories();
         $branches = AdLeadEntry::BRANCHES;
@@ -137,6 +147,7 @@ class AdsConversionController extends Controller
 
         return view('kpi.ads.index', array_merge(compact(
             'reports', 'adLeadEntries', 'categories', 'branches', 'agents', 'entriesFrom', 'entriesTo',
+            'entriesSearch', 'searchAllDates',
             'analyticsReport', 'analyticsFrom', 'analyticsTo', 'activeTab', 'analyticsFinancials'
         ), $trackerViewData));
     }

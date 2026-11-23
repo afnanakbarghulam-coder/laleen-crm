@@ -40,6 +40,8 @@ class Appointment extends Model
         'is_freebie_redemption',
         'decide_in_salon',
         'hold_duration',
+        'is_overtime',
+        'overtime_minutes',
         'notes',
         'branch',
         'price',
@@ -58,6 +60,8 @@ class Appointment extends Model
         'paid_at' => 'datetime',
         'decide_in_salon' => 'boolean',
         'hold_duration' => 'integer',
+        'is_overtime' => 'boolean',
+        'overtime_minutes' => 'integer',
         'freebie_package_id' => 'integer',
         'is_freebie_redemption' => 'boolean',
     ];

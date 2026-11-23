@@ -42,6 +42,161 @@
             margin-top: 2px;
             line-height: 1.25;
         }
+        .ad-leads-search-wrap {
+            position: relative;
+        }
+        .ad-leads-search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(235, 210, 200, 0.55);
+            font-size: 1rem;
+            pointer-events: none;
+        }
+        .ad-leads-search-input {
+            padding-left: 2.2rem !important;
+            padding-right: 2.2rem !important;
+        }
+        .ad-leads-search-clear {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(245, 232, 226, 0.85);
+            font-size: 15px;
+            line-height: 1;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+        .ad-leads-search-clear:hover {
+            background: rgba(217, 143, 131, 0.28);
+            color: #fff;
+        }
+        .ad-leads-filter-panel {
+            overflow: visible !important;
+            position: relative;
+            z-index: 30;
+        }
+        .ad-leads-suggestions-menu {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            z-index: 1060;
+            background: #241e1c !important;
+            background-color: #241e1c !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            opacity: 1 !important;
+            border: 1px solid rgba(217, 143, 131, 0.34);
+            border-radius: 12px;
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.78);
+            max-height: 340px;
+            overflow-y: auto;
+            padding: 6px;
+        }
+        .ad-leads-suggestion-item {
+            width: 100%;
+            text-align: left;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 9px;
+            padding: 8px 10px;
+            color: #f6ede9;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            transition: background 0.12s ease, border-color 0.12s ease;
+        }
+        .ad-leads-suggestion-item:hover,
+        .ad-leads-suggestion-item.is-active {
+            background: #332926;
+            border-color: rgba(217, 143, 131, 0.42);
+        }
+        .ad-suggest-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .ad-suggest-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #f7efeb;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .ad-suggest-phone {
+            font-size: 12px;
+            font-weight: 500;
+            color: #d7b7ae;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .ad-suggest-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 11px;
+            color: rgba(235, 215, 208, 0.62);
+        }
+        .ad-suggest-cat {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 7px;
+            border-radius: 999px;
+            background: rgba(217, 143, 131, 0.16);
+            border: 1px solid rgba(217, 143, 131, 0.3);
+            color: #f4c4bc;
+            font-weight: 600;
+            max-width: 58%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .ad-suggest-date-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .ad-suggest-outside-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 6px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 600;
+            background: rgba(245, 158, 11, 0.16);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            color: #fcd34d;
+        }
+        .ad-suggest-hl {
+            background: rgba(217, 143, 131, 0.34);
+            color: #fff6f4;
+            padding: 0 2px;
+            border-radius: 3px;
+        }
+        .ad-leads-suggestion-status {
+            padding: 10px 12px;
+            font-size: 12.5px;
+            color: rgba(235, 215, 208, 0.72);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
     </style>
 
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
@@ -73,21 +228,58 @@
             @endmoduleEdit
         </div>
 
-        <div class="kpi-panel mb-3">
-            <form method="GET" action="{{ route('kpi.ads.index') }}" class="row g-3 align-items-end">
+        @php
+            $entriesSearchVal = (string) ($entriesSearch ?? '');
+            $isSearchingAllDates = ! empty($searchAllDates);
+        @endphp
+
+        <div class="kpi-panel ad-leads-filter-panel mb-3">
+            <form method="GET" action="{{ route('kpi.ads.index') }}" id="adLeadsFilterForm" class="row g-3 align-items-end">
                 <input type="hidden" name="tab" value="leads">
-                <div class="col-md-3">
-                    <label class="form-label">From</label>
-                    <input type="date" name="entries_from" class="form-control" value="{{ $entriesFrom?->format('Y-m-d') }}">
+                @if ($isSearchingAllDates)
+                    <input type="hidden" name="all_dates" id="adLeadsAllDatesHidden" value="1">
+                @endif
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label" for="adLeadsFromInput">From</label>
+                    <input type="date" name="entries_from" id="adLeadsFromInput" class="form-control" value="{{ $entriesFrom?->format('Y-m-d') }}">
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label">To</label>
-                    <input type="date" name="entries_to" class="form-control" value="{{ $entriesTo?->format('Y-m-d') }}">
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label" for="adLeadsToInput">To</label>
+                    <input type="date" name="entries_to" id="adLeadsToInput" class="form-control" value="{{ $entriesTo?->format('Y-m-d') }}">
                 </div>
-                <div class="col-md-3 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary">Filter</button>
-                    @if ($entriesFrom || $entriesTo)
-                        <a href="{{ route('kpi.ads.index', ['tab' => 'leads']) }}" class="btn btn-outline-secondary">Reset</a>
+                <div class="col-md-6 col-lg-4">
+                    <label class="form-label" for="adLeadsSearchInput">Search</label>
+                    <div class="ad-leads-search-wrap" id="adLeadsSearchWrap">
+                        <i class="bx bx-search ad-leads-search-icon" aria-hidden="true"></i>
+                        <input
+                            type="text"
+                            name="search"
+                            id="adLeadsSearchInput"
+                            class="form-control ad-leads-search-input"
+                            value="{{ $entriesSearchVal }}"
+                            data-initial-search="{{ $entriesSearchVal }}"
+                            data-suggestions-url="{{ route('kpi.ad-leads.suggestions') }}"
+                            placeholder="Name or phone number..."
+                            autocomplete="off"
+                            role="combobox"
+                            aria-autocomplete="list"
+                            aria-expanded="false"
+                            aria-controls="adLeadsSuggestionsMenu"
+                        >
+                        <button
+                            type="button"
+                            id="adLeadsSearchClearBtn"
+                            class="ad-leads-search-clear {{ $entriesSearchVal !== '' ? '' : 'd-none' }}"
+                            aria-label="Clear search"
+                            title="Clear search"
+                        >&times;</button>
+                        <div id="adLeadsSuggestionsMenu" class="ad-leads-suggestions-menu d-none" role="listbox"></div>
+                    </div>
+                </div>
+                <div class="col-md-12 col-lg-4 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary" id="adLeadsFilterBtn">Filter</button>
+                    @if ($entriesFrom || $entriesTo || $entriesSearchVal !== '' || $isSearchingAllDates)
+                        <a href="{{ route('kpi.ads.index', ['tab' => 'leads']) }}" class="btn btn-outline-secondary" id="adLeadsResetBtn">Reset</a>
                     @endif
                 </div>
             </form>
@@ -283,6 +475,11 @@
                                             </button>
                                             <form action="{{ route('kpi.ad-leads.destroy', $entry) }}" method="POST" class="d-inline m-0" onsubmit="return confirm('Delete this ad lead entry?')">
                                                 @csrf @method('DELETE')
+                                                @foreach (request()->only(['tab', 'entries_from', 'entries_to', 'search', 'all_dates', 'month', 'entries_page']) as $rfKey => $rfVal)
+                                                    @if ($rfVal !== null && $rfVal !== '')
+                                                        <input type="hidden" name="return_filters[{{ $rfKey }}]" value="{{ $rfVal }}">
+                                                    @endif
+                                                @endforeach
                                                 <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
                                             </form>
                                         @endmoduleEdit
@@ -353,7 +550,37 @@
                         </tbody>
                     @empty
                         <tbody>
-                            <tr><td colspan="7" class="text-center text-muted py-4">No ad leads logged{{ ($entriesFrom || $entriesTo) ? ' for this period' : ' yet' }}.</td></tr>
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    @if ($entriesSearchVal !== '' && ($entriesFrom || $entriesTo))
+                                        <div>
+                                            No ad leads matched <strong class="text-reset">&ldquo;{{ $entriesSearchVal }}&rdquo;</strong>
+                                            between {{ $entriesFrom?->format('d M Y') }} and {{ $entriesTo?->format('d M Y') }}.
+                                        </div>
+                                        <div class="mt-2 d-flex justify-content-center gap-2 flex-wrap">
+                                            <a href="{{ route('kpi.ads.index', ['tab' => 'leads', 'search' => $entriesSearchVal, 'all_dates' => 1]) }}"
+                                                id="adLeadsSearchAllDatesBtn"
+                                                class="btn btn-sm btn-outline-primary">
+                                                <i class="bx bx-calendar-x me-1"></i>Search all dates
+                                            </a>
+                                            <a href="{{ route('kpi.ads.index', ['tab' => 'leads']) }}" class="btn btn-sm btn-outline-secondary">
+                                                Reset filters
+                                            </a>
+                                        </div>
+                                    @elseif ($entriesSearchVal !== '')
+                                        <div>
+                                            No ad leads matched <strong class="text-reset">&ldquo;{{ $entriesSearchVal }}&rdquo;</strong> across all dates.
+                                        </div>
+                                        <div class="mt-2">
+                                            <a href="{{ route('kpi.ads.index', ['tab' => 'leads']) }}" class="btn btn-sm btn-outline-secondary">
+                                                Reset filters
+                                            </a>
+                                        </div>
+                                    @else
+                                        No ad leads logged{{ ($entriesFrom || $entriesTo) ? ' for this period' : ' yet' }}.
+                                    @endif
+                                </td>
+                            </tr>
                         </tbody>
                     @endforelse
                 </table>
@@ -366,6 +593,327 @@
             @include('kpi.ads._lead-entry-modal', ['uid' => 'new', 'entry' => null])
             @include('kpi.ads._send-to-followups-modal')
         @endmoduleEdit
+
+        <script>
+            (function initAdLeadsSearchBar() {
+                const form = document.getElementById('adLeadsFilterForm');
+                const searchWrap = document.getElementById('adLeadsSearchWrap');
+                const searchInput = document.getElementById('adLeadsSearchInput');
+                const clearBtn = document.getElementById('adLeadsSearchClearBtn');
+                const menuEl = document.getElementById('adLeadsSuggestionsMenu');
+                const fromInput = document.getElementById('adLeadsFromInput');
+                const toInput = document.getElementById('adLeadsToInput');
+
+                if (!form || !searchInput || !menuEl) return;
+
+                const suggestionsUrl = searchInput.dataset.suggestionsUrl || '';
+                let debounceTimer = null;
+                let activeController = null;
+                let currentItems = [];
+                let activeIndex = -1;
+                let isOpen = false;
+
+                function syncClearVisibility() {
+                    if (!clearBtn) return;
+                    clearBtn.classList.toggle('d-none', searchInput.value.trim() === '');
+                }
+
+                function escapeHtml(text) {
+                    return String(text || '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
+                }
+
+                function highlightSubstring(text, query) {
+                    const source = String(text || '');
+                    const needle = String(query || '').trim();
+                    if (!needle || !source) {
+                        return escapeHtml(source);
+                    }
+
+                    const lowerSource = source.toLowerCase();
+                    const lowerNeedle = needle.toLowerCase();
+                    const idx = lowerSource.indexOf(lowerNeedle);
+                    if (idx !== -1) {
+                        return escapeHtml(source.slice(0, idx))
+                            + '<mark class="ad-suggest-hl">'
+                            + escapeHtml(source.slice(idx, idx + needle.length))
+                            + '</mark>'
+                            + escapeHtml(source.slice(idx + needle.length));
+                    }
+
+                    // For phone strings, also highlight matching normalized digit tail when input had +974/spaces
+                    const digits = needle.replace(/\D+/g, '');
+                    const localDigits = digits.startsWith('974') && digits.length > 3 ? digits.slice(3) : digits;
+                    if (localDigits.length >= 2) {
+                        const dIdx = lowerSource.indexOf(localDigits);
+                        if (dIdx !== -1) {
+                            return escapeHtml(source.slice(0, dIdx))
+                                + '<mark class="ad-suggest-hl">'
+                                + escapeHtml(source.slice(dIdx, dIdx + localDigits.length))
+                                + '</mark>'
+                                + escapeHtml(source.slice(dIdx + localDigits.length));
+                        }
+                    }
+
+                    return escapeHtml(source);
+                }
+
+                function openMenu() {
+                    isOpen = true;
+                    menuEl.classList.remove('d-none');
+                    searchInput.setAttribute('aria-expanded', 'true');
+                }
+
+                function closeMenu() {
+                    isOpen = false;
+                    activeIndex = -1;
+                    menuEl.classList.add('d-none');
+                    searchInput.setAttribute('aria-expanded', 'false');
+                }
+
+                function renderLoading() {
+                    currentItems = [];
+                    activeIndex = -1;
+                    menuEl.innerHTML = '<div class="ad-leads-suggestion-status"><span class="spinner-border spinner-border-sm text-secondary" role="status" aria-hidden="true"></span><span>Searching...</span></div>';
+                    openMenu();
+                }
+
+                function renderEmpty() {
+                    currentItems = [];
+                    activeIndex = -1;
+                    menuEl.innerHTML = '<div class="ad-leads-suggestion-status">No matching ad leads</div>';
+                    openMenu();
+                }
+
+                function updateActiveItemUi() {
+                    const buttons = menuEl.querySelectorAll('.ad-leads-suggestion-item');
+                    buttons.forEach(function (btn, idx) {
+                        const isActive = idx === activeIndex;
+                        btn.classList.toggle('is-active', isActive);
+                        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                        if (isActive) {
+                            btn.scrollIntoView({ block: 'nearest' });
+                        }
+                    });
+                }
+
+                function selectSuggestion(item) {
+                    if (!item) return;
+
+                    const selectedTerm = (item.phone && String(item.phone).trim() !== '')
+                        ? String(item.phone).trim()
+                        : String(item.customer_name || '').trim();
+
+                    searchInput.value = selectedTerm;
+                    syncClearVisibility();
+                    closeMenu();
+
+                    if (item.in_range === false) {
+                        if (fromInput) fromInput.value = '';
+                        if (toInput) toInput.value = '';
+                        let hiddenAll = document.getElementById('adLeadsAllDatesHidden');
+                        if (!hiddenAll) {
+                            hiddenAll = document.createElement('input');
+                            hiddenAll.type = 'hidden';
+                            hiddenAll.name = 'all_dates';
+                            hiddenAll.id = 'adLeadsAllDatesHidden';
+                            hiddenAll.value = '1';
+                            form.appendChild(hiddenAll);
+                        } else {
+                            hiddenAll.value = '1';
+                        }
+                    }
+
+                    form.submit();
+                }
+
+                function renderItems(items, query) {
+                    currentItems = Array.isArray(items) ? items : [];
+                    activeIndex = -1;
+
+                    if (currentItems.length === 0) {
+                        renderEmpty();
+                        return;
+                    }
+
+                    menuEl.innerHTML = '';
+
+                    currentItems.forEach(function (item, idx) {
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'ad-leads-suggestion-item';
+                        btn.setAttribute('role', 'option');
+                        btn.setAttribute('aria-selected', 'false');
+                        btn.dataset.index = String(idx);
+
+                        const outsideBadgeHtml = item.in_range === false
+                            ? '<span class="ad-suggest-outside-badge">Outside range</span>'
+                            : '';
+
+                        btn.innerHTML = ''
+                            + '<div class="ad-suggest-top">'
+                            +   '<span class="ad-suggest-name">' + highlightSubstring(item.customer_name || 'Unnamed Lead', query) + '</span>'
+                            +   '<span class="ad-suggest-phone">' + highlightSubstring(item.phone || '—', query) + '</span>'
+                            + '</div>'
+                            + '<div class="ad-suggest-meta">'
+                            +   '<span class="ad-suggest-cat">' + escapeHtml(item.ad_type || 'Ad Lead') + '</span>'
+                            +   '<span class="ad-suggest-date-wrap"><span>' + escapeHtml(item.date || '') + '</span>' + outsideBadgeHtml + '</span>'
+                            + '</div>';
+
+                        btn.addEventListener('mouseenter', function () {
+                            activeIndex = idx;
+                            updateActiveItemUi();
+                        });
+
+                        btn.addEventListener('mousedown', function (e) {
+                            e.preventDefault();
+                            selectSuggestion(item);
+                        });
+
+                        menuEl.appendChild(btn);
+                    });
+
+                    openMenu();
+                }
+
+                function fetchSuggestions(query) {
+                    if (!suggestionsUrl) return;
+
+                    if (activeController) {
+                        activeController.abort();
+                    }
+                    activeController = new AbortController();
+
+                    renderLoading();
+
+                    const url = new URL(suggestionsUrl, window.location.origin);
+                    url.searchParams.set('q', query);
+                    if (fromInput && fromInput.value.trim() !== '') {
+                        url.searchParams.set('from', fromInput.value.trim());
+                    }
+                    if (toInput && toInput.value.trim() !== '') {
+                        url.searchParams.set('to', toInput.value.trim());
+                    }
+
+                    fetch(url.toString(), {
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' },
+                        signal: activeController.signal,
+                    })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error('Suggestions request failed');
+                        return res.json();
+                    })
+                    .then(function (items) {
+                        if (searchInput.value.trim() !== query) return;
+                        renderItems(items, query);
+                    })
+                    .catch(function (err) {
+                        if (err && err.name === 'AbortError') return;
+                        closeMenu();
+                    });
+                }
+
+                searchInput.addEventListener('input', function () {
+                    syncClearVisibility();
+                    const term = searchInput.value.trim();
+
+                    if (debounceTimer) {
+                        clearTimeout(debounceTimer);
+                        debounceTimer = null;
+                    }
+
+                    if (term.length < 2) {
+                        if (activeController) {
+                            activeController.abort();
+                            activeController = null;
+                        }
+                        currentItems = [];
+                        closeMenu();
+                        return;
+                    }
+
+                    debounceTimer = setTimeout(function () {
+                        fetchSuggestions(term);
+                    }, 200);
+                });
+
+                searchInput.addEventListener('keydown', function (e) {
+                    if (!isOpen || currentItems.length === 0) {
+                        if (e.key === 'Escape' && isOpen) {
+                            e.preventDefault();
+                            closeMenu();
+                        }
+                        return;
+                    }
+
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        activeIndex = (activeIndex + 1) % currentItems.length;
+                        updateActiveItemUi();
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        activeIndex = activeIndex <= 0 ? (currentItems.length - 1) : (activeIndex - 1);
+                        updateActiveItemUi();
+                    } else if (e.key === 'Enter') {
+                        if (activeIndex >= 0 && currentItems[activeIndex]) {
+                            e.preventDefault();
+                            selectSuggestion(currentItems[activeIndex]);
+                        } else {
+                            closeMenu();
+                        }
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        closeMenu();
+                    }
+                });
+
+                document.addEventListener('mousedown', function (e) {
+                    if (!isOpen) return;
+                    if (searchWrap && searchWrap.contains(e.target)) return;
+                    closeMenu();
+                });
+
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', function () {
+                        if (debounceTimer) {
+                            clearTimeout(debounceTimer);
+                            debounceTimer = null;
+                        }
+                        if (activeController) {
+                            activeController.abort();
+                            activeController = null;
+                        }
+                        const hadInitialSearch = (searchInput.dataset.initialSearch || '').trim() !== '';
+                        searchInput.value = '';
+                        currentItems = [];
+                        menuEl.innerHTML = '';
+                        closeMenu();
+                        syncClearVisibility();
+                        if (hadInitialSearch) {
+                            form.submit();
+                        } else {
+                            searchInput.focus();
+                        }
+                    });
+                }
+
+                // If user manually enters a date while in "Search all dates" mode, exit all_dates mode
+                [fromInput, toInput].forEach(function (dateEl) {
+                    if (!dateEl) return;
+                    dateEl.addEventListener('change', function () {
+                        const allDatesHidden = document.getElementById('adLeadsAllDatesHidden');
+                        if (allDatesHidden && (dateEl.value || '').trim() !== '') {
+                            allDatesHidden.remove();
+                        }
+                    });
+                });
+            })();
+        </script>
     </div>
 
     {{-- ================= ADS ANALYTICS ================= --}}
