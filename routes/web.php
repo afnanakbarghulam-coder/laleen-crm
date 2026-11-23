@@ -258,7 +258,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/staff-complaints/{staffComplaint}/draft-notice-ai', [StaffComplaintController::class, 'draftNoticeAi'])->middleware('throttle:20,1')->name('staff-complaints.draft-notice-ai');
 
         Route::post('/staff-deductions', [StaffDeductionController::class, 'store'])->name('staff-deductions.store');
-        Route::put('/staff-deductions/{staffDeduction}', [StaffDeductionController::class, 'update'])->name('staff-deductions.update');
+        Route::match(['put', 'patch'], '/staff-deductions/{staffDeduction}', [StaffDeductionController::class, 'update'])->name('staff-deductions.update');
         Route::delete('/staff-deductions/{staffDeduction}', [StaffDeductionController::class, 'destroy'])->name('staff-deductions.destroy');
 
         Route::match(['post', 'put', 'patch'], '/staff-notices/{staffNotice}/acknowledge', [StaffNoticeController::class, 'acknowledge'])->name('staff-notices.acknowledge');

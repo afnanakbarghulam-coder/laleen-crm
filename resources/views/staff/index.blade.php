@@ -579,6 +579,105 @@
         border-color: rgba(217, 143, 131, 0.1);
     }
 
+    .ded-manual-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: #b8a29a;
+        background: rgba(255, 255, 255, 0.055);
+        border: 1px solid rgba(255, 255, 255, 0.11);
+    }
+
+    .ded-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: 1px solid rgba(229, 184, 168, 0.16);
+        background: transparent;
+        color: #b8a29a;
+        padding: 0;
+        cursor: pointer;
+        transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+    }
+
+    .ded-action-btn:hover {
+        color: #e5b8a8;
+        border-color: rgba(229, 184, 168, 0.45);
+        background: rgba(229, 184, 168, 0.1);
+    }
+
+    .ded-action-btn.is-danger:hover {
+        color: #fda4af;
+        border-color: rgba(253, 164, 175, 0.48);
+        background: rgba(253, 164, 175, 0.1);
+    }
+
+    #addDeductionModal .modal-content {
+        background: #1b1315 !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        border: 1px solid rgba(229, 184, 168, 0.22) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.72) !important;
+        color: #f8efe6;
+    }
+
+    #addDeductionModal .modal-header {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 16px 20px 14px;
+    }
+
+    #addDeductionModal .modal-body {
+        padding: 18px 20px;
+    }
+
+    #addDeductionModal .modal-footer {
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 12px 20px 16px;
+    }
+
+    #addDeductionModal .form-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #d6c3bc;
+        margin-bottom: 5px;
+    }
+
+    #addDeductionModal .form-control,
+    #addDeductionModal .form-select {
+        background-color: #130d0f !important;
+        border: 1px solid rgba(229, 184, 168, 0.2) !important;
+        color: #f8efe6 !important;
+        border-radius: 10px;
+    }
+
+    #addDeductionModal .form-control:focus,
+    #addDeductionModal .form-select:focus {
+        border-color: #d98f83 !important;
+        box-shadow: 0 0 0 2px rgba(217, 143, 131, 0.18) !important;
+    }
+
+    #addDeductionModal .form-control::placeholder {
+        color: #8f7a73;
+    }
+
+    .ded-modal-error {
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: rgba(253, 164, 175, 0.12);
+        border: 1px solid rgba(253, 164, 175, 0.36);
+        color: #fda4af;
+        font-size: 12.5px;
+        margin-bottom: 14px;
+    }
+
     /* ---- Laleen Minimal UI: Contracts, Inline Sub-Views & 3-Column Track ---- */
     .laleen-contract-card,
     .laleen-ops-hub-card {
@@ -1324,7 +1423,7 @@
                                                                             @if ($deduction->complaint)
                                                                                 <span class="ref-badge">{{ $deduction->complaint->reference_number }}</span>
                                                                             @else
-                                                                                <span class="text-muted small">—</span>
+                                                                                <span class="ded-manual-pill">Manual</span>
                                                                             @endif
                                                                         </td>
                                                                     </tr>
@@ -1821,44 +1920,51 @@
 
         {{-- Isolated Sub-Tab 2: Deductions & Penalties --}}
         <div id="hr-subpane-deductions" class="hr-sub-pane {{ $currentHrSub === 'deductions' ? '' : 'd-none' }}">
-        <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-2">
+        <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">
             <div>
-                <h6 class="fw-bold mb-0">Deductions &amp; Penalties</h6>
-                <p class="text-muted small mb-0">Deductions are managed through the complaint HR Resolution panel. Click any linked complaint reference to jump to or copy it.</p>
+                <h6 class="fw-bold mb-1">Deductions &amp; Penalties</h6>
+                <p class="text-muted small mb-0">Manage complaint-linked and manual staff deductions. Click any linked complaint reference to jump to or copy it.</p>
             </div>
-            <form method="GET" action="{{ route('staffs.index') }}" class="row g-2 align-items-end hr-filter-bar" style="max-width: 500px;">
-                <input type="hidden" name="tab" value="deductions">
-                @if ($complaintsStaffFilter)
-                    <input type="hidden" name="complaints_staff" value="{{ $complaintsStaffFilter }}">
-                @endif
-                @if ($complaintsSearch)
-                    <input type="hidden" name="complaints_search" value="{{ $complaintsSearch }}">
-                @endif
-                @if ($complaintsDate)
-                    <input type="hidden" name="complaints_date" value="{{ $complaintsDate }}">
-                @endif
-                @if ($complaintsFrom)
-                    <input type="hidden" name="complaints_from" value="{{ $complaintsFrom }}">
-                @endif
-                @if ($complaintsTo)
-                    <input type="hidden" name="complaints_to" value="{{ $complaintsTo }}">
-                @endif
-
-                <div class="col-sm-4">
-                    <label class="form-label">From Date</label>
-                    <input type="date" name="deductions_from" class="form-control form-control-sm" value="{{ $deductionsFrom ?: $deductionsDate }}">
-                </div>
-                <div class="col-sm-4">
-                    <label class="form-label">To Date</label>
-                    <input type="date" name="deductions_to" class="form-control form-control-sm" value="{{ $deductionsTo ?: $deductionsDate }}">
-                </div>
-                <div class="col-sm-4 d-flex gap-2">
-                    <button type="submit" class="btn btn-sm btn-primary w-100">Filter</button>
-                    @if ($deductionsDate || $deductionsFrom || $deductionsTo)
-                        <a href="{{ route('staffs.index', array_filter(['tab' => 'deductions', 'complaints_staff' => $complaintsStaffFilter, 'complaints_search' => $complaintsSearch, 'complaints_date' => $complaintsDate, 'complaints_from' => $complaintsFrom, 'complaints_to' => $complaintsTo])) }}" class="btn btn-sm btn-outline-secondary w-100">Reset</a>
+            <div class="d-flex align-items-end flex-wrap gap-2">
+                <form method="GET" action="{{ route('staffs.index') }}" class="d-flex align-items-end flex-wrap gap-2 hr-filter-bar m-0">
+                    <input type="hidden" name="tab" value="deductions">
+                    @if ($complaintsStaffFilter)
+                        <input type="hidden" name="complaints_staff" value="{{ $complaintsStaffFilter }}">
                     @endif
-                </div>
-            </form>
+                    @if ($complaintsSearch)
+                        <input type="hidden" name="complaints_search" value="{{ $complaintsSearch }}">
+                    @endif
+                    @if ($complaintsDate)
+                        <input type="hidden" name="complaints_date" value="{{ $complaintsDate }}">
+                    @endif
+                    @if ($complaintsFrom)
+                        <input type="hidden" name="complaints_from" value="{{ $complaintsFrom }}">
+                    @endif
+                    @if ($complaintsTo)
+                        <input type="hidden" name="complaints_to" value="{{ $complaintsTo }}">
+                    @endif
+
+                    <div>
+                        <label class="form-label">From Date</label>
+                        <input type="date" name="deductions_from" class="form-control form-control-sm" style="min-width:142px;" value="{{ $deductionsFrom ?: $deductionsDate }}">
+                    </div>
+                    <div>
+                        <label class="form-label">To Date</label>
+                        <input type="date" name="deductions_to" class="form-control form-control-sm" style="min-width:142px;" value="{{ $deductionsTo ?: $deductionsDate }}">
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-sm btn-primary px-3">Filter</button>
+                        @if ($deductionsDate || $deductionsFrom || $deductionsTo)
+                            <a href="{{ route('staffs.index', array_filter(['tab' => 'deductions', 'complaints_staff' => $complaintsStaffFilter, 'complaints_search' => $complaintsSearch, 'complaints_date' => $complaintsDate, 'complaints_from' => $complaintsFrom, 'complaints_to' => $complaintsTo])) }}" class="btn btn-sm btn-outline-secondary">Reset</a>
+                        @endif
+                    </div>
+                </form>
+                @if ($canManageManualDeductions)
+                    <button type="button" id="openAddManualDeductionBtn" class="sc-btn-rosegold text-nowrap" style="height: 31px; padding: 0 15px;" onclick="openManualDeductionModal()">
+                        <i class="bx bx-plus"></i> Add Deduction
+                    </button>
+                @endif
+            </div>
         </div>
         <div class="card hr-table-card p-0 mb-2">
             <div class="table-responsive">
@@ -1868,16 +1974,19 @@
                             <th style="min-width:130px;">Date</th>
                             <th style="min-width:150px;">Staff</th>
                             <th style="min-width:110px;">Amount</th>
-                            <th style="min-width:170px;">Reason</th>
-                            <th style="min-width:220px;">Linked complaint</th>
+                            <th style="min-width:200px;">Reason</th>
+                            <th style="min-width:160px;">Linked complaint</th>
+                            @if ($canManageManualDeductions)
+                                <th class="text-end" style="width:92px;">Actions</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($deductions as $deduction)
                             <tr data-entry-row="{{ $deduction->id }}" data-entry='@json($deduction->toEditPayload())'>
-                                <td>{{ $deduction->deduction_date->format('d M Y') }}</td>
+                                <td class="text-nowrap">{{ $deduction->deduction_date->format('d M Y') }}</td>
                                 <td class="fw-semibold">{{ $deduction->staff->name ?? '—' }}</td>
-                                <td>QAR {{ number_format($deduction->amount, 2) }}</td>
+                                <td class="text-nowrap">QAR {{ number_format($deduction->amount, 2) }}</td>
                                 <td>{{ $deduction->reason }}</td>
                                 <td>
                                     @if ($deduction->complaint && $deduction->complaint->reference_number)
@@ -1888,12 +1997,28 @@
                                             <i class="bi bi-copy" style="font-size: 10px;"></i>
                                         </span>
                                     @else
-                                        <span class="text-muted small">—</span>
+                                        <span class="ded-manual-pill">Manual</span>
                                     @endif
                                 </td>
+                                @if ($canManageManualDeductions)
+                                    <td class="text-end text-nowrap">
+                                        @if ($deduction->isManual())
+                                            <div class="d-inline-flex align-items-center gap-1">
+                                                <button type="button" class="ded-action-btn" title="Edit manual deduction" aria-label="Edit manual deduction" onclick="openManualDeductionModal({{ $deduction->id }})">
+                                                    <i class="bx bx-pencil"></i>
+                                                </button>
+                                                <button type="button" class="ded-action-btn is-danger" title="Delete manual deduction" aria-label="Delete manual deduction" onclick="deleteManualDeduction({{ $deduction->id }})">
+                                                    <i class="bx bx-trash"></i>
+                                                </button>
+                                            </div>
+                                        @else
+                                            <span class="text-muted small" title="Managed via complaint HR Resolution">—</span>
+                                        @endif
+                                    </td>
+                                @endif
                             </tr>
                         @empty
-                            <tr id="dedEmptyRow"><td colspan="5" class="text-center text-muted py-4">No deductions logged.</td></tr>
+                            <tr id="dedEmptyRow"><td colspan="{{ $canManageManualDeductions ? 6 : 5 }}" class="text-center text-muted py-4">No deductions logged.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -2120,55 +2245,50 @@
             </div>
         </div>
 
-        <!-- Add Deduction Modal -->
-        <div class="modal fade" id="addDeductionModal" tabindex="-1">
+        @if ($canManageManualDeductions)
+        <!-- Manual Deduction Modal (Add / Edit) -->
+        <div class="modal fade" id="addDeductionModal" tabindex="-1" aria-labelledby="addDeductionModalTitle" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
+                <form class="modal-content" id="manualDeductionForm" novalidate>
+                    <input type="hidden" id="dedQaId" value="">
                     <div class="modal-header">
-                        <h5 class="modal-title">Add Deduction</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <h5 class="modal-title fw-bold mb-0" id="addDeductionModalTitle">Add Deduction</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
+                        <div id="dedQaError" class="ded-modal-error d-none" role="alert"></div>
                         <div class="row g-3 mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Date *</label>
-                                <input type="date" class="form-control" id="dedQaDate" value="{{ now()->format('Y-m-d') }}">
+                            <div class="col-sm-6">
+                                <label class="form-label" for="dedQaDate">Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="dedQaDate" name="date" value="{{ now()->format('Y-m-d') }}" required>
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Amount (QAR) *</label>
-                                <input type="number" min="0" step="0.01" class="form-control" id="dedQaAmount" placeholder="QAR">
+                            <div class="col-sm-6">
+                                <label class="form-label" for="dedQaAmount">Amount (QAR) <span class="text-danger">*</span></label>
+                                <input type="number" min="0.01" step="0.01" inputmode="decimal" class="form-control" id="dedQaAmount" name="amount" placeholder="e.g., 50.00" required>
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Staff Member *</label>
-                            <select class="form-select" id="dedQaStaff">
-                                <option value="">Select staff</option>
-                                @foreach ($allStaff as $s)
+                            <label class="form-label" for="dedQaStaff">Staff <span class="text-danger">*</span></label>
+                            <select class="form-select" id="dedQaStaff" name="staff_id" required>
+                                <option value="">Select active staff...</option>
+                                @foreach ($activeStaffForDeductions as $s)
                                     <option value="{{ $s->id }}">{{ $s->name }}</option>
                                 @endforeach
                             </select>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Reason *</label>
-                            <input type="text" class="form-control" id="dedQaReason" placeholder="Reason for deduction">
-                        </div>
                         <div class="mb-1">
-                            <label class="form-label">Linked Complaint <span class="text-muted small">(optional)</span></label>
-                            <select class="form-select" id="dedQaComplaint">
-                                <option value="">No linked complaint</option>
-                                @foreach ($openComplaints as $c)
-                                    <option value="{{ $c->id }}">{{ $c->reference_number }} — {{ $c->staffMembers->pluck('name')->implode(', ') ?: '—' }} ({{ $c->complaint_date->format('d M Y') }})</option>
-                                @endforeach
-                            </select>
+                            <label class="form-label" for="dedQaReason">Reason <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="dedQaReason" name="reason" rows="3" maxlength="500" placeholder="e.g., Left AC on after closing, late arrival, dress code violation" required></textarea>
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-primary" id="dedQaSaveBtn">Save Deduction</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="sc-btn-rosegold" id="dedQaSaveBtn">Save Deduction</button>
                     </div>
-                </div>
+                </form>
             </div>
         </div>
+        @endif
 
         <div class="modal fade" id="quickAddClientModal" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered">
@@ -3601,43 +3721,171 @@
             dedEntries[entry.id] = entry;
         });
 
-        function dedViewRowHtml(e) {
-            const refCode = e.complaint_reference || (OPEN_COMPLAINTS.find(x => x.id === e.complaint_id)?.reference_number) || '';
-            const refCell = refCode
-                ? `<span class="ref-badge ref-badge-action" title="Click to copy &amp; filter by ${escapeHtml(refCode)}" onclick="filterByComplaintRef('${escapeHtml(refCode)}')">${escapeHtml(refCode)} <i class="bi bi-copy" style="font-size: 10px;"></i></span>`
-                : '<span class="text-muted small">—</span>';
-            return `
-                <td>${e.deduction_date_label}</td>
-                <td class="fw-semibold">${escapeHtml(e.staff_name)}</td>
-                <td>QAR ${Number(e.amount).toFixed(2)}</td>
-                <td>${escapeHtml(e.reason)}</td>
-                <td>${refCell}</td>
-            `;
+        function refreshDeductionsView() {
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', 'deductions');
+            window.location.assign(url.toString());
         }
 
-        const dedQaSaveBtn = document.getElementById('dedQaSaveBtn');
-        if (dedQaSaveBtn) {
-            dedQaSaveBtn.addEventListener('click', function () {
-                const fields = {
-                    deduction_date: document.getElementById('dedQaDate').value,
-                    staff_id: document.getElementById('dedQaStaff').value,
-                    amount: document.getElementById('dedQaAmount').value,
-                    reason: document.getElementById('dedQaReason').value,
-                    complaint_id: document.getElementById('dedQaComplaint').value,
-                };
-                if (!fields.deduction_date || !fields.staff_id || !fields.amount || !fields.reason.trim()) {
-                    showStaffToast('Date, staff, amount, and reason are required.', 'error');
+        function setDedModalError(msg) {
+            const box = document.getElementById('dedQaError');
+            if (!box) return;
+            if (msg) {
+                box.textContent = msg;
+                box.classList.remove('d-none');
+            } else {
+                box.textContent = '';
+                box.classList.add('d-none');
+            }
+        }
+
+        window.openManualDeductionModal = function (id = null) {
+            const modalEl = document.getElementById('addDeductionModal');
+            if (!modalEl) return;
+
+            const titleEl = document.getElementById('addDeductionModalTitle');
+            const idInput = document.getElementById('dedQaId');
+            const dateInput = document.getElementById('dedQaDate');
+            const staffSelect = document.getElementById('dedQaStaff');
+            const amountInput = document.getElementById('dedQaAmount');
+            const reasonInput = document.getElementById('dedQaReason');
+            const saveBtn = document.getElementById('dedQaSaveBtn');
+
+            setDedModalError('');
+
+            // Clean up any temporary inactive-staff option added during a previous edit
+            staffSelect.querySelectorAll('option[data-temp-staff="1"]').forEach(o => o.remove());
+
+            if (id && dedEntries[id]) {
+                const entry = dedEntries[id];
+                if (entry.complaint_id) {
+                    showStaffToast('Complaint-linked deductions are managed via the complaint HR Resolution panel.', 'error');
                     return;
                 }
-                jsonFetch(`{{ route('staff-deductions.store') }}`, 'POST', fields).then(({ ok, data }) => {
+                idInput.value = String(entry.id);
+                titleEl.textContent = 'Edit Deduction';
+                saveBtn.textContent = 'Save Changes';
+                dateInput.value = entry.deduction_date || entry.date || '';
+                amountInput.value = Number(entry.amount || 0).toFixed(2);
+                reasonInput.value = entry.reason || '';
+
+                const targetStaffId = String(entry.staff_id || '');
+                if (targetStaffId && ![...staffSelect.options].some(o => String(o.value) === targetStaffId)) {
+                    const opt = document.createElement('option');
+                    opt.value = targetStaffId;
+                    opt.textContent = entry.staff_name || `Staff #${targetStaffId}`;
+                    opt.dataset.tempStaff = '1';
+                    staffSelect.appendChild(opt);
+                }
+                staffSelect.value = targetStaffId;
+            } else {
+                idInput.value = '';
+                titleEl.textContent = 'Add Deduction';
+                saveBtn.textContent = 'Save Deduction';
+                dateInput.value = `{{ now()->format('Y-m-d') }}`;
+                staffSelect.value = '';
+                amountInput.value = '';
+                reasonInput.value = '';
+            }
+
+            saveBtn.disabled = false;
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        };
+
+        window.deleteManualDeduction = function (id) {
+            const entry = dedEntries[id];
+            if (!entry) return;
+            if (entry.complaint_id) {
+                showStaffToast('Complaint-linked deductions must be managed via the complaint HR Resolution panel.', 'error');
+                return;
+            }
+            const label = `QAR ${Number(entry.amount || 0).toFixed(2)} for ${entry.staff_name || 'this staff member'}`;
+            if (!confirm(`Delete manual deduction of ${label}?`)) return;
+
+            jsonDelete(`/staff-deductions/${id}`).then(({ ok, data }) => {
+                if (ok && data.success) {
+                    showStaffToast(data.message || 'Manual deduction deleted.');
+                    refreshDeductionsView();
+                } else {
+                    showStaffToast((data && data.message) || 'Could not delete deduction.', 'error');
+                }
+            }).catch(() => {
+                showStaffToast('Network error while deleting deduction.', 'error');
+            });
+        };
+
+        const manualDeductionForm = document.getElementById('manualDeductionForm');
+        let dedSubmitting = false;
+        if (manualDeductionForm) {
+            manualDeductionForm.addEventListener('submit', function (ev) {
+                ev.preventDefault();
+                if (dedSubmitting) return;
+
+                setDedModalError('');
+
+                const editId = document.getElementById('dedQaId').value.trim();
+                const dateVal = document.getElementById('dedQaDate').value;
+                const staffId = document.getElementById('dedQaStaff').value;
+                const amountRaw = document.getElementById('dedQaAmount').value;
+                const amountNum = parseFloat(amountRaw);
+                const reasonVal = document.getElementById('dedQaReason').value.trim();
+
+                if (!dateVal) {
+                    setDedModalError('Please select a deduction date.');
+                    return;
+                }
+                if (!staffId) {
+                    setDedModalError('Please select a staff member.');
+                    return;
+                }
+                if (!amountRaw || Number.isNaN(amountNum) || amountNum < 0.01) {
+                    setDedModalError('Please enter a valid deduction amount greater than 0.');
+                    return;
+                }
+                if (!reasonVal) {
+                    setDedModalError('Please enter the reason for this deduction.');
+                    return;
+                }
+                if (reasonVal.length > 500) {
+                    setDedModalError('Reason must be 500 characters or fewer.');
+                    return;
+                }
+
+                const saveBtn = document.getElementById('dedQaSaveBtn');
+                const idleLabel = editId ? 'Save Changes' : 'Save Deduction';
+                dedSubmitting = true;
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Saving...';
+
+                const url = editId ? `/staff-deductions/${editId}` : `{{ route('staff-deductions.store') }}`;
+                const method = editId ? 'PUT' : 'POST';
+
+                jsonFetch(url, method, {
+                    date: dateVal,
+                    staff_id: staffId,
+                    amount: amountRaw,
+                    reason: reasonVal,
+                }).then(({ ok, data }) => {
                     if (ok && data.success) {
                         bootstrap.Modal.getInstance(document.getElementById('addDeductionModal'))?.hide();
-                        showStaffToast(data.message || 'Deduction logged.');
-                        window.location.reload();
+                        showStaffToast(data.message || (editId ? 'Manual deduction updated.' : 'Manual deduction logged.'));
+                        refreshDeductionsView();
                     } else {
-                        const firstError = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'Could not add deduction.');
+                        const firstError = data && data.errors
+                            ? Object.values(data.errors)[0][0]
+                            : ((data && data.message) || 'Could not save deduction.');
+                        setDedModalError(firstError);
                         showStaffToast(firstError, 'error');
+                        dedSubmitting = false;
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = idleLabel;
                     }
+                }).catch(() => {
+                    setDedModalError('Network error while saving deduction. Please try again.');
+                    showStaffToast('Network error while saving deduction.', 'error');
+                    dedSubmitting = false;
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = idleLabel;
                 });
             });
         }

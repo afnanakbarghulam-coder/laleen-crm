@@ -512,10 +512,23 @@ class StaffController extends Controller
             ? StaffContract::allTemplates()
             : StaffContract::TEMPLATES;
 
+        $todayQatar = now('Asia/Qatar')->toDateString();
+        $activeStaffForDeductions = $allStaff->filter(function (Staff $s) use ($todayQatar) {
+            if (! $s->bookable) {
+                return false;
+            }
+            $startOk = ! $s->start_date || Carbon::parse($s->start_date)->toDateString() <= $todayQatar;
+            $endOk = ! $s->end_date || Carbon::parse($s->end_date)->toDateString() >= $todayQatar;
+
+            return $startOk && $endOk;
+        })->values();
+        $canManageManualDeductions = StaffDeductionController::canManage($request->user());
+
         return view('staff.index', compact(
             'staff', 'services', 'categories', 'activeTab',
             'directorySubView', 'payrollSubView', 'shiftsOpsSubView', 'hrSubView',
             'allStaff', 'allStaffOptions', 'serviceOptions',
+            'activeStaffForDeductions', 'canManageManualDeductions',
             'staffWorkspaceOptions', 'selectedWorkspaceStaffId',
             'payrollBranch', 'payrollFrom', 'payrollTo', 'payrollRows',
             'shiftWeekStart', 'shiftWeekEnd', 'shiftDays', 'shiftRoster', 'shiftDayTotals', 'shiftConfigs', 'shiftBranch',

@@ -35,12 +35,20 @@ class StaffDeduction extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function isManual(): bool
+    {
+        return $this->complaint_id === null;
+    }
+
     public function toEditPayload(): array
     {
         return array_merge($this->only(['id', 'staff_id', 'amount', 'reason', 'complaint_id']), [
+            'date' => $this->deduction_date->format('Y-m-d'),
             'deduction_date' => $this->deduction_date->format('Y-m-d'),
             'deduction_date_label' => $this->deduction_date->format('d M Y'),
             'staff_name' => $this->staff->name ?? '—',
+            'is_manual' => $this->isManual(),
+            'complaint_reference' => $this->complaint?->reference_number,
         ]);
     }
 }
