@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Appointment;
 use App\Models\BranchEvaluation;
+use App\Models\KpiStaffEvaluation;
 use App\Models\LegalDocument;
 use App\Models\LegalTask;
 use App\Models\Service;
@@ -11,11 +12,13 @@ use App\Models\ShiftBlock;
 use App\Models\ShiftPattern;
 use App\Models\Staff;
 use App\Models\StaffAttendance;
+use App\Models\StaffComplaint;
 use App\Models\StaffDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -182,6 +185,119 @@ class FiveCoordinatedUpgradesTest extends TestCase
         $portalResp->assertSee('Al Wakrah Branch Evaluations');
         $portalResp->assertSee('2/3 This Week');
         $portalResp->assertSee('1/3 This Week');
+    }
+
+    public function test_kpis_dashboard_renders_active_salon_staff_with_real_evaluations_and_complaints_columns(): void
+    {
+        $oaStylist = Staff::create([
+            'name' => 'Mariam Stylist',
+            'branch' => 'old_airport',
+            'is_remote' => false,
+            'bookable' => true,
+        ]);
+        $wkStylist = Staff::create([
+            'name' => 'Sara Beautician',
+            'branch' => 'wakrah',
+            'is_remote' => false,
+            'bookable' => true,
+        ]);
+
+        // Seed real kpi_staff_evaluations rows in current month (2026-11) using real overall_average column
+        KpiStaffEvaluation::create([
+            'staff_id' => $oaStylist->id,
+            'evaluator_id' => $this->admin->id,
+            'branch' => 'old_airport',
+            'evaluation_date' => '2026-11-10',
+            'score_cleanliness' => 5,
+            'score_dress_code' => 5,
+            'score_attitude' => 5,
+            'score_sales' => 5,
+            'score_teamwork' => 5,
+            'score_communication' => 5,
+            'overall_average' => 5.00,
+        ]);
+        KpiStaffEvaluation::create([
+            'staff_id' => $oaStylist->id,
+            'evaluator_id' => $this->admin->id,
+            'branch' => 'old_airport',
+            'evaluation_date' => '2026-11-18',
+            'score_cleanliness' => 5,
+            'score_dress_code' => 5,
+            'score_attitude' => 5,
+            'score_sales' => 1,
+            'score_teamwork' => 5,
+            'score_communication' => 5,
+            'overall_average' => 4.33,
+        ]);
+        KpiStaffEvaluation::create([
+            'staff_id' => $wkStylist->id,
+            'evaluator_id' => $this->admin->id,
+            'branch' => 'wakrah',
+            'evaluation_date' => '2026-11-17',
+            'score_cleanliness' => 5,
+            'score_dress_code' => 5,
+            'score_attitude' => 1,
+            'score_sales' => 1,
+            'score_teamwork' => 5,
+            'score_communication' => 1,
+            'overall_average' => 3.00,
+        ]);
+
+        // Seed a real StaffComplaint linked via complaint_staff pivot (NO staff_id / status column on staff_complaints)
+        $complaint = StaffComplaint::create([
+            'complaint_date' => '2026-11-19',
+            'branch' => 'wakrah',
+            'customer_name' => 'Walk-in Client',
+            'customer_phone' => '55110022',
+            'category' => 'Service Quality',
+            'description' => 'Service delayed',
+            'what_happened' => 'Service delayed by 20 mins',
+            'is_staff_mistake' => null,
+            'created_by' => $this->admin->id,
+        ]);
+        $complaint->staffMembers()->attach([$wkStylist->id]);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $resp = $this->actingAs($this->admin)
+            ->get(route('kpi.hub', ['month' => '2026-11']))
+            ->assertOk();
+
+        $executedSql = collect(DB::getQueryLog())->pluck('query')->implode("\n");
+        DB::disableQueryLog();
+
+        // Guard strictly against invalid columns that SQLite DQS would otherwise silently accept while MySQL throws 500
+        $this->assertStringNotContainsString('overall_score', $executedSql);
+        $this->assertStringContainsString('overall_average', $executedSql);
+        $this->assertDoesNotMatchRegularExpression('/from\s+[`"]?staff_complaints[`"]?.*where\s+[`"]?staff_id[`"]?\s+in/i', $executedSql);
+
+        $salonStaffList = collect($resp->viewData('scorecard')['salon_staff_list'] ?? [])->keyBy('staff_id');
+        $this->assertTrue($salonStaffList->has($oaStylist->id));
+        $this->assertTrue($salonStaffList->has($wkStylist->id));
+
+        // Mariam (Old Airport): avg(5.00, 4.33) = 4.67, 2 evals, 0 complaints -> passing both KPIs
+        $mariam = $salonStaffList->get($oaStylist->id);
+        $this->assertSame(2, $mariam['eval_count']);
+        $this->assertEquals(4.67, $mariam['eval_avg']);
+        $this->assertTrue($mariam['eval_pass']);
+        $this->assertSame(0, $mariam['complaints_count']);
+        $this->assertTrue($mariam['complaints_clean']);
+        $this->assertSame(2, $mariam['passing_kpis_count']);
+
+        // Sara (Al Wakrah): avg(3.00) = 3.00, 1 eval, 1 unresolved complaint -> 0 passing KPIs
+        $sara = $salonStaffList->get($wkStylist->id);
+        $this->assertSame(1, $sara['eval_count']);
+        $this->assertEquals(3.0, $sara['eval_avg']);
+        $this->assertFalse($sara['eval_pass']);
+        $this->assertSame(1, $sara['complaints_count']);
+        $this->assertFalse($sara['complaints_clean']);
+        $this->assertSame('Under Review', $sara['complaints'][0]['status']);
+
+        $resp->assertSee('Mariam Stylist');
+        $resp->assertSee('4.67');
+        $resp->assertSee('Sara Beautician');
+        $resp->assertSee('3.00');
     }
 
     public function test_upgrade_3_branch_evaluation_requires_remarks_on_fail_and_displays_on_report(): void

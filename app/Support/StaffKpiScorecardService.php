@@ -1528,18 +1528,37 @@ class StaffKpiScorecardService
                 ->whereDate('evaluation_date', '>=', $periodStart->toDateString())
                 ->whereDate('evaluation_date', '<=', $periodEnd->toDateString())
                 ->orderByDesc('evaluation_date')
-                ->get(['id', 'staff_id', 'evaluation_date', 'overall_score'])
+                ->orderByDesc('id')
+                ->get(['id', 'staff_id', 'evaluation_date', 'overall_average'])
                 ->groupBy('staff_id')
             : collect();
 
-        $complaintsByStaff = Schema::hasTable('staff_complaints')
-            ? StaffComplaint::query()
-                ->whereIn('staff_id', $staffIds)
-                ->whereBetween('created_at', [$periodStart, $periodEnd])
-                ->orderByDesc('created_at')
-                ->get(['id', 'staff_id', 'status', 'created_at'])
-                ->groupBy('staff_id')
-            : collect();
+        $complaintsByStaff = [];
+        if (Schema::hasTable('staff_complaints') && Schema::hasTable('complaint_staff')) {
+            $mtdComplaints = StaffComplaint::query()
+                ->with([
+                    'staffMembers' => fn ($q) => $q->whereIn('staff.id', $staffIds)->select('staff.id'),
+                    'notices:id,complaint_id',
+                ])
+                ->whereHas('staffMembers', fn ($q) => $q->whereIn('staff.id', $staffIds))
+                ->whereDate('complaint_date', '>=', $periodStart->toDateString())
+                ->whereDate('complaint_date', '<=', $periodEnd->toDateString())
+                ->orderByDesc('complaint_date')
+                ->orderByDesc('id')
+                ->get(['id', 'complaint_date', 'is_staff_mistake', 'resolved_at']);
+
+            foreach ($mtdComplaints as $complaint) {
+                $isResolved = $complaint->resolved_at !== null
+                    || $complaint->is_staff_mistake !== null
+                    || $complaint->notices->isNotEmpty();
+
+                foreach ($complaint->staffMembers as $member) {
+                    $complaintsByStaff[(int) $member->id][] = [
+                        'status' => $isResolved ? 'Resolved' : 'Under Review',
+                    ];
+                }
+            }
+        }
 
         $rows = [];
         foreach ($beauticians as $s) {
@@ -1548,7 +1567,7 @@ class StaffKpiScorecardService
 
             $evals = $evalsByStaff->get($s->id, collect())
                 ->map(fn (KpiStaffEvaluation $e) => [
-                    'score' => (float) $e->overall_score,
+                    'score' => (float) $e->overall_average,
                     'date_label' => $e->evaluation_date
                         ? Carbon::parse($e->evaluation_date, 'Asia/Qatar')->format('d M Y')
                         : '—',
@@ -1556,12 +1575,7 @@ class StaffKpiScorecardService
                 ->values()
                 ->all();
 
-            $complaints = $complaintsByStaff->get($s->id, collect())
-                ->map(fn (StaffComplaint $c) => [
-                    'status' => strtolower((string) $c->status) === 'resolved' ? 'Resolved' : 'Under Review',
-                ])
-                ->values()
-                ->all();
+            $complaints = $complaintsByStaff[(int) $s->id] ?? [];
 
             $evalCount = count($evals);
             $evalAvg = $evalCount > 0 ? round(collect($evals)->avg('score'), 2) : null;
