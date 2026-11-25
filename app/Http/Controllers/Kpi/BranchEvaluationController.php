@@ -7,6 +7,7 @@ use App\Models\BranchEvaluation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class BranchEvaluationController extends Controller
 {
@@ -56,7 +57,7 @@ class BranchEvaluationController extends Controller
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
-        $validated = $request->validate($this->validationRules());
+        $validated = $this->validatePayload($request);
         $userId = $request->user()->id;
 
         $evaluation = BranchEvaluation::create($this->scoredAttributes($validated) + [
@@ -88,7 +89,7 @@ class BranchEvaluationController extends Controller
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
-        $validated = $request->validate($this->validationRules());
+        $validated = $this->validatePayload($request);
 
         $branchEvaluation->update($this->scoredAttributes($validated) + [
             'updated_by' => $request->user()->id,
@@ -117,8 +118,8 @@ class BranchEvaluationController extends Controller
             ->with('success', 'Branch evaluation deleted.');
     }
 
-    /** Shared by store() and update() so both validate the 27 binary answers identically. */
-    private function validationRules(): array
+    /** Shared by store() and update() so both validate the 27 binary answers and mandatory Fail remarks identically. */
+    private function validatePayload(Request $request): array
     {
         $fields = BranchEvaluation::questionFields();
 
@@ -127,14 +128,35 @@ class BranchEvaluationController extends Controller
             'manager' => 'required|in:' . implode(',', BranchEvaluation::MANAGERS),
             'evaluation_date' => 'required|date',
             'answers' => 'required|array|size:' . count($fields),
+            'remarks' => 'nullable|array',
             'action_plan' => 'nullable|string',
         ];
 
         foreach ($fields as $field) {
             $rules["answers.{$field}"] = 'required|in:1,5';
+            $rules["remarks.{$field}"] = 'nullable|string|max:1000';
         }
 
-        return $rules;
+        $validator = Validator::make($request->all(), $rules);
+
+        $validator->after(function ($v) use ($request, $fields) {
+            $answers = (array) $request->input('answers', []);
+            $remarks = (array) $request->input('remarks', []);
+
+            foreach ($fields as $field) {
+                if ((int) ($answers[$field] ?? 0) === 1) {
+                    $remarkText = trim((string) ($remarks[$field] ?? ''));
+                    if ($remarkText === '') {
+                        $v->errors()->add(
+                            "remarks.{$field}",
+                            'A remark explaining the issue is required whenever a question is marked Fail (1).'
+                        );
+                    }
+                }
+            }
+        });
+
+        return $validator->validate();
     }
 
     /** Validated input -> model attributes, with total_score/percentage/grade recalculated from the answers. */
@@ -143,11 +165,20 @@ class BranchEvaluationController extends Controller
         $totalScore = array_sum($validated['answers']);
         $percentage = round($totalScore / BranchEvaluation::maxScore() * 100, 2);
 
+        $cleanRemarks = [];
+        foreach (BranchEvaluation::questionFields() as $field) {
+            $text = trim((string) ($validated['remarks'][$field] ?? ''));
+            if ($text !== '') {
+                $cleanRemarks[$field] = $text;
+            }
+        }
+
         return [
             'branch' => $validated['branch'],
             'manager' => $validated['manager'],
             'evaluation_date' => $validated['evaluation_date'],
             'answers' => $validated['answers'],
+            'remarks' => !empty($cleanRemarks) ? $cleanRemarks : null,
             'total_score' => $totalScore,
             'percentage' => $percentage,
             'grade' => BranchEvaluation::gradeFor($percentage),

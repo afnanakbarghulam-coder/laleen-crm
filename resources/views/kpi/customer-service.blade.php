@@ -8,8 +8,10 @@
             <p>Track agent targets and evaluate chat quality.</p>
         </div>
         <div class="d-flex gap-2">
-            <a href="{{ route('kpi.operations') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Operations</a>
-            <a href="{{ route('kpi.hub') }}" class="btn btn-sm btn-outline-primary"><i class="bx bx-line-chart me-1"></i>Executive KPIs</a>
+            <a href="{{ route('operations.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bx bx-arrow-back me-1"></i>Back to Operations</a>
+            @moduleView('kpis')
+                <a href="{{ route('kpi.hub') }}" class="btn btn-sm btn-outline-primary"><i class="bx bx-line-chart me-1"></i>Executive KPIs</a>
+            @endmoduleView
         </div>
     </div>
 

@@ -534,12 +534,15 @@
         }
     </style>
     @php
-        $initialCatalogTab = in_array(request('tab'), ['services', 'combos', 'freebies'], true) ? request('tab') : 'services';
+        $initialCatalogTab = in_array(request('tab'), ['services', 'combos', 'freebies', 'offers'], true) ? request('tab') : 'services';
+        $activeOffersBadgeCount = collect($monthlyOffers ?? [])
+            ->filter(fn ($o) => $o->liveStatus($todayQatar ?? null)['key'] === 'active')
+            ->count();
     @endphp
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h4 class="fw-bold mb-0">Service Catalog</h4>
-            <p class="text-muted small mb-0">Manage salon services, multi-visit combos, and Service + Freebies offers.</p>
+            <p class="text-muted small mb-0">Manage salon services, multi-visit combos, Service + Freebies, and Monthly Offers.</p>
         </div>
         @moduleEdit('services')
             <button class="btn btn-dark svc-tab-action {{ $initialCatalogTab !== 'services' ? 'd-none' : '' }}" data-tab="services" data-bs-toggle="modal" data-bs-target="#serviceModal">
@@ -551,6 +554,9 @@
             <button class="btn btn-dark svc-tab-action {{ $initialCatalogTab !== 'freebies' ? 'd-none' : '' }}" data-tab="freebies" id="addFreebieBtn">
                 <i class="bx bx-plus me-1"></i> Add Service + Freebies
             </button>
+            <button class="btn btn-dark svc-tab-action {{ $initialCatalogTab !== 'offers' ? 'd-none' : '' }}" data-tab="offers" id="addOfferBtn">
+                <i class="bx bx-plus me-1"></i> Add Monthly Offer
+            </button>
         @endmoduleEdit
     </div>
 
@@ -558,6 +564,12 @@
         <button type="button" class="svc-top-tab {{ $initialCatalogTab === 'services' ? 'active' : '' }}" data-tab="services">Services</button>
         <button type="button" class="svc-top-tab {{ $initialCatalogTab === 'combos' ? 'active' : '' }}" data-tab="combos">Combos</button>
         <button type="button" class="svc-top-tab {{ $initialCatalogTab === 'freebies' ? 'active' : '' }}" data-tab="freebies">Service + Freebies</button>
+        <button type="button" class="svc-top-tab {{ $initialCatalogTab === 'offers' ? 'active' : '' }}" data-tab="offers">
+            Offers
+            @if ($activeOffersBadgeCount > 0)
+                <span class="badge rounded-pill ms-1" style="background:rgba(52,211,153,0.2); color:#6ee7b7; font-size:10.5px;">{{ $activeOffersBadgeCount }}</span>
+            @endif
+        </button>
     </div>
 
     <!-- TAB: SERVICES -->
@@ -865,6 +877,19 @@
     </div>
     <!-- /TAB: SERVICE + FREEBIES -->
 
+    <!-- TAB: MONTHLY OFFERS -->
+    <div class="svc-tab-pane {{ $initialCatalogTab === 'offers' ? 'active' : '' }}" id="tab-offers">
+        @include('services.partials.offers-board', [
+            'monthlyOffers' => $monthlyOffers ?? collect(),
+            'todayQatar' => $todayQatar ?? now('Asia/Qatar'),
+            'canEditOffers' => (bool) (auth()->user()?->canEdit('services')),
+            'combos' => $combos ?? collect(),
+            'freebiePackages' => $freebiePackages ?? collect(),
+            'isStandaloneOffersPage' => false,
+        ])
+    </div>
+    <!-- /TAB: MONTHLY OFFERS -->
+
     @moduleEdit('services')
     @include('services.main-form')
     @include('services.combo-form')
@@ -939,7 +964,7 @@
             modal.show();
         }
 
-        /* ---------------- TOP TABS (Services / Combos / Service + Freebies) ---------------- */
+        /* ---------------- TOP TABS (Services / Combos / Service + Freebies / Offers) ---------------- */
         document.querySelectorAll('.svc-top-tab').forEach(tabBtn => {
             tabBtn.addEventListener('click', function() {
                 const tab = this.dataset.tab;
@@ -947,6 +972,10 @@
                 document.querySelectorAll('.svc-top-tab').forEach(b => b.classList.toggle('active', b === this));
                 document.querySelectorAll('.svc-tab-pane').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
                 document.querySelectorAll('.svc-tab-action').forEach(b => b.classList.toggle('d-none', b.dataset.tab !== tab));
+
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', tab);
+                history.replaceState(null, '', url.toString());
 
                 // Hide bulk bar cleanly when navigating away from the Services tab
                 const bulkBar = document.getElementById('svcBulkActionBar');

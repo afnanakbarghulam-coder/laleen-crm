@@ -581,10 +581,19 @@
         </div>
 
         @if (!$isAdminPreview)
-            <button type="button" class="mp-btn-ghost" data-bs-toggle="modal" data-bs-target="#portalChangePasswordModal">
-                <i class="bx bx-lock-alt"></i>
-                <span>Change Password</span>
-            </button>
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                @if (auth()->user()?->canViewMonthlyOffers())
+                    <a href="{{ route('offers.index') }}" class="mp-btn-ghost"
+                       style="border-color: rgba(212, 163, 115, 0.34); color: #f3d9a4;">
+                        <i class="bx bx-purchase-tag-alt"></i>
+                        <span>Monthly Offers</span>
+                    </a>
+                @endif
+                <button type="button" class="mp-btn-ghost" data-bs-toggle="modal" data-bs-target="#portalChangePasswordModal">
+                    <i class="bx bx-lock-alt"></i>
+                    <span>Change Password</span>
+                </button>
+            </div>
         @endif
     </div>
 

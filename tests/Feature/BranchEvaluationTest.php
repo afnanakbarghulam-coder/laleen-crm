@@ -61,12 +61,17 @@ class BranchEvaluationTest extends TestCase
 
         // 8 fails -> 135 - (8 * 4) = 103 -> 103/135 = 76.30% -> Pass
         $failFields = ['q4', 'q5', 'q8', 'q10', 'q11', 'q19', 'q20', 'q22'];
+        $remarks = [];
+        foreach ($failFields as $f) {
+            $remarks[$f] = "Issue observed on {$f} during branch visit.";
+        }
 
         $payload = [
             'branch' => 'old_airport',
             'manager' => 'Ahana',
             'evaluation_date' => '2026-06-16',
             'answers' => $this->answersWithFails($failFields),
+            'remarks' => $remarks,
             'action_plan' => 'Hygiene check every morning.',
         ];
 

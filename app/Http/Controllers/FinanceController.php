@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DailyBranchClose;
 use App\Models\Expense;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
 use App\Models\Staff;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
@@ -24,6 +26,16 @@ class FinanceController extends Controller
 
     public function index(Request $request)
     {
+        /** @var User|null $actor */
+        $actor = $request->user() ?? auth()->user();
+        abort_unless($actor && ($actor->canView('finance') || $actor->isSalonManager()), 403, 'You do not have permission to access this section.');
+
+        $isAdmin = $actor->isAdmin();
+        $isSalonManager = $actor->isSalonManager();
+        $isBlindManagerOnly = $isSalonManager && !$actor->canView('finance');
+        $managedSalesBranch = $isSalonManager ? $actor->managedSalonBranch() : null;
+        $managedCanonicalBranch = $isSalonManager ? $actor->managedCanonicalBranch() : null;
+
         $from = $request->filled('from')
             ? Carbon::parse($request->from)->startOfDay()
             : now()->startOfMonth();
@@ -36,9 +48,13 @@ class FinanceController extends Controller
             [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
         }
 
-        $branch = $request->filled('branch') && (array_key_exists($request->branch, self::BRANCHES) || $request->branch === 'general')
-            ? $request->branch
-            : null;
+        if ($isSalonManager && $managedSalesBranch) {
+            $branch = $managedSalesBranch;
+        } else {
+            $branch = $request->filled('branch') && (array_key_exists($request->branch, self::BRANCHES) || $request->branch === 'general')
+                ? $request->branch
+                : null;
+        }
 
         $staffId = $request->filled('staff_id') && Staff::whereKey($request->staff_id)->exists()
             ? (int) $request->staff_id
@@ -120,6 +136,38 @@ class FinanceController extends Controller
         $branchBreakdown = self::branchBreakdown($from, $to);
         $trend = $this->trendBuckets($from, $to, $sales, $expenses, $staffId);
 
+        // ---- Blind End-of-Day (EOD) Cash & POS Close State ----
+        $todayQatarStr = Carbon::now('Asia/Qatar')->toDateString();
+        $eodDate = $request->filled('eod_date')
+            ? Carbon::parse($request->query('eod_date'), 'Asia/Qatar')->toDateString()
+            : $todayQatarStr;
+
+        if ($isSalonManager && $managedCanonicalBranch) {
+            $eodBranch = $managedCanonicalBranch;
+        } else {
+            $eodBranch = DailyBranchClose::normalizeBranch($request->query('eod_branch'))
+                ?? DailyBranchClose::normalizeBranch($branch)
+                ?? 'old_airport';
+        }
+
+        $currentEodClose = DailyBranchClose::with(['submitter:id,name', 'verifier:id,name'])
+            ->where('branch', $eodBranch)
+            ->whereDate('close_date', $eodDate)
+            ->first();
+
+        $recentEodCloses = DailyBranchClose::with(['submitter:id,name', 'verifier:id,name'])
+            ->when($isSalonManager && $managedCanonicalBranch, fn ($q) => $q->where('branch', $managedCanonicalBranch))
+            ->orderByDesc('close_date')
+            ->orderBy('branch')
+            ->limit(20)
+            ->get();
+
+        // Blindness guard: Salon Managers cannot see Sales Ledger payment method totals before submitting EOD Close for that day
+        $hideBlindPaymentTotals = $isSalonManager && (!$currentEodClose || !$currentEodClose->is_locked);
+        $adminEodLiveExpected = $isAdmin
+            ? DailyBranchClose::expectedTotalsFor($eodBranch, $eodDate)
+            : null;
+
         return view('revenue.index', [
             'from' => $from,
             'to' => $to,
@@ -146,6 +194,16 @@ class FinanceController extends Controller
             'trendLabels' => $trend['labels'],
             'trendRevenue' => $trend['revenue'],
             'trendExpenses' => $trend['expenses'],
+            'isAdminViewer' => $isAdmin,
+            'isSalonManagerViewer' => $isSalonManager,
+            'isBlindManagerOnly' => $isBlindManagerOnly,
+            'managedCanonicalBranch' => $managedCanonicalBranch,
+            'eodDate' => $eodDate,
+            'eodBranch' => $eodBranch,
+            'currentEodClose' => $currentEodClose,
+            'recentEodCloses' => $recentEodCloses,
+            'hideBlindPaymentTotals' => $hideBlindPaymentTotals,
+            'adminEodLiveExpected' => $adminEodLiveExpected,
         ]);
     }
 

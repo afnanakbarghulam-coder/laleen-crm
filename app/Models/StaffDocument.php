@@ -18,22 +18,37 @@ class StaffDocument extends Model
         'qid' => 'QID / Government ID',
         'passport' => 'Passport',
         'national_id' => 'National ID',
-        'health_card' => 'Health Card',
+        'health_card' => 'Health Certificate / Health Card',
         'medical_certificate' => 'Medical Certificate',
+        'six_month_agreement' => '6-Month Agreement Paper',
         'offer_letter' => 'Offer Letter',
         'signed_contract' => 'Signed Contract',
         'other' => 'Other',
     ];
 
     /**
+     * Staff legal & compliance document categories managed via Legal Tasks -> Staff Legal Documents.
+     * Uploaded rows write directly to `staff_documents` as verified and sync immediately to `/my-profile`.
+     */
+    public const LEGAL_STAFF_CATEGORIES = [
+        'qid' => 'QID / Government ID',
+        'passport' => 'Passport',
+        'health_card' => 'Health Certificate / Health Card',
+        'six_month_agreement' => '6-Month Agreement Paper',
+        'signed_contract' => 'Signed Contract',
+        'medical_certificate' => 'Medical Certificate',
+        'other' => 'Other',
+    ];
+
+    /**
      * Personal document categories permitted for employee self-upload from `/my-profile?tab=documents`.
-     * HR-only contract & offer documents (`offer_letter`, `signed_contract`) are strictly blocked for staff.
+     * HR-only contract & offer documents (`offer_letter`, `signed_contract`, `six_month_agreement`) are strictly blocked for staff.
      */
     public const SELF_UPLOAD_CATEGORIES = [
         'qid' => 'QID / Government ID',
         'passport' => 'Passport',
         'national_id' => 'National ID',
-        'health_card' => 'Health Card',
+        'health_card' => 'Health Certificate / Health Card',
         'medical_certificate' => 'Medical Certificate',
     ];
 

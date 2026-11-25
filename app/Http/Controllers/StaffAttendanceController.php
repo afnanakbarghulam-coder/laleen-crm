@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Appointment;
 use App\Models\Staff;
 use App\Models\StaffAttendance;
 use App\Models\User;
@@ -12,6 +13,69 @@ use Illuminate\Validation\Rule;
 
 class StaffAttendanceController extends Controller
 {
+    /**
+     * Return today's (or chosen date's) uncompleted Enhanced Calendar appointments for a specialist
+     * before confirming an `Absent` mark so reception/managers know which bookings need reassignment.
+     */
+    public function absentPreview(Request $request)
+    {
+        /** @var User $actor */
+        $actor = $request->user();
+
+        $validated = $request->validate([
+            'staff_id' => ['required', 'integer', 'exists:staff,id'],
+            'attendance_date' => ['nullable', 'date'],
+        ]);
+
+        $staff = Staff::with('user')->findOrFail((int) $validated['staff_id']);
+        $this->authorizeBranchScope($actor, $staff);
+
+        $dateStr = !empty($validated['attendance_date'])
+            ? Carbon::parse($validated['attendance_date'], 'Asia/Qatar')->toDateString()
+            : Carbon::now('Asia/Qatar')->toDateString();
+
+        $appointments = Appointment::query()
+            ->whereDate('appointment_datetime', $dateStr)
+            ->whereNotIn('status', ['cancelled', 'no_show', 'completed'])
+            ->where(function ($q) use ($staff) {
+                $q->where('staff_id', $staff->id)
+                    ->orWhereHas('appointmentServices', function ($sq) use ($staff) {
+                        $sq->where('staff_id', $staff->id)
+                            ->where('is_pending', false);
+                    });
+            })
+            ->with(['appointmentServices' => fn ($q) => $q->where('staff_id', $staff->id)->where('is_pending', false)])
+            ->orderBy('appointment_datetime')
+            ->get();
+
+        $bookings = $appointments->map(function (Appointment $appt) {
+            $firstLine = $appt->appointmentServices->first();
+            $timeCarbon = $firstLine?->start_time
+                ? Carbon::parse($firstLine->start_time)
+                : ($appt->appointment_datetime ? Carbon::parse($appt->appointment_datetime) : null);
+
+            $serviceSummary = $appt->appointmentServices->isNotEmpty()
+                ? $appt->appointmentServices->pluck('service_name')->filter()->implode(', ')
+                : ($appt->display_combo_name ?: ($appt->service_name ?: 'Appointment'));
+
+            return [
+                'id' => $appt->id,
+                'time' => $timeCarbon ? $timeCarbon->format('g:i A') : 'Unscheduled',
+                'customer_name' => $appt->customer_name ?: 'Walk-in Client',
+                'service_name' => $serviceSummary,
+                'status' => $appt->status,
+            ];
+        })->values();
+
+        return response()->json([
+            'success' => true,
+            'staff_id' => $staff->id,
+            'staff_name' => $staff->name,
+            'attendance_date' => $dateStr,
+            'bookings_count' => $bookings->count(),
+            'bookings' => $bookings,
+        ]);
+    }
     /**
      * Server-side tamper-proof Salon Check-In (`POST /staff-attendance/check-in`).
      * Always uses `Carbon::now('Asia/Qatar')` on the server (never trusts client clock),
@@ -82,6 +146,7 @@ class StaffAttendanceController extends Controller
         }
 
         $record = DB::transaction(function () use (
+            $existing,
             $staff,
             $todayStr,
             $status,
@@ -92,23 +157,28 @@ class StaffAttendanceController extends Controller
             $actor,
             $finalNotes
         ) {
-            return StaffAttendance::updateOrCreate(
-                [
-                    'staff_id' => $staff->id,
-                    'attendance_date' => $todayStr,
-                ],
-                [
-                    'status' => $status,
-                    'scheduled_start_time' => $scheduledStartTime,
-                    'scheduled_end_time' => $scheduledEndTime,
-                    'checked_in_at' => $nowQatar,
-                    'late_minutes' => $lateMinutes,
-                    'checked_in_by' => $actor->id,
-                    'recorded_by' => $actor->id,
-                    'is_locked' => true,
-                    'notes' => $finalNotes,
-                ]
-            );
+            $attributes = [
+                'status' => $status,
+                'scheduled_start_time' => $scheduledStartTime,
+                'scheduled_end_time' => $scheduledEndTime,
+                'checked_in_at' => $nowQatar,
+                'late_minutes' => $lateMinutes,
+                'checked_in_by' => $actor->id,
+                'recorded_by' => $actor->id,
+                'is_locked' => true,
+                'notes' => $finalNotes,
+            ];
+
+            if ($existing) {
+                $existing->fill($attributes)->save();
+
+                return $existing->fresh();
+            }
+
+            return StaffAttendance::create(array_merge([
+                'staff_id' => $staff->id,
+                'attendance_date' => $todayStr,
+            ], $attributes));
         });
 
         $checkInClock = $record->checkedInQatarLabel();
@@ -189,25 +259,30 @@ class StaffAttendanceController extends Controller
     }
 
     /**
-     * Manual attendance status upsert (`present`, `absent`, `late`, `off`) for past dates,
+     * Manual attendance status upsert (`present`, `absent`, `late` — `off` removed) for past dates,
      * remote staff, no-shows, or note updates. Strictly rejects non-admin attempts to
-     * alter or overwrite a locked check-in record (HTTP 403).
+     * alter or overwrite a locked check-in record (HTTP 403), rejects `'off'` (422), and rejects
+     * marking an in-salon employee `absent` on their scheduled Off Day (422).
      */
     public function store(Request $request)
     {
         /** @var User $actor */
         $actor = $request->user();
 
+        $allowedStatuses = $request->boolean('notes_only')
+            ? array_keys(StaffAttendance::STATUSES)
+            : array_keys(StaffAttendance::MANUAL_STATUSES);
+
         $validated = $request->validate([
             'staff_id' => ['required', 'integer', 'exists:staff,id'],
             'attendance_date' => ['required', 'date'],
-            'status' => ['required', Rule::in(array_keys(StaffAttendance::STATUSES))],
+            'status' => ['required', Rule::in($allowedStatuses)],
             'late_minutes' => ['nullable', 'integer', 'min:0', 'max:1440'],
             'notes' => ['nullable', 'string', 'max:500'],
             'notes_only' => ['nullable', 'boolean'],
         ]);
 
-        $staff = Staff::with('user')->findOrFail((int) $validated['staff_id']);
+        $staff = Staff::with(['user', 'shiftPatterns.blocks', 'timeOffs'])->findOrFail((int) $validated['staff_id']);
         $this->authorizeBranchScope($actor, $staff);
 
         $dateStr = Carbon::parse($validated['attendance_date'], 'Asia/Qatar')->toDateString();
@@ -251,22 +326,38 @@ class StaffAttendanceController extends Controller
             ]);
         }
 
+        // Prevent marking an in-salon employee Absent on a scheduled Off Day
+        if ($validated['status'] === StaffAttendance::STATUS_ABSENT && !$staff->isRemote()) {
+            $shift = $staff->resolveShiftForDate($dateStr);
+            if ($shift['type'] === 'off') {
+                return $this->errorResponse(
+                    $request,
+                    "{$staff->name} is already on a scheduled Off Day for {$dateStr} and cannot be marked Absent.",
+                    422
+                );
+            }
+        }
+
         $lateMinutes = $validated['status'] === StaffAttendance::STATUS_LATE
             ? (int) ($validated['late_minutes'] ?? ($existing?->late_minutes ?? 0))
             : 0;
 
-        $record = StaffAttendance::updateOrCreate(
-            [
+        $attributes = [
+            'status' => $validated['status'],
+            'late_minutes' => $lateMinutes,
+            'notes' => $cleanNotes,
+            'recorded_by' => $actor->id,
+        ];
+
+        if ($existing) {
+            $existing->fill($attributes)->save();
+            $record = $existing->fresh();
+        } else {
+            $record = StaffAttendance::create(array_merge([
                 'staff_id' => $staff->id,
                 'attendance_date' => $dateStr,
-            ],
-            [
-                'status' => $validated['status'],
-                'late_minutes' => $lateMinutes,
-                'notes' => $cleanNotes,
-                'recorded_by' => $actor->id,
-            ]
-        );
+            ], $attributes));
+        }
 
         $message = "Marked {$staff->name} as {$record->statusLabel()} for {$dateStr}.";
 
@@ -295,7 +386,7 @@ class StaffAttendanceController extends Controller
         abort_unless($actor && $actor->isAdmin(), 403, 'Only administrators can edit locked check-in records.');
 
         $validated = $request->validate([
-            'status' => ['required', Rule::in(array_keys(StaffAttendance::STATUSES))],
+            'status' => ['required', Rule::in(array_keys(StaffAttendance::MANUAL_STATUSES))],
             'checked_in_time' => ['nullable', 'date_format:H:i'],
             'checked_out_time' => ['nullable', 'date_format:H:i'],
             'late_minutes' => ['nullable', 'integer', 'min:0', 'max:1440'],

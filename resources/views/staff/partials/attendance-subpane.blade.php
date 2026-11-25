@@ -302,51 +302,90 @@
                                     @endif
                                 </div>
                             @elseif ($isToday && !$isRemoteMember)
-                                {{-- Today's Live Salon Check-In Terminal Row --}}
+                                {{-- Today's Live Salon Check-In Terminal Row (`Off` removed; scheduled Off Day hides `Absent`) --}}
                                 @moduleEdit('staff_management')
                                     @php
+                                        $isScheduledOffDay = ($shift['type'] ?? '') === 'off';
+                                        $isCurrentlyAbsent = $curStatus === \App\Models\StaffAttendance::STATUS_ABSENT;
                                         $checkInPayload = [
                                             'staffId' => $member->id,
                                             'staffName' => $member->name,
-                                            'shiftDisplay' => $shift['type'] === 'off'
+                                            'isAbsentOverride' => $isCurrentlyAbsent,
+                                            'shiftDisplay' => $isScheduledOffDay
                                                 ? 'Off Day (Extra Shift Check-In)'
                                                 : ($shift['type'] === 'on_leave' ? ($shift['display'] . ' (Override Check-In)') : $shift['display']),
                                         ];
                                     @endphp
                                     <div class="d-flex align-items-center flex-wrap gap-2">
+                                        @if ($isCurrentlyAbsent)
+                                            <span class="att-locked-pill att-locked-late-rose" title="Marked Absent — tap Check In if they arrived late">
+                                                <i class="bx bx-user-x"></i>
+                                                <span>Absent</span>
+                                            </span>
+                                        @endif
+
                                         <button type="button"
                                             class="att-checkin-btn js-open-checkin-modal"
-                                            data-payload='@json($checkInPayload)'>
+                                            data-payload='@json($checkInPayload)'
+                                            title="{{ $isCurrentlyAbsent ? 'Staff arrived late? Check In converts Absent to Late automatically' : 'Record official Qatar-time Check-In' }}">
                                             <i class="bx bx-log-in-circle"></i> Check In
                                         </button>
-                                        <button type="button"
-                                            class="att-status-btn {{ $curStatus === 'absent' ? 'active-absent' : '' }}"
-                                            data-att-btn="{{ $member->id }}"
-                                            data-status="absent"
-                                            onclick="markStaffAttendance({{ $member->id }}, 'absent', '{{ $attDate }}')">
-                                            Absent
-                                        </button>
-                                        <button type="button"
-                                            class="att-status-btn {{ $curStatus === 'off' ? 'active-off' : '' }}"
-                                            data-att-btn="{{ $member->id }}"
-                                            data-status="off"
-                                            onclick="markStaffAttendance({{ $member->id }}, 'off', '{{ $attDate }}')">
-                                            Off
-                                        </button>
+
+                                        @if (!$isScheduledOffDay)
+                                            <button type="button"
+                                                class="att-status-btn {{ $isCurrentlyAbsent ? 'active-absent' : '' }}"
+                                                data-att-btn="{{ $member->id }}"
+                                                data-status="absent"
+                                                onclick="openConfirmAbsentModal({{ $member->id }}, @js($member->name), '{{ $attDate }}')">
+                                                Absent
+                                            </button>
+                                        @endif
+
+                                        @if ($isAdmin && $rec)
+                                            @php
+                                                $overridePayload = [
+                                                    'id' => $rec->id,
+                                                    'staffName' => $member->name,
+                                                    'date' => $attDate,
+                                                    'status' => $rec->status,
+                                                    'checkedInTime' => $rec->checked_in_at ? $rec->checked_in_at->copy()->timezone('Asia/Qatar')->format('H:i') : '',
+                                                    'checkedOutTime' => $rec->checked_out_at ? $rec->checked_out_at->copy()->timezone('Asia/Qatar')->format('H:i') : '',
+                                                    'lateMinutes' => $lateMins,
+                                                    'notes' => (string) ($rec->notes ?? ''),
+                                                ];
+                                            @endphp
+                                            <button type="button"
+                                                class="portal-mini-btn js-open-att-override"
+                                                data-payload='@json($overridePayload)'
+                                                title="Admin Only: Edit or Reset Attendance">
+                                                <i class="bx bx-edit-alt"></i>
+                                            </button>
+                                        @endif
                                     </div>
                                 @else
-                                    <span class="small" style="color:#cbb8b0;">{{ $curStatus ? \App\Models\StaffAttendance::STATUSES[$curStatus] : 'Not checked in' }}</span>
+                                    <span class="small" style="color:#cbb8b0;">{{ $curStatus ? (\App\Models\StaffAttendance::STATUSES[$curStatus] ?? ucfirst($curStatus)) : 'Not checked in' }}</span>
                                 @endmoduleEdit
                             @else
-                                {{-- Past/Future Dates OR Remote Staff: Manual Status Marking --}}
+                                {{-- Past/Future Dates OR Remote Staff: Manual Status Marking (`Off` removed) --}}
                                 @moduleEdit('staff_management')
+                                    @php
+                                        $isScheduledOffDay = !$isRemoteMember && ($shift['type'] ?? '') === 'off';
+                                    @endphp
                                     <div class="d-flex align-items-center flex-wrap gap-1">
-                                        @foreach (\App\Models\StaffAttendance::STATUSES as $stKey => $stLabel)
+                                        @foreach (\App\Models\StaffAttendance::MANUAL_STATUSES as $stKey => $stLabel)
+                                            @if ($stKey === 'absent' && $isScheduledOffDay)
+                                                @continue
+                                            @endif
                                             <button type="button"
                                                 class="att-status-btn {{ $curStatus === $stKey ? 'active-' . $stKey : '' }}"
                                                 data-att-btn="{{ $member->id }}"
                                                 data-status="{{ $stKey }}"
-                                                onclick="markStaffAttendance({{ $member->id }}, '{{ $stKey }}', '{{ $attDate }}')">
+                                                @if ($stKey === 'absent')
+                                                    onclick="openConfirmAbsentModal({{ $member->id }}, @js($member->name), '{{ $attDate }}')"
+                                                @else
+                                                    onclick="markStaffAttendance({{ $member->id }}, '{{ $stKey }}', '{{ $attDate }}')"
+                                                @endif
+                                            >
                                                 {{ $stLabel }}
                                             </button>
                                         @endforeach
@@ -374,7 +413,7 @@
                                         @endif
                                     </div>
                                 @else
-                                    <span class="small" style="color:#cbb8b0;">{{ $curStatus ? \App\Models\StaffAttendance::STATUSES[$curStatus] : 'Not marked' }}</span>
+                                    <span class="small" style="color:#cbb8b0;">{{ $curStatus ? (\App\Models\StaffAttendance::STATUSES[$curStatus] ?? ucfirst($curStatus)) : 'Not marked' }}</span>
                                 @endmoduleEdit
                             @endif
                         </td>
@@ -421,6 +460,10 @@
                 <input type="hidden" id="ciStaffId" value="">
                 <div class="modal-body">
                     <div class="alert alert-danger py-2 px-3 small d-none mb-3" id="ciErrorAlert"></div>
+                    <div class="alert py-2 px-3 small d-none mb-3" id="ciAbsentOverrideNotice" style="background:rgba(212,163,115,0.12); border:1px solid rgba(212,163,115,0.34); color:#f3d9a4;">
+                        <i class="bx bx-info-circle me-1"></i>
+                        Currently marked <strong>Absent</strong>. Checking in now will convert this record to <strong>Late</strong> (or On Time) and restore Enhanced Calendar booking availability.
+                    </div>
 
                     <div class="py-2 d-flex justify-content-between align-items-center" style="border-bottom:1px solid rgba(255,255,255,0.06);">
                         <span class="small" style="color:#9e8780;">Scheduled Shift</span>
@@ -451,6 +494,62 @@
         </div>
     </div>
 </div>
+
+{{-- Confirmation Modal Before Marking Absent (Shows Live Uncompleted Bookings Warning) --}}
+<div class="modal sa-modal" id="confirmAbsentModal" tabindex="-1" aria-labelledby="confirmAbsentTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 470px;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0" id="confirmAbsentTitle" style="color:#f8efe6;">Confirm Absence?</h5>
+                    <div class="small" style="color:#b8a29a;">Marks staff absent &amp; blocks new Enhanced Calendar bookings for this date.</div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="confirmAbsentForm" onsubmit="return submitConfirmAbsent(event);">
+                <input type="hidden" id="absStaffId" value="">
+                <input type="hidden" id="absDate" value="">
+                <div class="modal-body">
+                    <div class="alert alert-danger py-2 px-3 small d-none mb-3" id="absErrorAlert"></div>
+
+                    <p class="mb-3" id="absConfirmQuestion" style="color:#f8efe6; font-size:14px; font-weight:600;"></p>
+
+                    <div id="absBookingsLoading" class="small mb-3" style="color:#b8a29a;">
+                        Checking Enhanced Calendar bookings&hellip;
+                    </div>
+
+                    <div id="absBookingsWarning" class="d-none mb-3 p-3 rounded-3" style="background:rgba(251,113,133,0.10); border:1px solid rgba(251,113,133,0.34);">
+                        <div class="fw-semibold small mb-2" style="color:#fda4af;" id="absBookingsWarningTitle"></div>
+                        <ul class="mb-2 ps-3 small" id="absBookingsList" style="color:#f8efe6;"></ul>
+                        <div class="small" style="color:#cbb8b0;">
+                            Existing bookings stay visible on Enhanced Calendar with a <strong>Needs Reassignment</strong> badge so nothing is lost.
+                        </div>
+                    </div>
+
+                    <div id="absNoBookingsNote" class="d-none small mb-3" style="color:#9fc19a;">
+                        <i class="bx bx-check-circle me-1"></i>No uncompleted Enhanced Calendar appointments scheduled for this date.
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label" for="absNotes">Reason / Note (optional)</label>
+                        <input type="text" id="absNotes" class="form-control form-control-sm" maxlength="500" placeholder="e.g. Called in sick, personal emergency…">
+                    </div>
+
+                    <div class="small" style="color:#9e8780;">
+                        <i class="bx bx-time-five me-1" style="color:#d4a373;"></i>
+                        If they arrive later today, tapping <strong>Check In</strong> will automatically convert Absent to Late and re-open calendar availability.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="sc-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-danger rounded-pill px-3 fw-semibold" id="absConfirmBtn">
+                        <i class="bx bx-user-x me-1"></i>Confirm Absent
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endmoduleEdit
 
 @if ($isAdmin)
@@ -474,7 +573,7 @@
                         <div class="col-md-6">
                             <label class="form-label" for="aaoStatus">Status *</label>
                             <select id="aaoStatus" class="form-select" required>
-                                @foreach (\App\Models\StaffAttendance::STATUSES as $stKey => $stLabel)
+                                @foreach (\App\Models\StaffAttendance::MANUAL_STATUSES as $stKey => $stLabel)
                                     <option value="{{ $stKey }}">{{ $stLabel }}</option>
                                 @endforeach
                             </select>
@@ -570,6 +669,8 @@
                 document.getElementById('ciStaffId').value = payload.staffId || '';
                 document.getElementById('confirmCheckInTitle').textContent = `Confirm Check-In for ${payload.staffName || 'Staff'}?`;
                 document.getElementById('ciShiftDisplay').textContent = payload.shiftDisplay || '—';
+                const overrideNotice = document.getElementById('ciAbsentOverrideNotice');
+                if (overrideNotice) overrideNotice.classList.toggle('d-none', !payload.isAbsentOverride);
                 const inlineNote = document.getElementById('attNote' + payload.staffId);
                 document.getElementById('ciNotes').value = inlineNote ? inlineNote.value.trim() : '';
                 const errEl = document.getElementById('ciErrorAlert');
@@ -665,6 +766,111 @@
             alert('Network error recording check-out.');
         }
         if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Check Out'; }
+    };
+
+    window.openConfirmAbsentModal = async function (staffId, staffName, attendanceDate) {
+        const modalEl = document.getElementById('confirmAbsentModal');
+        if (!modalEl) return;
+
+        document.getElementById('absStaffId').value = staffId;
+        document.getElementById('absDate').value = attendanceDate;
+        document.getElementById('confirmAbsentTitle').textContent = `Mark ${staffName} Absent?`;
+        const isTodayDate = attendanceDate === @json(now('Asia/Qatar')->toDateString());
+        document.getElementById('absConfirmQuestion').textContent = isTodayDate
+            ? `Are you sure ${staffName} is absent today?`
+            : `Are you sure ${staffName} is absent on ${attendanceDate}?`;
+
+        const inlineNote = document.getElementById('attNote' + staffId);
+        document.getElementById('absNotes').value = inlineNote ? inlineNote.value.trim() : '';
+
+        const errEl = document.getElementById('absErrorAlert');
+        const loadingEl = document.getElementById('absBookingsLoading');
+        const warnEl = document.getElementById('absBookingsWarning');
+        const warnTitleEl = document.getElementById('absBookingsWarningTitle');
+        const listEl = document.getElementById('absBookingsList');
+        const noneEl = document.getElementById('absNoBookingsNote');
+        const btn = document.getElementById('absConfirmBtn');
+
+        if (errEl) { errEl.classList.add('d-none'); errEl.textContent = ''; }
+        if (loadingEl) loadingEl.classList.remove('d-none');
+        if (warnEl) warnEl.classList.add('d-none');
+        if (noneEl) noneEl.classList.add('d-none');
+        if (listEl) listEl.innerHTML = '';
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bx bx-user-x me-1"></i>Confirm Absent'; }
+
+        if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+        try {
+            const url = `{{ route('staff-attendance.absent-preview') }}?staff_id=${encodeURIComponent(staffId)}&attendance_date=${encodeURIComponent(attendanceDate)}`;
+            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            const data = await res.json().catch(() => ({}));
+            if (loadingEl) loadingEl.classList.add('d-none');
+
+            const bookings = Array.isArray(data.bookings) ? data.bookings : [];
+            if (bookings.length > 0) {
+                if (warnTitleEl) {
+                    warnTitleEl.textContent = `${bookings.length} uncompleted appointment${bookings.length === 1 ? '' : 's'} will need reassignment:`;
+                }
+                if (listEl) {
+                    bookings.forEach(function (b) {
+                        const li = document.createElement('li');
+                        li.textContent = `${b.time} — ${b.customer_name} (${b.service_name})`;
+                        listEl.appendChild(li);
+                    });
+                }
+                if (warnEl) warnEl.classList.remove('d-none');
+            } else if (noneEl) {
+                noneEl.classList.remove('d-none');
+            }
+        } catch (e) {
+            if (loadingEl) loadingEl.classList.add('d-none');
+        }
+    };
+
+    window.submitConfirmAbsent = async function (evt) {
+        evt.preventDefault();
+        const staffId = Number(document.getElementById('absStaffId')?.value || 0);
+        const attendanceDate = document.getElementById('absDate')?.value || '';
+        const notes = document.getElementById('absNotes')?.value?.trim() || '';
+        const errEl = document.getElementById('absErrorAlert');
+        const btn = document.getElementById('absConfirmBtn');
+        if (!staffId || !attendanceDate) return false;
+
+        if (errEl) { errEl.classList.add('d-none'); errEl.textContent = ''; }
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+        try {
+            const res = await fetch('{{ route('staff-attendance.store') }}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    staff_id: staffId,
+                    attendance_date: attendanceDate,
+                    status: 'absent',
+                    notes: notes,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.success) {
+                window.location.href = attReloadUrl;
+                return false;
+            }
+            if (errEl) {
+                errEl.textContent = data.message || 'Could not mark staff member absent.';
+                errEl.classList.remove('d-none');
+            }
+        } catch (e) {
+            if (errEl) {
+                errEl.textContent = 'Network error saving absence.';
+                errEl.classList.remove('d-none');
+            }
+        }
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bx bx-user-x me-1"></i>Confirm Absent'; }
+        return false;
     };
 
     window.markStaffAttendance = async function (staffId, status, attendanceDate, silent = false) {

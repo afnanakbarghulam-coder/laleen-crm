@@ -28,11 +28,12 @@ class RestrictSalonStaffToPortal
 
         $path = ltrim($request->path(), '/');
 
-        // Always allow portal routes, staff contract portal links, policy-checked own document/certificate downloads, logout, and healthcheck.
+        // Always allow portal routes, staff contract portal links, read-only Monthly Offers, policy-checked own document/certificate downloads, logout, and healthcheck.
         if (
             $path === 'my-profile'
             || str_starts_with($path, 'my-profile/')
             || str_starts_with($path, 'my-contract/')
+            || ($request->isMethod('GET') && ($path === 'monthly-offers' || $path === 'offers'))
             || preg_match('#^staff-documents/\d+/download$#', $path) === 1
             || preg_match('#^staff-leaves/\d+/certificate$#', $path) === 1
             || $path === 'logout'

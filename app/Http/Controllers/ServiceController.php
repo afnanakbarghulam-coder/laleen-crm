@@ -7,11 +7,13 @@ use App\Models\AppointmentService;
 use App\Models\ClientPackageService;
 use App\Models\Combo;
 use App\Models\Lead;
+use App\Models\MonthlyOffer;
 use App\Models\Service;
 use App\Models\ServiceCategory;
 use App\Models\ServiceFreebiePackage;
 use App\Models\Staff;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class ServiceController extends Controller
@@ -47,6 +49,19 @@ class ServiceController extends Controller
             'eligibleServices.category',
         ])->orderBy('name')->get();
 
+        $monthlyOffers = MonthlyOffer::with([
+            'combo.services:id,name,price,duration',
+            'freebiePackage.anchorService:id,name,price,duration',
+            'freebiePackage.eligibleServices:id,name,price,duration',
+            'creator:id,name',
+        ])
+            ->orderByDesc('is_active')
+            ->orderBy('valid_until')
+            ->orderByDesc('id')
+            ->get();
+
+        $todayQatar = Carbon::now('Asia/Qatar');
+
         return view('services.index', compact(
             'categories',
             'uncategorizedCount',
@@ -55,7 +70,9 @@ class ServiceController extends Controller
             'staffList',
             'allServices',
             'combos',
-            'freebiePackages'
+            'freebiePackages',
+            'monthlyOffers',
+            'todayQatar'
         ));
     }
 

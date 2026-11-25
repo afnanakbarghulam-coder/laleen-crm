@@ -523,11 +523,11 @@ class KpiExecutiveScorecardTest extends TestCase
         $this->assertTrue($afterDec['sana']['replies_sla_passing']);
         $this->assertTrue($afterDec['ayan']['social_oversight_passing']);
 
-        // 6. Verify GET /kpis/operations and GET /operations load the clean 3-department Operations Hub
-        $opsResponse = $this->actingAs($this->admin)->get(route('kpi.operations'));
+        // 6. Verify standalone GET /operations loads the clean 3-department Operations Hub and legacy /kpis/operations redirects
+        $opsResponse = $this->actingAs($this->admin)->get(route('operations.index'));
         $opsResponse->assertOk();
         $opsResponse->assertSee('Operations Hub');
-        $opsResponse->assertSee('KPIs (Executive Scorecards)');
+        $opsResponse->assertDontSee('KPIs (Executive Scorecards)');
         $opsResponse->assertSee('Operations');
         $opsResponse->assertDontSee('Operations (Customer Service & Marketing)');
         $opsResponse->assertSee('Marketing');
@@ -538,8 +538,10 @@ class KpiExecutiveScorecardTest extends TestCase
         $opsResponse->assertDontSee('Customer Service & QA Operations');
         $opsResponse->assertDontSee('Salon Staff Operations');
 
-        $aliasOpsResponse = $this->actingAs($this->admin)->get(route('kpis.operations'));
-        $aliasOpsResponse->assertOk();
+        $this->actingAs($this->admin)->get(route('kpi.operations'))
+            ->assertRedirect(route('operations.index'));
+        $this->actingAs($this->admin)->get(route('kpi.hub', ['tab' => 'operations']))
+            ->assertRedirect(route('operations.index'));
 
         // 7. Verify GET /kpis/salon-staff shows only Salon Staff Evaluation & Branch Evaluation (no Staff Sales Performance)
         $salonStaffResponse = $this->actingAs($this->admin)->get(route('kpi.salon-staff.index'));

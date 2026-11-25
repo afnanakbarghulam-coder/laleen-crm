@@ -76,27 +76,57 @@
                                 @enderror
                             </div>
 
-                            <div class="form-password-toggle mb-6">
+                            <div class="mb-6">
                                 <label class="form-label" for="password">Password</label>
-                                <div class="input-group input-group-merge">
+                                <div class="luxe-password-wrap">
                                     <input type="password" id="password" name="password"
-                                        class="form-control @error('password') is-invalid @enderror" required
+                                        class="form-control luxe-password-input @error('password') is-invalid @enderror" required
                                         autocomplete="new-password">
-                                    <span class="input-group-text cursor-pointer"><i
-                                            class="icon-base bx bx-hide"></i></span>
+                                    <button type="button"
+                                            class="luxe-password-toggle js-auth-password-toggle"
+                                            data-target="password"
+                                            aria-label="Show password"
+                                            aria-pressed="false"
+                                            title="Show password">
+                                        <svg class="js-icon-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path>
+                                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path>
+                                            <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path>
+                                            <line x1="1" y1="1" x2="23" y2="23"></line>
+                                        </svg>
+                                        <svg class="js-icon-eye d-none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                        </svg>
+                                    </button>
                                 </div>
                                 @error('password')
                                     <small class="text-danger">{{ $message }}</small>
                                 @enderror
                             </div>
 
-                            <div class="form-password-toggle mb-6">
+                            <div class="mb-6">
                                 <label class="form-label" for="password_confirmation">Confirm Password</label>
-                                <div class="input-group input-group-merge">
+                                <div class="luxe-password-wrap">
                                     <input type="password" id="password_confirmation" name="password_confirmation"
-                                        class="form-control" required autocomplete="new-password">
-                                    <span class="input-group-text cursor-pointer"><i
-                                            class="icon-base bx bx-hide"></i></span>
+                                        class="form-control luxe-password-input" required autocomplete="new-password">
+                                    <button type="button"
+                                            class="luxe-password-toggle js-auth-password-toggle"
+                                            data-target="password_confirmation"
+                                            aria-label="Show confirm password"
+                                            aria-pressed="false"
+                                            title="Show password">
+                                        <svg class="js-icon-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path>
+                                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path>
+                                            <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path>
+                                            <line x1="1" y1="1" x2="23" y2="23"></line>
+                                        </svg>
+                                        <svg class="js-icon-eye d-none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                        </svg>
+                                    </button>
                                 </div>
                             </div>
 
@@ -159,6 +189,21 @@
     </script>
     <script src="{{ asset('design/sneat-admin-template/assets/vendor/js/menu.js') }}"></script>
     <script src="{{ asset('design/sneat-admin-template/assets/js/main.js') }}"></script>
+    <script>
+        document.querySelectorAll('.js-auth-password-toggle').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const input = document.getElementById(btn.dataset.target);
+                if (!input) return;
+                const showing = input.type === 'password';
+                input.type = showing ? 'text' : 'password';
+                btn.setAttribute('aria-pressed', showing ? 'true' : 'false');
+                btn.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+                btn.setAttribute('title', showing ? 'Hide password' : 'Show password');
+                btn.querySelector('.js-icon-eye-off')?.classList.toggle('d-none', showing);
+                btn.querySelector('.js-icon-eye')?.classList.toggle('d-none', !showing);
+            });
+        });
+    </script>
 </body>
 
 </html>

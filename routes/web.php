@@ -8,6 +8,7 @@ use App\Http\Controllers\CrmIdeaController;
 use App\Http\Controllers\CrmPresentationController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerImportController;
+use App\Http\Controllers\DailyBranchCloseController;
 use App\Http\Controllers\Ecommerce\EcommerceAiAgentController;
 use App\Http\Controllers\Ecommerce\EcommerceContentCalendarController;
 use App\Http\Controllers\Ecommerce\EcommerceController;
@@ -42,6 +43,7 @@ use App\Http\Controllers\Kpi\StaffEvaluationController;
 use App\Http\Controllers\Kpi\StaffSalesController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LegalTaskController;
+use App\Http\Controllers\MonthlyOfferController;
 use App\Http\Controllers\OpsActionTrackerController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductRdController;
@@ -61,6 +63,7 @@ use App\Http\Controllers\StaffLeaveController;
 use App\Http\Controllers\StaffNoticeController;
 use App\Http\Controllers\StaffOvertimeController;
 use App\Http\Controllers\StaffPortalController;
+use App\Http\Controllers\StockController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -121,6 +124,10 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/staff-leaves/{leave}/certificate', [StaffLeaveController::class, 'certificate'])
         ->whereNumber('leave')
         ->name('staff-leaves.certificate');
+
+    // ---- Universal Read-Only Company-Wide Monthly Offers Board (All operational roles incl. Salon Staff; 403 for Legal Team) ----
+    Route::get('/monthly-offers', [MonthlyOfferController::class, 'index'])->name('offers.index');
+    Route::get('/offers', [MonthlyOfferController::class, 'index']);
 });
 
 Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
@@ -227,9 +234,20 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
         Route::delete('/staff-blocks/{staffBlock}', [StaffBlockController::class, 'destroy'])->name('staff-blocks.destroy');
     });
 
-    // ---- Finance ----
-    Route::middleware('module:finance')->group(function () {
-        Route::get('/revenue', [FinanceController::class, 'index'])->name('appointments.revenue.index');
+    // ---- Finance & Blind End-of-Day (EOD) Close ----
+    // Controller allows `finance` viewers AND branch-scoped `Salon Manager` (blind close only when finance = none).
+    Route::get('/revenue', [FinanceController::class, 'index'])->name('appointments.revenue.index');
+    Route::post('/finance/eod-close', [DailyBranchCloseController::class, 'store'])->name('finance.eod-close.store');
+    Route::get('/finance/eod-close/{dailyBranchClose}/z-report', [DailyBranchCloseController::class, 'zReport'])
+        ->whereNumber('dailyBranchClose')
+        ->name('finance.eod-close.z-report');
+    Route::middleware('role:admin')->group(function () {
+        Route::post('/finance/eod-close/{dailyBranchClose}/verify', [DailyBranchCloseController::class, 'verify'])
+            ->whereNumber('dailyBranchClose')
+            ->name('finance.eod-close.verify');
+        Route::post('/finance/eod-close/{dailyBranchClose}/unlock', [DailyBranchCloseController::class, 'unlock'])
+            ->whereNumber('dailyBranchClose')
+            ->name('finance.eod-close.unlock');
     });
     Route::middleware('module:finance,edit')->group(function () {
         Route::get('/appointments/{appointment}/payment', [AppointmentController::class, 'payment'])->name('appointments.payment');
@@ -289,6 +307,7 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
         });
 
         // ---- Attendance Log & Tamper-Proof Salon Check-In Terminal ----
+        Route::get('/staff-attendance/absent-preview', [StaffAttendanceController::class, 'absentPreview'])->name('staff-attendance.absent-preview');
         Route::post('/staff-attendance', [StaffAttendanceController::class, 'store'])->name('staff-attendance.store');
         Route::post('/staff-attendance/check-in', [StaffAttendanceController::class, 'checkIn'])->name('staff-attendance.check-in');
         Route::post('/staff-attendance/check-out', [StaffAttendanceController::class, 'checkOut'])->name('staff-attendance.check-out');
@@ -352,6 +371,53 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
         Route::delete('/service-freebie-packages/{serviceFreebiePackage}', [ServiceFreebiePackageController::class, 'destroy'])
             ->whereNumber('serviceFreebiePackage')
             ->name('service-freebies.destroy');
+
+        Route::post('/monthly-offers', [MonthlyOfferController::class, 'store'])->name('offers.store');
+        Route::match(['put', 'patch'], '/monthly-offers/{monthlyOffer}', [MonthlyOfferController::class, 'update'])
+            ->whereNumber('monthlyOffer')
+            ->name('offers.update');
+        Route::patch('/monthly-offers/{monthlyOffer}/toggle', [MonthlyOfferController::class, 'toggle'])
+            ->whereNumber('monthlyOffer')
+            ->name('offers.toggle');
+        Route::delete('/monthly-offers/{monthlyOffer}', [MonthlyOfferController::class, 'destroy'])
+            ->whereNumber('monthlyOffer')
+            ->name('offers.destroy');
+    });
+
+    // ---- Stock Module (Saturday–Friday Weekly Audit Cycle) ----
+    Route::prefix('stock')->name('stock.')->group(function () {
+        Route::middleware('module:stock')->group(function () {
+            Route::get('/', [StockController::class, 'index'])->name('index');
+        });
+        Route::middleware('module:stock,edit')->group(function () {
+            Route::post('/movements', [StockController::class, 'storeMovement'])->name('movements.store');
+            Route::post('/transfer', [StockController::class, 'transfer'])->name('transfer');
+            Route::post('/weeks/{stockWeek}/save-counts', [StockController::class, 'saveCounts'])
+                ->whereNumber('stockWeek')
+                ->name('weeks.save-counts');
+            Route::post('/weeks/{stockWeek}/submit', [StockController::class, 'submit'])
+                ->whereNumber('stockWeek')
+                ->name('weeks.submit');
+        });
+        Route::middleware('role:admin')->group(function () {
+            Route::post('/weeks/{stockWeek}/approve', [StockController::class, 'approve'])
+                ->whereNumber('stockWeek')
+                ->name('weeks.approve');
+            Route::post('/weeks/{stockWeek}/request-revision', [StockController::class, 'requestRevision'])
+                ->whereNumber('stockWeek')
+                ->name('weeks.request-revision');
+            Route::post('/weeks/{stockWeek}/unlock', [StockController::class, 'unlock'])
+                ->whereNumber('stockWeek')
+                ->name('weeks.unlock');
+
+            Route::post('/items', [StockController::class, 'storeItem'])->name('items.store');
+            Route::match(['put', 'patch'], '/items/{stockItem}', [StockController::class, 'updateItem'])
+                ->whereNumber('stockItem')
+                ->name('items.update');
+            Route::delete('/items/{stockItem}', [StockController::class, 'destroyItem'])
+                ->whereNumber('stockItem')
+                ->name('items.destroy');
+        });
     });
 
     // ---- Products ----
@@ -439,100 +505,103 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
             ->name('portal.admin-preview.production-breakdown');
     });
 
-    // ---- KPIs & Operations ----
+    // ---- Standalone Operations Module ----
+    Route::middleware('module:operations')->group(function () {
+        Route::get('/operations', [KpiHubController::class, 'operations'])->name('operations.index');
+    });
+
+    // ---- KPIs & Operational Sub-Views ----
     // NOTE: each subresource's literal 'create' path is registered before its
     // '{report}' wildcard (show), same reasoning as the Leads section above.
-    Route::middleware('module:kpis')->get('/operations', [KpiHubController::class, 'operations'])->name('kpis.operations');
-
     Route::prefix('kpis')->name('kpi.')->group(function () {
         Route::middleware('module:kpis')->get('/', [KpiHubController::class, 'index'])->name('hub');
-        Route::middleware('module:kpis')->get('/operations', [KpiHubController::class, 'operations'])->name('operations');
+        Route::middleware('module:operations')->get('/operations', fn () => redirect()->route('operations.index'))->name('operations');
         Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->post('/late-replies', [KpiHubController::class, 'updateLateReplies'])->name('late-replies.update');
         Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->delete('/late-replies/{lateReplyLog}', [KpiHubController::class, 'destroyLateReply'])->name('late-replies.destroy');
         Route::middleware('module:kpis')->get('/late-replies/{lateReplyLog}/screenshot', [KpiHubController::class, 'lateReplyScreenshot'])->name('late-replies.screenshot');
-        Route::middleware('module:kpis')->get('/marketing', [KpiHubController::class, 'marketing'])->name('marketing.index');
-        Route::middleware('module:kpis')->get('/customer-service', [KpiHubController::class, 'customerService'])->name('customer-service.index');
-        Route::middleware('module:kpis')->get('/salon-staff', [KpiHubController::class, 'salonStaff'])->name('salon-staff.index');
+        Route::middleware('module:operations|kpis')->get('/marketing', [KpiHubController::class, 'marketing'])->name('marketing.index');
+        Route::middleware('module:operations|kpis')->get('/customer-service', [KpiHubController::class, 'customerService'])->name('customer-service.index');
+        Route::middleware('module:operations|kpis')->get('/salon-staff', [KpiHubController::class, 'salonStaff'])->name('salon-staff.index');
 
-        Route::middleware('module:kpis')->get('/ads', [AdsConversionController::class, 'index'])->name('ads.index');
-        Route::middleware('module:kpis,edit')->post('/ads', [AdsConversionController::class, 'store'])->name('ads.store');
-        Route::middleware('module:kpis')->get('/ads/{report}', [AdsConversionController::class, 'show'])->name('ads.show');
-        Route::middleware('module:kpis,edit')->delete('/ads/{report}', [AdsConversionController::class, 'destroy'])->name('ads.destroy');
+        Route::middleware('module:operations|kpis')->get('/ads', [AdsConversionController::class, 'index'])->name('ads.index');
+        Route::middleware('module:operations|kpis,edit')->post('/ads', [AdsConversionController::class, 'store'])->name('ads.store');
+        Route::middleware('module:operations|kpis')->get('/ads/{report}', [AdsConversionController::class, 'show'])->name('ads.show');
+        Route::middleware('module:operations|kpis,edit')->delete('/ads/{report}', [AdsConversionController::class, 'destroy'])->name('ads.destroy');
 
         Route::middleware('throttle:30,1')->post('/ad-metrics/extract', [AdCampaignMetricsController::class, 'extractPreview'])->name('ad-metrics.extract');
         Route::post('/ad-metrics/confirm', [AdCampaignMetricsController::class, 'confirmImport'])->name('ad-metrics.confirm');
         Route::delete('/ad-metrics/{adCampaignMetric}', [AdCampaignMetricsController::class, 'destroy'])->name('ad-metrics.destroy');
 
-        Route::middleware('module:kpis')->get('/ads-plan', [MonthlyAdController::class, 'index'])->name('ads-plan.index');
-        Route::middleware('module:kpis,edit')->post('/ads-plan', [MonthlyAdController::class, 'store'])->name('ads-plan.store');
-        Route::middleware('module:kpis,edit')->match(['put', 'patch'], '/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'update'])->name('ads-plan.update');
-        Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/complete-planning', [MonthlyAdController::class, 'completePlanning'])->name('ads-plan.complete-planning');
-        Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/complete-production', [MonthlyAdController::class, 'completeProduction'])->name('ads-plan.complete-production');
-        Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/scale', [MonthlyAdController::class, 'scaleAd'])->name('ads-plan.scale');
-        Route::middleware('module:kpis,edit')->patch('/ads-plan/{monthlyAd}/kill', [MonthlyAdController::class, 'killAd'])->name('ads-plan.kill');
-        Route::middleware('module:kpis,edit')->delete('/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'destroy'])->name('ads-plan.destroy');
+        Route::middleware('module:operations|kpis')->get('/ads-plan', [MonthlyAdController::class, 'index'])->name('ads-plan.index');
+        Route::middleware('module:operations|kpis,edit')->post('/ads-plan', [MonthlyAdController::class, 'store'])->name('ads-plan.store');
+        Route::middleware('module:operations|kpis,edit')->match(['put', 'patch'], '/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'update'])->name('ads-plan.update');
+        Route::middleware('module:operations|kpis,edit')->patch('/ads-plan/{monthlyAd}/complete-planning', [MonthlyAdController::class, 'completePlanning'])->name('ads-plan.complete-planning');
+        Route::middleware('module:operations|kpis,edit')->patch('/ads-plan/{monthlyAd}/complete-production', [MonthlyAdController::class, 'completeProduction'])->name('ads-plan.complete-production');
+        Route::middleware('module:operations|kpis,edit')->patch('/ads-plan/{monthlyAd}/scale', [MonthlyAdController::class, 'scaleAd'])->name('ads-plan.scale');
+        Route::middleware('module:operations|kpis,edit')->patch('/ads-plan/{monthlyAd}/kill', [MonthlyAdController::class, 'killAd'])->name('ads-plan.kill');
+        Route::middleware('module:operations|kpis,edit')->delete('/ads-plan/{monthlyAd}', [MonthlyAdController::class, 'destroy'])->name('ads-plan.destroy');
 
-        Route::middleware('module:kpis')->get('/ad-leads/suggestions', [AdLeadEntryController::class, 'suggestions'])->name('ad-leads.suggestions');
-        Route::middleware('module:kpis|leads')->get('/ad-leads/categories', [AdLeadEntryController::class, 'categories'])->name('ad-leads.categories');
-        Route::middleware('module:kpis|leads,edit')->post('/ad-leads', [AdLeadEntryController::class, 'store'])->name('ad-leads.store');
-        Route::middleware(['module:kpis|leads', 'throttle:20,1'])->post('/ad-leads/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script.inline');
-        Route::middleware(['module:kpis|leads', 'throttle:20,1'])->post('/ad-leads/{adLeadEntry}/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script');
-        Route::middleware('module:kpis|leads,edit')->post('/ad-leads/{adLeadEntry}/send-to-followups', [AdLeadEntryController::class, 'sendToFollowUps'])->name('ad-leads.send-to-followups');
-        Route::middleware('module:kpis,edit')->put('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'update'])->name('ad-leads.update');
-        Route::middleware('module:kpis,edit')->delete('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'destroy'])->name('ad-leads.destroy');
+        Route::middleware('module:operations|kpis')->get('/ad-leads/suggestions', [AdLeadEntryController::class, 'suggestions'])->name('ad-leads.suggestions');
+        Route::middleware('module:operations|kpis|leads')->get('/ad-leads/categories', [AdLeadEntryController::class, 'categories'])->name('ad-leads.categories');
+        Route::middleware('module:operations|kpis|leads,edit')->post('/ad-leads', [AdLeadEntryController::class, 'store'])->name('ad-leads.store');
+        Route::middleware(['module:operations|kpis|leads', 'throttle:20,1'])->post('/ad-leads/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script.inline');
+        Route::middleware(['module:operations|kpis|leads', 'throttle:20,1'])->post('/ad-leads/{adLeadEntry}/ai-script', [AiScriptController::class, 'generate'])->name('ad-leads.ai-script');
+        Route::middleware('module:operations|kpis|leads,edit')->post('/ad-leads/{adLeadEntry}/send-to-followups', [AdLeadEntryController::class, 'sendToFollowUps'])->name('ad-leads.send-to-followups');
+        Route::middleware('module:operations|kpis,edit')->put('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'update'])->name('ad-leads.update');
+        Route::middleware('module:operations|kpis,edit')->delete('/ad-leads/{adLeadEntry}', [AdLeadEntryController::class, 'destroy'])->name('ad-leads.destroy');
 
-        Route::middleware('module:kpis')->get('/agents', [AgentTargetController::class, 'index'])->name('agents.index');
-        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->post('/agents', [AgentTargetController::class, 'store'])->name('agents.store');
-        Route::middleware('module:kpis')->get('/agents/{report}', [AgentTargetController::class, 'show'])->name('agents.show');
-        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->delete('/agents/{report}', [AgentTargetController::class, 'destroy'])->name('agents.destroy');
+        Route::middleware('module:operations|kpis')->get('/agents', [AgentTargetController::class, 'index'])->name('agents.index');
+        Route::middleware(['module:operations|kpis,edit', 'role:admin,owner,super_admin'])->post('/agents', [AgentTargetController::class, 'store'])->name('agents.store');
+        Route::middleware('module:operations|kpis')->get('/agents/{report}', [AgentTargetController::class, 'show'])->name('agents.show');
+        Route::middleware(['module:operations|kpis,edit', 'role:admin,owner,super_admin'])->delete('/agents/{report}', [AgentTargetController::class, 'destroy'])->name('agents.destroy');
 
-        Route::middleware(['module:kpis', 'role:admin,owner,super_admin,agent'])->post('/agent-shift-logs', [AgentShiftLogController::class, 'store'])->name('agent-shift-logs.store');
-        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->put('/agent-shift-logs/{agentShiftLog}', [AgentShiftLogController::class, 'update'])->name('agent-shift-logs.update');
-        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->delete('/agent-shift-logs/{agentShiftLog}', [AgentShiftLogController::class, 'destroy'])->name('agent-shift-logs.destroy');
+        Route::middleware(['module:operations|kpis', 'role:admin,owner,super_admin,agent'])->post('/agent-shift-logs', [AgentShiftLogController::class, 'store'])->name('agent-shift-logs.store');
+        Route::middleware(['module:operations|kpis,edit', 'role:admin,owner,super_admin'])->put('/agent-shift-logs/{agentShiftLog}', [AgentShiftLogController::class, 'update'])->name('agent-shift-logs.update');
+        Route::middleware(['module:operations|kpis,edit', 'role:admin,owner,super_admin'])->delete('/agent-shift-logs/{agentShiftLog}', [AgentShiftLogController::class, 'destroy'])->name('agent-shift-logs.destroy');
 
-        Route::middleware('module:kpis')->get('/staff-sales', [StaffSalesController::class, 'index'])->name('staff-sales.index');
+        Route::middleware('module:operations|kpis')->get('/staff-sales', [StaffSalesController::class, 'index'])->name('staff-sales.index');
 
-        Route::middleware('module:kpis')->get('/chat-eval', [ChatEvaluationController::class, 'index'])->name('chat-eval.index');
-        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->get('/chat-eval/create', [ChatEvaluationController::class, 'create'])->name('chat-eval.create');
-        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->post('/chat-eval', [ChatEvaluationController::class, 'store'])->name('chat-eval.store');
-        Route::middleware('module:kpis')->get('/chat-eval/{report}/download', [ChatEvaluationController::class, 'download'])->name('chat-eval.download');
-        Route::middleware('module:kpis')->get('/chat-eval/{report}', [ChatEvaluationController::class, 'show'])->name('chat-eval.show');
-        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->get('/chat-eval/{report}/edit', [ChatEvaluationController::class, 'edit'])->name('chat-eval.edit');
-        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->put('/chat-eval/{report}', [ChatEvaluationController::class, 'update'])->name('chat-eval.update');
-        Route::middleware(['module:kpis,edit', 'role:admin,owner,super_admin'])->delete('/chat-eval/{report}', [ChatEvaluationController::class, 'destroy'])->name('chat-eval.destroy');
+        Route::middleware('module:operations|kpis')->get('/chat-eval', [ChatEvaluationController::class, 'index'])->name('chat-eval.index');
+        Route::middleware(['module:operations|kpis,edit', 'role:admin,owner,super_admin'])->get('/chat-eval/create', [ChatEvaluationController::class, 'create'])->name('chat-eval.create');
+        Route::middleware(['module:operations|kpis,edit', 'role:admin,owner,super_admin'])->post('/chat-eval', [ChatEvaluationController::class, 'store'])->name('chat-eval.store');
+        Route::middleware('module:operations|kpis')->get('/chat-eval/{report}/download', [ChatEvaluationController::class, 'download'])->name('chat-eval.download');
+        Route::middleware('module:operations|kpis')->get('/chat-eval/{report}', [ChatEvaluationController::class, 'show'])->name('chat-eval.show');
+        Route::middleware(['module:operations|kpis,edit', 'role:admin,owner,super_admin'])->get('/chat-eval/{report}/edit', [ChatEvaluationController::class, 'edit'])->name('chat-eval.edit');
+        Route::middleware(['module:operations|kpis,edit', 'role:admin,owner,super_admin'])->put('/chat-eval/{report}', [ChatEvaluationController::class, 'update'])->name('chat-eval.update');
+        Route::middleware(['module:operations|kpis,edit', 'role:admin,owner,super_admin'])->delete('/chat-eval/{report}', [ChatEvaluationController::class, 'destroy'])->name('chat-eval.destroy');
 
-        Route::middleware('module:kpis')->get('/content', [ContentKpiController::class, 'index'])->name('content.index');
-        Route::middleware('module:kpis,edit')->post('/content', [ContentKpiController::class, 'store'])->name('content.store');
-        Route::middleware('module:kpis')->get('/content/{report}', [ContentKpiController::class, 'show'])->name('content.show');
-        Route::middleware('module:kpis,edit')->delete('/content/{report}', [ContentKpiController::class, 'destroy'])->name('content.destroy');
+        Route::middleware('module:operations|kpis')->get('/content', [ContentKpiController::class, 'index'])->name('content.index');
+        Route::middleware('module:operations|kpis,edit')->post('/content', [ContentKpiController::class, 'store'])->name('content.store');
+        Route::middleware('module:operations|kpis')->get('/content/{report}', [ContentKpiController::class, 'show'])->name('content.show');
+        Route::middleware('module:operations|kpis,edit')->delete('/content/{report}', [ContentKpiController::class, 'destroy'])->name('content.destroy');
 
-        Route::middleware('module:kpis,edit')->post('/content-entries', [ContentEntryController::class, 'store'])->name('content-entries.store');
-        Route::middleware('module:kpis,edit')->put('/content-entries/{contentEntry}', [ContentEntryController::class, 'update'])->name('content-entries.update');
-        Route::middleware('module:kpis,edit')->delete('/content-entries/{contentEntry}', [ContentEntryController::class, 'destroy'])->name('content-entries.destroy');
+        Route::middleware('module:operations|kpis,edit')->post('/content-entries', [ContentEntryController::class, 'store'])->name('content-entries.store');
+        Route::middleware('module:operations|kpis,edit')->put('/content-entries/{contentEntry}', [ContentEntryController::class, 'update'])->name('content-entries.update');
+        Route::middleware('module:operations|kpis,edit')->delete('/content-entries/{contentEntry}', [ContentEntryController::class, 'destroy'])->name('content-entries.destroy');
 
-        Route::middleware('module:kpis')->get('/content-calendar', [ContentCalendarController::class, 'index'])->name('content-calendar.index');
-        Route::middleware('module:kpis,edit')->post('/content-calendar', [ContentCalendarController::class, 'updateWeek'])->name('content-calendar.update');
-        Route::middleware('module:kpis,edit')->delete('/content-calendar', [ContentCalendarController::class, 'destroyWeek'])->name('content-calendar.destroy-week');
-        Route::middleware('module:kpis,edit')->post('/content-calendar/import-pdf', [ContentCalendarController::class, 'importPdf'])->name('content-calendar.import-pdf');
-        Route::middleware('module:kpis,edit')->patch('/content-calendar/week-meta', [ContentCalendarController::class, 'updateWeekMeta'])->name('content-calendar.update-meta');
-        Route::middleware('module:kpis,edit')->patch('/content-calendar/{plan}/inline', [ContentCalendarController::class, 'updateDayInline'])->name('content-calendar.inline-update');
-        Route::middleware('module:kpis,edit')->patch('/content-calendar/{plan}/toggle-status', [ContentCalendarController::class, 'toggleStatus'])->name('content-calendar.toggle-status');
+        Route::middleware('module:operations|kpis')->get('/content-calendar', [ContentCalendarController::class, 'index'])->name('content-calendar.index');
+        Route::middleware('module:operations|kpis,edit')->post('/content-calendar', [ContentCalendarController::class, 'updateWeek'])->name('content-calendar.update');
+        Route::middleware('module:operations|kpis,edit')->delete('/content-calendar', [ContentCalendarController::class, 'destroyWeek'])->name('content-calendar.destroy-week');
+        Route::middleware('module:operations|kpis,edit')->post('/content-calendar/import-pdf', [ContentCalendarController::class, 'importPdf'])->name('content-calendar.import-pdf');
+        Route::middleware('module:operations|kpis,edit')->patch('/content-calendar/week-meta', [ContentCalendarController::class, 'updateWeekMeta'])->name('content-calendar.update-meta');
+        Route::middleware('module:operations|kpis,edit')->patch('/content-calendar/{plan}/inline', [ContentCalendarController::class, 'updateDayInline'])->name('content-calendar.inline-update');
+        Route::middleware('module:operations|kpis,edit')->patch('/content-calendar/{plan}/toggle-status', [ContentCalendarController::class, 'toggleStatus'])->name('content-calendar.toggle-status');
 
-        Route::middleware('module:kpis')->get('/evaluations', [StaffEvaluationController::class, 'index'])->name('evaluations.index');
-        Route::middleware('module:kpis,edit')->post('/evaluations', [StaffEvaluationController::class, 'store'])->name('evaluations.store');
-        Route::middleware(['role:admin,owner,super_admin', 'module:kpis,edit'])
+        Route::middleware('module:operations|kpis')->get('/evaluations', [StaffEvaluationController::class, 'index'])->name('evaluations.index');
+        Route::middleware('module:operations|kpis,edit')->post('/evaluations', [StaffEvaluationController::class, 'store'])->name('evaluations.store');
+        Route::middleware(['role:admin,owner,super_admin', 'module:operations|kpis,edit'])
             ->delete('/evaluations/{staffEvaluation}', [StaffEvaluationController::class, 'destroy'])
             ->name('evaluations.destroy');
 
-        Route::middleware('module:kpis')->get('/salon-staff/branch-evaluation', [BranchEvaluationController::class, 'index'])->name('branch-evaluation.index');
-        Route::middleware(['role:admin,owner,super_admin', 'module:kpis,edit'])->group(function () {
+        Route::middleware('module:operations|kpis')->get('/salon-staff/branch-evaluation', [BranchEvaluationController::class, 'index'])->name('branch-evaluation.index');
+        Route::middleware(['role:admin,owner,super_admin', 'module:operations|kpis,edit'])->group(function () {
             Route::get('/salon-staff/branch-evaluation/create', [BranchEvaluationController::class, 'create'])->name('branch-evaluation.create');
             Route::post('/salon-staff/branch-evaluation', [BranchEvaluationController::class, 'store'])->name('branch-evaluation.store');
             Route::get('/salon-staff/branch-evaluation/{branchEvaluation}/edit', [BranchEvaluationController::class, 'edit'])->name('branch-evaluation.edit');
             Route::put('/salon-staff/branch-evaluation/{branchEvaluation}', [BranchEvaluationController::class, 'update'])->name('branch-evaluation.update');
             Route::delete('/salon-staff/branch-evaluation/{branchEvaluation}', [BranchEvaluationController::class, 'destroy'])->name('branch-evaluation.destroy');
         });
-        Route::middleware('module:kpis')->get('/salon-staff/branch-evaluation/{branchEvaluation}', [BranchEvaluationController::class, 'show'])->name('branch-evaluation.show');
+        Route::middleware('module:operations|kpis')->get('/salon-staff/branch-evaluation/{branchEvaluation}', [BranchEvaluationController::class, 'show'])->name('branch-evaluation.show');
     });
 
     // ---- Ecommerce ----
@@ -668,7 +737,12 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
         });
     });
 
-    // ---- Legal Tasks ----
+    // ---- Legal Tasks & Legal Documents Vault ----
+    Route::middleware('module:legal_tasks')
+        ->get('/legal-documents/{legalDocument}/download', [LegalTaskController::class, 'downloadDocument'])
+        ->whereNumber('legalDocument')
+        ->name('legal-documents.download');
+
     Route::prefix('legal')->name('legal.')->group(function () {
         Route::middleware('module:legal_tasks')->group(function () {
             Route::get('/', [LegalTaskController::class, 'index'])->name('index');
@@ -678,6 +752,16 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
             Route::post('/tasks', [LegalTaskController::class, 'store'])->name('tasks.store');
             Route::match(['put', 'patch'], '/tasks/{legalTask}', [LegalTaskController::class, 'update'])->name('tasks.update');
             Route::delete('/tasks/{legalTask}', [LegalTaskController::class, 'destroy'])->name('tasks.destroy');
+
+            Route::post('/documents', [LegalTaskController::class, 'storeDocument'])->name('documents.store');
+            Route::delete('/documents/{legalDocument}', [LegalTaskController::class, 'destroyDocument'])
+                ->whereNumber('legalDocument')
+                ->name('documents.destroy');
+
+            Route::post('/staff-documents', [LegalTaskController::class, 'storeStaffDocument'])->name('staff-documents.store');
+            Route::delete('/staff-documents/{document}', [LegalTaskController::class, 'destroyStaffDocument'])
+                ->whereNumber('document')
+                ->name('staff-documents.destroy');
         });
     });
 });

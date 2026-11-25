@@ -467,6 +467,7 @@ class StaffPortalController extends Controller
                 'ops_lead' => 'Remote Operations & SLA Oversight',
                 'marketing_specialist' => 'Performance Ads & Growth Marketing',
                 'social_media_editor' => 'Social Content & Reels Production',
+                'legal_team' => 'Legal Compliance & Documentation Vault',
                 default => 'Laleen Remote Operations Team',
             };
 

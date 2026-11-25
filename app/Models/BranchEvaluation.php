@@ -73,6 +73,7 @@ class BranchEvaluation extends Model
         'manager',
         'evaluation_date',
         'answers',
+        'remarks',
         'total_score',
         'percentage',
         'grade',
@@ -84,6 +85,7 @@ class BranchEvaluation extends Model
     protected $casts = [
         'evaluation_date' => 'date',
         'answers' => 'array',
+        'remarks' => 'array',
         'percentage' => 'decimal:2',
     ];
 
@@ -166,7 +168,15 @@ class BranchEvaluation extends Model
         ];
     }
 
-    /** Flat, ordered list of every question with its text, answer, and pass/fail status for this evaluation. */
+    public function remarkFor(string $field): ?string
+    {
+        $raw = is_array($this->remarks) ? ($this->remarks[$field] ?? null) : null;
+        $trimmed = trim((string) $raw);
+
+        return $trimmed !== '' ? $trimmed : null;
+    }
+
+    /** Flat, ordered list of every question with its text, answer, remark, and pass/fail status for this evaluation. */
     public function questionResults(): Collection
     {
         $results = collect();
@@ -182,6 +192,7 @@ class BranchEvaluation extends Model
                     'field' => $field,
                     'question' => $text,
                     'answer' => $answer,
+                    'remark' => $this->remarkFor($field),
                     'status' => $answer >= self::POINTS_PER_QUESTION ? 'pass' : 'fail',
                 ]);
 

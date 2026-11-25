@@ -2677,6 +2677,9 @@ class AppointmentController extends Controller
                 'shiftPatterns.blocks',
                 'timeOffs',
                 'leaves' => fn ($q) => $q->approved(),
+                'attendances' => fn ($q) => $q
+                    ->whereDate('attendance_date', '>=', $rangeStart->copy()->timezone('Asia/Qatar')->toDateString())
+                    ->whereDate('attendance_date', '<=', $rangeEnd->copy()->timezone('Asia/Qatar')->toDateString()),
             ])
             ->where(function ($q) use ($bookedStaffIdsOnDate) {
                 $q->active();
@@ -2974,10 +2977,14 @@ class AppointmentController extends Controller
         }
 
         $offInfo = [];
+        $absentStaffIds = [];
         foreach ($staffs as $staff) {
             $info = $this->staffOffInfo($staff, $anchor);
             if ($info['off']) {
                 $offInfo[$staff->id] = $info['reason'];
+                if (($info['kind'] ?? null) === 'absent') {
+                    $absentStaffIds[] = (int) $staff->id;
+                }
             }
         }
 
@@ -3007,6 +3014,7 @@ class AppointmentController extends Controller
             'status_colors' => $this->statusColors(),
             'staff_colors'  => $staffColors,
             'off'           => $offInfo,
+            'absent_staff_ids' => $absentStaffIds,
             'staffs'        => $staffPayload,
             'blocks'        => $blocks,
             'pending_time_bookings' => $pendingTimeBookings,
@@ -3339,6 +3347,7 @@ class AppointmentController extends Controller
                 'shiftPatterns.blocks',
                 'timeOffs',
                 'leaves' => fn ($q) => $q->approved()->coveringDate($appointmentTime),
+                'attendances' => fn ($q) => $q->whereDate('attendance_date', $appointmentTime->copy()->timezone('Asia/Qatar')->toDateString()),
             ]);
 
         if ($decideInSalon) {

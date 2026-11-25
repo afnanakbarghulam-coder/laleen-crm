@@ -31,6 +31,7 @@ class User extends Authenticatable
         'salon_staff' => 'Salon Staff',
         'marketing_specialist' => 'Marketing Specialist',
         'social_media_editor' => 'Social Media Editor',
+        'legal_team' => 'Legal Team',
     ];
 
     /**
@@ -57,6 +58,7 @@ class User extends Authenticatable
         'ops_lead',
         'marketing_specialist',
         'social_media_editor',
+        'legal_team',
     ];
 
     /**
@@ -93,13 +95,14 @@ class User extends Authenticatable
         'salon_staff' => 'Salon Staff',
         'marketing_specialist' => 'Marketing Specialist',
         'social_media_editor' => 'Social Media Editor',
+        'legal_team' => 'Legal Team',
         'manager' => 'Manager',
         'staff' => 'Staff',
         'user' => 'User',
     ];
 
     /**
-     * Complete 14-module registry in exact global sidebar order.
+     * Complete 16-module registry in exact global sidebar order.
      *
      * @var array<string, string>
      */
@@ -114,7 +117,9 @@ class User extends Authenticatable
         'staff' => 'Staff Management',
         'services' => 'Services',
         'products' => 'Products',
+        'stock' => 'Stock',
         'kpis' => 'KPIs',
+        'operations' => 'Operations',
         'ecommerce' => 'Ecommerce',
         'legal_tasks' => 'Legal Tasks',
         'guide' => 'CRM Guide & SOPs',
@@ -138,7 +143,9 @@ class User extends Authenticatable
             'staff' => 'edit',
             'services' => 'edit',
             'products' => 'edit',
+            'stock' => 'edit',
             'kpis' => 'edit',
+            'operations' => 'edit',
             'ecommerce' => 'edit',
             'legal_tasks' => 'edit',
             'guide' => 'edit',
@@ -154,7 +161,9 @@ class User extends Authenticatable
             'staff' => 'edit',
             'services' => 'view',
             'products' => 'view',
+            'stock' => 'edit',
             'kpis' => 'view',
+            'operations' => 'edit',
             'ecommerce' => 'none',
             'legal_tasks' => 'edit',
             'guide' => 'view',
@@ -170,7 +179,9 @@ class User extends Authenticatable
             'staff' => 'view',
             'services' => 'view',
             'products' => 'view',
+            'stock' => 'none',
             'kpis' => 'view',
+            'operations' => 'view',
             'ecommerce' => 'none',
             'legal_tasks' => 'none',
             'guide' => 'view',
@@ -186,7 +197,9 @@ class User extends Authenticatable
             'staff' => 'edit',
             'services' => 'view',
             'products' => 'view',
+            'stock' => 'edit',
             'kpis' => 'edit',
+            'operations' => 'edit',
             'ecommerce' => 'none',
             'legal_tasks' => 'none',
             'guide' => 'view',
@@ -202,7 +215,9 @@ class User extends Authenticatable
             'staff' => 'view',
             'services' => 'view',
             'products' => 'view',
+            'stock' => 'none',
             'kpis' => 'edit',
+            'operations' => 'edit',
             'ecommerce' => 'none',
             'legal_tasks' => 'none',
             'guide' => 'view',
@@ -218,7 +233,9 @@ class User extends Authenticatable
             'staff' => 'none',
             'services' => 'view',
             'products' => 'view',
+            'stock' => 'none',
             'kpis' => 'view',
+            'operations' => 'view',
             'ecommerce' => 'none',
             'legal_tasks' => 'none',
             'guide' => 'view',
@@ -234,7 +251,9 @@ class User extends Authenticatable
             'staff' => 'none',
             'services' => 'view',
             'products' => 'view',
+            'stock' => 'none',
             'kpis' => 'edit',
+            'operations' => 'edit',
             'ecommerce' => 'edit',
             'legal_tasks' => 'none',
             'guide' => 'view',
@@ -250,10 +269,30 @@ class User extends Authenticatable
             'staff' => 'none',
             'services' => 'view',
             'products' => 'view',
+            'stock' => 'none',
             'kpis' => 'edit',
+            'operations' => 'edit',
             'ecommerce' => 'none',
             'legal_tasks' => 'none',
             'guide' => 'view',
+        ],
+        'legal_team' => [
+            'dashboard' => 'none',
+            'command_center' => 'none',
+            'leads' => 'none',
+            'bookings' => 'none',
+            'calendar' => 'none',
+            'finance' => 'none',
+            'clients' => 'none',
+            'staff' => 'none',
+            'services' => 'none',
+            'products' => 'none',
+            'stock' => 'none',
+            'kpis' => 'none',
+            'operations' => 'none',
+            'ecommerce' => 'none',
+            'legal_tasks' => 'edit',
+            'guide' => 'none',
         ],
         'staff' => [
             'dashboard' => 'view',
@@ -266,7 +305,9 @@ class User extends Authenticatable
             'staff' => 'none',
             'services' => 'view',
             'products' => 'view',
+            'stock' => 'none',
             'kpis' => 'none',
+            'operations' => 'none',
             'ecommerce' => 'none',
             'legal_tasks' => 'none',
             'guide' => 'view',
@@ -282,7 +323,9 @@ class User extends Authenticatable
             'staff' => 'none',
             'services' => 'none',
             'products' => 'none',
+            'stock' => 'none',
             'kpis' => 'none',
+            'operations' => 'none',
             'ecommerce' => 'none',
             'legal_tasks' => 'none',
             'guide' => 'none',
@@ -298,7 +341,9 @@ class User extends Authenticatable
             'staff' => 'none',
             'services' => 'none',
             'products' => 'none',
+            'stock' => 'none',
             'kpis' => 'none',
+            'operations' => 'none',
             'ecommerce' => 'none',
             'legal_tasks' => 'none',
             'guide' => 'view',
@@ -439,6 +484,42 @@ class User extends Authenticatable
     public function isChatAgent(): bool
     {
         return strtolower(trim((string) $this->role)) === 'agent';
+    }
+
+    public function isLegalTeam(): bool
+    {
+        return strtolower(trim((string) $this->role)) === 'legal_team';
+    }
+
+    /**
+     * All active operational roles (salon + remote) can view active Monthly Offers read-only.
+     * Legal Team remains strictly isolated to Legal Tasks only.
+     */
+    public function canViewMonthlyOffers(): bool
+    {
+        return !$this->isLegalTeam();
+    }
+
+    /**
+     * Admins and branch-assigned Salon Managers can access Blind End-of-Day Close in Finance -> Sales Ledger.
+     */
+    public function canAccessBlindEodClose(): bool
+    {
+        return $this->isAdmin() || $this->isSalonManager();
+    }
+
+    /**
+     * Canonical EOD/Stock branch key ('old_airport' | 'al_wakrah') for a branch-scoped Salon Manager,
+     * or null for Admins and HQ roles.
+     */
+    public function managedCanonicalBranch(): ?string
+    {
+        $managed = $this->managedSalonBranch();
+        if ($managed === null) {
+            return null;
+        }
+
+        return $managed === 'wakrah' ? 'al_wakrah' : $managed;
     }
 
     /**
@@ -605,11 +686,22 @@ class User extends Authenticatable
             return self::normalizePermissionLevel((string) $perms['staff_management']);
         }
 
-        // Backward-compatibility guardrail for records saved before the 14-module registry:
+        // Legal Team accounts with no explicit permissions JSON fall back strictly to their preset (Legal Tasks only)
+        if ($this->isLegalTeam()) {
+            return self::normalizePermissionLevel(self::ROLE_PERMISSION_PRESETS['legal_team'][$key] ?? 'none');
+        }
+
+        // Backward-compatibility guardrail for records saved before the 16-module registry:
         return match ($key) {
             'dashboard', 'guide' => 'view',
             'calendar' => !in_array('calendar', $visited, true)
                 ? $this->permissionLevel('bookings', array_merge($visited, ['calendar']))
+                : 'none',
+            'operations' => !in_array('operations', $visited, true)
+                ? $this->permissionLevel('kpis', array_merge($visited, ['operations']))
+                : 'none',
+            'stock' => in_array(strtolower(trim((string) $this->role)), ['salon_manager', 'ops_lead'], true)
+                ? 'edit'
                 : 'none',
             default => 'none',
         };
@@ -653,6 +745,7 @@ class User extends Authenticatable
         $candidates = [
             'dashboard' => 'dashboard',
             'kpis' => 'kpi.hub',
+            'operations' => 'operations.index',
             'leads' => 'leads.index',
             'calendar' => 'appointments.calendar',
             'bookings' => 'appointments.index',
@@ -660,6 +753,7 @@ class User extends Authenticatable
             'clients' => 'customers.index',
             'services' => 'services.index',
             'products' => 'products.index',
+            'stock' => 'stock.index',
             'staff' => 'staffs.index',
             'finance' => 'appointments.revenue.index',
             'command_center' => 'command-center.index',

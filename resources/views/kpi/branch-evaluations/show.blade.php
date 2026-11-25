@@ -18,6 +18,7 @@
                 'answer' => $q['status'] === 'pass' ? '✅ Pass' : '❌ Fail',
                 'score' => $q['answer'] . ' / ' . \App\Models\BranchEvaluation::POINTS_PER_QUESTION,
                 'status' => $q['status'],
+                'remark' => $q['remark'] ?? null,
             ])->values(),
         ];
     });
@@ -300,6 +301,33 @@
 
         .be-answer.is-warn {
             color: var(--luxe-warning);
+        }
+
+        .be-saved-remark {
+            margin-top: 6px;
+            padding: 6px 11px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.45;
+            border-left: 3px solid rgba(212, 163, 115, 0.55);
+            background: rgba(212, 163, 115, 0.08);
+            color: #e6d7d0;
+        }
+
+        .be-saved-remark.is-fail {
+            border-left-color: #fb7185;
+            background: rgba(251, 113, 133, 0.11);
+            color: #ffe4e6;
+        }
+
+        .be-saved-remark-label {
+            font-weight: 700;
+            color: #d4a373;
+            margin-right: 4px;
+        }
+
+        .be-saved-remark.is-fail .be-saved-remark-label {
+            color: #fda4af;
         }
 
         .be-breakdown-row {

@@ -307,14 +307,14 @@
          @endmoduleView
 
          <!-- 6. Finance -->
-         @moduleView('finance')
-             <li class="menu-item {{ request()->routeIs('appointments.revenue.*') ? 'active' : '' }}">
-                 <a href="{{ route('appointments.revenue.index') }}" class="menu-link">
+         @if (auth()->user()?->canView('finance') || auth()->user()?->isSalonManager())
+             <li class="menu-item {{ request()->routeIs('appointments.revenue.*') || request()->routeIs('finance.eod-close.*') ? 'active' : '' }}">
+                 <a href="{{ route('appointments.revenue.index', auth()->user()?->isSalonManager() && !auth()->user()?->canView('finance') ? ['tab' => 'sales-ledger'] : []) }}" class="menu-link">
                      <i class="bx bx-money me-2"></i>
                      <div>Finance</div>
                  </a>
              </li>
-         @endmoduleView
+         @endif
 
          <!-- 7. Clients -->
          @moduleView('clients')
@@ -336,15 +336,22 @@
              </li>
          @endmoduleView
 
-         <!-- 9. Services -->
-         @moduleView('services')
-             <li class="menu-item {{ request()->routeIs('services.*') || request()->routeIs('combos.*') ? 'active' : '' }}">
+         <!-- 9. Services (or Monthly Offers fallback for operational users without full Services catalog access) -->
+         @if (auth()->user()?->canView('services'))
+             <li class="menu-item {{ request()->routeIs('services.*') || request()->routeIs('combos.*') || request()->routeIs('offers.*') ? 'active' : '' }}">
                  <a href="{{ route('services.index') }}" class="menu-link">
                      <i class="bx bx-briefcase me-2"></i>
                      <div>Services</div>
                  </a>
              </li>
-         @endmoduleView
+         @elseif (auth()->user()?->canViewMonthlyOffers() && !auth()->user()?->isSalonStaff())
+             <li class="menu-item {{ request()->routeIs('offers.*') ? 'active' : '' }}">
+                 <a href="{{ route('offers.index') }}" class="menu-link">
+                     <i class="bx bx-purchase-tag-alt me-2"></i>
+                     <div>Monthly Offers</div>
+                 </a>
+             </li>
+         @endif
 
          <!-- 10. Products -->
          @moduleView('products')
@@ -356,12 +363,32 @@
              </li>
          @endmoduleView
 
+         <!-- 11. Stock -->
+         @moduleView('stock')
+             <li class="menu-item {{ request()->routeIs('stock.*') ? 'active' : '' }}">
+                 <a href="{{ route('stock.index') }}" class="menu-link">
+                     <i class="bx bx-box me-2"></i>
+                     <div>Stock</div>
+                 </a>
+             </li>
+         @endmoduleView
+
          <!-- 11. KPIs -->
          @moduleView('kpis')
-             <li class="menu-item {{ request()->is('kpis*') || request()->routeIs('kpi.*') || request()->routeIs('kpis.*') ? 'active' : '' }}">
+             <li class="menu-item {{ request()->routeIs('kpi.hub') || request()->routeIs('kpi.staff-sales.*') ? 'active' : '' }}">
                  <a href="{{ route('kpi.hub') }}" class="menu-link">
                      <i class="bx bx-line-chart me-2"></i>
                      <div>KPIs</div>
+                 </a>
+             </li>
+         @endmoduleView
+
+         <!-- 12. Operations -->
+         @moduleView('operations')
+             <li class="menu-item {{ request()->routeIs('operations.*') || request()->routeIs('kpi.operations') || request()->routeIs('kpis.operations') || request()->routeIs('kpi.marketing.*') || request()->routeIs('kpi.customer-service.*') || request()->routeIs('kpi.salon-staff.*') || request()->routeIs('kpi.ads.*') || request()->routeIs('kpi.ads-plan.*') || request()->routeIs('kpi.agents.*') || request()->routeIs('kpi.chat-eval.*') || request()->routeIs('kpi.content.*') || request()->routeIs('kpi.content-calendar.*') || request()->routeIs('kpi.evaluations.*') || request()->routeIs('kpi.branch-evaluation.*') ? 'active' : '' }}">
+                 <a href="{{ route('operations.index') }}" class="menu-link">
+                     <i class="bx bx-cog me-2"></i>
+                     <div>Operations</div>
                  </a>
              </li>
          @endmoduleView

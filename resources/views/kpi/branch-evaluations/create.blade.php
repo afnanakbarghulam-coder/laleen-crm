@@ -12,11 +12,11 @@
 
     @if ($errors->any())
         <div class="alert alert-danger">
-            <strong>Please check the form</strong> &mdash; every question needs an answer, and Branch, Manager, and Date are required.
+            <strong>Please check the form</strong> &mdash; every question needs an answer, every <strong>Fail (1)</strong> question requires a remark explaining the issue, and Branch, Manager, and Date are required.
         </div>
     @endif
 
-    <form method="POST" action="{{ route('kpi.branch-evaluation.store') }}">
+    <form method="POST" action="{{ route('kpi.branch-evaluation.store') }}" id="branchEvalForm">
         @csrf
 
         <div class="kpi-panel mb-4">
@@ -50,17 +50,50 @@
                 </div>
                 <div class="be-section-table">
                     @foreach ($questions as $field => $text)
-                        <div class="be-q-row">
-                            <div class="be-q-text">{{ $num }}. {{ $text }}</div>
-                            <div class="be-q-choices" role="radiogroup" aria-label="{{ $text }}">
-                                <label class="be-q-pill fail">
-                                    <input type="radio" name="answers[{{ $field }}]" value="1" @checked(old("answers.$field") == 1) required>
-                                    <span>1 &middot; Fail</span>
-                                </label>
-                                <label class="be-q-pill pass">
-                                    <input type="radio" name="answers[{{ $field }}]" value="5" @checked(old("answers.$field") == 5) required>
-                                    <span>5 &middot; Pass</span>
-                                </label>
+                        @php
+                            $oldAnswer = old("answers.$field");
+                            $oldRemark = old("remarks.$field", '');
+                            $isFailSelected = (string) $oldAnswer === '1';
+                            $showRemarkBox = $isFailSelected || trim((string) $oldRemark) !== '' || $errors->has("remarks.$field");
+                        @endphp
+                        <div class="be-q-row {{ $isFailSelected ? 'is-fail-row' : '' }}" data-field="{{ $field }}">
+                            <div class="be-q-main">
+                                <div class="be-q-text">{{ $num }}. {{ $text }}</div>
+                                <div class="be-q-choices" role="radiogroup" aria-label="{{ $text }}">
+                                    <button type="button" class="be-remark-toggle {{ $showRemarkBox ? 'd-none' : '' }}" data-remark-toggle="{{ $field }}" title="Add optional remark">
+                                        + Remark
+                                    </button>
+                                    <label class="be-q-pill fail">
+                                        <input type="radio" name="answers[{{ $field }}]" value="1" data-answer-field="{{ $field }}" @checked($oldAnswer == 1) required>
+                                        <span>1 &middot; Fail</span>
+                                    </label>
+                                    <label class="be-q-pill pass">
+                                        <input type="radio" name="answers[{{ $field }}]" value="5" data-answer-field="{{ $field }}" @checked($oldAnswer == 5) required>
+                                        <span>5 &middot; Pass</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="be-remark-wrap {{ $showRemarkBox ? '' : 'd-none' }} {{ $isFailSelected ? 'is-required' : '' }}" data-remark-wrap="{{ $field }}">
+                                <div class="be-remark-head">
+                                    <label class="be-remark-label" for="remark_{{ $field }}">
+                                        <span data-remark-heading="{{ $field }}">{{ $isFailSelected ? 'Failure Remark' : 'Remark (Optional)' }}</span>
+                                        <span class="be-remark-req-pill {{ $isFailSelected ? '' : 'd-none' }}" data-remark-req="{{ $field }}">Required on Fail</span>
+                                    </label>
+                                </div>
+                                <input
+                                    type="text"
+                                    id="remark_{{ $field }}"
+                                    name="remarks[{{ $field }}]"
+                                    value="{{ $oldRemark }}"
+                                    maxlength="1000"
+                                    class="form-control form-control-sm be-remark-input @error("remarks.$field") is-invalid @enderror"
+                                    placeholder="{{ $isFailSelected ? 'Explain what failed and what needs fixing…' : 'Optional observation or note…' }}"
+                                    data-remark-input="{{ $field }}"
+                                    @if ($isFailSelected) required @endif
+                                >
+                                @error("remarks.$field")
+                                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                                @enderror
                             </div>
                         </div>
                         @php $num++; @endphp
@@ -120,16 +153,28 @@
 
         .be-q-row {
             display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 12px 20px;
+            flex-direction: column;
+            gap: 10px;
+            padding: 13px 20px;
             border-bottom: 1px solid var(--luxe-border);
+            transition: background 0.15s ease;
+        }
+
+        .be-q-row.is-fail-row {
+            background: rgba(251, 113, 133, 0.05);
         }
 
         .be-q-row:last-child {
             border-bottom: none;
+        }
+
+        .be-q-main {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            width: 100%;
         }
 
         .be-q-text {
@@ -140,8 +185,77 @@
 
         .be-q-choices {
             display: flex;
+            align-items: center;
             gap: 8px;
             flex-shrink: 0;
+        }
+
+        .be-remark-toggle {
+            background: transparent;
+            border: 1px dashed rgba(212, 163, 115, 0.35);
+            color: var(--luxe-muted);
+            border-radius: 999px;
+            padding: 5px 11px;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .be-remark-toggle:hover {
+            color: var(--luxe-ink);
+            border-color: var(--luxe-accent);
+        }
+
+        .be-remark-wrap {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid rgba(229, 184, 168, 0.14);
+        }
+
+        .be-remark-wrap.is-required {
+            background: rgba(251, 113, 133, 0.08);
+            border-color: rgba(251, 113, 133, 0.42);
+        }
+
+        .be-remark-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .be-remark-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11.5px;
+            font-weight: 600;
+            color: var(--luxe-muted);
+            margin: 0;
+        }
+
+        .be-remark-wrap.is-required .be-remark-label {
+            color: #fda4af;
+        }
+
+        .be-remark-req-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 8px;
+            border-radius: 999px;
+            font-size: 10.5px;
+            font-weight: 700;
+            background: rgba(251, 113, 133, 0.18);
+            color: #fecdd3;
+            border: 1px solid rgba(251, 113, 133, 0.4);
+        }
+
+        .be-remark-input.is-missing {
+            border-color: #fb7185 !important;
+            box-shadow: 0 0 0 2px rgba(251, 113, 133, 0.25) !important;
         }
 
         .be-q-pill {
@@ -199,6 +313,90 @@
 
             branchSelect.addEventListener('change', syncManagerFromBranch);
             syncManagerFromBranch();
+
+            function syncQuestionRemarkState(field, forceExpand) {
+                var row = document.querySelector('.be-q-row[data-field="' + field + '"]');
+                if (!row) return;
+                var checked = row.querySelector('input[type="radio"]:checked');
+                var isFail = checked && checked.value === '1';
+                var wrap = row.querySelector('[data-remark-wrap="' + field + '"]');
+                var toggle = row.querySelector('[data-remark-toggle="' + field + '"]');
+                var input = row.querySelector('[data-remark-input="' + field + '"]');
+                var reqPill = row.querySelector('[data-remark-req="' + field + '"]');
+                var heading = row.querySelector('[data-remark-heading="' + field + '"]');
+
+                row.classList.toggle('is-fail-row', !!isFail);
+                if (wrap) wrap.classList.toggle('is-required', !!isFail);
+                if (reqPill) reqPill.classList.toggle('d-none', !isFail);
+                if (heading) heading.textContent = isFail ? 'Failure Remark' : 'Remark (Optional)';
+
+                if (input) {
+                    input.required = !!isFail;
+                    input.placeholder = isFail
+                        ? 'Explain what failed and what needs fixing…'
+                        : 'Optional observation or note…';
+                    if (!isFail) {
+                        input.classList.remove('is-missing');
+                    }
+                }
+
+                var hasText = input && input.value.trim() !== '';
+                var shouldShow = isFail || hasText || !!forceExpand;
+                if (wrap) wrap.classList.toggle('d-none', !shouldShow);
+                if (toggle) toggle.classList.toggle('d-none', shouldShow);
+            }
+
+            document.querySelectorAll('[data-answer-field]').forEach(function (radio) {
+                radio.addEventListener('change', function () {
+                    var field = this.getAttribute('data-answer-field');
+                    syncQuestionRemarkState(field, false);
+                    if (this.value === '1') {
+                        var input = document.querySelector('[data-remark-input="' + field + '"]');
+                        if (input && input.value.trim() === '') {
+                            input.focus();
+                        }
+                    }
+                });
+            });
+
+            document.querySelectorAll('[data-remark-toggle]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var field = this.getAttribute('data-remark-toggle');
+                    syncQuestionRemarkState(field, true);
+                    var input = document.querySelector('[data-remark-input="' + field + '"]');
+                    if (input) input.focus();
+                });
+            });
+
+            document.querySelectorAll('[data-remark-input]').forEach(function (input) {
+                input.addEventListener('input', function () {
+                    if (this.value.trim() !== '') {
+                        this.classList.remove('is-missing');
+                    }
+                });
+            });
+
+            var form = document.getElementById('branchEvalForm');
+            if (form) {
+                form.addEventListener('submit', function (evt) {
+                    var firstMissing = null;
+                    document.querySelectorAll('.be-q-row[data-field]').forEach(function (row) {
+                        var field = row.getAttribute('data-field');
+                        var checked = row.querySelector('input[type="radio"]:checked');
+                        var input = row.querySelector('[data-remark-input="' + field + '"]');
+                        if (checked && checked.value === '1' && input && input.value.trim() === '') {
+                            syncQuestionRemarkState(field, true);
+                            input.classList.add('is-missing');
+                            if (!firstMissing) firstMissing = input;
+                        }
+                    });
+                    if (firstMissing) {
+                        evt.preventDefault();
+                        firstMissing.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        firstMissing.focus();
+                    }
+                });
+            }
         });
     </script>
 @endsection

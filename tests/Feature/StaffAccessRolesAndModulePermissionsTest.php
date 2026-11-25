@@ -43,7 +43,9 @@ class StaffAccessRolesAndModulePermissionsTest extends TestCase
             'staff' => 'Staff Management',
             'services' => 'Services',
             'products' => 'Products',
+            'stock' => 'Stock',
             'kpis' => 'KPIs',
+            'operations' => 'Operations',
             'ecommerce' => 'Ecommerce',
             'legal_tasks' => 'Legal Tasks',
             'guide' => 'CRM Guide & SOPs',
@@ -59,10 +61,11 @@ class StaffAccessRolesAndModulePermissionsTest extends TestCase
         $indexResp->assertSeeInOrder(array_values($expectedModules));
         $indexResp->assertSee('Marketing Specialist');
         $indexResp->assertSee('Social Media Editor');
+        $indexResp->assertSee('Legal Team');
         $indexResp->assertSee("window.Alpine.data('staffAccessUserForm'", false);
         $indexResp->assertDontSee('x-data="{', false);
 
-        // Save all 14 modules using no_access / view_only / full_edit tokens
+        // Save all 16 modules using no_access / view_only / full_edit tokens
         $submittedPermissions = [
             'dashboard' => 'view_only',
             'command_center' => 'no_access',
@@ -74,7 +77,9 @@ class StaffAccessRolesAndModulePermissionsTest extends TestCase
             'staff' => 'view_only',
             'services' => 'full_edit',
             'products' => 'view_only',
+            'stock' => 'view_only',
             'kpis' => 'full_edit',
+            'operations' => 'view_only',
             'ecommerce' => 'no_access',
             'legal_tasks' => 'view_only',
             'guide' => 'view_only',
@@ -90,7 +95,7 @@ class StaffAccessRolesAndModulePermissionsTest extends TestCase
         ])->assertRedirect(route('users.index'));
 
         $created = User::where('email', 'matrix@laleen.qa')->firstOrFail();
-        $this->assertCount(14, $created->permissions);
+        $this->assertCount(16, $created->permissions);
         $this->assertSame('view', $created->permissionLevel('dashboard'));
         $this->assertSame('none', $created->permissionLevel('command_center'));
         $this->assertSame('edit', $created->permissionLevel('leads'));
@@ -102,7 +107,9 @@ class StaffAccessRolesAndModulePermissionsTest extends TestCase
         $this->assertSame('view', $created->permissionLevel('staff_management'));
         $this->assertSame('edit', $created->permissionLevel('services'));
         $this->assertSame('view', $created->permissionLevel('products'));
+        $this->assertSame('view', $created->permissionLevel('stock'));
         $this->assertSame('edit', $created->permissionLevel('kpis'));
+        $this->assertSame('view', $created->permissionLevel('operations'));
         $this->assertSame('none', $created->permissionLevel('ecommerce'));
         $this->assertSame('view', $created->permissionLevel('legal_tasks'));
         $this->assertSame('view', $created->permissionLevel('guide'));

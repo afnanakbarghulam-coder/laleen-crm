@@ -7,16 +7,6 @@
             <h4 class="mb-1">Operations Hub</h4>
             <p class="mb-0">Manage daily operational workflows across Marketing, Customer Service, and Salon Staff.</p>
         </div>
-
-        {{-- Top 2-Button Mode Switcher --}}
-        <div class="luxe-mode-switcher" role="navigation" aria-label="KPI and Operations Switcher">
-            <a href="{{ route('kpi.hub') }}" class="luxe-mode-btn">
-                <span>📊</span> KPIs (Executive Scorecards)
-            </a>
-            <a href="{{ route('kpi.operations') }}" class="luxe-mode-btn active">
-                <span>⚙️</span> Operations
-            </a>
-        </div>
     </div>
 
     {{-- 3 Main Department Cards (Marketing, Customer Service, Salon Staff) --}}
@@ -45,41 +35,6 @@
     </div>
 
     <style>
-        .luxe-mode-switcher {
-            display: inline-flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            background: rgba(20, 12, 15, 0.85);
-            border: 1px solid rgba(229, 184, 168, 0.22);
-            padding: 5px;
-            border-radius: 14px;
-        }
-
-        .luxe-mode-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 7px 14px;
-            border-radius: 10px;
-            font-size: 12.5px;
-            font-weight: 600;
-            color: #c9a39a;
-            text-decoration: none;
-            transition: all 0.2s ease;
-        }
-
-        .luxe-mode-btn:hover {
-            color: #f8efe6;
-            background: rgba(229, 184, 168, 0.08);
-        }
-
-        .luxe-mode-btn.active {
-            background: linear-gradient(135deg, #d98f83, #c19a8c);
-            color: #1f1412;
-            font-weight: 700;
-            box-shadow: 0 4px 14px rgba(217, 143, 131, 0.28);
-        }
-
         .kpi-master-card {
             padding: 32px 28px;
             text-align: center;

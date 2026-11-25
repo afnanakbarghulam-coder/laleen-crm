@@ -25,6 +25,26 @@
 
         * { box-sizing: border-box; }
 
+        @media screen {
+            :root, html { color-scheme: dark; }
+            input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active,
+            textarea:-webkit-autofill, textarea:-webkit-autofill:hover, textarea:-webkit-autofill:focus,
+            select:-webkit-autofill, select:-webkit-autofill:hover, select:-webkit-autofill:focus {
+                -webkit-text-fill-color: #FCF8F8 !important;
+                color: #FCF8F8 !important;
+                caret-color: #FCF8F8 !important;
+                -webkit-box-shadow: 0 0 0 1000px #1c1614 inset !important;
+                box-shadow: 0 0 0 1000px #1c1614 inset !important;
+                transition: background-color 99999s ease-in-out 0s;
+            }
+            input:autofill, textarea:autofill, select:autofill {
+                -webkit-text-fill-color: #FCF8F8 !important;
+                color: #FCF8F8 !important;
+                caret-color: #FCF8F8 !important;
+                box-shadow: 0 0 0 1000px #1c1614 inset !important;
+            }
+        }
+
         body {
             margin: 0;
             min-height: 100vh;

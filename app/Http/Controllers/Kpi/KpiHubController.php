@@ -34,6 +34,10 @@ class KpiHubController extends Controller
 
     public function index(Request $request)
     {
+        if (strtolower(trim((string) $request->query('tab', ''))) === 'operations') {
+            return redirect()->route('operations.index');
+        }
+
         $nowQatar = now('Asia/Qatar');
         $rawMonth = trim((string) $request->query('month', $nowQatar->format('Y-m')));
         if (!preg_match('/^\d{4}-\d{2}$/', $rawMonth)) {

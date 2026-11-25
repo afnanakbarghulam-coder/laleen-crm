@@ -360,13 +360,15 @@
 @section('content')
 
     @php
-        $rawTab = request('tab', 'overview');
+        $isBlindManagerOnly = (bool) ($isBlindManagerOnly ?? false);
+        $hideBlindPaymentTotals = (bool) ($hideBlindPaymentTotals ?? false);
+        $rawTab = request('tab', $isBlindManagerOnly ? 'sales-ledger' : 'overview');
         if ($rawTab === 'sales') {
             $rawTab = 'sales-ledger';
         }
-        $activeTab = in_array($rawTab, ['overview', 'sales-ledger', 'expenses'], true)
-            ? $rawTab
-            : 'overview';
+        $activeTab = $isBlindManagerOnly
+            ? 'sales-ledger'
+            : (in_array($rawTab, ['overview', 'sales-ledger', 'expenses'], true) ? $rawTab : 'overview');
         $activeBranchLabel = $branch ? ($branches[$branch] ?? ($branch === 'general' ? 'General / Shared' : $branch)) : 'All Branches';
         $activeStaffName = $staffId ? $staffList->firstWhere('id', $staffId)?->name : null;
         $cashTotal = (float) ($paymentTotals['cash'] ?? 0);
@@ -376,27 +378,30 @@
 
     <div class="fin-header">
         <div>
-            <h4>Finance</h4>
-            <p>Live profit &amp; loss, revenue trends and expense tracking across your branches.</p>
+            <h4>{{ $isBlindManagerOnly ? 'Branch Sales Ledger & EOD Close' : 'Finance' }}</h4>
+            <p>{{ $isBlindManagerOnly ? 'Submit your daily End-of-Day cash & POS Z-Report close and inspect branch transactions.' : 'Live profit & loss, revenue trends and expense tracking across your branches.' }}</p>
             @if ($branch || $staffId)
                 <div class="mt-1">
                     @if ($branch)
                         <span class="fin-pay-chip">Branch: {{ $activeBranchLabel }}</span>
                     @endif
-                    @if ($staffId)
+                    @if ($staffId && !$isBlindManagerOnly)
                         <span class="fin-pay-chip {{ $activeTab === 'sales-ledger' ? '' : 'd-none' }}" id="finHeaderStaffChip">Staff: {{ $activeStaffName }}</span>
                     @endif
                 </div>
             @endif
         </div>
-        <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-outline-secondary fin-apply-btn d-inline-flex align-items-center"
-                data-bs-toggle="collapse" data-bs-target="#finFilterCollapse" aria-expanded="false" aria-controls="finFilterCollapse">
-                <i class="bx bx-filter-alt me-1"></i> Filters
-            </button>
-        </div>
+        @if (!$isBlindManagerOnly)
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-outline-secondary fin-apply-btn d-inline-flex align-items-center"
+                    data-bs-toggle="collapse" data-bs-target="#finFilterCollapse" aria-expanded="false" aria-controls="finFilterCollapse">
+                    <i class="bx bx-filter-alt me-1"></i> Filters
+                </button>
+            </div>
+        @endif
     </div>
 
+    @if (!$isBlindManagerOnly)
     <!-- COLLAPSIBLE FILTER BAR -->
     <div class="collapse" id="finFilterCollapse">
         <div class="fin-filter-card">
@@ -463,7 +468,9 @@
             Showing: {{ $from->format('d/m/Y') }} - {{ $to->format('d/m/Y') }} | {{ $activeBranchLabel }}{{ ($activeTab === 'sales-ledger' && $activeStaffName) ? ' | ' . $activeStaffName : '' }}
         </span>
     </div>
+    @endif
 
+    @if (!$isBlindManagerOnly)
     <!-- TAB 1: OVERVIEW -->
     <div id="fin-tab-overview" class="fin-tab-pane {{ $activeTab === 'overview' ? '' : 'd-none' }}">
     <!-- KPI CARDS -->
@@ -614,9 +621,14 @@
     </div>
     </div>
     <!-- /TAB 1: OVERVIEW -->
+    @endif
 
     <!-- TAB 2: SALES LEDGER -->
     <div id="fin-tab-sales-ledger" class="fin-tab-pane {{ $activeTab === 'sales-ledger' ? '' : 'd-none' }}">
+    @if ($isAdminViewer || $isSalonManagerViewer)
+        @include('revenue.partials.eod-close')
+    @endif
+
     <!-- DAILY SALES LEDGER -->
     <div class="fin-section-card">
         <div class="fin-section-head flex-wrap gap-2">
@@ -625,9 +637,13 @@
                 <span class="text-muted small">{{ $sales->count() }} {{ Str::plural('transaction', $sales->count()) }}</span>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-2">
-                <span class="fin-pay-chip"><i class="bx bx-money"></i> Cash: {{ number_format($cashTotal, 2) }} QAR</span>
-                <span class="fin-pay-chip"><i class="bx bx-credit-card"></i> Card: {{ number_format($cardTotal, 2) }} QAR</span>
-                <span class="fin-pay-chip"><i class="bx bx-transfer"></i> Online Transfer: {{ number_format($onlineTransferTotal, 2) }} QAR</span>
+                @if ($hideBlindPaymentTotals)
+                    <span class="fin-pay-chip"><i class="bx bx-lock-alt"></i> Payment totals hidden until End-of-Day Close is submitted</span>
+                @else
+                    <span class="fin-pay-chip"><i class="bx bx-money"></i> Cash: {{ number_format($cashTotal, 2) }} QAR</span>
+                    <span class="fin-pay-chip"><i class="bx bx-credit-card"></i> Card: {{ number_format($cardTotal, 2) }} QAR</span>
+                    <span class="fin-pay-chip"><i class="bx bx-transfer"></i> Online Transfer: {{ number_format($onlineTransferTotal, 2) }} QAR</span>
+                @endif
             </div>
         </div>
         <div class="table-responsive">
@@ -645,6 +661,11 @@
                 </thead>
                 <tbody>
                     @forelse ($sales as $sale)
+                        @php
+                            $maskRowForBlindEod = $hideBlindPaymentTotals
+                                && $sale->created_at
+                                && $sale->created_at->timezone('Asia/Qatar')->toDateString() === $eodDate;
+                        @endphp
                         <tr>
                             <td class="text-nowrap">{{ $sale->created_at->format('d M, h:i A') }}</td>
                             <td>{{ $sale->customer->name ?? $sale->appointment?->customer_name ?? 'Walk-in' }}</td>
@@ -659,19 +680,23 @@
                                 @endforeach
                             </td>
                             <td>
-                                @foreach ($sale->payments as $payment)
-                                    <span class="fin-pay-chip">
-                                        <i class="bx {{ $payment->method === 'cash' ? 'bx-money' : ($payment->method === 'card' ? 'bx-credit-card' : 'bx-transfer') }}"></i>
-                                        {{ ucfirst(str_replace('_', ' ', $payment->method)) }}: {{ number_format($payment->amount, 2) }}
-                                    </span>
-                                @endforeach
+                                @if ($maskRowForBlindEod)
+                                    <span class="fin-pay-chip"><i class="bx bx-hide"></i> Hidden until EOD Close</span>
+                                @else
+                                    @foreach ($sale->payments as $payment)
+                                        <span class="fin-pay-chip">
+                                            <i class="bx {{ $payment->method === 'cash' ? 'bx-money' : ($payment->method === 'card' ? 'bx-credit-card' : 'bx-transfer') }}"></i>
+                                            {{ ucfirst(str_replace('_', ' ', $payment->method)) }}: {{ number_format($payment->amount, 2) }}
+                                        </span>
+                                    @endforeach
+                                @endif
                             </td>
                             @php
                                 $ledgerRowTotal = ($staffId && isset($staffSaleFigures[$sale->id]))
                                     ? (float) $staffSaleFigures[$sale->id]['net']
                                     : (float) $sale->total_amount;
                             @endphp
-                            <td class="text-end fw-semibold">{{ number_format($ledgerRowTotal, 2) }}</td>
+                            <td class="text-end fw-semibold">{{ $maskRowForBlindEod ? '—' : number_format($ledgerRowTotal, 2) }}</td>
                         </tr>
                     @empty
                         <tr>
@@ -685,6 +710,7 @@
     </div>
     <!-- /TAB 2: SALES LEDGER -->
 
+    @if (!$isBlindManagerOnly)
     <!-- TAB 3: EXPENSES -->
     <div id="fin-tab-expenses" class="fin-tab-pane {{ $activeTab === 'expenses' ? '' : 'd-none' }}">
     <!-- EXPENSE TRACKER -->
@@ -755,6 +781,7 @@
     </div>
     </div>
     <!-- /TAB 3: EXPENSES -->
+    @endif
 
     <!-- ADD EXPENSE MODAL -->
     @moduleEdit('finance')
@@ -853,63 +880,69 @@
         });
 
         // Revenue vs Expense trend
-        new ApexCharts(document.querySelector('#finTrendChart'), {
-            chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'inherit' },
-            series: [
-                { name: 'Revenue', data: @json($trendRevenue) },
-                { name: 'Expenses', data: @json($trendExpenses) },
-            ],
-            xaxis: { categories: @json($trendLabels), labels: { rotate: -45, style: { fontSize: '11px' } } },
-            yaxis: { labels: { formatter: (v) => v.toFixed(0) } },
-            colors: ['#d98f83', '#a8524a'],
-            fill: { type: 'gradient', gradient: { opacityFrom: .35, opacityTo: .05 } },
-            stroke: { curve: 'smooth', width: 2.5 },
-            dataLabels: { enabled: false },
-            legend: { position: 'top', horizontalAlign: 'left' },
-            tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
-            grid: { borderColor: 'rgba(217, 143, 131,0.16)' },
-        }).render();
+        if (document.querySelector('#finTrendChart')) {
+            new ApexCharts(document.querySelector('#finTrendChart'), {
+                chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'inherit' },
+                series: [
+                    { name: 'Revenue', data: @json($trendRevenue) },
+                    { name: 'Expenses', data: @json($trendExpenses) },
+                ],
+                xaxis: { categories: @json($trendLabels), labels: { rotate: -45, style: { fontSize: '11px' } } },
+                yaxis: { labels: { formatter: (v) => v.toFixed(0) } },
+                colors: ['#d98f83', '#a8524a'],
+                fill: { type: 'gradient', gradient: { opacityFrom: .35, opacityTo: .05 } },
+                stroke: { curve: 'smooth', width: 2.5 },
+                dataLabels: { enabled: false },
+                legend: { position: 'top', horizontalAlign: 'left' },
+                tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
+                grid: { borderColor: 'rgba(217, 143, 131,0.16)' },
+            }).render();
+        }
 
         // Revenue breakdown donut
-        new ApexCharts(document.querySelector('#finDonutChart'), {
-            chart: { type: 'donut', height: 320, fontFamily: 'inherit' },
-            series: [{{ $grossServices }}, {{ $grossProducts }}, {{ $grossPackages ?? 0 }}],
-            labels: ['Services', 'Products', 'Packages'],
-            colors: ['#d98f83', '#8aa6ab', '#c9a66b'],
-            dataLabels: { enabled: true, formatter: (val) => val.toFixed(1) + '%' },
-            legend: { position: 'bottom' },
-            tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
-            plotOptions: {
-                pie: {
-                    donut: {
-                        labels: {
-                            show: true,
-                            total: {
+        if (document.querySelector('#finDonutChart')) {
+            new ApexCharts(document.querySelector('#finDonutChart'), {
+                chart: { type: 'donut', height: 320, fontFamily: 'inherit' },
+                series: [{{ $grossServices }}, {{ $grossProducts }}, {{ $grossPackages ?? 0 }}],
+                labels: ['Services', 'Products', 'Packages'],
+                colors: ['#d98f83', '#8aa6ab', '#c9a66b'],
+                dataLabels: { enabled: true, formatter: (val) => val.toFixed(1) + '%' },
+                legend: { position: 'bottom' },
+                tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
+                plotOptions: {
+                    pie: {
+                        donut: {
+                            labels: {
                                 show: true,
-                                label: 'Gross Sales',
-                                formatter: () => '{{ number_format($grossSales, 2) }}',
+                                total: {
+                                    show: true,
+                                    label: 'Gross Sales',
+                                    formatter: () => '{{ number_format($grossSales, 2) }}',
+                                }
                             }
                         }
                     }
-                }
-            },
-        }).render();
+                },
+            }).render();
+        }
 
         // Branch comparison
-        new ApexCharts(document.querySelector('#finBranchChart'), {
-            chart: { type: 'bar', height: 300, toolbar: { show: false }, fontFamily: 'inherit' },
-            series: [
-                { name: 'Gross Sales', data: @json(array_column($branchBreakdown, 'sales')) },
-                { name: 'Expenses', data: @json(array_column($branchBreakdown, 'expenses')) },
-            ],
-            xaxis: { categories: @json(array_column($branchBreakdown, 'label')) },
-            colors: ['#d98f83', '#a8524a'],
-            plotOptions: { bar: { columnWidth: '45%', borderRadius: 6 } },
-            dataLabels: { enabled: false },
-            legend: { position: 'top', horizontalAlign: 'left' },
-            tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
-            grid: { borderColor: 'rgba(217, 143, 131,0.16)' },
-        }).render();
+        if (document.querySelector('#finBranchChart')) {
+            new ApexCharts(document.querySelector('#finBranchChart'), {
+                chart: { type: 'bar', height: 300, toolbar: { show: false }, fontFamily: 'inherit' },
+                series: [
+                    { name: 'Gross Sales', data: @json(array_column($branchBreakdown, 'sales')) },
+                    { name: 'Expenses', data: @json(array_column($branchBreakdown, 'expenses')) },
+                ],
+                xaxis: { categories: @json(array_column($branchBreakdown, 'label')) },
+                colors: ['#d98f83', '#a8524a'],
+                plotOptions: { bar: { columnWidth: '45%', borderRadius: 6 } },
+                dataLabels: { enabled: false },
+                legend: { position: 'top', horizontalAlign: 'left' },
+                tooltip: { y: { formatter: (v) => v.toFixed(2) + ' QAR' } },
+                grid: { borderColor: 'rgba(217, 143, 131,0.16)' },
+            }).render();
+        }
 
         // Multi-tab switching logic
         const finTabBtns = document.querySelectorAll('.fin-tab-btn');

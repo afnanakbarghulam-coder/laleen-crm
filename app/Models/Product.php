@@ -20,6 +20,22 @@ class Product extends Model
         'low_stock_threshold' => 'integer',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function (self $product): void {
+            StockItem::syncFromProduct($product);
+        });
+
+        static::deleting(function (self $product): void {
+            StockItem::deactivateForProduct($product);
+        });
+    }
+
+    public function stockItem()
+    {
+        return $this->hasOne(StockItem::class, 'product_id');
+    }
+
     public function saleItems()
     {
         return $this->hasMany(SaleItem::class, 'product_id');

@@ -30,7 +30,14 @@
                     @foreach ($questions as $q)
                         <tr>
                             <td>{{ $q['num'] }}</td>
-                            <td>{{ $q['question'] }}</td>
+                            <td>
+                                <div>{{ $q['question'] }}</div>
+                                @if (!empty($q['remark']))
+                                    <div class="be-saved-remark {{ $q['status'] === 'fail' ? 'is-fail' : 'is-pass' }}">
+                                        <span class="be-saved-remark-label">Remark:</span> {{ $q['remark'] }}
+                                    </div>
+                                @endif
+                            </td>
                             <td><span class="be-answer is-{{ $q['status'] }}">{{ $q['answer'] }}</span></td>
                             <td class="text-end">{{ $q['score'] }}</td>
                         </tr>

@@ -1,0 +1,769 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Combo;
+use App\Models\DailyBranchClose;
+use App\Models\MonthlyOffer;
+use App\Models\Product;
+use App\Models\Sale;
+use App\Models\SaleItem;
+use App\Models\SalePayment;
+use App\Models\Service;
+use App\Models\ServiceFreebiePackage;
+use App\Models\Staff;
+use App\Models\StockItem;
+use App\Models\StockMovement;
+use App\Models\StockWeek;
+use App\Models\StockWeekEntry;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
+use Tests\TestCase;
+
+class EodCloseStockAndMonthlyOffersTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $admin;
+    private User $oldAirportManager;
+    private User $wakrahManager;
+    private User $opsLead;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->admin = User::factory()->create([
+            'name' => 'Afnan Admin',
+            'email' => 'admin@laleen.qa',
+            'role' => 'admin',
+            'is_active' => true,
+        ]);
+
+        $this->oldAirportManager = $this->makeBranchManager('Ahana Old Airport', 'ahana.eod@laleen.qa', 'old_airport');
+        $this->wakrahManager = $this->makeBranchManager('Rhea Al Wakrah', 'rhea.eod@laleen.qa', 'wakrah');
+
+        $this->opsLead = User::factory()->create([
+            'name' => 'Nadia Ops Lead',
+            'email' => 'ops.stock@laleen.qa',
+            'role' => 'ops_lead',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('ops_lead'),
+        ]);
+    }
+
+    private function makeBranchManager(string $name, string $email, string $staffBranch): User
+    {
+        $user = User::factory()->create([
+            'name' => $name,
+            'email' => $email,
+            'role' => 'salon_manager',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('salon_manager'),
+        ]);
+
+        Staff::create([
+            'name' => $name,
+            'email' => $email,
+            'branch' => $staffBranch,
+            'role' => 'Salon Manager',
+            'user_id' => $user->id,
+            'status' => 'active',
+        ]);
+
+        return $user->fresh();
+    }
+
+    private function createSaleWithPayments(string $salesBranch, Carbon $when, array $payments, array $productItems = []): Sale
+    {
+        $total = array_sum($payments);
+        $sale = Sale::create([
+            'branch' => $salesBranch,
+            'services_total' => empty($productItems) ? $total : 0,
+            'products_total' => empty($productItems) ? 0 : $total,
+            'packages_total' => 0,
+            'discount_amount' => 0,
+            'tip_amount' => 0,
+            'total_amount' => $total,
+            'created_by' => $this->admin->id,
+        ]);
+        $sale->timestamps = false;
+        $sale->created_at = $when;
+        $sale->updated_at = $when;
+        $sale->save();
+
+        foreach ($payments as $method => $amount) {
+            SalePayment::create([
+                'sale_id' => $sale->id,
+                'method' => $method,
+                'amount' => $amount,
+            ]);
+        }
+
+        foreach ($productItems as $pi) {
+            SaleItem::create([
+                'sale_id' => $sale->id,
+                'type' => 'product',
+                'product_id' => $pi['product_id'],
+                'name' => $pi['name'],
+                'quantity' => $pi['quantity'],
+                'price' => $pi['unit_price'],
+                'total' => $pi['unit_price'] * $pi['quantity'],
+            ]);
+        }
+
+        return $sale;
+    }
+
+    /* =========================================================================
+     * UPGRADE 1 — FINANCE -> SALES LEDGER: BLIND END-OF-DAY (EOD) CLOSE
+     * ========================================================================= */
+
+    public function test_blind_eod_close_hides_totals_pre_submit_requires_z_report_and_blocks_cross_branch(): void
+    {
+        Storage::fake('local');
+        $today = Carbon::now('Asia/Qatar')->setTime(14, 0);
+        $todayStr = $today->toDateString();
+
+        $this->createSaleWithPayments('old_airport', $today, [
+            'cash' => 320.00,
+            'card' => 480.00,
+            'online_transfer' => 150.00,
+        ]);
+        $this->createSaleWithPayments('wakrah', $today, [
+            'cash' => 210.00,
+            'card' => 90.00,
+        ]);
+
+        // Salon Manager without finance permission still accesses blind EOD Sales Ledger for own branch only
+        $resp = $this->actingAs($this->oldAirportManager)
+            ->get(route('appointments.revenue.index', ['eod_date' => $todayStr]))
+            ->assertOk();
+
+        $resp->assertSee('End-of-Day Cash &amp; POS Close', false);
+        $resp->assertSee('Payment totals hidden until End-of-Day Close is submitted');
+        $resp->assertDontSee('Admin Live Reference');
+        $resp->assertDontSee('Cash: 320.00 QAR');
+        $resp->assertDontSee('Card: 480.00 QAR');
+        $resp->assertDontSee('Total Expenses');
+
+        // Cross-branch submit is strictly 403
+        $this->actingAs($this->oldAirportManager)
+            ->post(route('finance.eod-close.store'), [
+                'branch' => 'al_wakrah',
+                'close_date' => $todayStr,
+                'opening_float_qar' => 0,
+                'entered_cash_qar' => 210,
+                'entered_card_qar' => 90,
+                'entered_transfer_qar' => 0,
+                'z_report' => UploadedFile::fake()->image('z-wakrah.jpg'),
+            ])
+            ->assertForbidden();
+
+        // Missing Z-Report when card > 0 returns 422 validation error
+        $this->actingAs($this->oldAirportManager)
+            ->postJson(route('finance.eod-close.store'), [
+                'branch' => 'old_airport',
+                'close_date' => $todayStr,
+                'opening_float_qar' => 100,
+                'entered_cash_qar' => 420,
+                'entered_card_qar' => 480,
+                'entered_transfer_qar' => 150,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['z_report']);
+    }
+
+    public function test_blind_eod_close_reconciles_balanced_shortage_overage_locks_and_secures_z_report(): void
+    {
+        Storage::fake('local');
+        $today = Carbon::now('Asia/Qatar')->setTime(15, 30);
+        $todayStr = $today->toDateString();
+
+        $this->createSaleWithPayments('old_airport', $today, [
+            'cash' => 300.00,
+            'card' => 450.00,
+            'online_transfer' => 150.00,
+        ]);
+
+        // 1. Balanced submit (Opening Float 200 + Expected Cash 300 = 500 physical cash)
+        $this->actingAs($this->oldAirportManager)
+            ->post(route('finance.eod-close.store'), [
+                'branch' => 'old_airport',
+                'close_date' => $todayStr,
+                'opening_float_qar' => 200,
+                'entered_cash_qar' => 500,
+                'entered_card_qar' => 450,
+                'entered_transfer_qar' => 150,
+                'variance_note' => 'All matched cleanly',
+                'z_report' => UploadedFile::fake()->create('z-batch.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $close = DailyBranchClose::where('branch', 'old_airport')->whereDate('close_date', $todayStr)->firstOrFail();
+        $this->assertSame(DailyBranchClose::STATUS_BALANCED, $close->status);
+        $this->assertEquals(0.0, $close->cash_variance_qar);
+        $this->assertEquals(0.0, $close->card_variance_qar);
+        $this->assertEquals(0.0, $close->transfer_variance_qar);
+        $this->assertEquals(0.0, $close->total_variance_qar);
+        $this->assertTrue($close->is_locked);
+        $this->assertNotNull($close->z_report_path);
+        Storage::disk('local')->assertExists($close->z_report_path);
+
+        // Post-submit reveals reconciliation table to Old Airport Manager
+        $this->actingAs($this->oldAirportManager)
+            ->get(route('appointments.revenue.index', ['tab' => 'sales-ledger', 'eod_date' => $todayStr]))
+            ->assertOk()
+            ->assertSee('Balanced')
+            ->assertSee('Total Daily Close')
+            ->assertSee('900.00');
+
+        // 2. Private Z-Report download policy check
+        $this->actingAs($this->admin)->get(route('finance.eod-close.z-report', $close))->assertOk();
+        $this->actingAs($this->oldAirportManager)->get(route('finance.eod-close.z-report', $close))->assertOk();
+        $this->actingAs($this->wakrahManager)->get(route('finance.eod-close.z-report', $close))->assertForbidden();
+        $this->actingAs($this->opsLead)->get(route('finance.eod-close.z-report', $close))->assertForbidden();
+
+        // 3. Locked day rejects Manager edit/resubmit (403) and Manager cannot self-verify or unlock (403)
+        $this->actingAs($this->oldAirportManager)
+            ->post(route('finance.eod-close.store'), [
+                'branch' => 'old_airport',
+                'close_date' => $todayStr,
+                'opening_float_qar' => 200,
+                'entered_cash_qar' => 480,
+                'entered_card_qar' => 450,
+                'entered_transfer_qar' => 150,
+            ])
+            ->assertForbidden();
+
+        $this->actingAs($this->oldAirportManager)->post(route('finance.eod-close.verify', $close))->assertForbidden();
+        $this->actingAs($this->oldAirportManager)->post(route('finance.eod-close.unlock', $close))->assertForbidden();
+
+        // 4. Admin verifies, then unlocks so Manager can resubmit with a Shortage (-25.00 QAR)
+        $this->actingAs($this->admin)->post(route('finance.eod-close.verify', $close))->assertRedirect();
+        $close->refresh();
+        $this->assertTrue($close->isVerified());
+        $this->assertSame($this->admin->id, $close->verified_by);
+
+        $this->actingAs($this->admin)->post(route('finance.eod-close.unlock', $close))->assertRedirect();
+        $close->refresh();
+        $this->assertFalse($close->is_locked);
+        $this->assertFalse($close->isVerified());
+
+        $this->actingAs($this->oldAirportManager)
+            ->post(route('finance.eod-close.store'), [
+                'branch' => 'old_airport',
+                'close_date' => $todayStr,
+                'opening_float_qar' => 200,
+                'entered_cash_qar' => 475,
+                'entered_card_qar' => 450,
+                'entered_transfer_qar' => 150,
+                'variance_note' => '25 QAR petty taxi receipt missing',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $close->refresh();
+        $this->assertSame(DailyBranchClose::STATUS_SHORTAGE, $close->status);
+        $this->assertEquals(-25.0, $close->cash_variance_qar);
+        $this->assertEquals(-25.0, $close->total_variance_qar);
+        $this->assertTrue($close->is_locked);
+
+        // 5. Admin overrides with Overage (+15.00 QAR)
+        $this->actingAs($this->admin)
+            ->post(route('finance.eod-close.store'), [
+                'branch' => 'old_airport',
+                'close_date' => $todayStr,
+                'opening_float_qar' => 200,
+                'entered_cash_qar' => 515,
+                'entered_card_qar' => 450,
+                'entered_transfer_qar' => 150,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $close->refresh();
+        $this->assertSame(DailyBranchClose::STATUS_OVERAGE, $close->status);
+        $this->assertEquals(15.0, $close->total_variance_qar);
+    }
+
+    /* =========================================================================
+     * UPGRADE 2 — DEDICATED STOCK MODULE (SATURDAY–FRIDAY WEEKLY AUDIT)
+     * ========================================================================= */
+
+    public function test_stock_module_auto_syncs_retail_products_on_create_update_and_delete(): void
+    {
+        $product = Product::create([
+            'name' => 'Laleen Argan Hair Serum 100ml',
+            'sku' => 'LAL-ARG-100',
+            'price' => 145.00,
+            'stock_quantity' => 12,
+            'low_stock_threshold' => 4,
+        ]);
+
+        $stockItem = StockItem::where('product_id', $product->id)->first();
+        $this->assertNotNull($stockItem);
+        $this->assertSame(StockItem::TYPE_RETAIL, $stockItem->item_type);
+        $this->assertSame('Laleen Argan Hair Serum 100ml', $stockItem->name);
+        $this->assertEquals(4.0, $stockItem->par_level_old_airport);
+        $this->assertTrue($stockItem->is_active);
+
+        $product->update(['name' => 'Laleen Gold Argan Hair Serum 100ml']);
+        $stockItem->refresh();
+        $this->assertSame('Laleen Gold Argan Hair Serum 100ml', $stockItem->name);
+
+        $product->delete();
+        $stockItem->refresh();
+        $this->assertFalse($stockItem->is_active);
+    }
+
+    public function test_stock_weekly_sat_to_fri_audit_math_decimals_transfers_revision_and_carry_forward(): void
+    {
+        // Verify Sat -> Fri week bounds in Asia/Qatar (Wednesday 2026-11-25 belongs to Sat 2026-11-21 -> Fri 2026-11-27)
+        $bounds = StockWeek::weekBoundsFor('2026-11-25');
+        $this->assertSame('2026-11-21', $bounds['start_str']);
+        $this->assertSame('2026-11-27', $bounds['end_str']);
+        $this->assertSame(Carbon::SATURDAY, $bounds['start']->dayOfWeek);
+        $this->assertSame(Carbon::FRIDAY, $bounds['end']->dayOfWeek);
+
+        // Admin adds a Backbar item & a Retail product
+        $this->actingAs($this->admin)->post(route('stock.items.store'), [
+            'name' => 'Majirel 7.1 Hair Color Tube',
+            'category' => 'hair_color',
+            'unit' => 'Tube',
+            'par_level_old_airport' => 6,
+            'par_level_al_wakrah' => 4,
+        ])->assertRedirect(route('stock.index', ['tab' => 'catalog']));
+
+        $backbar = StockItem::where('name', 'Majirel 7.1 Hair Color Tube')->firstOrFail();
+
+        $retailProduct = Product::create([
+            'name' => 'Keratin Home Mask',
+            'sku' => 'KER-01',
+            'price' => 160,
+            'stock_quantity' => 10,
+            'low_stock_threshold' => 5,
+        ]);
+        $retailItem = StockItem::where('product_id', $retailProduct->id)->firstOrFail();
+
+        // Seed 2 units of Retail product sold on Old Airport during the Sat-Fri window
+        $saleTime = Carbon::parse('2026-11-24 13:00:00', 'Asia/Qatar');
+        $this->createSaleWithPayments('old_airport', $saleTime, ['card' => 320], [
+            [
+                'product_id' => $retailProduct->id,
+                'name' => $retailProduct->name,
+                'quantity' => 2,
+                'unit_price' => 160,
+            ],
+        ]);
+
+        // Load Old Airport's week so entries auto-populate (including retail_sold_qty = 2)
+        $this->actingAs($this->oldAirportManager)
+            ->get(route('stock.index', ['branch' => 'old_airport', 'week' => $bounds['start_str']]))
+            ->assertOk()
+            ->assertSee('Majirel 7.1 Hair Color Tube')
+            ->assertSee('Keratin Home Mask');
+
+        $oaWeek = StockWeek::where('branch', 'old_airport')->whereDate('week_start_date', $bounds['start_str'])->firstOrFail();
+
+        // 1. Fresh-start Week 1: Manager enters initial Opening (Sat) = 10 backbar, 6 retail
+        $this->actingAs($this->oldAirportManager)
+            ->post(route('stock.weeks.save-counts', $oaWeek), [
+                'entries' => [
+                    $backbar->id => ['opening_qty' => 10, 'closing_qty' => null],
+                    $retailItem->id => ['opening_qty' => 6, 'closing_qty' => null],
+                ],
+            ])
+            ->assertRedirect();
+
+        // 2. Ops Lead logs +2.5 Received delivery for Old Airport
+        $this->actingAs($this->opsLead)
+            ->post(route('stock.movements.store'), [
+                'branch' => 'old_airport',
+                'stock_item_id' => $backbar->id,
+                'week_start_date' => $bounds['start_str'],
+                'quantity' => 2.5,
+                'reference_note' => 'Supplier INV-88',
+            ])
+            ->assertRedirect();
+
+        // 3. Old Airport Manager transfers 1.5 tubes to Al Wakrah (atomic both branches)
+        $this->actingAs($this->oldAirportManager)
+            ->post(route('stock.transfer'), [
+                'from_branch' => 'old_airport',
+                'to_branch' => 'al_wakrah',
+                'stock_item_id' => $backbar->id,
+                'week_start_date' => $bounds['start_str'],
+                'quantity' => 1.5,
+                'reference_note' => 'Driver courier',
+            ])
+            ->assertRedirect();
+
+        $wakrahWeek = StockWeek::where('branch', 'al_wakrah')->whereDate('week_start_date', $bounds['start_str'])->firstOrFail();
+        $wakrahEntry = StockWeekEntry::where('stock_week_id', $wakrahWeek->id)->where('stock_item_id', $backbar->id)->firstOrFail();
+        $this->assertEquals(1.5, $wakrahEntry->transfer_net_qty);
+        $this->assertSame(1, StockMovement::where('type', StockMovement::TYPE_TRANSFER_OUT)->count());
+        $this->assertSame(1, StockMovement::where('type', StockMovement::TYPE_TRANSFER_IN)->count());
+
+        // 4. Manager enters Friday Closing counts (4.5 backbar, 3 retail) and submits for approval
+        $this->actingAs($this->oldAirportManager)
+            ->post(route('stock.weeks.submit', $oaWeek), [
+                'entries' => [
+                    $backbar->id => ['opening_qty' => 10, 'closing_qty' => 4.5],
+                    $retailItem->id => ['opening_qty' => 6, 'closing_qty' => 3],
+                ],
+            ])
+            ->assertRedirect();
+
+        $oaWeek->refresh();
+        $this->assertSame(StockWeek::STATUS_SUBMITTED, $oaWeek->status);
+
+        $bbEntry = StockWeekEntry::where('stock_week_id', $oaWeek->id)->where('stock_item_id', $backbar->id)->firstOrFail();
+        $rtEntry = StockWeekEntry::where('stock_week_id', $oaWeek->id)->where('stock_item_id', $retailItem->id)->firstOrFail();
+
+        // Math: Used = Opening (10) + Received (2.5) + Transfer (-1.5) - Closing (4.5) = 6.5
+        $this->assertEquals(6.5, $bbEntry->used_qty);
+        $this->assertEquals(1.5, $bbEntry->needToOrderQty($backbar->parForBranch('old_airport')));
+
+        // Retail: Opening 6 - Closing 3 = Used 3 vs Retail Sold 2 -> shrinkage flag true!
+        $this->assertEquals(3.0, $rtEntry->used_qty);
+        $this->assertEquals(2.0, $rtEntry->retail_sold_qty);
+        $this->assertTrue($rtEntry->hasRetailShrinkage());
+        $this->assertEquals(2.0, $rtEntry->needToOrderQty($retailItem->parForBranch('old_airport')));
+
+        // 5. Post-submit lock: Manager gets 403 editing counts, logging restocks, or self-approving
+        $this->actingAs($this->oldAirportManager)
+            ->post(route('stock.weeks.save-counts', $oaWeek), [
+                'entries' => [$backbar->id => ['closing_qty' => 5]],
+            ])
+            ->assertForbidden();
+
+        $this->actingAs($this->oldAirportManager)
+            ->post(route('stock.movements.store'), [
+                'branch' => 'old_airport',
+                'stock_item_id' => $backbar->id,
+                'week_start_date' => $bounds['start_str'],
+                'quantity' => 1,
+            ])
+            ->assertForbidden();
+
+        $this->actingAs($this->oldAirportManager)
+            ->post(route('stock.weeks.approve', $oaWeek))
+            ->assertForbidden();
+
+        // 6. Admin requests revision with note -> unlocks for Manager
+        $this->actingAs($this->admin)
+            ->post(route('stock.weeks.request-revision', $oaWeek), [
+                'admin_note' => 'Please recount Keratin Home Mask on retail shelf.',
+            ])
+            ->assertRedirect();
+
+        $oaWeek->refresh();
+        $this->assertSame(StockWeek::STATUS_REVISION_REQUESTED, $oaWeek->status);
+        $this->assertSame('Please recount Keratin Home Mask on retail shelf.', $oaWeek->admin_note);
+
+        // Manager can now correct closing to 4 (matches 2 sold) and resubmit
+        $this->actingAs($this->oldAirportManager)
+            ->post(route('stock.weeks.submit', $oaWeek), [
+                'entries' => [
+                    $backbar->id => ['closing_qty' => 4.5],
+                    $retailItem->id => ['closing_qty' => 4],
+                ],
+            ])
+            ->assertRedirect();
+
+        // 7. Admin approves & carries forward Friday Closing -> next Saturday Opening (2026-11-28)
+        $this->actingAs($this->admin)
+            ->post(route('stock.weeks.approve', $oaWeek))
+            ->assertRedirect();
+
+        $oaWeek->refresh();
+        $this->assertSame(StockWeek::STATUS_APPROVED, $oaWeek->status);
+
+        $nextWeek = StockWeek::where('branch', 'old_airport')->whereDate('week_start_date', '2026-11-28')->firstOrFail();
+        $nextBackbar = StockWeekEntry::where('stock_week_id', $nextWeek->id)->where('stock_item_id', $backbar->id)->firstOrFail();
+        $nextRetail = StockWeekEntry::where('stock_week_id', $nextWeek->id)->where('stock_item_id', $retailItem->id)->firstOrFail();
+
+        $this->assertEquals(4.5, $nextBackbar->opening_qty);
+        $this->assertEquals(4.0, $nextRetail->opening_qty);
+
+        // Verify Need to Order tab renders properly with WhatsApp copy text
+        $this->actingAs($this->opsLead)
+            ->get(route('stock.index', ['tab' => 'order', 'branch' => 'old_airport', 'week' => $bounds['start_str']]))
+            ->assertOk()
+            ->assertSee('Majirel 7.1 Hair Color Tube')
+            ->assertSee('Copy WhatsApp Order List');
+    }
+
+    public function test_stock_rbac_enforces_branch_isolation_ops_lead_limits_and_unauthorized_roles(): void
+    {
+        $bounds = StockWeek::weekBoundsFor('2026-11-25');
+        $item = StockItem::create([
+            'name' => 'Cotton Pads Pack',
+            'item_type' => StockItem::TYPE_BACKBAR,
+            'category' => 'consumables',
+            'unit' => 'Pack',
+            'par_level_old_airport' => 5,
+            'par_level_al_wakrah' => 5,
+            'is_active' => true,
+        ]);
+
+        // Old Airport Manager cannot view Al Wakrah stock
+        $this->actingAs($this->oldAirportManager)
+            ->get(route('stock.index', ['branch' => 'al_wakrah', 'week' => $bounds['start_str']]))
+            ->assertForbidden();
+
+        // Ops Lead can view both branches & log restock, but gets 403 entering Friday counts or approving
+        $this->actingAs($this->opsLead)
+            ->get(route('stock.index', ['branch' => 'al_wakrah', 'week' => $bounds['start_str']]))
+            ->assertOk();
+
+        $wakrahWeek = StockWeek::where('branch', 'al_wakrah')->whereDate('week_start_date', $bounds['start_str'])->firstOrFail();
+
+        $this->actingAs($this->opsLead)
+            ->post(route('stock.weeks.save-counts', $wakrahWeek), [
+                'entries' => [$item->id => ['closing_qty' => 2]],
+            ])
+            ->assertForbidden();
+
+        $this->actingAs($this->opsLead)
+            ->post(route('stock.items.store'), [
+                'name' => 'Blocked Ops Catalog Item',
+                'category' => 'consumables',
+                'unit' => 'Box',
+            ])
+            ->assertForbidden();
+
+        // Chat Agent and Legal Team have no access to Stock
+        $chatAgent = User::factory()->create([
+            'role' => 'agent',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('agent'),
+        ]);
+        $legalUser = User::factory()->create([
+            'role' => 'legal_team',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('legal_team'),
+        ]);
+
+        $this->actingAs($chatAgent)->get(route('stock.index'))->assertForbidden();
+        $this->actingAs($legalUser)->get(route('stock.index'))->assertForbidden();
+    }
+
+    /* =========================================================================
+     * UPGRADE 3 — SERVICES MODULE: COMPANY-WIDE MONTHLY OFFERS BOARD
+     * ========================================================================= */
+
+    public function test_monthly_offers_live_syncs_combos_and_freebies_requires_tcs_and_evaluates_qatar_dates(): void
+    {
+        $svc1 = Service::create(['name' => 'Signature Blowdry', 'price' => 150, 'duration' => 45]);
+        $svc2 = Service::create(['name' => 'Classic Manicure', 'price' => 90, 'duration' => 30]);
+        $svc3 = Service::create(['name' => 'Eyebrow Threading', 'price' => 45, 'duration' => 15]);
+
+        $combo = Combo::create([
+            'name' => 'November Glow Trio',
+            'price' => 220,
+            'quantity_included' => 2,
+            'validity_days' => 14,
+            'status' => 'active',
+        ]);
+        $combo->services()->sync([$svc1->id, $svc2->id]);
+
+        $freebie = ServiceFreebiePackage::create([
+            'name' => 'Blowdry + Free Brows',
+            'anchor_service_id' => $svc1->id,
+            'price' => 150,
+            'free_choices_count' => 1,
+            'validity_days' => 7,
+            'is_active' => true,
+        ]);
+        $freebie->eligibleServices()->sync([$svc3->id]);
+
+        $today = Carbon::now('Asia/Qatar');
+
+        // 1. Blank Terms & Conditions must fail validation (422)
+        $this->actingAs($this->admin)
+            ->postJson(route('offers.store'), [
+                'title' => 'Missing TCs Promo',
+                'offer_type' => 'standalone',
+                'promo_price_qar' => 199,
+                'branch_scope' => 'all',
+                'valid_from' => $today->copy()->subDay()->toDateString(),
+                'valid_until' => $today->copy()->addDays(10)->toDateString(),
+                'terms_and_conditions' => '   ',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['terms_and_conditions']);
+
+        // 2. Create Active Combo Offer, Upcoming Service+Freebie Offer, and Expired Standalone Offer
+        $this->actingAs($this->admin)->post(route('offers.store'), [
+            'title' => 'Monthly Glow Combo Promo',
+            'offer_type' => 'combo',
+            'combo_id' => $combo->id,
+            'branch_scope' => 'all',
+            'valid_from' => $today->copy()->subDays(2)->toDateString(),
+            'valid_until' => $today->copy()->addDays(10)->toDateString(),
+            'terms_and_conditions' => "Valid Sunday to Wednesday only\nAdvance booking required",
+            'staff_notes' => 'Upsell hair mask add-on.',
+            'is_active' => '1',
+        ])->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $this->actingAs($this->admin)->post(route('offers.store'), [
+            'title' => 'Next Week Freebie Special',
+            'offer_type' => 'service_freebie',
+            'service_freebie_id' => $freebie->id,
+            'branch_scope' => 'old_airport',
+            'valid_from' => $today->copy()->addDays(3)->toDateString(),
+            'valid_until' => $today->copy()->addDays(15)->toDateString(),
+            'terms_and_conditions' => 'Old Airport branch only',
+            'is_active' => '1',
+        ])->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $this->actingAs($this->admin)->post(route('offers.store'), [
+            'title' => 'Last Month Flash Deal',
+            'offer_type' => 'standalone',
+            'promo_price_qar' => 99,
+            'original_value_qar' => 160,
+            'branch_scope' => 'al_wakrah',
+            'valid_from' => $today->copy()->subDays(20)->toDateString(),
+            'valid_until' => $today->copy()->subDays(2)->toDateString(),
+            'terms_and_conditions' => 'Walk-ins welcome',
+            'is_active' => '1',
+        ])->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $activeOffer = MonthlyOffer::where('title', 'Monthly Glow Combo Promo')->with('combo.services')->firstOrFail();
+        $upcomingOffer = MonthlyOffer::where('title', 'Next Week Freebie Special')->with(['freebiePackage.anchorService', 'freebiePackage.eligibleServices'])->firstOrFail();
+        $expiredOffer = MonthlyOffer::where('title', 'Last Month Flash Deal')->firstOrFail();
+
+        $this->assertSame('active', $activeOffer->liveStatus($today)['key']);
+        $this->assertSame('upcoming', $upcomingOffer->liveStatus($today)['key']);
+        $this->assertSame('expired', $expiredOffer->liveStatus($today)['key']);
+        $this->assertEquals(220.0, $activeOffer->effectivePrice());
+
+        // Live sync: updating linked Combo price updates Monthly Offer display live without re-saving the offer
+        $combo->update(['price' => 275]);
+        $activeOffer->refresh()->load('combo.services');
+        $this->assertEquals(275.0, $activeOffer->effectivePrice());
+
+        $this->actingAs($this->admin)
+            ->get(route('services.index', ['tab' => 'offers']))
+            ->assertOk()
+            ->assertSee('Monthly Glow Combo Promo')
+            ->assertSee('275')
+            ->assertSee('Signature Blowdry')
+            ->assertSee('Valid Sunday to Wednesday only')
+            ->assertSee('Copy for Client');
+
+        // Toggle archive & delete
+        $this->actingAs($this->admin)->patch(route('offers.toggle', $activeOffer))->assertRedirect();
+        $this->assertFalse($activeOffer->fresh()->is_active);
+        $this->assertSame('archived', $activeOffer->fresh()->liveStatus($today)['key']);
+
+        $this->actingAs($this->admin)->delete(route('offers.destroy', $expiredOffer))->assertRedirect();
+        $this->assertDatabaseMissing('monthly_offers', ['id' => $expiredOffer->id]);
+    }
+
+    public function test_monthly_offers_accessible_to_all_operational_roles_and_blocked_for_legal_team(): void
+    {
+        $today = Carbon::now('Asia/Qatar');
+        $offer = MonthlyOffer::create([
+            'title' => 'Laleen Signature Monthly Glow',
+            'offer_type' => MonthlyOffer::TYPE_STANDALONE,
+            'promo_price_qar' => 299,
+            'original_value_qar' => 420,
+            'branch_scope' => 'all',
+            'valid_from' => $today->copy()->subDay()->toDateString(),
+            'valid_until' => $today->copy()->addDays(10)->toDateString(),
+            'terms_and_conditions' => "Valid all days\nCannot be combined with other offers",
+            'is_active' => true,
+            'created_by' => $this->admin->id,
+        ]);
+
+        // Create salon_staff linked to a Staff row for /my-profile verification
+        $salonStaffUser = User::factory()->create([
+            'name' => 'Lina Stylist',
+            'email' => 'lina.offers@laleen.qa',
+            'role' => 'salon_staff',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('salon_staff'),
+        ]);
+        Staff::create([
+            'name' => 'Lina Stylist',
+            'email' => 'lina.offers@laleen.qa',
+            'branch' => 'old_airport',
+            'role' => 'Stylist',
+            'user_id' => $salonStaffUser->id,
+            'status' => 'active',
+        ]);
+
+        $otherRoles = [
+            'sales_coordinator',
+            'agent',
+            'marketing_specialist',
+            'social_media_editor',
+        ];
+        $operationalUsers = [
+            $this->admin,
+            $this->oldAirportManager,
+            $this->opsLead,
+            $salonStaffUser,
+        ];
+        foreach ($otherRoles as $r) {
+            $operationalUsers[] = User::factory()->create([
+                'role' => $r,
+                'is_active' => true,
+                'permissions' => User::defaultPermissionsForRole($r),
+            ]);
+        }
+
+        // All 8 operational roles can view /monthly-offers (200) and read title + T&Cs
+        foreach ($operationalUsers as $u) {
+            $this->actingAs($u)
+                ->get(route('offers.index'))
+                ->assertOk()
+                ->assertSee('Laleen Signature Monthly Glow')
+                ->assertSee('Cannot be combined with other offers');
+        }
+
+        // Salon Staff sees Monthly Offers shortcut in /my-profile & stays isolated from /services
+        $this->actingAs($salonStaffUser)
+            ->get(route('portal.profile'))
+            ->assertOk()
+            ->assertSee(route('offers.index'), false)
+            ->assertSee('Monthly Offers');
+
+        $this->actingAs($salonStaffUser)->get(route('services.index'))->assertForbidden();
+
+        // Non-editors cannot create, toggle, or delete offers (403)
+        foreach ([$salonStaffUser, $this->opsLead, $this->oldAirportManager] as $nonEditor) {
+            if ($nonEditor->canEdit('services')) {
+                continue;
+            }
+            $this->actingAs($nonEditor)->post(route('offers.store'), [
+                'title' => 'Unauthorized Promo',
+                'offer_type' => 'standalone',
+                'promo_price_qar' => 100,
+                'branch_scope' => 'all',
+                'valid_from' => $today->toDateString(),
+                'valid_until' => $today->copy()->addDays(5)->toDateString(),
+                'terms_and_conditions' => 'None',
+            ])->assertForbidden();
+
+            $this->actingAs($nonEditor)->patch(route('offers.toggle', $offer))->assertForbidden();
+            $this->actingAs($nonEditor)->delete(route('offers.destroy', $offer))->assertForbidden();
+        }
+
+        // Legal Team is strictly blocked (403) from /monthly-offers and /offers
+        $legalUser = User::factory()->create([
+            'role' => 'legal_team',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('legal_team'),
+        ]);
+        $this->actingAs($legalUser)->get('/monthly-offers')->assertForbidden();
+        $this->actingAs($legalUser)->get('/offers')->assertForbidden();
+    }
+}

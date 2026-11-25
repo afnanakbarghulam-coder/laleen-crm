@@ -22,6 +22,7 @@ class Staff extends Model
         'ops_lead',
         'marketing_specialist',
         'social_media_editor',
+        'legal_team',
     ];
 
     public const BRANCH_ROLES = [
@@ -225,6 +226,7 @@ class Staff extends Model
                     'ops_lead',
                     'marketing_specialist',
                     'social_media_editor',
+                    'legal_team',
                     'salon_manager',
                     'admin',
                     'owner',

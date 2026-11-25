@@ -22,6 +22,13 @@ class StaffAttendance extends Model
         self::STATUS_OFF => 'Off',
     ];
 
+    /** Active statuses allowed in Attendance Log controls and manual writes (`Off` removed). */
+    public const MANUAL_STATUSES = [
+        self::STATUS_PRESENT => 'Present',
+        self::STATUS_ABSENT => 'Absent',
+        self::STATUS_LATE => 'Late',
+    ];
+
     protected $table = 'staff_attendances';
 
     protected $fillable = [

@@ -50,6 +50,8 @@ class StaffKpiScorecardService
     public const ARBAB_COMPLETION_TARGET_PCT = 85.0;
     public const ARBAB_SLA_TARGET_PCT = 85.0;
 
+    public const SUNDUS_WEEKLY_BRANCH_EVAL_TARGET = 3;
+
     /**
      * Build the full Executive KPI Scorecard payload used by `/kpis`.
      *
@@ -141,6 +143,18 @@ class StaffKpiScorecardService
             referenceDate: $window['reference_date']
         );
 
+        $sundusData = $this->buildSundusSection(
+            periodStart: $window['period_start'],
+            periodEnd: $window['period_end'],
+            referenceDate: $window['reference_date'],
+            isCurrentMonth: $isCurrentMonth
+        );
+
+        $salonStaffRows = $this->buildSalonStaffSections(
+            periodStart: $window['period_start'],
+            periodEnd: $window['period_end']
+        );
+
         return [
             'month' => $selectedMonth,
             'is_current_month' => $isCurrentMonth,
@@ -151,6 +165,7 @@ class StaffKpiScorecardService
             'days_elapsed' => $window['days_elapsed'],
             'days_in_month' => $window['days_in_month'],
             'mondays_elapsed_count' => $mondaysElapsedCount,
+            'sundus' => $sundusData,
             'ayan' => $ayanData,
             'laden' => $ladenData,
             'sana' => $sanaData,
@@ -159,11 +174,12 @@ class StaffKpiScorecardService
             'areeba' => $areebaData,
             'zoya' => $zoyaData,
             'arbab' => $arbabData,
+            'salon_staff_list' => $salonStaffRows,
         ];
     }
 
     /**
-     * Build the presentation view-models (header meta + exact KPI cards) for ALL executive owners on `/kpis`.
+     * Build the presentation view-models (header meta + exact KPI cards) for ALL executive & salon staff owners on `/kpis`.
      *
      * @param  array<string, mixed>  $scorecard
      * @return array<string, array<string, mixed>>
@@ -172,16 +188,39 @@ class StaffKpiScorecardService
     {
         $ctx = $this->extractContextFromExecutiveScorecard($scorecard);
 
-        return [
-            'ayan' => $this->presentAyan($scorecard['ayan'], $scorecard['sana'], $ctx, $viewer),
-            'laden' => $this->presentLaden($scorecard['laden'], $ctx, $viewer),
-            'sana' => $this->presentSana($scorecard['sana'], $ctx, $viewer),
+        $models = [
+            'sundus' => $this->presentSundus($scorecard['sundus'] ?? [], $ctx, $viewer),
             'ahana' => $this->presentBranchManager('ahana', $scorecard['ahana'], $ctx, $viewer),
             'rhea' => $this->presentBranchManager('rhea', $scorecard['rhea'], $ctx, $viewer),
+            'laden' => $this->presentLaden($scorecard['laden'], $ctx, $viewer),
+            'arbab' => $this->presentArbab($scorecard['arbab'], $ctx, $viewer),
+            'ayan' => $this->presentAyan($scorecard['ayan'], $scorecard['sana'], $ctx, $viewer),
+            'sana' => $this->presentSana($scorecard['sana'], $ctx, $viewer),
             'areeba' => $this->presentChatAgent('areeba', $scorecard['areeba'], $ctx, $viewer),
             'zoya' => $this->presentChatAgent('zoya', $scorecard['zoya'], $ctx, $viewer),
-            'arbab' => $this->presentArbab($scorecard['arbab'], $ctx, $viewer),
         ];
+
+        foreach (($scorecard['salon_staff_list'] ?? []) as $staffRow) {
+            $ownerKey = (string) ($staffRow['owner_key'] ?? '');
+            if ($ownerKey === '') {
+                continue;
+            }
+            $vm = $this->presentSalonStaff(
+                displayName: (string) $staffRow['name'],
+                roleLabel: 'Salon Staff',
+                periodLabel: $ctx['period_range_label'],
+                weeklyEvaluations: $staffRow['weekly_evaluations'] ?? [],
+                myComplaints: $staffRow['complaints'] ?? [],
+                ownerKey: $ownerKey
+            );
+            $vm['staff_id'] = (int) $staffRow['staff_id'];
+            $vm['branch'] = (string) $staffRow['branch'];
+            $vm['branch_label'] = (string) $staffRow['branch_label'];
+            $vm['team_group'] = 'salon_staff';
+            $models[$ownerKey] = $vm;
+        }
+
+        return $models;
     }
 
     /**
@@ -197,17 +236,17 @@ class StaffKpiScorecardService
             strtolower(trim(explode('@', (string) ($user->email ?? ''))[0] ?? '')),
         ]);
 
-        $namedKeys = ['laden', 'arbab', 'sana', 'ayan', 'areeba', 'zoya', 'ahana', 'rhea'];
+        $namedKeys = ['sundus', 'sundas', 'laden', 'arbab', 'sana', 'ayan', 'areeba', 'zoya', 'ahana', 'rhea'];
         foreach ($candidates as $haystack) {
             foreach ($namedKeys as $key) {
                 if ($haystack === $key || preg_match('/\b' . preg_quote($key, '/') . '\b/i', $haystack)) {
-                    return $key;
+                    return $key === 'sundas' ? 'sundus' : $key;
                 }
             }
-            // Email local-part prefix check (e.g., laden.khan@..., arbab.ops@..., sana.kazi@...)
+            // Email local-part prefix check (e.g., sundus@..., laden.khan@..., arbab.ops@..., sana.kazi@...)
             foreach ($namedKeys as $key) {
                 if (preg_match('/^' . preg_quote($key, '/') . '([._-]|$)/i', $haystack)) {
-                    return $key;
+                    return $key === 'sundas' ? 'sundus' : $key;
                 }
             }
         }
@@ -264,6 +303,23 @@ class StaffKpiScorecardService
         $key = $this->resolveScorecardKey($targetUser, $staff);
         $displayName = $staff?->name ?: $targetUser->name;
         $roleLabel = User::roleLabel($targetUser->role);
+
+        if ($key === 'sundus') {
+            $explicitIds = $targetUser->exists ? collect([$targetUser->id]) : null;
+            $data = $this->buildSundusSection(
+                periodStart: $window['period_start'],
+                periodEnd: $window['period_end'],
+                referenceDate: $window['reference_date'],
+                isCurrentMonth: $isCurrentMonth,
+                explicitUserIds: $explicitIds
+            );
+            $vm = $this->presentSundus($data, $ctx, $effectiveViewer, $displayName);
+            $vm['display_name'] = $displayName;
+            $vm['role_subtitle'] = "{$roleLabel} — Branch Execution Audits ({$data['total_kpis_count']} KPIs)";
+            $vm['raw'] = $data;
+
+            return $vm;
+        }
 
         if ($key === 'laden') {
             $data = $this->buildLadenSection(
@@ -1321,6 +1377,224 @@ class StaffKpiScorecardService
         ];
     }
 
+    /**
+     * Resolve Sundus's user ID(s) reliably (matches `Sundus` / `Sundas` by name or email).
+     *
+     * @return Collection<int, int>
+     */
+    public function resolveSundusUserIds(): Collection
+    {
+        if (!Schema::hasTable('users')) {
+            return collect();
+        }
+
+        return User::query()
+            ->where(function ($q) {
+                $q->whereRaw("LOWER(COALESCE(name, '')) LIKE '%sundus%'")
+                    ->orWhereRaw("LOWER(COALESCE(name, '')) LIKE '%sundas%'")
+                    ->orWhereRaw("LOWER(COALESCE(email, '')) LIKE '%sundus%'")
+                    ->orWhereRaw("LOWER(COALESCE(email, '')) LIKE '%sundas%'");
+            })
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+    }
+
+    /**
+     * Build Sundus (Admin — Branch Execution Audits) Execution KPIs:
+     * 1. Old Airport Branch Evaluations (Target: 3 / week, scaled cleanly to MTD weeks)
+     * 2. Al Wakrah Branch Evaluations (Target: 3 / week, scaled cleanly to MTD weeks)
+     *
+     * STRICT ATTRIBUTION: counts ONLY Branch Evaluations submitted under Sundus's login
+     * (`created_by IN sundusUserIds`). Evaluations submitted by any other admin are excluded.
+     */
+    private function buildSundusSection(
+        Carbon $periodStart,
+        Carbon $periodEnd,
+        Carbon $referenceDate,
+        bool $isCurrentMonth,
+        ?Collection $explicitUserIds = null
+    ): array {
+        $sundusIds = $explicitUserIds && $explicitUserIds->isNotEmpty()
+            ? $explicitUserIds->map(fn ($id) => (int) $id)->values()
+            : $this->resolveSundusUserIds();
+
+        // Weekly cadence scaling: count distinct Mondays elapsed in [$periodStart, $periodEnd] (minimum 1 week)
+        $mondaysCount = 0;
+        foreach (CarbonPeriod::create($periodStart->copy()->startOfDay(), $periodEnd->copy()->startOfDay()) as $day) {
+            if ($day->isMonday()) {
+                $mondaysCount++;
+            }
+        }
+        $weeksElapsed = max(1, $mondaysCount);
+        $weeklyTarget = self::SUNDUS_WEEKLY_BRANCH_EVAL_TARGET;
+        $mtdTargetPerBranch = $weeksElapsed * $weeklyTarget;
+
+        // Current Monday–Sunday week bounds in Asia/Qatar (clamped to selected period for past months)
+        $weekStart = $referenceDate->copy()->startOfWeek(Carbon::MONDAY)->startOfDay();
+        $weekEnd = $weekStart->copy()->endOfWeek(Carbon::SUNDAY)->endOfDay();
+        if (!$isCurrentMonth) {
+            if ($weekStart->lt($periodStart)) {
+                $weekStart = $periodStart->copy()->startOfDay();
+            }
+            if ($weekEnd->gt($periodEnd)) {
+                $weekEnd = $periodEnd->copy()->endOfDay();
+            }
+        }
+
+        $oaMtd = 0;
+        $wkMtd = 0;
+        $oaWeek = 0;
+        $wkWeek = 0;
+
+        if ($sundusIds->isNotEmpty() && Schema::hasTable('branch_evaluations') && Schema::hasColumn('branch_evaluations', 'created_by')) {
+            $mtdRows = BranchEvaluation::query()
+                ->whereIn('created_by', $sundusIds)
+                ->whereDate('evaluation_date', '>=', $periodStart->toDateString())
+                ->whereDate('evaluation_date', '<=', $periodEnd->toDateString())
+                ->get(['branch', 'evaluation_date']);
+
+            $oaMtd = $mtdRows->where('branch', 'old_airport')->count();
+            $wkMtd = $mtdRows->where('branch', 'wakrah')->count();
+
+            $weekRows = BranchEvaluation::query()
+                ->whereIn('created_by', $sundusIds)
+                ->whereDate('evaluation_date', '>=', $weekStart->toDateString())
+                ->whereDate('evaluation_date', '<=', $weekEnd->toDateString())
+                ->get(['branch', 'evaluation_date']);
+
+            $oaWeek = $weekRows->where('branch', 'old_airport')->count();
+            $wkWeek = $weekRows->where('branch', 'wakrah')->count();
+        }
+
+        $oaPct = min(100.0, round(($oaMtd / max(1, $mtdTargetPerBranch)) * 100, 1));
+        $wkPct = min(100.0, round(($wkMtd / max(1, $mtdTargetPerBranch)) * 100, 1));
+        $oaPassing = ($oaMtd >= $mtdTargetPerBranch);
+        $wkPassing = ($wkMtd >= $mtdTargetPerBranch);
+
+        $passingCount = ($oaPassing ? 1 : 0) + ($wkPassing ? 1 : 0);
+        $totalKpis = 2;
+        $overallPct = round(($oaPct + $wkPct) / 2, 1);
+
+        return [
+            'owner' => 'Sundus',
+            'role' => 'Admin — Branch Execution Audits',
+            'sundus_user_ids' => $sundusIds->all(),
+            'weekly_target' => $weeklyTarget,
+            'weeks_elapsed' => $weeksElapsed,
+            'mtd_target_per_branch' => $mtdTargetPerBranch,
+            'old_airport_mtd' => $oaMtd,
+            'old_airport_week' => $oaWeek,
+            'old_airport_pct' => $oaPct,
+            'old_airport_passing' => $oaPassing,
+            'wakrah_mtd' => $wkMtd,
+            'wakrah_week' => $wkWeek,
+            'wakrah_pct' => $wkPct,
+            'wakrah_passing' => $wkPassing,
+            'overall_score_pct' => $overallPct,
+            'passing_kpis_count' => $passingCount,
+            'total_kpis_count' => $totalKpis,
+            'below_floor_count' => $totalKpis - $passingCount,
+            'is_passing_all' => $passingCount === $totalKpis,
+        ];
+    }
+
+    /**
+     * Batch-build lightweight MTD scorecards for all active branch beauticians (`Salon Staff`)
+     * using O(1) batch queries so `/kpis` can display & inspect them cleanly under the Salon Staff section.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildSalonStaffSections(Carbon $periodStart, Carbon $periodEnd): array
+    {
+        if (!Schema::hasTable('staff')) {
+            return [];
+        }
+
+        $beauticians = Staff::salonEvaluatable(null, $periodEnd->toDateString())
+            ->with('user:id,name,role')
+            ->orderBy('name')
+            ->get(['id', 'name', 'branch', 'is_remote', 'bookable', 'user_id']);
+
+        if ($beauticians->isEmpty()) {
+            return [];
+        }
+
+        $staffIds = $beauticians->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        $evalsByStaff = Schema::hasTable('kpi_staff_evaluations')
+            ? KpiStaffEvaluation::query()
+                ->whereIn('staff_id', $staffIds)
+                ->whereDate('evaluation_date', '>=', $periodStart->toDateString())
+                ->whereDate('evaluation_date', '<=', $periodEnd->toDateString())
+                ->orderByDesc('evaluation_date')
+                ->get(['id', 'staff_id', 'evaluation_date', 'overall_score'])
+                ->groupBy('staff_id')
+            : collect();
+
+        $complaintsByStaff = Schema::hasTable('staff_complaints')
+            ? StaffComplaint::query()
+                ->whereIn('staff_id', $staffIds)
+                ->whereBetween('created_at', [$periodStart, $periodEnd])
+                ->orderByDesc('created_at')
+                ->get(['id', 'staff_id', 'status', 'created_at'])
+                ->groupBy('staff_id')
+            : collect();
+
+        $rows = [];
+        foreach ($beauticians as $s) {
+            $branchKey = strtolower(trim((string) $s->branch)) === 'wakrah' ? 'wakrah' : 'old_airport';
+            $branchLabel = $branchKey === 'wakrah' ? 'Al Wakrah' : 'Old Airport';
+
+            $evals = $evalsByStaff->get($s->id, collect())
+                ->map(fn (KpiStaffEvaluation $e) => [
+                    'score' => (float) $e->overall_score,
+                    'date_label' => $e->evaluation_date
+                        ? Carbon::parse($e->evaluation_date, 'Asia/Qatar')->format('d M Y')
+                        : '—',
+                ])
+                ->values()
+                ->all();
+
+            $complaints = $complaintsByStaff->get($s->id, collect())
+                ->map(fn (StaffComplaint $c) => [
+                    'status' => strtolower((string) $c->status) === 'resolved' ? 'Resolved' : 'Under Review',
+                ])
+                ->values()
+                ->all();
+
+            $evalCount = count($evals);
+            $evalAvg = $evalCount > 0 ? round(collect($evals)->avg('score'), 2) : null;
+            $evalAvgPct = $evalAvg !== null ? min(100.0, round(($evalAvg / 5.0) * 100, 1)) : 0.0;
+            $evalPass = $evalAvg !== null && $evalAvg >= 4.0;
+            $complaintsCount = count($complaints);
+            $complaintsClean = $complaintsCount === 0;
+            $passing = ($evalPass ? 1 : 0) + ($complaintsClean ? 1 : 0);
+            $overallPct = round(($evalAvgPct + ($complaintsClean ? 100.0 : max(0.0, 100.0 - ($complaintsCount * 25.0)))) / 2, 1);
+
+            $rows[] = [
+                'owner_key' => 'staff_' . $s->id,
+                'staff_id' => (int) $s->id,
+                'name' => $s->name,
+                'initials' => $this->initialsFor($s->name),
+                'branch' => $branchKey,
+                'branch_label' => $branchLabel,
+                'eval_count' => $evalCount,
+                'eval_avg' => $evalAvg,
+                'eval_pass' => $evalPass,
+                'complaints_count' => $complaintsCount,
+                'complaints_clean' => $complaintsClean,
+                'passing_kpis_count' => $passing,
+                'total_kpis_count' => 2,
+                'overall_score_pct' => $overallPct,
+                'weekly_evaluations' => $evals,
+                'complaints' => $complaints,
+            ];
+        }
+
+        return $rows;
+    }
+
     // =========================================================================
     // CANONICAL PRESENTATION VIEW-MODELS (SHARED BY `/kpis` & `/my-profile`)
     // =========================================================================
@@ -2027,6 +2301,102 @@ class StaffKpiScorecardService
         ];
     }
 
+    private function presentSundus(
+        array $sundus,
+        array $ctx,
+        ?User $viewer,
+        ?string $displayNameOverride = null
+    ): array {
+        $weeksElapsed = (int) ($sundus['weeks_elapsed'] ?? 1);
+        $weeklyTarget = (int) ($sundus['weekly_target'] ?? self::SUNDUS_WEEKLY_BRANCH_EVAL_TARGET);
+        $mtdTarget = (int) ($sundus['mtd_target_per_branch'] ?? ($weeksElapsed * $weeklyTarget));
+
+        $oaMtd = (int) ($sundus['old_airport_mtd'] ?? 0);
+        $oaWeek = (int) ($sundus['old_airport_week'] ?? 0);
+        $oaPct = (float) ($sundus['old_airport_pct'] ?? 0);
+        $oaPass = !empty($sundus['old_airport_passing']);
+
+        $wkMtd = (int) ($sundus['wakrah_mtd'] ?? 0);
+        $wkWeek = (int) ($sundus['wakrah_week'] ?? 0);
+        $wkPct = (float) ($sundus['wakrah_pct'] ?? 0);
+        $wkPass = !empty($sundus['wakrah_passing']);
+
+        $overallPct = (float) ($sundus['overall_score_pct'] ?? 0);
+        $passing = (int) ($sundus['passing_kpis_count'] ?? 0);
+        $total = (int) ($sundus['total_kpis_count'] ?? 2);
+
+        $oaUrl = $this->safeUrl($viewer, 'operations|kpis', 'kpi.branch-evaluation.index', [
+            'branch' => 'old_airport',
+            'month' => $ctx['month'],
+        ]);
+        $wkUrl = $this->safeUrl($viewer, 'operations|kpis', 'kpi.branch-evaluation.index', [
+            'branch' => 'wakrah',
+            'month' => $ctx['month'],
+        ]);
+
+        return [
+            'owner_key' => 'sundus',
+            'initials' => $this->initialsFor($displayNameOverride ?: 'Sundus'),
+            'name' => 'Sundus',
+            'display_name' => $displayNameOverride ?: 'Sundus',
+            'role_subtitle' => "Admin — Branch Execution Audits ({$total} KPIs)",
+            'period_label' => $ctx['period_range_label'],
+            'overall_pct' => $overallPct,
+            'passing_count' => $passing,
+            'total_kpis' => $total,
+            'overall_badge' => number_format($overallPct, 1) . "% Overall ({$passing}/{$total} Passing)",
+            'orb_class' => self::healthOrbClass($overallPct),
+            'tag_class' => $passing === $total ? 'tag-pass' : 'tag-champagne',
+            'columns' => 2,
+            'action_label' => $oaUrl ? 'Open Branch Evaluations' : null,
+            'action_url' => $this->safeUrl($viewer, 'operations|kpis', 'kpi.branch-evaluation.index', ['month' => $ctx['month']]),
+            'cards' => [
+                [
+                    'owner_key' => 'sundus',
+                    'icon' => 'clipboard-check',
+                    'orb_class' => $oaPass ? 'orb-emerald' : 'orb-rose',
+                    'tag_label' => 'SUNDUS',
+                    'tag_class' => $oaPass ? 'tag-pass' : 'tag-rose',
+                    'tag_url' => $oaUrl,
+                    'tag_title' => 'View Old Airport Branch Evaluations',
+                    'label' => 'Old Airport Branch Evaluations',
+                    'subnote' => 'Counts only audits submitted under Sundus\'s login',
+                    'hero_main' => (string) $oaMtd,
+                    'hero_unit' => "/ {$mtdTarget} MTD",
+                    'delta_segments' => [
+                        ['text' => "{$oaWeek}/{$weeklyTarget} This Week", 'class' => $oaWeek >= $weeklyTarget ? 'hl-emerald' : 'hl-champagne'],
+                        ['text' => " • " . number_format($oaPct, 1) . "% MTD (Target: {$weeklyTarget}/week × {$weeksElapsed}w)"],
+                    ],
+                    'bar_pct' => min(100.0, max(4.0, $oaPct)),
+                    'bar_class' => $oaPass ? 'fill-emerald' : 'fill-rose-gold',
+                    'scale_left' => '0',
+                    'scale_right' => "{$mtdTarget} MTD Target",
+                ],
+                [
+                    'owner_key' => 'sundus',
+                    'icon' => 'clipboard-check',
+                    'orb_class' => $wkPass ? 'orb-emerald' : 'orb-champagne',
+                    'tag_label' => 'SUNDUS',
+                    'tag_class' => $wkPass ? 'tag-pass' : 'tag-champagne',
+                    'tag_url' => $wkUrl,
+                    'tag_title' => 'View Al Wakrah Branch Evaluations',
+                    'label' => 'Al Wakrah Branch Evaluations',
+                    'subnote' => 'Counts only audits submitted under Sundus\'s login',
+                    'hero_main' => (string) $wkMtd,
+                    'hero_unit' => "/ {$mtdTarget} MTD",
+                    'delta_segments' => [
+                        ['text' => "{$wkWeek}/{$weeklyTarget} This Week", 'class' => $wkWeek >= $weeklyTarget ? 'hl-emerald' : 'hl-champagne'],
+                        ['text' => " • " . number_format($wkPct, 1) . "% MTD (Target: {$weeklyTarget}/week × {$weeksElapsed}w)"],
+                    ],
+                    'bar_pct' => min(100.0, max(4.0, $wkPct)),
+                    'bar_class' => $wkPass ? 'fill-emerald' : 'fill-champagne',
+                    'scale_left' => '0',
+                    'scale_right' => "{$mtdTarget} MTD Target",
+                ],
+            ],
+        ];
+    }
+
     /**
      * @param  list<array<string, mixed>>  $weeklyEvaluations
      * @param  list<array<string, mixed>>  $myComplaints
@@ -2036,7 +2406,8 @@ class StaffKpiScorecardService
         string $roleLabel,
         string $periodLabel,
         array $weeklyEvaluations,
-        array $myComplaints
+        array $myComplaints,
+        string $ownerKey = 'salon_staff'
     ): array {
         $evalCount = count($weeklyEvaluations);
         $evalAvg = $evalCount > 0
@@ -2055,7 +2426,7 @@ class StaffKpiScorecardService
         $overallPct = round((($evalAvgPct) + ($complaintsClean ? 100.0 : max(0.0, 100.0 - ($complaintsCount * 25.0)))) / 2, 1);
 
         return [
-            'owner_key' => 'salon_staff',
+            'owner_key' => $ownerKey,
             'initials' => $this->initialsFor($displayName),
             'name' => $displayName,
             'display_name' => $displayName,
@@ -2074,7 +2445,7 @@ class StaffKpiScorecardService
             'action_url' => null,
             'cards' => [
                 [
-                    'owner_key' => 'salon_staff',
+                    'owner_key' => $ownerKey,
                     'icon' => 'star',
                     'orb_class' => $evalPass ? 'orb-emerald' : 'orb-champagne',
                     'tag_label' => $evalPass ? 'PASSING' : 'QUALITY',
@@ -2093,7 +2464,7 @@ class StaffKpiScorecardService
                     'scale_right' => '5.0 Max',
                 ],
                 [
-                    'owner_key' => 'salon_staff',
+                    'owner_key' => $ownerKey,
                     'icon' => 'check-circle',
                     'orb_class' => $evalCount > 0 ? 'orb-emerald' : 'orb-rose',
                     'tag_label' => 'REVIEWS',
@@ -2112,7 +2483,7 @@ class StaffKpiScorecardService
                     'scale_right' => '4 / Month',
                 ],
                 [
-                    'owner_key' => 'salon_staff',
+                    'owner_key' => $ownerKey,
                     'icon' => 'shield-check',
                     'orb_class' => $complaintsClean ? 'orb-emerald' : 'orb-ruby',
                     'tag_label' => $complaintsClean ? 'CLEAN RECORD' : 'REVIEW',
@@ -2157,8 +2528,18 @@ class StaffKpiScorecardService
             return null;
         }
 
-        if (!$viewer->isAdmin() && !$viewer->canView($module)) {
-            return null;
+        if (!$viewer->isAdmin()) {
+            $allowedModules = array_filter(array_map('trim', explode('|', $module)));
+            $canAccess = false;
+            foreach ($allowedModules as $mod) {
+                if ($viewer->canView($mod)) {
+                    $canAccess = true;
+                    break;
+                }
+            }
+            if (!$canAccess) {
+                return null;
+            }
         }
 
         return route($routeName, $params);

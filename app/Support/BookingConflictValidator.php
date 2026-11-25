@@ -7,6 +7,7 @@ use App\Models\AppointmentService;
 use App\Models\Customer;
 use App\Models\Service;
 use App\Models\Staff;
+use App\Models\StaffAttendance;
 use App\Models\StaffBlock;
 use App\Models\StaffLeave;
 use App\Models\StaffTimeOff;
@@ -130,6 +131,26 @@ class BookingConflictValidator
                     'off' => true,
                     'kind' => 'on_leave',
                     'reason' => 'On Leave',
+                ];
+            }
+        }
+
+        if (Schema::hasTable('staff_attendances')) {
+            $absentRecord = $staff->relationLoaded('attendances')
+                ? $staff->attendances->first(fn (StaffAttendance $att) => $att->status === StaffAttendance::STATUS_ABSENT
+                    && $att->attendance_date
+                    && $att->attendance_date->toDateString() === $dateStr)
+                : StaffAttendance::query()
+                    ->where('staff_id', $staff->id)
+                    ->whereDate('attendance_date', $dateStr)
+                    ->where('status', StaffAttendance::STATUS_ABSENT)
+                    ->first();
+
+            if ($absentRecord) {
+                return [
+                    'off' => true,
+                    'kind' => 'absent',
+                    'reason' => 'Absent',
                 ];
             }
         }
@@ -947,6 +968,14 @@ class BookingConflictValidator
                         ];
                     }
 
+                    if ($shiftEval['kind'] === 'absent') {
+                        return [
+                            'reason' => self::REASON_STAFF_OFF,
+                            'field' => 'staff_id',
+                            'message' => "{$prefix}: {$staff->name} is marked Absent on {$effectiveMoment->format('d M Y')}.",
+                        ];
+                    }
+
                     return [
                         'reason' => self::REASON_STAFF_OFF,
                         'field' => 'staff_id',
@@ -956,9 +985,11 @@ class BookingConflictValidator
             } else {
                 $offInfo = $this->staffOffInfo($staff, $effectiveMoment, $duration, false);
                 if ($offInfo['off']) {
-                    $offMsg = ($offInfo['kind'] ?? null) === 'on_leave'
-                        ? "{$prefix}: {$staff->name} is on approved leave on {$effectiveMoment->format('d M Y')}."
-                        : "{$prefix}: {$staff->name} is off duty on {$effectiveMoment->format('d M Y')}.";
+                    $offMsg = match ($offInfo['kind'] ?? null) {
+                        'on_leave' => "{$prefix}: {$staff->name} is on approved leave on {$effectiveMoment->format('d M Y')}.",
+                        'absent' => "{$prefix}: {$staff->name} is marked Absent on {$effectiveMoment->format('d M Y')}.",
+                        default => "{$prefix}: {$staff->name} is off duty on {$effectiveMoment->format('d M Y')}.",
+                    };
                     return [
                         'reason' => self::REASON_STAFF_OFF,
                         'field' => 'staff_id',

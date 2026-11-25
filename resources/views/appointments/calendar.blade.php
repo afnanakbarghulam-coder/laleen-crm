@@ -419,6 +419,52 @@
         color: var(--cal-muted);
     }
 
+    .cal-absent-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 2px;
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: rgba(244, 63, 94, 0.22);
+        border: 1px solid rgba(251, 113, 133, 0.55);
+        color: #fda4af;
+        font-size: 9.5px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        line-height: 1.4;
+    }
+
+    .cal-reassign-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        margin-top: 2px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        background: rgba(244, 63, 94, 0.24);
+        border: 1px solid rgba(251, 113, 133, 0.58);
+        color: #ffe4e6;
+        font-size: 9.5px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        width: fit-content;
+    }
+
+    .cal-appt.is-needs-reassignment,
+    .cal-chip.is-needs-reassignment {
+        box-shadow: inset 0 0 0 1px rgba(251, 113, 133, 0.65), 0 2px 8px rgba(244, 63, 94, 0.18);
+    }
+
+    .cal-off-tag.is-compact-top {
+        top: 6px;
+        z-index: 0;
+        opacity: 0.85;
+        font-size: 10.5px;
+        padding: 2px 4px;
+    }
+
     .cal-slots {
         position: relative;
     }
@@ -2760,11 +2806,13 @@
                 const offMap = (daySnapshot && daySnapshot.off) || {};
                 const offReason = offMap[sid] || offMap[staff.id];
                 if (offReason) {
-                    const isOnLeave = /leave/i.test(String(offReason));
+                    const reasonText = String(offReason);
+                    const isAbsent = /absent/i.test(reasonText);
+                    const isOnLeave = /leave/i.test(reasonText);
                     return {
                         state: 'off',
-                        kind: isOnLeave ? 'on_leave' : 'day_off',
-                        suffix: isOnLeave ? ' (On Leave)' : ' (Day Off)',
+                        kind: isAbsent ? 'absent' : (isOnLeave ? 'on_leave' : 'day_off'),
+                        suffix: isAbsent ? ' (Absent)' : (isOnLeave ? ' (On Leave)' : ' (Day Off)'),
                         isOvertime: false,
                         overtimeMinutes: 0,
                         shiftEnd: null,
@@ -3341,85 +3389,89 @@
             html += `</div>`;
 
             data.staffs.forEach(staff => {
-                const isOff = !!data.off[staff.id];
+                const offReason = data.off[staff.id] || '';
+                const isOff = !!offReason;
+                const isAbsent = /absent/i.test(String(offReason))
+                    || (Array.isArray(data.absent_staff_ids) && data.absent_staff_ids.map(Number).includes(Number(staff.id)));
                 const apts = data.appointments[staff.id] || [];
                 const blocks = (data.blocks && data.blocks[staff.id]) || [];
 
-                html += `<div class="cal-staff-col ${isOff ? 'is-off' : ''}" data-staff-id="${staff.id}" data-staff-name="${staff.name}">
+                html += `<div class="cal-staff-col ${isOff ? 'is-off' : ''}${isAbsent ? ' is-absent' : ''}" data-staff-id="${staff.id}" data-staff-name="${staff.name}">
                     <div class="cal-staff-header">
                         <img src="${staff.profile_picture}">
                         <div class="name">${staff.name}</div>
+                        ${isAbsent ? `<span class="cal-absent-pill" title="Marked Absent — new bookings blocked">ABSENT</span>` : ''}
                         <div class="badge-count">${apts.length} appt${apts.length === 1 ? '' : 's'}</div>
                     </div>
                     <div class="cal-slots">`;
 
+                data.time_slots.forEach(t => {
+                    html += `<div class="cal-slot-cell" style="height:${SLOT_H}px" data-time="${t}"
+                            onclick="onSlotClick(event, ${staff.id}, '${data.date}', '${t}')"
+                            ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
+                            ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${t}')"></div>`;
+                });
+
                 if (isOff) {
-                    data.time_slots.forEach(t => {
-                        html += `<div class="cal-slot-cell" style="height:${SLOT_H}px" data-time="${t}"
-                                onclick="onSlotClick(event, ${staff.id}, '${data.date}', '${t}')"
-                                ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
-                                ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${t}')"></div>`;
-                    });
-                    html += `<div class="cal-off-tag" style="pointer-events:none;">Not working<br>${data.off[staff.id]}</div>`;
-                } else {
-                    data.time_slots.forEach(t => {
-                        html += `<div class="cal-slot-cell" style="height:${SLOT_H}px" data-time="${t}"
-                                onclick="onSlotClick(event, ${staff.id}, '${data.date}', '${t}')"
-                                ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
-                                ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${t}')"></div>`;
-                    });
-
-                    blocks.forEach(b => {
-                        const diffMinutes = b.start_minutes - dayStartMinutes;
-                        // .cal-block is positioned inside .cal-slots, which already
-                        // starts below the 84px sticky header in normal flow - adding
-                        // HEADER_H here would double-count it and draw the block too low.
-                        const top = diffMinutes * PPM;
-                        const height = Math.max((b.end_minutes - b.start_minutes) * PPM, 30);
-                        html += `<div class="cal-block" style="top:${top}px;height:${height}px" title="${b.reason}"
-                                ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
-                                ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${b.start}')"
-                                onclick="event.stopPropagation(); removeBlock(${b.id})">
-                                🚫 ${b.reason}
-                            </div>`;
-                    });
-
-                    apts.forEach(a => {
-                        const color = data.status_colors[a.status] || '#c9a39a';
-                        const diffMinutes = a.start_minutes - dayStartMinutes;
-                        const top = diffMinutes * PPM;
-                        const gridTotalHeight = (data.time_slots.length * SLOT_H);
-                        const rawHeight = Math.max(a.duration * PPM, a.combo_name ? 58 : 46);
-                        const height = Math.max(Math.min(rawHeight, Math.max(46, gridTotalHeight - top)), 46);
-                        const displaySvcLabel = a.is_combo_tbd ? 'Services TBD in Salon' : (a.decide_in_salon ? 'Decide in Salon' : a.service_name);
-                        const canDragOrResize = CAN_EDIT_BOOKINGS && a.status !== 'completed' && a.status !== 'cancelled';
-                        const sliceServiceLineId = (a.is_split_booking && a.appointment_service_id) ? Number(a.appointment_service_id) : 'null';
-                        const comboBadgeLabel = a.combo_name
-                            ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${a.is_custom_combo ? ' · Custom' : ''}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
-                            : '';
-                        const otDelta = (a.is_overtime && Number(a.overtime_minutes) > 0 && window.LaleenSliceEngine)
-                            ? window.LaleenSliceEngine.formatOvertimeDelta(a.overtime_minutes)
-                            : '';
-                        const otBadgeHtml = a.is_overtime
-                            ? ` <span class="cal-ot-badge" title="${escapeHtml(otDelta ? `Overtime (${otDelta} past shift end)` : 'Overtime booking')}">OT</span>`
-                            : '';
-
-                        html += `<div class="cal-appt status-${a.status}${a.is_overtime ? ' is-overtime' : ''}" data-id="${a.id}" data-service-line-id="${a.appointment_service_id || ''}" data-is-split="${a.is_split_booking ? '1' : '0'}" data-staff-id="${staff.id}" data-start="${a.start}" data-duration="${a.duration}"
-                                draggable="${canDragOrResize ? 'true' : 'false'}"
-                                ondragstart="onApptDragStart(event, ${a.id}, ${a.start_minutes}, false, ${sliceServiceLineId})" ondragend="onApptDragEnd(event)"
-                                ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
-                                ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${a.start}')"
-                                onclick="event.stopPropagation(); openDrawer(${a.id})"
-                                style="top:${top}px;height:${height}px;background:${tint(color, .14)};border-left-color:${color};color:${color};">
-                                <span class="cust">${escapeHtml(a.customer_name || 'Walk-in')}${otBadgeHtml}</span>
-                                ${a.combo_name ? `<span class="cal-combo-badge ${a.is_split_booking ? 'is-split-slice' : ''}">${comboBadgeLabel}</span>` : ''}
-                                <span class="svc">${escapeHtml(displaySvcLabel)}</span>
-                                <span class="svc cal-appt-time-label">${to12Hour(a.start)} - ${to12Hour(a.end)}</span>
-                                ${a.has_upsell ? `<span class="upsell-flag" title="Upsell by ${escapeHtml(a.upsell_staff_names)}">⬆ Upsell${a.upsell_staff_names ? ' · ' + escapeHtml(a.upsell_staff_names) : ''}</span>` : ''}
-                                ${canDragOrResize ? `<div class="cal-appt-resize-handle" title="Drag to resize duration" onmousedown="onApptResizeStart(event, ${a.id}, ${staff.id}, '${data.date}', '${a.start}', ${a.duration}, ${PPM}, ${sliceServiceLineId})"></div>` : ''}
-                            </div>`;
-                    });
+                    const tagClass = apts.length > 0 ? 'cal-off-tag is-compact-top' : 'cal-off-tag';
+                    const tagText = isAbsent
+                        ? (apts.length > 0 ? 'Absent · Reassign bookings' : 'Absent<br>New bookings blocked')
+                        : `Not working<br>${escapeHtml(offReason)}`;
+                    html += `<div class="${tagClass}" style="pointer-events:none;">${tagText}</div>`;
                 }
+
+                blocks.forEach(b => {
+                    const diffMinutes = b.start_minutes - dayStartMinutes;
+                    // .cal-block is positioned inside .cal-slots, which already
+                    // starts below the 84px sticky header in normal flow - adding
+                    // HEADER_H here would double-count it and draw the block too low.
+                    const top = diffMinutes * PPM;
+                    const height = Math.max((b.end_minutes - b.start_minutes) * PPM, 30);
+                    html += `<div class="cal-block" style="top:${top}px;height:${height}px" title="${b.reason}"
+                            ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
+                            ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${b.start}')"
+                            onclick="event.stopPropagation(); removeBlock(${b.id})">
+                            🚫 ${b.reason}
+                        </div>`;
+                });
+
+                apts.forEach(a => {
+                    const color = data.status_colors[a.status] || '#c9a39a';
+                    const diffMinutes = a.start_minutes - dayStartMinutes;
+                    const top = diffMinutes * PPM;
+                    const gridTotalHeight = (data.time_slots.length * SLOT_H);
+                    const needsReassign = isAbsent && !['completed', 'cancelled', 'no_show'].includes(String(a.status || '').toLowerCase());
+                    const rawHeight = Math.max(a.duration * PPM, (a.combo_name || needsReassign) ? 62 : 46);
+                    const height = Math.max(Math.min(rawHeight, Math.max(46, gridTotalHeight - top)), 46);
+                    const displaySvcLabel = a.is_combo_tbd ? 'Services TBD in Salon' : (a.decide_in_salon ? 'Decide in Salon' : a.service_name);
+                    const canDragOrResize = CAN_EDIT_BOOKINGS && a.status !== 'completed' && a.status !== 'cancelled';
+                    const sliceServiceLineId = (a.is_split_booking && a.appointment_service_id) ? Number(a.appointment_service_id) : 'null';
+                    const comboBadgeLabel = a.combo_name
+                        ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${a.is_custom_combo ? ' · Custom' : ''}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
+                        : '';
+                    const otDelta = (a.is_overtime && Number(a.overtime_minutes) > 0 && window.LaleenSliceEngine)
+                        ? window.LaleenSliceEngine.formatOvertimeDelta(a.overtime_minutes)
+                        : '';
+                    const otBadgeHtml = a.is_overtime
+                        ? ` <span class="cal-ot-badge" title="${escapeHtml(otDelta ? `Overtime (${otDelta} past shift end)` : 'Overtime booking')}">OT</span>`
+                        : '';
+
+                    html += `<div class="cal-appt status-${a.status}${a.is_overtime ? ' is-overtime' : ''}${needsReassign ? ' is-needs-reassignment' : ''}" data-id="${a.id}" data-service-line-id="${a.appointment_service_id || ''}" data-is-split="${a.is_split_booking ? '1' : '0'}" data-staff-id="${staff.id}" data-start="${a.start}" data-duration="${a.duration}"
+                            draggable="${canDragOrResize ? 'true' : 'false'}"
+                            ondragstart="onApptDragStart(event, ${a.id}, ${a.start_minutes}, false, ${sliceServiceLineId})" ondragend="onApptDragEnd(event)"
+                            ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
+                            ondrop="onSlotDrop(event, ${staff.id}, '${data.date}', '${a.start}')"
+                            onclick="event.stopPropagation(); openDrawer(${a.id})"
+                            style="top:${top}px;height:${height}px;background:${tint(color, .14)};border-left-color:${color};color:${color};">
+                            <span class="cust">${escapeHtml(a.customer_name || 'Walk-in')}${otBadgeHtml}</span>
+                            ${needsReassign ? `<span class="cal-reassign-badge">Needs Reassignment</span>` : ''}
+                            ${a.combo_name ? `<span class="cal-combo-badge ${a.is_split_booking ? 'is-split-slice' : ''}">${comboBadgeLabel}</span>` : ''}
+                            <span class="svc">${escapeHtml(displaySvcLabel)}</span>
+                            <span class="svc cal-appt-time-label">${to12Hour(a.start)} - ${to12Hour(a.end)}</span>
+                            ${a.has_upsell ? `<span class="upsell-flag" title="Upsell by ${escapeHtml(a.upsell_staff_names)}">⬆ Upsell${a.upsell_staff_names ? ' · ' + escapeHtml(a.upsell_staff_names) : ''}</span>` : ''}
+                            ${canDragOrResize ? `<div class="cal-appt-resize-handle" title="Drag to resize duration" onmousedown="onApptResizeStart(event, ${a.id}, ${staff.id}, '${data.date}', '${a.start}', ${a.duration}, ${PPM}, ${sliceServiceLineId})"></div>` : ''}
+                        </div>`;
+                });
 
                 html += `</div></div>`;
             });
@@ -3541,43 +3593,46 @@
                         ondragover="onDropTargetDragOver(event)" ondragleave="onDropTargetDragLeave(event)"
                         ondrop="onWeekCellDrop(event, ${staff.id}, '${day.date}')">`;
 
+                    const isAbsentDay = /absent/i.test(String(offReason || ''));
                     if (offReason) {
-                        html += `<div class="cal-week-off-label">${offReason}</div>`;
-                    } else {
-                        if (!dayAppts.length && !dayBlocks.length) {
-                            html += `<div class="cal-empty-hint">+</div>`;
-                        }
-
-                        dayBlocks.forEach(b => {
-                            html += `<div class="cal-chip-block" onclick="event.stopPropagation(); removeBlock(${b.id})">🚫 ${b.start}-${b.end} ${b.reason}</div>`;
-                        });
-
-                        dayAppts.forEach(a => {
-                            const color = data.status_colors[a.status] || '#c9a39a';
-                            const displaySvcLabel = a.is_combo_tbd ? 'Services TBD in Salon' : (a.decide_in_salon ? 'Decide in Salon' : a.service_name);
-                            const sliceServiceLineId = (a.is_split_booking && a.appointment_service_id) ? Number(a.appointment_service_id) : 'null';
-                            const comboBadgeLabel = a.combo_name
-                                ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${a.is_custom_combo ? ' · Custom' : ''}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
-                                : '';
-                            const otDelta = (a.is_overtime && Number(a.overtime_minutes) > 0 && window.LaleenSliceEngine)
-                                ? window.LaleenSliceEngine.formatOvertimeDelta(a.overtime_minutes)
-                                : '';
-                            const otBadgeHtml = a.is_overtime
-                                ? ` <span class="cal-ot-badge" title="${escapeHtml(otDelta ? `Overtime (${otDelta} past shift end)` : 'Overtime booking')}">OT</span>`
-                                : '';
-                            html += `<div class="cal-chip status-${a.status}${a.is_overtime ? ' is-overtime' : ''}" data-id="${a.id}" data-service-line-id="${a.appointment_service_id || ''}"
-                                draggable="${(!CAN_EDIT_BOOKINGS || a.status === 'completed' || a.status === 'cancelled') ? 'false' : 'true'}"
-                                ondragstart="event.stopPropagation(); onApptDragStart(event, ${a.id}, ${a.start_minutes}, false, ${sliceServiceLineId})"
-                                ondragend="onApptDragEnd(event)"
-                                onclick="event.stopPropagation(); openDrawer(${a.id})"
-                                style="background:${tint(color, .14)};border-left-color:${color};color:${color};">
-                                <strong>${a.time} · ${escapeHtml(a.customer_name || 'Walk-in')}${otBadgeHtml}</strong>
-                                ${a.combo_name ? `<div><span class="cal-combo-badge ${a.is_split_booking ? 'is-split-slice' : ''}">${comboBadgeLabel}</span></div>` : ''}
-                                ${escapeHtml(displaySvcLabel)}
-                                ${a.has_upsell ? `<span class="upsell-flag">⬆ Upsell</span>` : ''}
-                            </div>`;
-                        });
+                        html += isAbsentDay
+                            ? `<div class="mb-1"><span class="cal-absent-pill">ABSENT</span></div>`
+                            : `<div class="cal-week-off-label">${escapeHtml(offReason)}</div>`;
+                    } else if (!dayAppts.length && !dayBlocks.length) {
+                        html += `<div class="cal-empty-hint">+</div>`;
                     }
+
+                    dayBlocks.forEach(b => {
+                        html += `<div class="cal-chip-block" onclick="event.stopPropagation(); removeBlock(${b.id})">🚫 ${b.start}-${b.end} ${b.reason}</div>`;
+                    });
+
+                    dayAppts.forEach(a => {
+                        const color = data.status_colors[a.status] || '#c9a39a';
+                        const needsReassign = isAbsentDay && !['completed', 'cancelled', 'no_show'].includes(String(a.status || '').toLowerCase());
+                        const displaySvcLabel = a.is_combo_tbd ? 'Services TBD in Salon' : (a.decide_in_salon ? 'Decide in Salon' : a.service_name);
+                        const sliceServiceLineId = (a.is_split_booking && a.appointment_service_id) ? Number(a.appointment_service_id) : 'null';
+                        const comboBadgeLabel = a.combo_name
+                            ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${a.is_custom_combo ? ' · Custom' : ''}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
+                            : '';
+                        const otDelta = (a.is_overtime && Number(a.overtime_minutes) > 0 && window.LaleenSliceEngine)
+                            ? window.LaleenSliceEngine.formatOvertimeDelta(a.overtime_minutes)
+                            : '';
+                        const otBadgeHtml = a.is_overtime
+                            ? ` <span class="cal-ot-badge" title="${escapeHtml(otDelta ? `Overtime (${otDelta} past shift end)` : 'Overtime booking')}">OT</span>`
+                            : '';
+                        html += `<div class="cal-chip status-${a.status}${a.is_overtime ? ' is-overtime' : ''}${needsReassign ? ' is-needs-reassignment' : ''}" data-id="${a.id}" data-service-line-id="${a.appointment_service_id || ''}"
+                            draggable="${(!CAN_EDIT_BOOKINGS || a.status === 'completed' || a.status === 'cancelled') ? 'false' : 'true'}"
+                            ondragstart="event.stopPropagation(); onApptDragStart(event, ${a.id}, ${a.start_minutes}, false, ${sliceServiceLineId})"
+                            ondragend="onApptDragEnd(event)"
+                            onclick="event.stopPropagation(); openDrawer(${a.id})"
+                            style="background:${tint(color, .14)};border-left-color:${color};color:${color};">
+                            <strong>${a.time} · ${escapeHtml(a.customer_name || 'Walk-in')}${otBadgeHtml}</strong>
+                            ${needsReassign ? `<div><span class="cal-reassign-badge">Needs Reassignment</span></div>` : ''}
+                            ${a.combo_name ? `<div><span class="cal-combo-badge ${a.is_split_booking ? 'is-split-slice' : ''}">${comboBadgeLabel}</span></div>` : ''}
+                            ${escapeHtml(displaySvcLabel)}
+                            ${a.has_upsell ? `<span class="upsell-flag">⬆ Upsell</span>` : ''}
+                        </div>`;
+                    });
 
                     html += `</div>`;
                 });
