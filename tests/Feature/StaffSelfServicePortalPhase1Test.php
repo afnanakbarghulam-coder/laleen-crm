@@ -304,7 +304,7 @@ class StaffSelfServicePortalPhase1Test extends TestCase
         // /my-profile?tab=performance displays Chat Agent Booking Targets in KPIs-module scorecard style
         $perfRes = $this->actingAs($agentUser)->get('/my-profile?tab=performance');
         $perfRes->assertOk();
-        $perfRes->assertSee("Today's Daily Booking Target");
+        $perfRes->assertSee("Today's Daily Booking Target", false);
         $perfRes->assertSee('MTD Booking Quota');
 
         // Non-admin Chat Agent CANNOT access Admin Portal Access endpoints

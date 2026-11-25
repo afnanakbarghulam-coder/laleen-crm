@@ -2,13 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Models\AdLeadEntry;
 use App\Models\Appointment;
+use App\Models\BranchEvaluation;
 use App\Models\Customer;
+use App\Models\KpiChatEvaluation;
 use App\Models\KpiStaffEvaluation;
+use App\Models\Lead;
 use App\Models\OpsActionItem;
 use App\Models\Service;
 use App\Models\ShiftBlock;
 use App\Models\ShiftPattern;
+use App\Models\SocialContentPlan;
 use App\Models\Staff;
 use App\Models\StaffAttendance;
 use App\Models\StaffComplaint;
@@ -178,16 +183,17 @@ class StaffPortalFullUpgradeTest extends TestCase
         $opsOverview->assertSee('?tab=performance', false);
         $opsOverview->assertDontSee('?tab=leaves', false);
 
-        // Dedicated Performance tab displays Ops Tracker scorecards + pending items table
+        // Dedicated Performance tab displays exact KPIs-module Ops Lead scorecards + pending items table
         $opsResp = $this->actingAs($opsUser)->get('/my-profile?tab=performance')->assertOk();
-        $opsResp->assertSee('Ops Tracker KPI');
-        $opsResp->assertSee('Pending Ops Tasks');
-        $opsResp->assertSee('Overdue / Priority Items');
-        $opsResp->assertSee('Completion Rate');
+        $opsResp->assertSee('Overdue Tasks');
+        $opsResp->assertSee('Ops Actions');
+        $opsResp->assertSee('SLA On-Time');
+        $opsResp->assertSee('Pending Ops Tracker Items');
         $opsResp->assertSee('Audit Al Wakrah Towels Inventory');
+        $opsResp->assertDontSee('Back to All Staff Scorecards');
         $opsResp->assertDontSee('?tab=leaves', false);
 
-        // B. Sales Coordinator sees 3 KPIs-module scorecards (MTD Team Bookings, Lead Conversion Rate, Overdue Leads)
+        // B. Sales Coordinator sees ALL 4 Executive KPIs matching /kpis 1-to-1
         $salesUser = User::factory()->create([
             'name' => 'Laden Khan',
             'email' => 'laden.perf@laleen.qa',
@@ -224,12 +230,14 @@ class StaffPortalFullUpgradeTest extends TestCase
         $salesContracts->assertSee('4,500 QAR');
 
         $salesPerf = $this->actingAs($salesUser)->get('/my-profile?tab=performance')->assertOk();
-        $salesPerf->assertSee('MTD Team Bookings');
+        $salesPerf->assertSee('Daily Booking Quota');
+        $salesPerf->assertSee('Agent Chat Quality');
         $salesPerf->assertSee('Lead Conversion Rate');
-        $salesPerf->assertSee('Overdue Leads');
-        $salesPerf->assertSee('mp-luxe-kpi-card');
+        $salesPerf->assertSee('Complaint Resolution SLA');
+        $salesPerf->assertSee('luxe-kpi-card');
+        $salesPerf->assertDontSee('Back to All Staff Scorecards');
 
-        // C. Salon Manager (Old Airport) sees Branch Manager KPIs + ONLY Old Airport pending complaints on Performance tab
+        // C. Salon Manager (Old Airport) sees exact KPIs-module Branch Manager KPIs + ONLY Old Airport pending complaints
         $mgrUser = User::factory()->create([
             'name' => 'Ahana Salon Manager',
             'email' => 'ahana.sm@laleen.qa',
@@ -271,10 +279,8 @@ class StaffPortalFullUpgradeTest extends TestCase
         $mgrOverview->assertSee('?tab=leaves', false);
 
         $mgrResp = $this->actingAs($mgrUser)->get('/my-profile?tab=performance')->assertOk();
-        $mgrResp->assertSee('Branch Manager KPIs');
-        $mgrResp->assertSee('Chair Upsells');
-        $mgrResp->assertSee('Monday Staff Evaluations');
-        $mgrResp->assertSee('Branch Mystery Shopper');
+        $mgrResp->assertSee('Monday Staff Evaluation Compliance');
+        $mgrResp->assertSee('Branch Mystery Shopper Score');
         $mgrResp->assertSee('Pending Complaints for Action');
         $mgrResp->assertSee($oaComplaint->reference_number);
         $mgrResp->assertDontSee($wkComplaint->reference_number);
@@ -636,5 +642,276 @@ class StaffPortalFullUpgradeTest extends TestCase
             ->assertOk()
             ->json();
         $this->assertContains($stylistStaff->id, collect($availAfter)->pluck('id')->all());
+    }
+
+    public function test_one_to_one_kpi_hub_and_my_profile_performance_parity_across_all_roles(): void
+    {
+        $now = Carbon::now('Asia/Qatar');
+
+        // Seed realistic live operational data across bookings, chat evals, leads, complaints, ops, ads, social, audits
+        $stylist = Staff::create([
+            'name' => 'Parity Stylist',
+            'branch' => 'old_airport',
+            'is_remote' => false,
+            'bookable' => true,
+        ]);
+
+        $areebaUser = User::factory()->create([
+            'name' => 'Areeba Khan',
+            'email' => 'areeba.parity@laleen.qa',
+            'role' => 'agent',
+            'permissions' => User::defaultPermissionsForRole('agent'),
+        ]);
+        $areebaStaff = Staff::create(['name' => 'Areeba Khan', 'branch' => null, 'is_remote' => true, 'bookable' => false, 'user_id' => $areebaUser->id]);
+
+        $zoyaUser = User::factory()->create([
+            'name' => 'Zoya Ali',
+            'email' => 'zoya.parity@laleen.qa',
+            'role' => 'agent',
+            'permissions' => User::defaultPermissionsForRole('agent'),
+        ]);
+        $zoyaStaff = Staff::create(['name' => 'Zoya Ali', 'branch' => null, 'is_remote' => true, 'bookable' => false, 'user_id' => $zoyaUser->id]);
+
+        $ladenUser = User::factory()->create([
+            'name' => 'Laden Khan',
+            'email' => 'laden.parity@laleen.qa',
+            'role' => 'sales_coordinator',
+            'permissions' => User::defaultPermissionsForRole('sales_coordinator'),
+        ]);
+        $ladenStaff = Staff::create(['name' => 'Laden Khan', 'branch' => null, 'is_remote' => true, 'bookable' => false, 'user_id' => $ladenUser->id]);
+
+        $arbabUser = User::factory()->create([
+            'name' => 'Arbab Kashif',
+            'email' => 'arbab.parity@laleen.qa',
+            'role' => 'ops_lead',
+            'permissions' => User::defaultPermissionsForRole('ops_lead'),
+        ]);
+        $arbabStaff = Staff::create(['name' => 'Arbab Kashif', 'branch' => null, 'is_remote' => true, 'bookable' => false, 'user_id' => $arbabUser->id]);
+
+        $sanaUser = User::factory()->create([
+            'name' => 'Sana Kazi',
+            'email' => 'sana.parity@laleen.qa',
+            'role' => 'social_media_editor',
+            'permissions' => User::defaultPermissionsForRole('social_media_editor'),
+        ]);
+        $sanaStaff = Staff::create(['name' => 'Sana Kazi', 'branch' => null, 'is_remote' => true, 'bookable' => false, 'user_id' => $sanaUser->id]);
+
+        $ayanUser = User::factory()->create([
+            'name' => 'Ayan Malik',
+            'email' => 'ayan.parity@laleen.qa',
+            'role' => 'marketing_specialist',
+            'permissions' => User::defaultPermissionsForRole('marketing_specialist'),
+        ]);
+        $ayanStaff = Staff::create(['name' => 'Ayan Malik', 'branch' => null, 'is_remote' => true, 'bookable' => false, 'user_id' => $ayanUser->id]);
+
+        $ahanaUser = User::factory()->create([
+            'name' => 'Ahana Sharma',
+            'email' => 'ahana.parity@laleen.qa',
+            'role' => 'salon_manager',
+            'permissions' => User::defaultPermissionsForRole('salon_manager'),
+        ]);
+        $ahanaStaff = Staff::create(['name' => 'Ahana Sharma', 'branch' => 'old_airport', 'is_remote' => false, 'bookable' => false, 'user_id' => $ahanaUser->id]);
+
+        $rheaUser = User::factory()->create([
+            'name' => 'Rhea Jacob',
+            'email' => 'rhea.parity@laleen.qa',
+            'role' => 'salon_manager',
+            'permissions' => User::defaultPermissionsForRole('salon_manager'),
+        ]);
+        $rheaStaff = Staff::create(['name' => 'Rhea Jacob', 'branch' => 'wakrah', 'is_remote' => false, 'bookable' => false, 'user_id' => $rheaUser->id]);
+
+        // Bookings for Areeba (2) and Zoya (1) -> Laden team = 3
+        foreach ([[$areebaUser->id, '55010001'], [$areebaUser->id, '55010002'], [$zoyaUser->id, '55010003']] as [$agentId, $phone]) {
+            $appt = Appointment::create([
+                'customer_name' => 'Parity Client ' . $phone,
+                'phone' => '+974' . $phone,
+                'service_name' => $this->blowdry->name,
+                'appointment_datetime' => $now->copy()->addDay(),
+                'booking_date' => $now->copy()->addDay()->toDateString(),
+                'start_time' => '13:00:00',
+                'staff_id' => $stylist->id,
+                'branch' => 'old_airport',
+                'booking_agent_id' => $agentId,
+                'created_by' => $agentId,
+                'status' => 'confirmed',
+                'price' => 150,
+            ]);
+            $appt->forceFill(['created_at' => $now])->saveQuietly();
+        }
+
+        // Chat evaluation (78.5%)
+        KpiChatEvaluation::create([
+            'agent_id' => $areebaUser->id,
+            'evaluator_id' => $ladenUser->id,
+            'evaluation_date' => $now->toDateString(),
+            'answers' => [],
+            'total_score' => 94,
+            'percentage' => 78.50,
+            'grade' => 'Needs Coaching',
+        ]);
+
+        // Leads: 1 booked, 1 open overdue unassigned -> 50% conversion, 1 unassigned, 1 overdue
+        Lead::create([
+            'phone' => '55020001',
+            'customer_name' => 'Booked Lead',
+            'category' => 'inquiry',
+            'categories' => ['inquiry'],
+            'needful_done' => 'booked',
+            'assigned_agent_id' => $areebaUser->id,
+        ]);
+        Lead::create([
+            'phone' => '55020002',
+            'customer_name' => 'Overdue Unassigned Lead',
+            'category' => 'inquiry',
+            'categories' => ['inquiry'],
+            'needful_done' => null,
+            'assigned_agent_id' => null,
+            'next_followup_date' => $now->copy()->subDays(2)->toDateString(),
+        ]);
+
+        // Complaint (>48h open breach)
+        $breachComplaint = StaffComplaint::create([
+            'complaint_date' => $now->copy()->subDays(4)->toDateString(),
+            'branch' => 'old_airport',
+            'customer_name' => 'SLA Test Client',
+            'customer_phone' => '+97455030001',
+            'category' => 'Service Quality',
+            'description' => 'Overdue unresolved complaint.',
+        ]);
+        $breachComplaint->forceFill(['created_at' => $now->copy()->subDays(4)])->saveQuietly();
+
+        // Ops items for Arbab (1 open urgent, 1 completed)
+        OpsActionItem::create([
+            'title' => 'Inspect Old Airport Chair Lights',
+            'scope' => 'Old Airport',
+            'priority' => 'urgent',
+            'pending_with_type' => 'ops_lead',
+            'pending_with_name' => 'Arbab Kashif',
+            'is_completed' => false,
+        ]);
+        OpsActionItem::create([
+            'title' => 'Verify Payroll Sync',
+            'scope' => 'HQ',
+            'priority' => 'normal',
+            'pending_with_type' => 'ops_lead',
+            'pending_with_name' => 'Arbab Kashif',
+            'is_completed' => true,
+            'completed_at' => $now,
+        ]);
+
+        // Ad lead entry for Ayan
+        AdLeadEntry::create([
+            'date' => $now->toDateString(),
+            'phone' => '55040001',
+            'branch' => 'old_airport',
+            'category' => 'Hair',
+            'ticket_amount' => 1200,
+            'old_airport_amount' => 1200,
+            'booked' => true,
+        ]);
+
+        // Social content plan for Sana
+        SocialContentPlan::create([
+            'week_start_date' => $now->copy()->startOfWeek(Carbon::MONDAY)->toDateString(),
+            'day_of_week' => $now->dayOfWeek,
+            'reel_content' => 'Keratin transformation reel',
+            'is_reel_posted' => true,
+            'are_stories_posted' => true,
+        ]);
+
+        // Branch mystery shopper audits for Ahana & Rhea
+        BranchEvaluation::create([
+            'branch' => 'old_airport',
+            'manager' => 'Ahana Sharma',
+            'evaluator_id' => $this->admin->id,
+            'evaluation_date' => $now->toDateString(),
+            'answers' => [],
+            'total_score' => 92,
+            'percentage' => 92.0,
+            'grade' => 'A',
+        ]);
+        BranchEvaluation::create([
+            'branch' => 'wakrah',
+            'manager' => 'Rhea Jacob',
+            'evaluator_id' => $this->admin->id,
+            'evaluation_date' => $now->toDateString(),
+            'answers' => [],
+            'total_score' => 88,
+            'percentage' => 88.0,
+            'grade' => 'A',
+        ]);
+
+        // 1. Fetch authoritative KPI Hub scorecard view-models
+        $hubResp = $this->actingAs($this->admin)
+            ->get(route('kpi.hub', ['month' => $now->format('Y-m')]))
+            ->assertOk();
+        $hubVms = $hubResp->viewData('scorecardViewModels');
+
+        // 2. Verify exact 1-to-1 parity across ALL 8 executive/operational staff members
+        $parityTargets = [
+            'laden' => [$ladenUser, $ladenStaff],
+            'areeba' => [$areebaUser, $areebaStaff],
+            'zoya' => [$zoyaUser, $zoyaStaff],
+            'arbab' => [$arbabUser, $arbabStaff],
+            'sana' => [$sanaUser, $sanaStaff],
+            'ayan' => [$ayanUser, $ayanStaff],
+            'ahana' => [$ahanaUser, $ahanaStaff],
+            'rhea' => [$rheaUser, $rheaStaff],
+        ];
+
+        foreach ($parityTargets as $key => [$targetUser, $targetStaff]) {
+            $expectedVm = $hubVms[$key];
+
+            // Self-service `/my-profile?tab=performance`
+            $selfResp = $this->actingAs($targetUser)
+                ->get('/my-profile?tab=performance')
+                ->assertOk();
+            $selfVm = $selfResp->viewData('performanceScorecard');
+
+            $this->assertSame($expectedVm['overall_pct'], $selfVm['overall_pct'], "Overall % mismatch for {$key}");
+            $this->assertSame($expectedVm['passing_count'], $selfVm['passing_count'], "Passing count mismatch for {$key}");
+            $this->assertSame($expectedVm['total_kpis'], $selfVm['total_kpis'], "Total KPIs mismatch for {$key}");
+            $this->assertSame($expectedVm['overall_badge'], $selfVm['overall_badge'], "Overall badge mismatch for {$key}");
+            $this->assertCount(count($expectedVm['cards']), $selfVm['cards'], "Card count mismatch for {$key}");
+
+            foreach ($expectedVm['cards'] as $idx => $expCard) {
+                $actCard = $selfVm['cards'][$idx];
+                $this->assertSame($expCard['label'], $actCard['label'], "Card {$idx} label mismatch for {$key}");
+                $this->assertSame($expCard['hero_main'], $actCard['hero_main'], "Card {$idx} hero_main mismatch for {$key}");
+                $this->assertSame($expCard['hero_unit'], $actCard['hero_unit'], "Card {$idx} hero_unit mismatch for {$key}");
+                $this->assertSame($expCard['bar_pct'], $actCard['bar_pct'], "Card {$idx} bar_pct mismatch for {$key}");
+                $this->assertSame($expCard['delta_segments'], $actCard['delta_segments'], "Card {$idx} delta mismatch for {$key}");
+            }
+
+            // Confirm rendered HTML shows Overall Badge & omits Hub back button
+            $selfResp->assertSee($expectedVm['overall_badge']);
+            $selfResp->assertDontSee('Back to All Staff Scorecards');
+
+            // Admin Preview `/staff-portal-preview/{staff}?tab=performance` matches identically
+            $previewResp = $this->actingAs($this->admin)
+                ->get(route('portal.admin-preview', ['staff' => $targetStaff->id, 'tab' => 'performance']))
+                ->assertOk();
+            $previewVm = $previewResp->viewData('performanceScorecard');
+            $this->assertSame($expectedVm['overall_badge'], $previewVm['overall_badge'], "Preview badge mismatch for {$key}");
+            $this->assertCount(count($expectedVm['cards']), $previewVm['cards'], "Preview card count mismatch for {$key}");
+        }
+
+        // 3. Strict Isolation & Permission-Safe Links:
+        // When a user lacks `staff` module access, Complaint Resolution SLA card must NOT link to /staffs (no 403 links!)
+        $restrictedPerms = $ladenUser->permissions;
+        $restrictedPerms['staff'] = 'none';
+        $ladenUser->update(['permissions' => $restrictedPerms]);
+
+        $ladenSelf = $this->actingAs($ladenUser->fresh())->get('/my-profile?tab=performance')->assertOk();
+        $ladenSelfVm = $ladenSelf->viewData('performanceScorecard');
+        $complaintCard = collect($ladenSelfVm['cards'])->firstWhere('label', 'Complaint Resolution SLA');
+        $leadCard = collect($ladenSelfVm['cards'])->firstWhere('label', 'Lead Conversion Rate');
+        $this->assertNotNull($complaintCard);
+        $this->assertNull($complaintCard['tag_url'], 'Restricted user without staff access must not receive clickable /staffs link');
+        $this->assertNotNull($leadCard['tag_url'], 'User with leads access should keep clickable /leads link');
+        // Never leaks other staff members' KPIs
+        $ladenSelf->assertDontSee('Old Airport Ad Revenue');
+        $ladenSelf->assertDontSee('Organic Content Plan (MTD)');
+        $ladenSelf->assertDontSee('Branch Mystery Shopper Score');
     }
 }

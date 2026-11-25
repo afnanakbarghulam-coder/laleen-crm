@@ -17,6 +17,7 @@
 @section('title', $isAdminPreview ? ("Admin Preview — {$profile['name']}'s Portal Profile") : 'My Profile — Laleen Staff Portal')
 
 @section('content')
+@include('kpi.partials.scorecard-styles')
 <style>
     .mp-wrap {
         max-width: 1080px;
@@ -350,284 +351,6 @@
     }
     .mp-list-row:first-child { padding-top: 2px; }
     .mp-list-row:last-child { border-bottom: none; padding-bottom: 0; }
-
-    /* =====================================================================
-       PERFORMANCE TAB — EXACT KPIs MODULE SCORECARD LANGUAGE (.luxe-kpi-card)
-       ===================================================================== */
-    .mp-perf-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 12px;
-        margin-bottom: 16px;
-    }
-
-    .mp-perf-title {
-        font-size: 16px;
-        font-weight: 700;
-        color: #f8efe6;
-        margin: 0;
-    }
-
-    .mp-perf-period {
-        font-size: 12px;
-        color: #9e8780;
-        margin-top: 2px;
-    }
-
-    .mp-perf-grid {
-        display: grid;
-        gap: 18px;
-    }
-
-    .mp-perf-grid--2 {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .mp-perf-grid--3 {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    @media (max-width: 991px) {
-        .mp-perf-grid--3 {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-    }
-
-    @media (max-width: 767px) {
-        .mp-perf-grid--2,
-        .mp-perf-grid--3 {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    .mp-luxe-kpi-card {
-        background: linear-gradient(180deg, rgba(35, 22, 27, 0.92) 0%, rgba(23, 14, 18, 0.96) 100%);
-        border: 1px solid rgba(255, 255, 255, 0.07);
-        border-radius: 18px;
-        padding: 20px 20px 18px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        min-height: 238px;
-        position: relative;
-        overflow: hidden;
-        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .mp-luxe-kpi-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(229, 184, 168, 0.30), transparent);
-    }
-
-    .mp-luxe-kpi-card:hover {
-        transform: translateY(-2px);
-        border-color: rgba(229, 184, 168, 0.26);
-        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
-    }
-
-    .mp-luxe-card-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 10px;
-        margin-bottom: 14px;
-    }
-
-    .mp-luxe-orb {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-    }
-
-    .mp-luxe-orb.orb-rose {
-        background: radial-gradient(circle, rgba(229, 184, 168, 0.24) 0%, rgba(229, 184, 168, 0.05) 100%);
-        border: 1px solid rgba(229, 184, 168, 0.38);
-        color: #e5b8a8;
-        box-shadow: 0 0 16px rgba(229, 184, 168, 0.16);
-    }
-
-    .mp-luxe-orb.orb-champagne {
-        background: radial-gradient(circle, rgba(212, 163, 115, 0.24) 0%, rgba(212, 163, 115, 0.05) 100%);
-        border: 1px solid rgba(212, 163, 115, 0.38);
-        color: #d4a373;
-        box-shadow: 0 0 16px rgba(212, 163, 115, 0.16);
-    }
-
-    .mp-luxe-orb.orb-emerald {
-        background: radial-gradient(circle, rgba(52, 211, 153, 0.24) 0%, rgba(52, 211, 153, 0.05) 100%);
-        border: 1px solid rgba(52, 211, 153, 0.38);
-        color: #34d399;
-        box-shadow: 0 0 16px rgba(52, 211, 153, 0.16);
-    }
-
-    .mp-luxe-orb.orb-amber {
-        background: radial-gradient(circle, rgba(245, 158, 11, 0.24) 0%, rgba(245, 158, 11, 0.05) 100%);
-        border: 1px solid rgba(245, 158, 11, 0.38);
-        color: #f59e0b;
-        box-shadow: 0 0 16px rgba(245, 158, 11, 0.16);
-    }
-
-    .mp-luxe-orb.orb-ruby {
-        background: radial-gradient(circle, rgba(251, 113, 133, 0.24) 0%, rgba(251, 113, 133, 0.05) 100%);
-        border: 1px solid rgba(251, 113, 133, 0.38);
-        color: #fb7185;
-        box-shadow: 0 0 16px rgba(251, 113, 133, 0.16);
-    }
-
-    .mp-luxe-tag {
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        padding: 3px 9px;
-        border-radius: 999px;
-        text-decoration: none;
-        border: 1px solid rgba(229, 184, 168, 0.16);
-        color: #b8a29a;
-        background: rgba(255, 255, 255, 0.03);
-        transition: all 0.15s ease;
-        white-space: nowrap;
-    }
-
-    .mp-luxe-tag.tag-pass {
-        border-color: rgba(52, 211, 153, 0.38);
-        color: #34d399;
-        background: rgba(52, 211, 153, 0.10);
-    }
-
-    .mp-luxe-tag.tag-rose {
-        border-color: rgba(229, 184, 168, 0.32);
-        color: #e5b8a8;
-        background: rgba(229, 184, 168, 0.08);
-    }
-
-    .mp-luxe-tag.tag-champagne {
-        border-color: rgba(212, 163, 115, 0.35);
-        color: #f3d9a4;
-        background: rgba(212, 163, 115, 0.10);
-    }
-
-    .mp-luxe-tag.tag-ruby {
-        border-color: rgba(251, 113, 133, 0.38);
-        color: #fda4af;
-        background: rgba(251, 113, 133, 0.12);
-    }
-
-    a.mp-luxe-tag:hover {
-        color: #f8efe6;
-        border-color: #e5b8a8;
-    }
-
-    .mp-luxe-label {
-        font-size: 14.5px;
-        font-weight: 600;
-        color: #f8efe6;
-        line-height: 1.35;
-        margin-bottom: 8px;
-    }
-
-    .mp-luxe-subnote {
-        font-size: 11px;
-        color: #9e8780;
-        line-height: 1.35;
-        margin-top: -4px;
-        margin-bottom: 10px;
-    }
-
-    .mp-luxe-hero {
-        font-family: 'Poppins', sans-serif;
-        font-variant-numeric: tabular-nums;
-        font-size: 34px;
-        font-weight: 800;
-        color: #f8efe6;
-        letter-spacing: -0.025em;
-        line-height: 1.08;
-        margin-bottom: 8px;
-        display: flex;
-        align-items: baseline;
-        gap: 6px;
-        flex-wrap: wrap;
-    }
-
-    .mp-luxe-unit {
-        font-size: 17px;
-        font-weight: 600;
-        color: #e5b8a8;
-        opacity: 0.88;
-    }
-
-    .mp-luxe-delta {
-        font-size: 12px;
-        color: #a8938b;
-        margin-bottom: 14px;
-        line-height: 1.4;
-    }
-
-    .mp-luxe-delta .hl-emerald { color: #34d399; font-weight: 700; }
-    .mp-luxe-delta .hl-rose { color: #e5b8a8; font-weight: 700; }
-    .mp-luxe-delta .hl-champagne { color: #d4a373; font-weight: 700; }
-    .mp-luxe-delta .hl-ruby { color: #fb7185; font-weight: 700; }
-
-    .mp-luxe-viz {
-        margin-top: auto;
-        padding-top: 6px;
-    }
-
-    .mp-luxe-bar-track {
-        width: 100%;
-        height: 7px;
-        background: rgba(255, 255, 255, 0.07);
-        border-radius: 999px;
-        overflow: hidden;
-        margin-bottom: 6px;
-    }
-
-    .mp-luxe-bar-fill {
-        height: 100%;
-        border-radius: 999px;
-        transition: width 0.35s ease;
-    }
-
-    .mp-luxe-bar-fill.fill-rose-gold {
-        background: linear-gradient(90deg, #c98a78, #e5b8a8);
-        box-shadow: 0 0 10px rgba(229, 184, 168, 0.38);
-    }
-
-    .mp-luxe-bar-fill.fill-champagne {
-        background: linear-gradient(90deg, #b58352, #d4a373);
-        box-shadow: 0 0 10px rgba(212, 163, 115, 0.38);
-    }
-
-    .mp-luxe-bar-fill.fill-emerald {
-        background: linear-gradient(90deg, #10b981, #34d399);
-        box-shadow: 0 0 10px rgba(52, 211, 153, 0.38);
-    }
-
-    .mp-luxe-bar-fill.fill-ruby {
-        background: linear-gradient(90deg, #e11d48, #fb7185);
-        box-shadow: 0 0 10px rgba(251, 113, 133, 0.38);
-    }
-
-    .mp-luxe-bar-scale {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 10.5px;
-        color: #9e8780;
-        font-weight: 500;
-        font-variant-numeric: tabular-nums;
-    }
 
     /* Tables */
     .mp-table {
@@ -1088,40 +811,19 @@
         </div>
 
     {{-- ===================================================================== --}}
-    {{-- TAB 2: PERFORMANCE (EXACT KPIs MODULE SCORECARD LANGUAGE)             --}}
+    {{-- TAB 2: PERFORMANCE (1-TO-1 KPIs MODULE SCORECARD + ROLE DETAILS)      --}}
     {{-- ===================================================================== --}}
-    @elseif ($activeTab === 'performance' && $performancePayload)
+    @elseif ($activeTab === 'performance' && $performanceScorecard)
         <div class="d-flex flex-column gap-3">
-            <div class="mp-perf-head mb-0">
-                <div>
-                    <h2 class="mp-perf-title">{{ $performancePayload['heading'] }}</h2>
-                    <div class="mp-perf-period">{{ $performancePayload['period_label'] }}</div>
-                </div>
-                @if (!empty($performancePayload['action_url']) && !empty($performancePayload['action_label']))
-                    <a href="{{ $performancePayload['action_url'] }}" class="mp-btn-ghost">
-                        <span>{{ $performancePayload['action_label'] }}</span>
-                        <i class="bx bx-right-arrow-alt"></i>
-                    </a>
-                @endif
-            </div>
-
-            {{-- KPI Scorecard Grid (2-col or 3-col matching exact KPIs module style) --}}
-            @if (!empty($performancePayload['cards']))
-                <div class="mp-perf-grid mp-perf-grid--{{ ($performancePayload['columns'] ?? 3) === 2 ? '2' : '3' }}">
-                    @foreach ($performancePayload['cards'] as $card)
-                        @include('portal.partials.kpi-scorecard', ['card' => $card])
-                    @endforeach
-                </div>
-            @else
-                <div class="mp-card text-center py-4">
-                    <div class="small" style="color:#9e8780;">
-                        {{ $performancePayload['empty_message'] ?? 'No KPI scorecards are configured for this role yet.' }}
-                    </div>
-                </div>
-            @endif
+            {{-- Shared Exact KPIs Module Scorecard Header + KPI Card Grid --}}
+            @include('kpi.partials.staff-scorecard-panel', [
+                'scorecardVm' => $performanceScorecard,
+                'showBackButton' => false,
+            ])
 
             {{-- OPS LEAD: Pending Ops Tracker Items Table --}}
-            @if ($isOpsLead && $performancePayload['ops_items'] !== null)
+            @if ($isOpsLead && array_key_exists('ops_items', $performanceScorecard))
+                @php $opsItems = $performanceScorecard['ops_items'] ?? []; @endphp
                 <div class="mp-card">
                     <div class="mp-section-header">
                         <h3 class="mp-section-title">
@@ -1129,16 +831,16 @@
                             <span>Pending Ops Tracker Items</span>
                         </h3>
                         <div class="d-flex align-items-center gap-2">
-                            <span class="mp-pill mp-pill-muted mp-num">{{ count($performancePayload['ops_items']) }} Open</span>
-                            @if (!empty($performancePayload['action_url']))
-                                <a href="{{ $performancePayload['action_url'] }}" class="mp-btn-ghost py-1 px-3">
+                            <span class="mp-pill mp-pill-muted mp-num">{{ count($opsItems) }} Open</span>
+                            @if (!empty($performanceScorecard['action_url']))
+                                <a href="{{ $performanceScorecard['action_url'] }}" class="mp-btn-ghost py-1 px-3">
                                     Open Ops Tracker &nearr;
                                 </a>
                             @endif
                         </div>
                     </div>
 
-                    @if (!empty($performancePayload['ops_items']))
+                    @if (!empty($opsItems))
                         <div class="table-responsive">
                             <table class="mp-table">
                                 <thead>
@@ -1150,7 +852,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach ($performancePayload['ops_items'] as $op)
+                                    @foreach ($opsItems as $op)
                                         <tr>
                                             <td class="fw-semibold" style="color:#f8efe6;">{{ $op['title'] }}</td>
                                             <td style="color:#cbb8b0;">{{ $op['scope'] }}</td>
@@ -1176,8 +878,8 @@
             @endif
 
             {{-- SALON MANAGER: Pending Complaints for Action (Strictly Branch-Scoped) --}}
-            @if ($isSalonManager && $performancePayload['branch_pending_complaints'] !== null)
-                @php $bpc = $performancePayload['branch_pending_complaints']; @endphp
+            @if ($isSalonManager && $branchPendingComplaints !== null)
+                @php $bpc = $branchPendingComplaints; @endphp
                 <div class="mp-card">
                     <div class="mp-section-header">
                         <h3 class="mp-section-title">
@@ -1227,17 +929,17 @@
             @endif
 
             {{-- SALON STAFF: Weekly Evaluations History --}}
-            @if ($isSalonStaff && $performancePayload['weekly_evaluations'] !== null)
+            @if ($isSalonStaff && $weeklyEvaluations !== null)
                 <div class="mp-card">
                     <div class="mp-section-header">
                         <h3 class="mp-section-title">
                             <span class="mp-icon-badge"><i class="bx bx-award"></i></span>
                             <span>Weekly Evaluations</span>
                         </h3>
-                        <span class="mp-pill mp-pill-muted mp-num">{{ count($performancePayload['weekly_evaluations']) }}</span>
+                        <span class="mp-pill mp-pill-muted mp-num">{{ count($weeklyEvaluations) }}</span>
                     </div>
 
-                    @if (!empty($performancePayload['weekly_evaluations']))
+                    @if (!empty($weeklyEvaluations))
                         <div class="table-responsive">
                             <table class="mp-table">
                                 <thead>
@@ -1249,7 +951,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach ($performancePayload['weekly_evaluations'] as $ev)
+                                    @foreach ($weeklyEvaluations as $ev)
                                         <tr>
                                             <td class="text-nowrap mp-num">{{ $ev['date_label'] }}</td>
                                             <td>{{ $ev['evaluator'] }}</td>
@@ -1271,17 +973,17 @@
             @endif
 
             {{-- SALON STAFF: My Complaints (STRICT PRIVACY — zero client PII) --}}
-            @if ($isSalonStaff && $performancePayload['my_complaints'] !== null)
+            @if ($isSalonStaff && $myComplaints !== null)
                 <div class="mp-card">
                     <div class="mp-section-header">
                         <h3 class="mp-section-title">
                             <span class="mp-icon-badge"><i class="bx bx-message-square-error"></i></span>
                             <span>My Complaints</span>
                         </h3>
-                        <span class="mp-pill mp-pill-muted mp-num">{{ count($performancePayload['my_complaints']) }}</span>
+                        <span class="mp-pill mp-pill-muted mp-num">{{ count($myComplaints) }}</span>
                     </div>
 
-                    @if (!empty($performancePayload['my_complaints']))
+                    @if (!empty($myComplaints))
                         <div class="table-responsive">
                             <table class="mp-table">
                                 <thead>
@@ -1295,7 +997,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach ($performancePayload['my_complaints'] as $mc)
+                                    @foreach ($myComplaints as $mc)
                                         <tr>
                                             <td class="fw-semibold text-nowrap mp-num" style="color:#f3d9a4;">{{ $mc['ref'] }}</td>
                                             <td class="text-nowrap mp-num">{{ $mc['date_label'] }}</td>

@@ -10,6 +10,9 @@
         $rhea = $scorecard['rhea'] ?? [];
         $areeba = $scorecard['areeba'] ?? [];
         $zoya = $scorecard['zoya'] ?? [];
+        $arbab = $scorecard['arbab'] ?? [];
+        $scorecardViewModels = $scorecardViewModels
+            ?? app(\App\Support\StaffKpiScorecardService::class)->buildAllExecutiveViewModels($scorecard, auth()->user());
         $daysElapsedVal = (int) ($daysElapsed ?? ($scorecard['days_elapsed'] ?? max(1, now('Asia/Qatar')->day)));
         $daysInMonthVal = (int) ($daysInMonth ?? ($scorecard['days_in_month'] ?? 30));
         $effectiveMonthStr = $selectedMonth ?? ($scorecard['month'] ?? now('Asia/Qatar')->format('Y-m'));
@@ -162,6 +165,18 @@
         $zoyaPassingCount = (int) ($zoya['passing_kpis_count'] ?? ($zoyaBkPass ? 1 : 0));
         $zoyaTotalKpis = (int) ($zoya['total_kpis_count'] ?? 1);
 
+        // Arbab metrics (Operations Lead — Overdue Tasks, Ops Actions, SLA On-Time)
+        $arbabOverdue = (int) ($arbab['overdue_count'] ?? 0);
+        $arbabCompleted = (int) ($arbab['completed_count'] ?? 0);
+        $arbabTotal = (int) ($arbab['total_count'] ?? 0);
+        $arbabSlaPct = (float) ($arbab['sla_pct'] ?? 100);
+        $arbabOverduePass = !empty($arbab['overdue_passing']);
+        $arbabCompPass = !empty($arbab['completion_passing']);
+        $arbabSlaPass = !empty($arbab['sla_passing']);
+        $arbabOverallPct = (float) ($arbab['overall_score_pct'] ?? 0);
+        $arbabPassingCount = (int) ($arbab['passing_kpis_count'] ?? 0);
+        $arbabTotalKpis = (int) ($arbab['total_kpis_count'] ?? 3);
+
         $healthOrbClass = function (float $pct): string {
             if ($pct >= 80.0) {
                 return 'orb-emerald';
@@ -224,6 +239,7 @@
                             <option value="rhea">Rhea &mdash; Wakrah Manager ({{ number_format($rheaOverallPct, 0) }}%)</option>
                             <option value="areeba">Areeba &mdash; Chat Agent ({{ number_format($areebaOverallPct, 0) }}%)</option>
                             <option value="zoya">Zoya &mdash; Chat Agent ({{ number_format($zoyaOverallPct, 0) }}%)</option>
+                            <option value="arbab">Arbab &mdash; Operations Lead ({{ number_format($arbabOverallPct, 0) }}%)</option>
                         </select>
                         <svg class="luxe-staff-select-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="6 9 12 15 18 9"></polyline>
@@ -531,6 +547,44 @@
                     </div>
                 </div>
             </article>
+
+            {{-- STAFF CARD 8: ARBAB (OPERATIONS LEAD) --}}
+            <article class="luxe-kpi-card luxe-staff-master-card" data-select-owner="arbab" role="button" tabindex="0" title="Click to inspect Arbab's 3 KPIs">
+                <div class="luxe-card-top">
+                    <div class="luxe-icon-orb {{ $healthOrbClass($arbabOverallPct) }} luxe-avatar-initials">
+                        AR
+                    </div>
+                    <span class="luxe-owner-tag {{ $arbabPassingCount === $arbabTotalKpis ? 'tag-pass' : 'tag-arbab' }}">
+                        {{ $arbabPassingCount }} / {{ $arbabTotalKpis }} KPIs PASSING &nearr;
+                    </span>
+                </div>
+
+                <div>
+                    <h3 class="luxe-staff-name">Arbab</h3>
+                    <div class="luxe-staff-role">Operations Lead</div>
+                </div>
+
+                <div class="luxe-card-hero">
+                    {{ number_format($arbabOverallPct, 1) }}%
+                </div>
+
+                <div class="luxe-card-delta">
+                    <span class="{{ $arbabOverduePass ? 'hl-emerald' : 'hl-ruby' }}">{{ $arbabOverdue }} Overdue</span> &bull;
+                    <span class="{{ $arbabCompPass ? 'hl-emerald' : 'hl-champagne' }}">{{ $arbabCompleted }}/{{ $arbabTotal }} Ops Actions</span> &bull;
+                    <span class="{{ $arbabSlaPass ? 'hl-emerald' : 'hl-rose' }}">{{ number_format($arbabSlaPct, 0) }}% SLA</span>
+                </div>
+
+                <div class="luxe-card-viz viz-bar">
+                    <div class="luxe-bar-track">
+                        <div class="luxe-bar-fill {{ $healthBarClass($arbabOverallPct) }}" style="width: {{ min(100, max(4, $arbabOverallPct)) }}%"></div>
+                    </div>
+                    <div class="luxe-bar-scale">
+                        <span>0%</span>
+                        <span class="luxe-click-hint">Click to inspect individual KPIs &rarr;</span>
+                        <span>100%</span>
+                    </div>
+                </div>
+            </article>
         </div>
 
         {{-- =====================================================================
@@ -554,646 +608,16 @@
         </div>
 
         <div class="luxe-kpi-grid is-hidden" id="luxeKpiGrid">
-
-            {{-- AYAN CARD 1: Old Airport Ad Revenue --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="ayan">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb orb-rose">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="12" y1="1" x2="12" y2="23"></line>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.ads.index', ['month' => $selectedMonth ?? now()->format('Y-m')]) }}" class="luxe-owner-tag tag-ayan" title="Open Ads Conversion">AYAN &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Old Airport Ad Revenue</div>
-
-                <div class="luxe-card-hero">
-                    {{ number_format($oaRev, 0) }} <span class="luxe-unit">QAR</span>
-                </div>
-
-                <div class="luxe-card-delta">
-                    <span class="{{ $oaPass ? 'hl-emerald' : 'hl-rose' }}">{{ number_format($oaMtdPct, 0) }}%</span> of {{ number_format($mtdBranchTarget, 0) }} QAR MTD target (15K Full Mo)
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $oaPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $oaMtdPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100%</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- AYAN CARD 2: Wakrah Ad Revenue --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="ayan">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb orb-champagne">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.ads.index', ['month' => $selectedMonth ?? now()->format('Y-m')]) }}" class="luxe-owner-tag tag-ayan" title="Open Ads Conversion">AYAN &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Wakrah Ad Revenue</div>
-
-                <div class="luxe-card-hero">
-                    {{ number_format($wkRev, 0) }} <span class="luxe-unit">QAR</span>
-                </div>
-
-                <div class="luxe-card-delta">
-                    <span class="{{ $wkPass ? 'hl-emerald' : 'hl-champagne' }}">{{ number_format($wkMtdPct, 0) }}%</span> of {{ number_format($mtdBranchTarget, 0) }} QAR MTD target (15K Full Mo)
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $wkPass ? 'fill-emerald' : 'fill-champagne' }}" style="width: {{ min(100, max(4, $wkMtdPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100%</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- AYAN CARD 3: Ad Booking Conversion --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="ayan">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb orb-emerald">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                            <polyline points="17 6 23 6 23 12"></polyline>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.ads.index', ['month' => $selectedMonth ?? now()->format('Y-m')]) }}" class="luxe-owner-tag tag-ayan" title="Open Ads Conversion">AYAN &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Ad Booking Conversion</div>
-
-                <div class="luxe-card-hero">
-                    {{ number_format($adConv, 1) }}%
-                </div>
-
-                <div class="luxe-card-delta">
-                    Target: <span class="{{ $adConvPass ? 'hl-emerald' : 'hl-ruby' }}">&ge; 20.0%</span> booked ({{ $ayan['booked_ad_leads'] ?? 0 }}/{{ $ayan['total_ad_leads'] ?? 0 }})
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $adConvPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $adConvBarPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>20% Target</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- AYAN CARD 4: Content & Social SLA Oversight --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="ayan">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $ayanOversightPass ? 'orb-emerald' : 'orb-berry' }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.content-calendar.index', ['week' => $sanaInMonthWeek]) }}" class="luxe-owner-tag tag-ayan" title="Open Content Plan">AYAN &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Content &amp; Social SLA Oversight</div>
-
-                <div class="luxe-card-hero">
-                    {{ number_format($ayanOversightPct, 1) }}%
-                </div>
-
-                <div class="luxe-card-delta">
-                    <span class="{{ $contentPass ? 'hl-emerald' : 'hl-rose' }}">{{ $sanaPostedTotal }}/{{ $sanaCumulativeTarget }} Content</span> &bull;
-                    <span class="{{ $repliesPass ? 'hl-emerald' : 'hl-ruby' }}">{{ $lateCount }} Late Replies</span>
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $ayanOversightPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $ayanOversightPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100%</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- LADEN CARD 1: Daily Booking Quota --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="laden">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb orb-amber">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                            <line x1="16" y1="2" x2="16" y2="6"></line>
-                            <line x1="8" y1="2" x2="8" y2="6"></line>
-                            <path d="M9 14l2 2 4-4"></path>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.agents.index', ['month' => $ladenSelectedMonth, 'logs_from' => $ladenPeriodStart, 'logs_to' => $ladenPeriodEnd]) }}" class="luxe-owner-tag tag-laden" title="Open Agent Targets">LADEN &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Daily Booking Quota</div>
-
-                <div class="luxe-card-hero">
-                    {{ $mtdBk }} <span class="luxe-unit">/ {{ $mtdBkTarget }}</span>
-                </div>
-
-                <div class="luxe-card-delta">
-                    <span class="{{ $bkPass ? 'hl-emerald' : 'hl-champagne' }}">{{ number_format($mtdBkPct, 0) }}% MTD</span> ({{ $todayBk }}/{{ $ladenDailyBkTarget }} Today &bull; {{ $fullMoBkTarget }} Full Mo)
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $bkPass ? 'fill-emerald' : 'fill-champagne' }}" style="width: {{ min(100, max(4, $mtdBkPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100%</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- LADEN CARD 2: Agent Chat Quality --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="laden">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb orb-rose">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                            <path d="M9 10h6M9 14h4"></path>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.chat-eval.index', ['month' => $ladenSelectedMonth]) }}" class="luxe-owner-tag tag-laden" title="Grade Agent Chats">LADEN &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Agent Chat Quality</div>
-
-                <div class="luxe-card-hero">
-                    {{ number_format($chatAvg, 1) }}%
-                </div>
-
-                <div class="luxe-card-delta">
-                    Target: <span class="{{ $chatPass ? 'hl-emerald' : 'hl-ruby' }}">&ge; 85.0%</span> avg quality ({{ $laden['total_evaluations_count'] ?? 0 }} graded)
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $chatPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $chatBarPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>85% Target</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- LADEN CARD 3: Lead Conversion Rate --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="laden">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb orb-berry">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                            <polyline points="16 11 18 13 22 9"></polyline>
-                        </svg>
-                    </div>
-                    <a href="{{ route('leads.index', ['start_date' => $ladenPeriodStart, 'end_date' => $ladenPeriodEnd]) }}" class="luxe-owner-tag tag-laden" title="Open CRM Leads">LADEN &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Lead Conversion Rate</div>
-
-                <div class="luxe-card-hero">
-                    {{ number_format($leadConv, 1) }}%
-                </div>
-
-                <div class="luxe-card-delta">
-                    Target: <span class="{{ $leadPass ? 'hl-emerald' : 'hl-champagne' }}">&ge; 30.0% ({{ $bookedLeadsCnt }}/{{ $totalLeadsCnt }})</span> &bull;
-                    <span class="{{ $unassignedCnt > 0 ? 'hl-ruby' : 'hl-emerald' }}">{{ $unassignedCnt }} Unassigned</span> &bull;
-                    <span class="{{ $overdueCnt > 0 ? 'hl-champagne' : 'hl-emerald' }}">{{ $overdueCnt }} Overdue</span>
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $leadPass ? 'fill-emerald' : 'fill-champagne' }}" style="width: {{ min(100, max(4, $leadConvBarPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>30% Target</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- LADEN CARD 4: Complaint Resolution SLA --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="laden">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $cmpPass ? 'orb-emerald' : 'orb-ruby' }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                            <path d="M9 12l2 2 4-4"></path>
-                        </svg>
-                    </div>
-                    <a href="{{ route('staffs.index', ['tab' => 'complaints', 'complaints_from' => $ladenPeriodStart, 'complaints_to' => $ladenPeriodEnd]) }}" class="luxe-owner-tag tag-laden" title="Resolve Complaints">LADEN &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Complaint Resolution SLA</div>
-
-                <div class="luxe-card-hero">
-                    {{ number_format($cmpPct, 0) }}%
-                </div>
-
-                <div class="luxe-card-delta">
-                    <span class="{{ $openCmp === 0 ? 'hl-emerald' : ($cmpPass ? 'hl-champagne' : 'hl-ruby') }}">{{ $openCmp }} Open</span> &bull; &le; 48h resolution
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $cmpPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $cmpPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100% SLA</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- SANA CARD 1: Organic Content Plan (MTD) --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="sana">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb orb-champagne">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.content-calendar.index', ['week' => $sanaInMonthWeek]) }}" class="luxe-owner-tag tag-sana" title="Open Weekly Content Schedule">SANA &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Organic Content Plan (MTD)</div>
-
-                <div class="luxe-card-hero">
-                    {{ $sanaPostedTotal }} <span class="luxe-unit">/ {{ $sanaCumulativeTarget }}</span>
-                </div>
-
-                <div class="luxe-card-delta">
-                    <span class="{{ ($contentPass || ($sanaReelsTarget > 0 && $sanaReels >= $sanaReelsTarget)) ? 'hl-emerald' : 'hl-rose' }}">{{ $sanaReels }}/{{ $sanaReelsTarget }} Reels</span> &bull;
-                    <span class="{{ ($contentPass || ($sanaStoriesTarget > 0 && $sanaStories >= $sanaStoriesTarget)) ? 'hl-emerald' : 'hl-champagne' }}">{{ $sanaStories }}/{{ $sanaStoriesTarget }} Stories</span> &bull; {{ $shortPeriodBadge }}
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $contentPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $execPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100%</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- SANA CARD 2: Social Reply SLA --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="sana">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $repliesPass ? 'orb-emerald' : 'orb-berry' }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-                        </svg>
-                    </div>
-
-                    <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
-                        @if($isAdminUser)
-                            <button type="button" class="luxe-micro-btn" data-bs-toggle="modal" data-bs-target="#logLateReplyModal" title="Log Late Reply Breach">+</button>
-                        @endif
-                        @if($lateCount > 0)
-                            <button type="button" class="luxe-proof-btn" data-bs-toggle="modal" data-bs-target="#viewLateRepliesModal" title="View Late Reply Proof">
-                                View Proof ({{ $lateCount }})
-                            </button>
-                        @endif
-                        <a href="{{ route('kpi.content-calendar.index', ['week' => $sanaInMonthWeek]) }}" class="luxe-owner-tag tag-sana" title="Open Weekly Content Schedule">SANA &nearr;</a>
-                    </div>
-                </div>
-
-                <div class="luxe-card-label">Social Reply SLA</div>
-
-                <div class="luxe-card-hero">
-                    {{ $lateCount }} <span class="luxe-unit">Late</span>
-                </div>
-
-                <div class="luxe-card-delta">
-                    Target: <span class="{{ $repliesPass ? 'hl-emerald' : 'hl-ruby' }}">0 late replies</span> &bull; Syncs to Ayan
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $repliesPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ $repliesPass ? 100 : 4 }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100% SLA</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- AHANA CARD 1: Monday Staff Evaluation Compliance --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="ahana">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $ahanaEvalPass ? 'orb-emerald' : 'orb-rose' }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.evaluations.index', ['branch' => 'old_airport', 'month' => $selectedMonth]) }}" class="luxe-owner-tag tag-ahana" title="Open Salon Staff Evaluations">AHANA &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Monday Staff Evaluation Compliance</div>
-
-                <div class="luxe-card-hero">
-                    {{ number_format($ahanaEvalCompliancePct, 1) }}%
-                </div>
-
-                <div class="luxe-card-delta">
-                    <span class="{{ $ahanaEvalPass ? 'hl-emerald' : 'hl-rose' }}">{{ $ahanaCompletedEvals }}/{{ $ahanaExpectedEvals }} Evaluated</span> &bull; {{ $ahanaMondaysElapsed }} {{ \Illuminate\Support\Str::plural('Mon', $ahanaMondaysElapsed) }} MTD (100% Target)
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $ahanaEvalPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $ahanaEvalCompliancePct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100%</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- AHANA CARD 2: Branch Mystery Shopper Score --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="ahana">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $ahanaMysteryPass ? 'orb-emerald' : 'orb-rose' }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                            <path d="M9 14l2 2 4-4"></path>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.branch-evaluation.index', ['branch' => 'old_airport', 'month' => $selectedMonth]) }}" class="luxe-owner-tag tag-ahana" title="Open Old Airport Branch Evaluations">AHANA &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Branch Mystery Shopper Score</div>
-
-                <div class="luxe-card-hero">
-                    {{ number_format($ahanaMysteryAvgPct, 1) }}%
-                </div>
-
-                <div class="luxe-card-delta">
-                    Target: <span class="{{ $ahanaMysteryPass ? 'hl-emerald' : 'hl-ruby' }}">&ge; 85.0% avg</span> ({{ $ahanaAuditsCount }} Evaluations MTD)
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $ahanaMysteryPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $ahanaMysteryAttainmentPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>85% Target</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- RHEA CARD 1: Monday Staff Evaluation Compliance --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="rhea">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $rheaEvalPass ? 'orb-emerald' : 'orb-rose' }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.evaluations.index', ['branch' => 'wakrah', 'month' => $selectedMonth]) }}" class="luxe-owner-tag tag-rhea" title="Open Salon Staff Evaluations">RHEA &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Monday Staff Evaluation Compliance</div>
-
-                <div class="luxe-card-hero">
-                    {{ number_format($rheaEvalCompliancePct, 1) }}%
-                </div>
-
-                <div class="luxe-card-delta">
-                    <span class="{{ $rheaEvalPass ? 'hl-emerald' : 'hl-rose' }}">{{ $rheaCompletedEvals }}/{{ $rheaExpectedEvals }} Evaluated</span> &bull; {{ $rheaMondaysElapsed }} {{ \Illuminate\Support\Str::plural('Mon', $rheaMondaysElapsed) }} MTD (100% Target)
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $rheaEvalPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $rheaEvalCompliancePct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100%</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- RHEA CARD 2: Branch Mystery Shopper Score --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="rhea">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $rheaMysteryPass ? 'orb-emerald' : 'orb-rose' }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                            <path d="M9 14l2 2 4-4"></path>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.branch-evaluation.index', ['branch' => 'wakrah', 'month' => $selectedMonth]) }}" class="luxe-owner-tag tag-rhea" title="Open Wakrah Branch Evaluations">RHEA &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label">Branch Mystery Shopper Score</div>
-
-                <div class="luxe-card-hero">
-                    {{ number_format($rheaMysteryAvgPct, 1) }}%
-                </div>
-
-                <div class="luxe-card-delta">
-                    Target: <span class="{{ $rheaMysteryPass ? 'hl-emerald' : 'hl-ruby' }}">&ge; 85.0% avg</span> ({{ $rheaAuditsCount }} Evaluations MTD)
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $rheaMysteryPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(4, $rheaMysteryAttainmentPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>85% Target</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- AREEBA CARD 1: MTD Booking Quota (01 – Current Day) --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="areeba">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $areebaBkPass ? 'orb-emerald' : 'orb-rose' }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                            <line x1="16" y1="2" x2="16" y2="6"></line>
-                            <line x1="8" y1="2" x2="8" y2="6"></line>
-                            <path d="M9 14l2 2 4-4"></path>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-areeba" title="Open Agent Booking Targets">AREEBA &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label" title="{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}">MTD Booking Quota</div>
-                <div class="luxe-card-subnote">{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}</div>
-
-                <div class="luxe-card-hero">
-                    {{ $areebaMtdBk }} <span class="luxe-unit">/ {{ $areebaMtdTarget }}</span>
-                </div>
-
-                <div class="luxe-card-delta">
-                    <span class="{{ $areebaBkPass ? 'hl-emerald' : 'hl-rose' }}">{{ number_format($areebaMtdPct, 1) }}%</span> of MTD Target (13/day &times; {{ $daysElapsedVal }} days &bull; {{ $areebaFullMoTarget }} Full Mo)
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $areebaBkPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(0, $areebaMtdPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100%</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- AREEBA CARD 2: Today's Daily Booking Target / Historical Daily Avg Pace --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="areeba">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $areebaCard2Pass ? 'orb-emerald' : 'orb-rose' }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-areeba" title="Open Agent Shift Logs">AREEBA &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label" title="{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}">
-                    @if($isCurrentMonthView)
-                        Today's Daily Booking Target
-                    @else
-                        Daily Avg Pace
-                    @endif
-                </div>
-                <div class="luxe-card-subnote">{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}</div>
-
-                <div class="luxe-card-hero">
-                    {{ $isCurrentMonthView ? $areebaTodayBk : $areebaDailyAvg }} <span class="luxe-unit">/ 13</span>
-                </div>
-
-                <div class="luxe-card-delta">
-                    @if($isCurrentMonthView)
-                        <span class="{{ $areebaCard2Pass ? 'hl-emerald' : 'hl-rose' }}">{{ number_format($areebaTodayPct, 1) }}%</span> of Daily Quota ({{ $areebaTodayBk >= 13 ? 'Daily Quota Met!' : (max(0, 13 - $areebaTodayBk) . ' left today') }})
-                    @else
-                        <span class="{{ $areebaCard2Pass ? 'hl-emerald' : 'hl-rose' }}">{{ $areebaDailyAvg }} / 13 per day</span> across {{ $monthLabel }}
-                    @endif
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $areebaCard2Pass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(0, $areebaCard2BarPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100%</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- ZOYA CARD 1: MTD Booking Quota (01 – Current Day) --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="zoya">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $zoyaBkPass ? 'orb-emerald' : 'orb-rose' }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                            <line x1="16" y1="2" x2="16" y2="6"></line>
-                            <line x1="8" y1="2" x2="8" y2="6"></line>
-                            <path d="M9 14l2 2 4-4"></path>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-zoya" title="Open Agent Booking Targets">ZOYA &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label" title="{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}">MTD Booking Quota</div>
-                <div class="luxe-card-subnote">{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}</div>
-
-                <div class="luxe-card-hero">
-                    {{ $zoyaMtdBk }} <span class="luxe-unit">/ {{ $zoyaMtdTarget }}</span>
-                </div>
-
-                <div class="luxe-card-delta">
-                    <span class="{{ $zoyaBkPass ? 'hl-emerald' : 'hl-rose' }}">{{ number_format($zoyaMtdPct, 1) }}%</span> of MTD Target (13/day &times; {{ $daysElapsedVal }} days &bull; {{ $zoyaFullMoTarget }} Full Mo)
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $zoyaBkPass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(0, $zoyaMtdPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100%</span>
-                    </div>
-                </div>
-            </article>
-
-            {{-- ZOYA CARD 2: Today's Daily Booking Target / Historical Daily Avg Pace --}}
-            <article class="luxe-kpi-card is-hidden" data-owner="zoya">
-                <div class="luxe-card-top">
-                    <div class="luxe-icon-orb {{ $zoyaCard2Pass ? 'orb-emerald' : 'orb-rose' }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
-                        </svg>
-                    </div>
-                    <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-zoya" title="Open Agent Shift Logs">ZOYA &nearr;</a>
-                </div>
-
-                <div class="luxe-card-label" title="{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}">
-                    @if($isCurrentMonthView)
-                        Today's Daily Booking Target
-                    @else
-                        Daily Avg Pace
-                    @endif
-                </div>
-                <div class="luxe-card-subnote">{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}</div>
-
-                <div class="luxe-card-hero">
-                    {{ $isCurrentMonthView ? $zoyaTodayBk : $zoyaDailyAvg }} <span class="luxe-unit">/ 13</span>
-                </div>
-
-                <div class="luxe-card-delta">
-                    @if($isCurrentMonthView)
-                        <span class="{{ $zoyaCard2Pass ? 'hl-emerald' : 'hl-rose' }}">{{ number_format($zoyaTodayPct, 1) }}%</span> of Daily Quota ({{ $zoyaTodayBk >= 13 ? 'Daily Quota Met!' : (max(0, 13 - $zoyaTodayBk) . ' left today') }})
-                    @else
-                        <span class="{{ $zoyaCard2Pass ? 'hl-emerald' : 'hl-rose' }}">{{ $zoyaDailyAvg }} / 13 per day</span> across {{ $monthLabel }}
-                    @endif
-                </div>
-
-                <div class="luxe-card-viz viz-bar">
-                    <div class="luxe-bar-track">
-                        <div class="luxe-bar-fill {{ $zoyaCard2Pass ? 'fill-emerald' : 'fill-rose-gold' }}" style="width: {{ min(100, max(0, $zoyaCard2BarPct)) }}%"></div>
-                    </div>
-                    <div class="luxe-bar-scale">
-                        <span>0%</span>
-                        <span>100%</span>
-                    </div>
-                </div>
-            </article>
+            @foreach ($scorecardViewModels as $ownerVm)
+                @foreach ($ownerVm['cards'] as $card)
+                    @include('kpi.partials.kpi-card', [
+                        'card' => $card,
+                        'hiddenInitially' => true,
+                        'showLateReplyControls' => true,
+                        'isAdminUser' => $isAdminUser,
+                    ])
+                @endforeach
+            @endforeach
         </div>
     </div>
 
@@ -1854,9 +1278,9 @@
             font-size: 12px;
             color: var(--lx-muted);
             margin-bottom: 14px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            line-height: 1.45;
+            white-space: normal;
+            word-break: break-word;
         }
 
         .hl-emerald { color: var(--lx-emerald); font-weight: 700; }
@@ -1899,6 +1323,11 @@
         .fill-emerald {
             background: linear-gradient(90deg, #10b981, #34d399);
             box-shadow: 0 0 12px rgba(52, 211, 153, 0.45);
+        }
+
+        .fill-ruby {
+            background: linear-gradient(90deg, #e11d48, #fb7185);
+            box-shadow: 0 0 12px rgba(251, 113, 133, 0.45);
         }
 
         .luxe-bar-scale {
@@ -2066,55 +1495,16 @@
             const backToAllBtn = document.getElementById('backToAllStaffBtn');
 
             const staffMeta = {
-                ayan: {
-                    initials: 'AY',
-                    name: 'Ayan',
-                    role: 'Marketing & Ads Lead — 4 Executive KPIs',
-                    score: '{{ number_format($ayanOverallPct, 1) }}% Overall ({{ $ayanPassingCount }}/{{ $ayanTotalKpis }} Passing)',
-                    orbClass: '{{ $healthOrbClass($ayanOverallPct) }}'
+                @foreach ($scorecardViewModels as $ownerKey => $ownerVm)
+                '{{ $ownerKey }}': {
+                    initials: @json($ownerVm['initials']),
+                    name: @json($ownerVm['name']),
+                    role: @json($ownerVm['role_subtitle']),
+                    score: @json($ownerVm['overall_badge']),
+                    orbClass: @json($ownerVm['orb_class']),
+                    tagClass: @json($ownerVm['tag_class'])
                 },
-                laden: {
-                    initials: 'LA',
-                    name: 'Laden',
-                    role: 'Customer Service & Sales Lead — 4 Executive KPIs',
-                    score: '{{ number_format($ladenOverallPct, 1) }}% Overall ({{ $ladenPassingCount }}/{{ $ladenTotalKpis }} Passing)',
-                    orbClass: '{{ $healthOrbClass($ladenOverallPct) }}'
-                },
-                sana: {
-                    initials: 'SA',
-                    name: 'Sana',
-                    role: 'Organic Content & Social — 2 Executive KPIs',
-                    score: '{{ number_format($sanaOverallPct, 1) }}% Overall ({{ $sanaPassingCount }}/{{ $sanaTotalKpis }} Passing)',
-                    orbClass: '{{ $healthOrbClass($sanaOverallPct) }}'
-                },
-                ahana: {
-                    initials: 'AH',
-                    name: 'Ahana',
-                    role: 'Old Airport Branch Manager — 2 Executive KPIs',
-                    score: '{{ number_format($ahanaOverallPct, 1) }}% Overall ({{ $ahanaPassingCount }}/{{ $ahanaTotalKpis }} Passing)',
-                    orbClass: '{{ $healthOrbClass($ahanaOverallPct) }}'
-                },
-                rhea: {
-                    initials: 'RH',
-                    name: 'Rhea',
-                    role: 'Wakrah Branch Manager — 2 Executive KPIs',
-                    score: '{{ number_format($rheaOverallPct, 1) }}% Overall ({{ $rheaPassingCount }}/{{ $rheaTotalKpis }} Passing)',
-                    orbClass: '{{ $healthOrbClass($rheaOverallPct) }}'
-                },
-                areeba: {
-                    initials: 'AR',
-                    name: 'Areeba',
-                    role: 'Customer Service Chat Agent — 13 Bookings/Day Quota',
-                    score: '{{ number_format($areebaOverallPct, 1) }}% MTD Quota ({{ $areebaMtdBk }}/{{ $areebaMtdTarget }} Bookings)',
-                    orbClass: '{{ $healthOrbClass($areebaOverallPct) }}'
-                },
-                zoya: {
-                    initials: 'ZO',
-                    name: 'Zoya',
-                    role: 'Customer Service Chat Agent — 13 Bookings/Day Quota',
-                    score: '{{ number_format($zoyaOverallPct, 1) }}% MTD Quota ({{ $zoyaMtdBk }}/{{ $zoyaMtdTarget }} Bookings)',
-                    orbClass: '{{ $healthOrbClass($zoyaOverallPct) }}'
-                }
+                @endforeach
             };
 
             function applyOwnerView(owner) {
