@@ -249,10 +249,10 @@ class StaffPortalController extends Controller
             ->map(fn ($p) => mb_strtoupper(mb_substr($p, 0, 1)))
             ->implode('') ?: 'L';
 
-        // ---- Location & Shift Schedule ----
+        // ---- Location & Shift Schedule (7-day Saturday–Friday + compact summary) ----
         $branchInfo = $this->resolveBranchInfo($user, $staff);
         $activePattern = $staff?->activePatternFor($todayQatar);
-        $shiftSchedule = $this->buildWeeklyShiftSummary($staff, $activePattern);
+        $shiftSchedule = $this->buildWeeklyShiftSummary($staff, $activePattern, $todayQatar);
         $branchInfo['compact_subtitle'] = $this->buildCompactLocationSubtitle($branchInfo, $shiftSchedule);
 
         // ---- Dedicated Skills Tab (Salon Manager & Salon Staff ONLY) ----
@@ -562,7 +562,11 @@ class StaffPortalController extends Controller
             return [
                 'month_count' => 0,
                 'ytd_count' => 0,
+                'month_late_count' => 0,
+                'month_late_minutes' => 0,
+                'month_late_formatted' => '0 min',
                 'recent_dates' => [],
+                'recent_checkins' => [],
                 'month_label' => $nowQatar->format('M Y'),
                 'year_label' => (string) $nowQatar->year,
             ];
@@ -570,27 +574,84 @@ class StaffPortalController extends Controller
 
         $yearStart = $nowQatar->copy()->startOfYear()->toDateString();
         $monthStart = $nowQatar->copy()->startOfMonth()->toDateString();
+        $fourteenDaysAgo = $nowQatar->copy()->subDays(13)->toDateString();
+        $recentWindowStart = $fourteenDaysAgo < $monthStart ? $fourteenDaysAgo : $monthStart;
         $todayStr = $nowQatar->toDateString();
 
-        $ytdAbsences = StaffAttendance::query()
+        $ytdRecords = StaffAttendance::query()
             ->where('staff_id', $staff->id)
-            ->where('status', StaffAttendance::STATUS_ABSENT)
             ->whereDate('attendance_date', '>=', $yearStart)
             ->whereDate('attendance_date', '<=', $todayStr)
             ->orderByDesc('attendance_date')
-            ->get(['attendance_date', 'notes']);
+            ->orderByDesc('id')
+            ->get([
+                'id',
+                'attendance_date',
+                'status',
+                'scheduled_start_time',
+                'scheduled_end_time',
+                'checked_in_at',
+                'checked_out_at',
+                'late_minutes',
+                'is_locked',
+                'notes',
+            ]);
 
-        $monthCount = $ytdAbsences
+        $ytdAbsences = $ytdRecords
+            ->filter(fn (StaffAttendance $a) => $a->status === StaffAttendance::STATUS_ABSENT)
+            ->values();
+
+        $monthAbsences = $ytdAbsences
             ->filter(fn (StaffAttendance $a) => $a->attendance_date->toDateString() >= $monthStart)
             ->count();
 
+        $monthLates = $ytdRecords->filter(fn (StaffAttendance $a) => $a->status === StaffAttendance::STATUS_LATE
+            && $a->attendance_date->toDateString() >= $monthStart);
+
+        $monthLateCount = $monthLates->count();
+        $monthLateMinutes = (int) $monthLates->sum('late_minutes');
+
+        $recentCheckins = $ytdRecords
+            ->filter(fn (StaffAttendance $a) => $a->attendance_date->toDateString() >= $recentWindowStart)
+            ->take(20)
+            ->map(function (StaffAttendance $a) use ($staff) {
+                $badge = $a->statusBadgePayload();
+                $shiftLabel = $a->scheduledShiftLabel();
+                if ($shiftLabel === null) {
+                    if ($a->status === StaffAttendance::STATUS_OFF) {
+                        $shiftLabel = 'Off Day';
+                    } else {
+                        $resolved = $staff->resolveShiftForDate($a->attendance_date);
+                        $shiftLabel = $resolved['type'] === 'unscheduled' ? '—' : $resolved['display'];
+                    }
+                }
+
+                return [
+                    'date_label' => $a->attendance_date->format('D, d M Y'),
+                    'shift_label' => $shiftLabel,
+                    'checkin_label' => $a->checkedInQatarLabel() ?? '—',
+                    'checkout_label' => $a->checkedOutQatarLabel(),
+                    'status' => $a->status,
+                    'status_label' => $badge['label'],
+                    'status_tone' => $badge['tone'],
+                    'late_minutes' => (int) ($a->late_minutes ?? 0),
+                    'notes' => $a->notes,
+                ];
+            })
+            ->values()
+            ->all();
+
         return [
-            'month_count' => $monthCount,
+            'month_count' => $monthAbsences,
             'ytd_count' => $ytdAbsences->count(),
+            'month_late_count' => $monthLateCount,
+            'month_late_minutes' => $monthLateMinutes,
+            'month_late_formatted' => StaffAttendance::formatTotalLateMinutes($monthLateMinutes),
             'recent_dates' => $ytdAbsences->take(6)->map(fn (StaffAttendance $a) => [
                 'date_label' => $a->attendance_date->format('D, d M Y'),
                 'notes' => $a->notes,
             ])->values()->all(),
+            'recent_checkins' => $recentCheckins,
             'month_label' => $nowQatar->format('M Y'),
             'year_label' => (string) $nowQatar->year,
         ];
@@ -1054,12 +1115,24 @@ class StaffPortalController extends Controller
         ];
     }
 
-    private function buildWeeklyShiftSummary(?Staff $staff, ?ShiftPattern $activePattern): array
+    private function buildWeeklyShiftSummary(?Staff $staff, ?ShiftPattern $activePattern, ?Carbon $todayQatar = null): array
     {
+        $todayDow = (int) (($todayQatar ?? Carbon::now('Asia/Qatar'))->dayOfWeek);
+        // Exact 7-day Laleen salon week order: Saturday -> Sunday -> Monday -> Tuesday -> Wednesday -> Thursday -> Friday
+        $satToFriOrder = [6, 0, 1, 2, 3, 4, 5];
+
         if (!$staff) {
             return [
                 'has_schedule' => false,
                 'rows' => [],
+                'days' => array_map(fn (int $dow) => [
+                    'dow' => $dow,
+                    'day_name' => self::DAY_NAMES[$dow],
+                    'is_today' => $dow === $todayDow,
+                    'is_off' => false,
+                    'is_unscheduled' => true,
+                    'hours' => null,
+                ], $satToFriOrder),
                 'weekly_hours' => 0.0,
             ];
         }
@@ -1110,28 +1183,80 @@ class StaffPortalController extends Controller
                 $dow++;
             }
 
+            $days = array_map(fn (int $d) => [
+                'dow' => $d,
+                'day_name' => self::DAY_NAMES[$d],
+                'is_today' => $d === $todayDow,
+                'is_off' => $dayEntries[$d] === null,
+                'is_unscheduled' => false,
+                'hours' => $dayEntries[$d],
+            ], $satToFriOrder);
+
             return [
                 'has_schedule' => !empty($groupedRows),
                 'rows' => $groupedRows,
+                'days' => $days,
                 'weekly_hours' => round($weeklyMinutes / 60, 1),
             ];
         }
 
+        $legacyOffNames = collect(is_array($staff->weekly_off) ? $staff->weekly_off : [])
+            ->filter(fn ($d) => is_string($d) && trim($d) !== '')
+            ->map(fn ($d) => strtolower(trim($d)))
+            ->all();
+
         $wh = is_array($staff->working_hours) ? $staff->working_hours : [];
-        if (!empty($wh['start']) && !empty($wh['end'])) {
+        $hasLegacyHours = !empty($wh['start']) && !empty($wh['end']);
+        $legacyRange = $hasLegacyHours
+            ? $this->formatTimeRange((string) $wh['start'], (string) $wh['end'])
+            : null;
+        $legacyWeeklyMinutes = 0;
+
+        if ($hasLegacyHours) {
+            try {
+                $sNorm = strlen(trim((string) $wh['start'])) === 5 ? trim((string) $wh['start']) . ':00' : trim((string) $wh['start']);
+                $eNorm = strlen(trim((string) $wh['end'])) === 5 ? trim((string) $wh['end']) . ':00' : trim((string) $wh['end']);
+                $perDayMins = abs(Carbon::createFromFormat('H:i:s', $eNorm)->diffInMinutes(Carbon::createFromFormat('H:i:s', $sNorm)));
+            } catch (\Throwable) {
+                $perDayMins = 0;
+            }
+        } else {
+            $perDayMins = 0;
+        }
+
+        $days = [];
+        foreach ($satToFriOrder as $d) {
+            $dayName = self::DAY_NAMES[$d];
+            $isOff = in_array(strtolower($dayName), $legacyOffNames, true);
+            if (!$isOff && $hasLegacyHours) {
+                $legacyWeeklyMinutes += $perDayMins;
+            }
+            $days[] = [
+                'dow' => $d,
+                'day_name' => $dayName,
+                'is_today' => $d === $todayDow,
+                'is_off' => $isOff,
+                'is_unscheduled' => !$isOff && !$hasLegacyHours,
+                'hours' => (!$isOff && $hasLegacyHours) ? $legacyRange : null,
+            ];
+        }
+
+        if ($hasLegacyHours) {
             return [
                 'has_schedule' => true,
                 'rows' => [[
                     'days' => 'Standard Shift',
-                    'hours' => $this->formatTimeRange((string) $wh['start'], (string) $wh['end']),
+                    'hours' => $legacyRange,
                 ]],
-                'weekly_hours' => 0.0,
+                'days' => $days,
+                'weekly_hours' => round($legacyWeeklyMinutes / 60, 1),
             ];
         }
 
         return [
             'has_schedule' => false,
             'rows' => [],
+            'days' => $days,
             'weekly_hours' => 0.0,
         ];
     }

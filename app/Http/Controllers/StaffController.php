@@ -558,14 +558,23 @@ class StaffController extends Controller
         $canManageManualDeductions = StaffDeductionController::canManage($request->user());
 
         // ---- Attendance Log & Leave Requests Queue (scoped cleanly to keep /staffs?tab=payroll query budget low) ----
+        $nowQatar = Carbon::now('Asia/Qatar');
         $attDateParam = (string) $request->input('att_date', $todayQatar);
         try {
             $attendanceDate = Carbon::parse($attDateParam, 'Asia/Qatar')->toDateString();
         } catch (\Throwable) {
             $attendanceDate = $todayQatar;
         }
-        $rawAttBranch = strtolower(trim((string) $request->input('att_branch', '')));
-        $attendanceBranch = in_array($rawAttBranch, ['old_airport', 'wakrah', 'remote'], true) ? $rawAttBranch : '';
+        $isAttendanceToday = $attendanceDate === $todayQatar;
+
+        // Branch auto-scoping for Salon Managers (Ahana -> Old Airport, Rhea -> Al Wakrah)
+        $attendanceScopedBranch = $request->user()?->managedSalonBranch();
+        if ($attendanceScopedBranch !== null) {
+            $attendanceBranch = $attendanceScopedBranch;
+        } else {
+            $rawAttBranch = strtolower(trim((string) $request->input('att_branch', '')));
+            $attendanceBranch = in_array($rawAttBranch, ['old_airport', 'wakrah', 'remote'], true) ? $rawAttBranch : '';
+        }
 
         $attendanceStaffMembers = $attendanceBranch !== ''
             ? $allStaff->filter(function (Staff $s) use ($attendanceBranch) {
@@ -578,6 +587,7 @@ class StaffController extends Controller
             : $allStaff;
 
         $attendanceMap = collect();
+        $attendanceShiftsByStaffId = [];
         $pendingLeavesCount = 0;
         $staffLeaves = collect();
         $leaveConflictsById = [];
@@ -636,8 +646,24 @@ class StaffController extends Controller
                 $attendanceMap = StaffAttendance::whereDate('attendance_date', $attendanceDate)
                     ->get()
                     ->keyBy('staff_id');
+
+                $approvedLeavesForDate = Schema::hasTable('staff_leaves')
+                    ? StaffLeave::query()
+                        ->approved()
+                        ->coveringDate($attendanceDate)
+                        ->get()
+                        ->groupBy('staff_id')
+                    : collect();
+
+                foreach ($attendanceStaffMembers as $attMember) {
+                    $memberLeaves = $approvedLeavesForDate->get($attMember->id, collect());
+                    $attendanceShiftsByStaffId[$attMember->id] = $attMember->resolveShiftForDate($attendanceDate, $memberLeaves);
+                }
             }
         }
+
+        $qatarServerEpochMs = $nowQatar->getTimestampMs();
+        $qatarClockInitialLabel = $nowQatar->format('g:i A · D, d M Y');
 
         return view('staff.index', compact(
             'staff', 'services', 'categories', 'activeTab',
@@ -647,7 +673,9 @@ class StaffController extends Controller
             'staffWorkspaceOptions', 'selectedWorkspaceStaffId',
             'payrollBranch', 'payrollFrom', 'payrollTo', 'payrollRows',
             'shiftWeekStart', 'shiftWeekEnd', 'shiftDays', 'shiftRoster', 'shiftDayTotals', 'shiftConfigs', 'shiftBranch',
-            'attendanceDate', 'attendanceBranch', 'attendanceStaffMembers', 'attendanceMap',
+            'attendanceDate', 'attendanceBranch', 'attendanceScopedBranch', 'isAttendanceToday',
+            'attendanceStaffMembers', 'attendanceMap', 'attendanceShiftsByStaffId',
+            'qatarServerEpochMs', 'qatarClockInitialLabel',
             'pendingLeavesCount', 'staffLeaves', 'leaveConflictsById', 'leaveDeductionSuggestionsById', 'leaveEligibleStaff',
             'opsItems', 'opsOpenCount', 'opsCompletedCount', 'opsTotalCount', 'opsCompletionRate',
             'opsMyOpenCount', 'opsStatus', 'opsMine', 'opsSelectedStaffId', 'opsSelectedStaffName',

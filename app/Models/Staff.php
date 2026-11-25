@@ -283,6 +283,171 @@ class Staff extends Model
             ->first();
     }
 
+    /**
+     * Format a 24h time string (`10:00` or `10:00:00`) cleanly as `10:00 AM`.
+     */
+    public static function formatClockTime(string $time): string
+    {
+        $norm = strlen(trim($time)) === 5 ? trim($time) . ':00' : trim($time);
+        try {
+            return Carbon::createFromFormat('H:i:s', $norm)->format('g:i A');
+        } catch (\Throwable) {
+            return trim($time);
+        }
+    }
+
+    public static function formatClockRange(string $start, string $end): string
+    {
+        return self::formatClockTime($start) . ' – ' . self::formatClockTime($end);
+    }
+
+    /**
+     * Single source of truth for resolving a staff member's scheduled shift, weekly off day,
+     * or approved leave/time-off on any given date in `Asia/Qatar`.
+     *
+     * @param  \Illuminate\Support\Collection<int, StaffLeave>|null  $preloadedApprovedLeaves
+     * @return array{
+     *     type: 'shift'|'off'|'on_leave'|'unscheduled',
+     *     label: string,
+     *     display: string,
+     *     start_time: ?string,
+     *     end_time: ?string,
+     *     reason: ?string
+     * }
+     */
+    public function resolveShiftForDate(Carbon|string $date, ?\Illuminate\Support\Collection $preloadedApprovedLeaves = null): array
+    {
+        $target = $date instanceof Carbon
+            ? $date->copy()->timezone('Asia/Qatar')->startOfDay()
+            : Carbon::parse($date, 'Asia/Qatar')->startOfDay();
+        $dow = (int) $target->dayOfWeek;
+
+        // 1. Approved StaffLeave takes precedence
+        $approvedLeave = null;
+        if ($preloadedApprovedLeaves !== null) {
+            $approvedLeave = $preloadedApprovedLeaves->first(fn (StaffLeave $l) => $l->coversDate($target));
+        } elseif (\Illuminate\Support\Facades\Schema::hasTable('staff_leaves')) {
+            $approvedLeave = StaffLeave::query()
+                ->where('staff_id', $this->id)
+                ->approved()
+                ->coveringDate($target)
+                ->first();
+        }
+        if ($approvedLeave) {
+            $lbl = $approvedLeave->leave_type === StaffLeave::TYPE_SICK ? 'Sick Leave' : 'On Leave';
+
+            return [
+                'type' => 'on_leave',
+                'label' => $lbl,
+                'display' => $lbl,
+                'start_time' => null,
+                'end_time' => null,
+                'reason' => $approvedLeave->leave_type,
+            ];
+        }
+
+        // 2. StaffTimeOff entries
+        $timeOffs = $this->relationLoaded('timeOffs') ? $this->timeOffs : $this->timeOffs()->get();
+        $timeOff = $timeOffs->first(fn ($t) => $t->coversDate($target));
+        if ($timeOff) {
+            $lbl = strtolower((string) $timeOff->reason) === 'sick' ? 'Sick Leave' : 'On Leave';
+
+            return [
+                'type' => 'on_leave',
+                'label' => $lbl,
+                'display' => $lbl,
+                'start_time' => null,
+                'end_time' => null,
+                'reason' => (string) $timeOff->reason,
+            ];
+        }
+
+        // 3. Active ShiftPattern blocks for this weekday (0=Sun .. 6=Sat)
+        if (!$this->relationLoaded('shiftPatterns')) {
+            $this->load('shiftPatterns.blocks');
+        }
+        $pattern = $this->activePatternFor($target);
+        if ($pattern && $pattern->blocks->isNotEmpty()) {
+            $blocks = $pattern->blocks
+                ->where('day_of_week', $dow)
+                ->sortBy('start_time')
+                ->values();
+
+            if ($blocks->isEmpty()) {
+                return [
+                    'type' => 'off',
+                    'label' => 'Off Day',
+                    'display' => 'Off Day',
+                    'start_time' => null,
+                    'end_time' => null,
+                    'reason' => null,
+                ];
+            }
+
+            $normalize = static function (string $t): string {
+                $clean = trim($t);
+
+                return strlen($clean) === 5 ? $clean . ':00' : $clean;
+            };
+            $firstStart = $normalize((string) $blocks->first()->start_time);
+            $lastEnd = $normalize((string) $blocks->last()->end_time);
+            $display = $blocks->map(fn ($b) => self::formatClockRange((string) $b->start_time, (string) $b->end_time))
+                ->implode(' · ');
+
+            return [
+                'type' => 'shift',
+                'label' => $display,
+                'display' => $display,
+                'start_time' => $firstStart,
+                'end_time' => $lastEnd,
+                'reason' => null,
+            ];
+        }
+
+        // 4. Legacy weekly_off + working_hours fallback
+        $legacyOff = is_array($this->weekly_off) ? $this->weekly_off : [];
+        $todayNameLower = strtolower($target->format('l'));
+        $isLegacyOff = collect($legacyOff)
+            ->filter(fn ($d) => is_string($d) && trim($d) !== '')
+            ->contains(fn ($d) => strtolower(trim($d)) === $todayNameLower);
+
+        if ($isLegacyOff) {
+            return [
+                'type' => 'off',
+                'label' => 'Off Day',
+                'display' => 'Off Day',
+                'start_time' => null,
+                'end_time' => null,
+                'reason' => null,
+            ];
+        }
+
+        $wh = is_array($this->working_hours) ? $this->working_hours : [];
+        if (!empty($wh['start']) && !empty($wh['end'])) {
+            $startNorm = strlen(trim((string) $wh['start'])) === 5 ? trim((string) $wh['start']) . ':00' : trim((string) $wh['start']);
+            $endNorm = strlen(trim((string) $wh['end'])) === 5 ? trim((string) $wh['end']) . ':00' : trim((string) $wh['end']);
+            $display = self::formatClockRange($startNorm, $endNorm);
+
+            return [
+                'type' => 'shift',
+                'label' => $display,
+                'display' => $display,
+                'start_time' => $startNorm,
+                'end_time' => $endNorm,
+                'reason' => null,
+            ];
+        }
+
+        return [
+            'type' => 'unscheduled',
+            'label' => 'No shift set',
+            'display' => 'No shift set',
+            'start_time' => null,
+            'end_time' => null,
+            'reason' => null,
+        ];
+    }
+
     public function overtimeEntries()
     {
         return $this->hasMany(StaffOvertimeEntry::class);

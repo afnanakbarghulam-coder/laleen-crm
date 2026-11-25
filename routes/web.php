@@ -274,10 +274,16 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
             Route::get('/staff-leaves/{leave}/conflicts', [StaffLeaveController::class, 'conflicts'])->whereNumber('leave')->name('staff-leaves.conflicts');
             Route::post('/staff-leaves/manual', [StaffLeaveController::class, 'storeAdminManual'])->name('staff-leaves.manual.store');
             Route::patch('/staff-leaves/{leave}/review', [StaffLeaveController::class, 'review'])->whereNumber('leave')->name('staff-leaves.review');
+
+            // Admin-only attendance override & reset controls (anti-tamper lock enforcement)
+            Route::patch('/staff-attendance/{attendance}/admin-override', [StaffAttendanceController::class, 'adminOverride'])->whereNumber('attendance')->name('staff-attendance.admin-override');
+            Route::delete('/staff-attendance/{attendance}/reset', [StaffAttendanceController::class, 'adminReset'])->whereNumber('attendance')->name('staff-attendance.admin-reset');
         });
 
-        // ---- Attendance Log (Supports Old Airport, Al Wakrah & Remote Staff) ----
+        // ---- Attendance Log & Tamper-Proof Salon Check-In Terminal ----
         Route::post('/staff-attendance', [StaffAttendanceController::class, 'store'])->name('staff-attendance.store');
+        Route::post('/staff-attendance/check-in', [StaffAttendanceController::class, 'checkIn'])->name('staff-attendance.check-in');
+        Route::post('/staff-attendance/check-out', [StaffAttendanceController::class, 'checkOut'])->name('staff-attendance.check-out');
 
         // ---- Native Staff Contracts Engine (Admin Only) ----
         Route::post('/staff-contracts', [StaffContractController::class, 'store'])->name('staff-contracts.store');

@@ -353,6 +353,26 @@
     .mp-list-row:first-child { padding-top: 2px; }
     .mp-list-row:last-child { border-bottom: none; padding-bottom: 0; }
 
+    /* Clean 7-Day Weekly Shift Schedule Rows (Saturday -> Friday) */
+    .mp-sched-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 9px 10px;
+        margin: 0 -10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        font-size: 13px;
+        border-radius: 10px;
+    }
+    .mp-sched-row:last-child { border-bottom: none; }
+    .mp-sched-row.is-today {
+        background: rgba(217, 143, 131, 0.10);
+        border: 1px solid rgba(217, 143, 131, 0.24);
+        margin-top: 2px;
+        margin-bottom: 2px;
+    }
+
     /* Tables */
     .mp-table {
         width: 100%;
@@ -639,21 +659,38 @@
                 </div>
             </div>
 
-            {{-- 3. Absentees --}}
+            {{-- 3. Attendance (Absentees + MTD Late Check-Ins & Minutes) --}}
+            @php
+                $attMonthAbs = (int) ($absenteesPayload['month_count'] ?? 0);
+                $attYtdAbs = (int) ($absenteesPayload['ytd_count'] ?? 0);
+                $attLateCount = (int) ($absenteesPayload['month_late_count'] ?? 0);
+                $attLateMins = (int) ($absenteesPayload['month_late_minutes'] ?? 0);
+                $attLateFmt = (string) ($absenteesPayload['month_late_formatted'] ?? '0 min');
+            @endphp
             <div class="col-6 col-lg-3">
                 <div class="mp-stat-card">
                     <div class="mp-stat-head">
                         <div class="mp-stat-label-wrap">
-                            <span class="mp-stat-icon"><i class="bx bx-user-x"></i></span>
-                            <span class="mp-stat-label">Absentees</span>
+                            <span class="mp-stat-icon"><i class="bx bx-time-five"></i></span>
+                            <span class="mp-stat-label">Attendance</span>
                         </div>
+                        <span class="small mp-num" style="color:#9e8780;">{{ $absenteesPayload['month_label'] }}</span>
                     </div>
                     <div>
-                        <div class="mp-stat-value" style="color:{{ $absenteesPayload['month_count'] > 0 ? '#fda4af' : '#6ee7b7' }};">
-                            {{ $absenteesPayload['month_count'] }}
+                        <div class="mp-stat-value d-flex align-items-baseline gap-2" style="font-size:21px;">
+                            <span style="color:{{ $attMonthAbs > 0 ? '#fda4af' : '#6ee7b7' }};">{{ $attMonthAbs }}</span>
+                            <span style="font-size:12.5px; font-weight:500; color:#a8938b;">
+                                Absentees &middot; YTD {{ $attYtdAbs }}
+                            </span>
                         </div>
                         <div class="mp-stat-sub mp-num">
-                            {{ $absenteesPayload['month_label'] }} &middot; YTD: {{ $absenteesPayload['ytd_count'] }}
+                            @if ($attLateCount > 0)
+                                <span style="color:{{ $attLateMins >= 30 ? '#fda4af' : '#fbbf24' }}; font-weight:600;">
+                                    {{ $attLateCount }} Late &middot; {{ $attLateFmt }}
+                                </span>
+                            @else
+                                <span style="color:#6ee7b7; font-weight:600;">0 Late &middot; On time</span>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -682,60 +719,49 @@
 
         {{-- Row 2: Balanced Equal 6 / 6 Details Grid --}}
         <div class="row g-3 align-items-stretch">
-            {{-- Left Card (6 cols): Off Days & Attendance --}}
+            {{-- Left Card (6 cols): Redesigned 7-Day Weekly Shift Schedule (Saturday – Friday) --}}
             <div class="col-12 col-lg-6">
                 <div class="mp-card h-100">
                     <div class="mp-section-header">
                         <h2 class="mp-section-title">
-                            <span class="mp-icon-badge"><i class="bx bx-calendar-x"></i></span>
-                            <span>Off Days &amp; Attendance</span>
+                            <span class="mp-icon-badge"><i class="bx bx-calendar-week"></i></span>
+                            <span>Weekly Shift Schedule</span>
                         </h2>
-                        <span class="small" style="color:#9e8780;">Qatar Time &middot; {{ $todayQatarLabel }}</span>
-                    </div>
-
-                    {{-- Weekly Fixed Off Days --}}
-                    <div>
-                        <div class="mp-sub-heading">Weekly Fixed Off Day(s)</div>
-                        @if (!empty($offDaysPayload['weekly_off_days']))
-                            <div class="mp-skill-grid">
-                                @foreach ($offDaysPayload['weekly_off_days'] as $dayName)
-                                    <span class="mp-pill mp-pill-role">{{ $dayName }}</span>
-                                @endforeach
-                                @foreach (array_slice($offDaysPayload['upcoming_weekly_dates'], 0, 4) as $uDate)
-                                    <span class="mp-skill-chip mp-num">
-                                        {{ $uDate['label'] }}
-                                        @if ($uDate['is_today'])
-                                            <span class="mp-skill-meta">(Today)</span>
-                                        @endif
-                                    </span>
-                                @endforeach
-                            </div>
+                        @if (($shiftSchedule['weekly_hours'] ?? 0) > 0)
+                            <span class="mp-pill mp-pill-role mp-num">{{ $shiftSchedule['weekly_hours'] }}h / wk</span>
                         @else
-                            <div class="small" style="color:#9e8780;">No fixed weekly off day set.</div>
+                            <span class="small" style="color:#9e8780;">Qatar Time &middot; {{ $todayQatarLabel }}</span>
                         @endif
                     </div>
 
-                    {{-- Published Shift Hours (only if schedule exists) --}}
-                    @if ($shiftSchedule['has_schedule'])
-                        <div class="mp-zone">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div class="mp-sub-heading mb-0">Working Shift Hours</div>
-                                @if ($shiftSchedule['weekly_hours'] > 0)
-                                    <span class="small mp-num" style="color:#e5b8a8; font-weight:600;">{{ $shiftSchedule['weekly_hours'] }}h / wk</span>
-                                @endif
-                            </div>
-                            @foreach ($shiftSchedule['rows'] as $row)
-                                <div class="mp-list-row">
-                                    <span style="font-weight:600; color:#e5b8a8;">{{ $row['days'] }}</span>
-                                    <span class="mp-num" style="color:#f8efe6;">{{ $row['hours'] }}</span>
+                    {{-- All 7 Days Individually: Saturday through Friday --}}
+                    <div>
+                        @foreach (($shiftSchedule['days'] ?? []) as $dayRow)
+                            <div class="mp-sched-row {{ $dayRow['is_today'] ? 'is-today' : '' }}">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span style="font-weight:{{ $dayRow['is_today'] ? '700' : '500' }}; color:{{ $dayRow['is_today'] ? '#f8efe6' : '#d6c3bc' }};">
+                                        {{ $dayRow['day_name'] }}
+                                    </span>
+                                    @if ($dayRow['is_today'])
+                                        <span class="mp-pill mp-pill-role" style="font-size:10px; padding:1.5px 7px;">Today</span>
+                                    @endif
                                 </div>
-                            @endforeach
-                        </div>
-                    @endif
+                                <div>
+                                    @if ($dayRow['is_off'])
+                                        <span class="mp-pill mp-pill-amber">Off Day</span>
+                                    @elseif (!empty($dayRow['hours']))
+                                        <span class="mp-num fw-medium" style="color:#f8efe6;">{{ $dayRow['hours'] }}</span>
+                                    @else
+                                        <span class="small" style="color:#8f7a73;">Not set</span>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
 
-                    {{-- Scheduled Time Off & Approved Leaves (Next 30 Days) --}}
+                    {{-- Upcoming Approved Leaves / Time Off Footer (Next 30 Days) --}}
                     <div class="mp-zone">
-                        <div class="mp-sub-heading">Scheduled Time Off &amp; Approved Leaves (Next 30 Days)</div>
+                        <div class="mp-sub-heading">Upcoming Approved Leaves / Time Off</div>
                         @if (!empty($offDaysPayload['scheduled_time_offs']))
                             @foreach ($offDaysPayload['scheduled_time_offs'] as $to)
                                 <div class="mp-list-row">
@@ -754,24 +780,7 @@
                                 </div>
                             @endforeach
                         @else
-                            <div class="small" style="color:#9e8780;">No scheduled time off in the next 30 days.</div>
-                        @endif
-                    </div>
-
-                    {{-- Recent Absent Dates --}}
-                    <div class="mp-zone">
-                        <div class="mp-sub-heading">Recent Absent Dates ({{ $absenteesPayload['year_label'] }})</div>
-                        @if (!empty($absenteesPayload['recent_dates']))
-                            @foreach ($absenteesPayload['recent_dates'] as $ab)
-                                <div class="mp-list-row">
-                                    <span class="fw-semibold mp-num" style="color:#fda4af;">{{ $ab['date_label'] }}</span>
-                                    @if ($ab['notes'])
-                                        <span class="small" style="color:#a8938b;">{{ $ab['notes'] }}</span>
-                                    @endif
-                                </div>
-                            @endforeach
-                        @else
-                            <div class="small" style="color:#9e8780;">No absences recorded in {{ $absenteesPayload['year_label'] }}.</div>
+                            <div class="small" style="color:#8f7a73;">No upcoming approved leaves or time off in the next 30 days.</div>
                         @endif
                     </div>
                 </div>
@@ -813,6 +822,66 @@
                     @endif
                 </div>
             </div>
+        </div>
+
+        {{-- Row 3: Recent Check-Ins & Attendance (Last 14 Days / Current Month) --}}
+        <div class="mp-card mt-3">
+            <div class="mp-section-header">
+                <h2 class="mp-section-title">
+                    <span class="mp-icon-badge"><i class="bx bx-check-shield"></i></span>
+                    <span>Recent Check-Ins &amp; Attendance</span>
+                </h2>
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    @if ($attLateCount > 0)
+                        <span class="mp-pill mp-num {{ $attLateMins >= 30 ? 'mp-pill-danger' : 'mp-pill-amber' }}">
+                            {{ $attLateCount }} Late &middot; {{ $attLateFmt }} ({{ $absenteesPayload['month_label'] }})
+                        </span>
+                    @else
+                        <span class="mp-pill mp-pill-emerald mp-num">0 Late &middot; On time</span>
+                    @endif
+                </div>
+            </div>
+
+            @if (!empty($absenteesPayload['recent_checkins']))
+                <div class="table-responsive">
+                    <table class="mp-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Shift</th>
+                                <th>Check-In</th>
+                                <th class="text-end">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($absenteesPayload['recent_checkins'] as $ci)
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold mp-num" style="color:#f8efe6;">{{ $ci['date_label'] }}</div>
+                                        @if (!empty($ci['notes']))
+                                            <div class="small" style="color:#9e8780;">{{ $ci['notes'] }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="text-nowrap mp-num" style="color:#cbb8b0;">{{ $ci['shift_label'] }}</td>
+                                    <td class="text-nowrap mp-num">
+                                        <span style="color:#f8efe6;">{{ $ci['checkin_label'] }}</span>
+                                        @if (!empty($ci['checkout_label']))
+                                            <span class="small ms-1" style="color:#9e8780;">&middot; Out {{ $ci['checkout_label'] }}</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <span class="mp-pill mp-pill-{{ $ci['status_tone'] }} mp-num">{{ $ci['status_label'] }}</span>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <div class="py-3 text-center small" style="color:#9e8780;">
+                    No check-ins or attendance entries recorded in the last 14 days.
+                </div>
+            @endif
         </div>
 
     {{-- ===================================================================== --}}

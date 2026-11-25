@@ -722,6 +722,7 @@
         background: rgba(253, 164, 175, 0.1);
     }
 
+    .sa-modal .modal-content,
     #addDeductionModal .modal-content,
     #createPortalLoginModal .modal-content,
     #resetPortalPasswordModal .modal-content {
@@ -734,6 +735,7 @@
         color: #f8efe6;
     }
 
+    .sa-modal .modal-header,
     #addDeductionModal .modal-header,
     #createPortalLoginModal .modal-header,
     #resetPortalPasswordModal .modal-header {
@@ -741,12 +743,14 @@
         padding: 16px 20px 14px;
     }
 
+    .sa-modal .modal-body,
     #addDeductionModal .modal-body,
     #createPortalLoginModal .modal-body,
     #resetPortalPasswordModal .modal-body {
         padding: 18px 20px;
     }
 
+    .sa-modal .modal-footer,
     #addDeductionModal .modal-footer,
     #createPortalLoginModal .modal-footer,
     #resetPortalPasswordModal .modal-footer {
@@ -754,6 +758,7 @@
         padding: 12px 20px 16px;
     }
 
+    .sa-modal .form-label,
     #addDeductionModal .form-label,
     #createPortalLoginModal .form-label,
     #resetPortalPasswordModal .form-label {
@@ -761,6 +766,26 @@
         font-weight: 600;
         color: #d6c3bc;
         margin-bottom: 5px;
+    }
+
+    .sa-modal .form-control,
+    .sa-modal .form-select {
+        background-color: #130d0f !important;
+        border: 1px solid rgba(229, 184, 168, 0.22) !important;
+        color: #f8efe6 !important;
+        border-radius: 10px;
+        color-scheme: dark;
+    }
+
+    .sa-modal .form-select {
+        padding-right: 2.25rem !important;
+        white-space: nowrap;
+    }
+
+    .sa-modal .form-control:focus,
+    .sa-modal .form-select:focus {
+        border-color: #d98f83 !important;
+        box-shadow: 0 0 0 2px rgba(217, 143, 131, 0.18) !important;
     }
 
     #addDeductionModal .form-control,
@@ -1022,6 +1047,83 @@
 </style>
 
 @section('content')
+    <style>
+        /* Guaranteed post-theme opaque dark espresso modal styling for Staff Management modals */
+        .sa-modal.show {
+            opacity: 1 !important;
+        }
+        .sa-modal .modal-content {
+            background: #1b1315 !important;
+            background-color: #1b1315 !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            opacity: 1 !important;
+            border: 1px solid rgba(229, 184, 168, 0.24) !important;
+            border-radius: 16px !important;
+            box-shadow: 0 28px 70px rgba(0, 0, 0, 0.82) !important;
+            color: #f8efe6 !important;
+        }
+        .sa-modal .modal-header {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+            padding: 16px 20px 14px !important;
+            align-items: flex-start !important;
+        }
+        .sa-modal .modal-header .btn-close {
+            position: static !important;
+            transform: none !important;
+            margin: 2px 0 0 auto !important;
+            background-color: transparent !important;
+            box-shadow: none !important;
+            opacity: 0.72 !important;
+        }
+        .sa-modal .modal-header .btn-close:hover {
+            opacity: 1 !important;
+        }
+        .sa-modal .modal-body {
+            padding: 18px 20px !important;
+        }
+        .sa-modal .modal-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
+            padding: 12px 20px 16px !important;
+        }
+        .sa-modal .form-label {
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            color: #d6c3bc !important;
+            margin-bottom: 5px !important;
+        }
+        .sa-modal .form-control,
+        .sa-modal .form-select {
+            background: #130d0f !important;
+            background-color: #130d0f !important;
+            border: 1px solid rgba(229, 184, 168, 0.24) !important;
+            color: #f8efe6 !important;
+            border-radius: 10px !important;
+            color-scheme: dark;
+        }
+        .sa-modal .form-select {
+            -webkit-appearance: none !important;
+            -moz-appearance: none !important;
+            appearance: none !important;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23e5b8a8' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+            background-repeat: no-repeat !important;
+            background-position: right 0.85rem center !important;
+            background-size: 12px 10px !important;
+            padding: 0.5rem 2.25rem 0.5rem 0.85rem !important;
+            line-height: 1.45 !important;
+        }
+        .sa-modal .form-select option {
+            background-color: #130d0f !important;
+            color: #f8efe6 !important;
+        }
+        .sa-modal .form-control:focus,
+        .sa-modal .form-select:focus {
+            background: #130d0f !important;
+            border-color: #d98f83 !important;
+            box-shadow: 0 0 0 2px rgba(217, 143, 131, 0.22) !important;
+        }
+    </style>
+
     @php
         $currentDirSub = $directorySubView ?? 'directory';
         $currentPayrollSub = $payrollSubView ?? 'contracts';

@@ -7,6 +7,7 @@
     $conflictsMap = $leaveConflictsById ?? [];
     $deductionSuggestionsMap = $leaveDeductionSuggestionsById ?? [];
     $eligibleStaffList = $leaveEligibleStaff ?? collect();
+    $leavesReloadUrl = route('staffs.index', ['tab' => 'leaves']);
 
     $badgeStyleFor = static function (string $tone): string {
         return match ($tone) {
@@ -374,7 +375,7 @@
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
-                window.location.href = '{{ route('staffs.index', ['tab' => 'leaves']) }}';
+                window.location.href = @json($leavesReloadUrl);
                 return { ok: true, data };
             }
             const errMsg = data.message || 'Could not update leave request.';

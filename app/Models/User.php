@@ -405,6 +405,37 @@ class User extends Authenticatable
         return strtolower(trim((string) $this->role)) === 'salon_manager';
     }
 
+    /**
+     * Resolve the physical salon branch ('old_airport' or 'wakrah') when this account is a
+     * branch-scoped Salon Manager. Returns null for Admins and non-branch HQ roles.
+     */
+    public function managedSalonBranch(): ?string
+    {
+        if ($this->isAdmin()) {
+            return null;
+        }
+
+        $roleSlug = strtolower(trim((string) $this->role));
+        if (!in_array($roleSlug, ['salon_manager', 'manager'], true)) {
+            return null;
+        }
+
+        $linkedStaff = $this->relationLoaded('staff') ? $this->staff : $this->staff()->first();
+        if ($linkedStaff && !$linkedStaff->isRemote()) {
+            $rawBranch = strtolower(trim((string) $linkedStaff->branch));
+            if (in_array($rawBranch, ['old_airport', 'wakrah'], true)) {
+                return $rawBranch;
+            }
+            if ($rawBranch === 'al_wakrah') {
+                return 'wakrah';
+            }
+        }
+
+        $fallback = KpiStaffEvaluation::defaultBranchFor($this);
+
+        return in_array($fallback, ['old_airport', 'wakrah'], true) ? $fallback : null;
+    }
+
     public function isChatAgent(): bool
     {
         return strtolower(trim((string) $this->role)) === 'agent';
