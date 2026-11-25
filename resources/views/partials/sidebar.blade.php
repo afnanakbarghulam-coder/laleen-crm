@@ -328,7 +328,7 @@
 
          <!-- 8. Staff Management -->
          @moduleView('staff')
-             <li class="menu-item {{ request()->routeIs('staffs.*') || request()->routeIs('shifts.*') || request()->routeIs('staff.ops-tracker.*') || request()->routeIs('users.index') ? 'active' : '' }}">
+             <li class="menu-item {{ request()->routeIs('staffs.*') || request()->routeIs('shifts.*') || request()->routeIs('staff.ops-tracker.*') || request()->routeIs('users.*') || request()->routeIs('portal.admin-preview') ? 'active' : '' }}">
                  <a href="{{ route('staffs.index') }}" class="menu-link">
                      <i class="bx bx-user me-2"></i>
                      <div>Staff Management</div>

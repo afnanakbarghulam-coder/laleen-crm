@@ -2,6 +2,7 @@
     $inPlaceTabs = $inPlaceTabs ?? false;
     $activePill = $activePill ?? 'directory';
     $ownerPendingBadge = (int) ($pendingOwnerActionCount ?? $pendingOwnerCount ?? 0);
+    $showRolesAccessTab = (bool) (auth()->user()?->isAdmin());
 @endphp
 
 <style>
@@ -94,6 +95,13 @@
             data-tab="complaints">
             HR &amp; Disciplinary
         </button>
+
+        @if ($showRolesAccessTab)
+            <a href="{{ route('users.index') }}"
+                class="ui-chip staff-nav-pill {{ $activePill === 'roles_access' ? 'active' : '' }}">
+                Roles &amp; Access
+            </a>
+        @endif
     @else
         <a href="{{ route('staffs.index', ['tab' => 'directory']) }}"
             class="ui-chip staff-nav-pill {{ $activePill === 'directory' ? 'active' : '' }}">
@@ -117,5 +125,12 @@
             class="ui-chip staff-nav-pill {{ $activePill === 'complaints' ? 'active' : '' }}">
             HR &amp; Disciplinary
         </a>
+
+        @if ($showRolesAccessTab)
+            <a href="{{ route('users.index') }}"
+                class="ui-chip staff-nav-pill {{ $activePill === 'roles_access' ? 'active' : '' }}">
+                Roles &amp; Access
+            </a>
+        @endif
     @endif
 </nav>

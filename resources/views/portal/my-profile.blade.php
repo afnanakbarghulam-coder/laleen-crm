@@ -1,6 +1,12 @@
-@extends($isSalonStaff ? 'layouts.portal' : 'layouts.app')
+@php
+    $isAdminPreview = (bool) ($isAdminPreview ?? false);
+    $layoutView = (!$isAdminPreview && ($isSalonStaff ?? false)) ? 'layouts.portal' : 'layouts.app';
+    $makeTabUrl = $portalTabRoute ?? fn (string $tab) => route('portal.profile', ['tab' => $tab]);
+@endphp
 
-@section('title', 'My Profile — Laleen Staff Portal')
+@extends($layoutView)
+
+@section('title', $isAdminPreview ? ("Admin Preview — {$profile['name']}'s Portal Profile") : 'My Profile — Laleen Staff Portal')
 
 @section('content')
 <style>
@@ -390,15 +396,29 @@
 </style>
 
 <div class="mp-wrap">
+    @if ($isAdminPreview)
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 px-3 py-2"
+             style="border-radius:14px; background:rgba(212,163,115,0.12); border:1px solid rgba(212,163,115,0.34);">
+            <div class="d-flex align-items-center gap-2" style="font-size:13px; color:#f3d9a4; font-weight:600;">
+                <i class="bx bx-show fs-5"></i>
+                <span>Admin Preview &mdash; Viewing {{ $profile['name'] }}'s Portal Profile</span>
+            </div>
+            <a href="{{ route('users.index') }}" class="mp-btn-ghost py-1 px-3" style="text-decoration:none;">
+                <i class="bx bx-arrow-back"></i>
+                <span>Back to Roles &amp; Access</span>
+            </a>
+        </div>
+    @endif
+
     {{-- Profile Header Card --}}
     <div class="mp-card mb-3">
         <div class="mp-hero mb-0">
             <div class="mp-hero-left">
-                @if ($profile['avatar'])
-                    <img src="{{ $profile['avatar'] }}" alt="{{ $profile['name'] }}" class="mp-avatar">
-                @else
-                    <div class="mp-avatar-fallback">{{ $profile['initials'] }}</div>
-                @endif
+                @include('partials.avatar', [
+                    'src' => $profile['avatar_raw'] ?? null,
+                    'name' => $profile['name'],
+                    'size' => 64,
+                ])
                 <div class="min-w-0">
                     <h1 class="mp-name text-truncate">{{ $profile['name'] }}</h1>
                     <div class="mp-badges">
@@ -413,10 +433,12 @@
                 </div>
             </div>
 
-            <button type="button" class="mp-btn-ghost" data-bs-toggle="modal" data-bs-target="#portalChangePasswordModal">
-                <i class="bx bx-lock-alt"></i>
-                <span>Change Password</span>
-            </button>
+            @if (!$isAdminPreview)
+                <button type="button" class="mp-btn-ghost" data-bs-toggle="modal" data-bs-target="#portalChangePasswordModal">
+                    <i class="bx bx-lock-alt"></i>
+                    <span>Change Password</span>
+                </button>
+            @endif
         </div>
 
         <div class="mp-contact-strip">
@@ -441,22 +463,22 @@
 
     {{-- Portal Navigation Tabs --}}
     <nav class="mp-tabs" role="tablist" aria-label="My Profile Sections">
-        <a href="{{ route('portal.profile', ['tab' => 'overview']) }}"
+        <a href="{{ $makeTabUrl('overview') }}"
             class="mp-tab-link {{ $activeTab === 'overview' ? 'is-active' : '' }}" role="tab">
             <i class="bx bx-user"></i>
             <span>Overview</span>
         </a>
-        <a href="{{ route('portal.profile', ['tab' => 'contracts']) }}"
+        <a href="{{ $makeTabUrl('contracts') }}"
             class="mp-tab-link {{ $activeTab === 'contracts' ? 'is-active' : '' }}" role="tab">
             <i class="bx bx-file"></i>
             <span>Contracts</span>
         </a>
-        <a href="{{ route('portal.profile', ['tab' => 'documents']) }}"
+        <a href="{{ $makeTabUrl('documents') }}"
             class="mp-tab-link {{ $activeTab === 'documents' ? 'is-active' : '' }}" role="tab">
             <i class="bx bx-folder"></i>
             <span>Documents</span>
         </a>
-        <a href="{{ route('portal.profile', ['tab' => 'leaves']) }}"
+        <a href="{{ $makeTabUrl('leaves') }}"
             class="mp-tab-link {{ $activeTab === 'leaves' ? 'is-active' : '' }}" role="tab">
             <i class="bx bx-calendar-event"></i>
             <span>Leaves</span>
@@ -657,6 +679,7 @@
     @endif
 </div>
 
+@if (!$isAdminPreview)
 {{-- Change Password Modal --}}
 <div class="modal fade" id="portalChangePasswordModal" tabindex="-1" aria-labelledby="portalChangePasswordTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
@@ -700,10 +723,11 @@
         </div>
     </div>
 </div>
+@endif
 @endsection
 
 @section('scripts')
-@if ($errors->portalPassword->any())
+@if (!$isAdminPreview && $errors->portalPassword->any())
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const el = document.getElementById('portalChangePasswordModal');

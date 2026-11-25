@@ -42,6 +42,8 @@
             $backTarget = $routeName === 'customers.index' ? null : route('customers.index');
         } elseif (str_starts_with($routeName, 'users')) {
             $backTarget = $routeName === 'users.index' ? null : route('users.index');
+        } elseif ($routeName === 'portal.admin-preview') {
+            $backTarget = route('users.index');
         } elseif (str_starts_with($routeName, 'staffs') || str_starts_with($routeName, 'shifts')) {
             $backTarget = $routeName === 'staffs.index' ? null : route('staffs.index');
         } elseif (str_starts_with($routeName, 'services') || str_starts_with($routeName, 'service-categories')) {
@@ -104,18 +106,13 @@
                         {{-- User Name --}}
                         <span class="me-2 fw-semibold"> {{ auth()->user()->name }}</span>
 
-                        @if(auth()->user()->profile_photo)
-                            <div class="avatar avatar-online">
-                                <img src="{{ asset(auth()->user()->profile_photo) }}"
-                                    alt="Profile" class="w-px-40 rounded-circle">
-                            </div>
-                        @else
-                            <div class="avatar avatar-online d-flex justify-content-center align-items-center bg-light rounded-circle"
-                                style="width: 40px; height: 40px;">
-                                <i class="bx bx-user fs-3 text-secondary"></i>
-                            </div>
-                        @endif
-
+                        <div class="avatar avatar-online">
+                            @include('partials.avatar', [
+                                'src' => auth()->user()->profile_photo,
+                                'name' => auth()->user()->name,
+                                'size' => 38,
+                            ])
+                        </div>
                     </a>
 
                     <ul class="dropdown-menu dropdown-menu-end">

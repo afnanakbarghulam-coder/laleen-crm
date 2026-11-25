@@ -7,17 +7,13 @@
         </span>
 
         {{-- User Avatar --}}
-        @if(auth()->user()->profile_photo)
-            <div class="avatar avatar-online">
-                <img src="{{ asset(auth()->user()->profile_photo) }}"
-                     alt="Profile" class="w-px-40 rounded-circle">
-            </div>
-        @else
-            <div class="avatar avatar-online d-flex justify-content-center align-items-center bg-light rounded-circle"
-                style="width: 40px; height: 40px;">
-                <i class="bx bx-user fs-3 text-secondary"></i>
-            </div>
-        @endif
+        <div class="avatar avatar-online">
+            @include('partials.avatar', [
+                'src' => auth()->user()->profile_photo,
+                'name' => auth()->user()->name,
+                'size' => 40,
+            ])
+        </div>
 
     </a>
 
@@ -28,17 +24,11 @@
                 <div class="d-flex">
                     <div class="flex-shrink-0 me-3">
                         <div class="avatar avatar-online">
-
-                            @if(auth()->user()->profile_photo)
-                                <img src="{{ asset(auth()->user()->profile_photo) }}"
-                                     alt="{{ auth()->user()->name }}" class="w-px-40 rounded-circle">
-                            @else
-                                <div class="d-flex justify-content-center align-items-center bg-light rounded-circle"
-                                    style="width: 40px; height: 40px;">
-                                    <i class="bx bx-user fs-3 text-secondary"></i>
-                                </div>
-                            @endif
-
+                            @include('partials.avatar', [
+                                'src' => auth()->user()->profile_photo,
+                                'name' => auth()->user()->name,
+                                'size' => 40,
+                            ])
                         </div>
                     </div>
 

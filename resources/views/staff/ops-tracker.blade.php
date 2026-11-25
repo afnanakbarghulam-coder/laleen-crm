@@ -819,14 +819,9 @@
 @endphp
 
 <div class="ops-tracker-wrap">
-    {{-- Streamlined 4-Tab Staff Management Top Pill Bar + Shifts & Ops Sub-Navigation --}}
+    {{-- Unified 5-Tab Staff Management Top Pill Bar + Shifts & Ops Sub-Navigation --}}
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
         @include('staff.partials.top-pill-nav', ['inPlaceTabs' => false, 'activePill' => 'shifts_ops'])
-        @if (auth()->user()->isSuperAdmin())
-            <div class="d-flex align-items-center gap-2 mb-3">
-                <a href="{{ route('users.index') }}" class="btn btn-sm btn-outline-secondary">Staff Access</a>
-            </div>
-        @endif
     </div>
     @include('staff.partials.shifts-ops-subnav', ['inPlaceSubTabs' => false, 'activeSub' => 'ops_tracker'])
 

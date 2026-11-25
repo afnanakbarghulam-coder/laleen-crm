@@ -377,10 +377,16 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
         ->patch('/customers/{customer}/packages/{clientPackage}', [CustomerController::class, 'updateClientPackage'])
         ->name('customers.packages.update');
 
-    // ---- Staff Access: a single super-admin account only, independent of the module matrix ----
-    Route::middleware('super-admin')->group(function () {
+    // ---- Roles & Access (Unified Admin Access Hub + Staff Portal Preview) ----
+    Route::middleware('role:admin')->group(function () {
         Route::resource('users', UserController::class)->only(['index', 'store', 'update', 'destroy']);
         Route::patch('/users/{user}/toggle-active', [UserController::class, 'toggleActive'])->name('users.toggle-active');
+        Route::patch('/users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
+        Route::patch('/users/{user}/link-staff', [UserController::class, 'linkStaff'])->name('users.link-staff');
+        Route::post('/users/{user}/create-staff-profile', [UserController::class, 'createStaffProfile'])->name('users.create-staff-profile');
+        Route::get('/staff-portal-preview/{staff}', [StaffPortalController::class, 'adminPreview'])
+            ->whereNumber('staff')
+            ->name('portal.admin-preview');
     });
 
     // ---- KPIs & Operations ----

@@ -1,84 +1,109 @@
 @extends('layouts.app')
 
-@section('title', 'Staff Access')
+@section('title', 'Roles & Access — Staff Management')
 
 @section('content')
     @php
         $rolesMap = \App\Models\User::ROLES;
-        $modulesMap = \App\Models\User::MODULES;
-        $rolePresetsMap = \App\Models\User::ROLE_PERMISSION_PRESETS;
+        $selectedFilterRole = (string) request('role', '');
+        $activeView = $activeView ?? 'all';
 
-        $initialFormStates = [
-            'new' => [
-                'role' => 'user',
-                'permissions' => \App\Models\User::defaultPermissionsForRole('user'),
-            ],
-        ];
-
+        $accessUsersMap = [];
         foreach ($users as $u) {
-            $initialFormStates[(string) $u->id] = [
+            $accessUsersMap[(string) $u->id] = [
+                'id' => (int) $u->id,
+                'name' => (string) $u->name,
+                'email' => (string) $u->email,
                 'role' => (string) $u->role,
+                'is_active' => (bool) $u->is_active,
+                'staff_id' => $u->staff ? (int) $u->staff->id : null,
                 'permissions' => $u->effectivePermissionsMap(),
             ];
         }
 
-        $selectedFilterRole = (string) request('role', '');
-        $selectedFilterRoleLabel = $selectedFilterRole !== '' && isset($rolesMap[$selectedFilterRole])
-            ? $rolesMap[$selectedFilterRole]
-            : 'All Roles';
+        $formatBranchLabel = static function (?string $branch, ?string $role = null, bool $bookable = true): string {
+            $cleanRole = strtolower(trim((string) $role));
+            $raw = strtolower(trim((string) $branch));
+            if ($cleanRole === 'agent' && (!$bookable || $raw === '')) {
+                return 'Remote / HQ';
+            }
+
+            return match ($raw) {
+                'old_airport' => 'Old Airport',
+                'wakrah', 'al_wakrah' => 'Al Wakrah',
+                'both' => 'Old Airport & Al Wakrah',
+                default => 'Remote / HQ',
+            };
+        };
+
+        $formatAccessScope = static function (\App\Models\User $u): string {
+            if ($u->isAdmin()) {
+                return 'Full CRM Access';
+            }
+            if ($u->isSalonStaff()) {
+                return 'Portal Only (/my-profile)';
+            }
+            $enabled = collect($u->effectivePermissionsMap())
+                ->filter(fn ($lvl) => in_array($lvl, ['view', 'edit'], true))
+                ->count();
+
+            return $enabled === 1 ? '1 Module Enabled' : "{$enabled} Modules Enabled";
+        };
     @endphp
 
     <style>
         [x-cloak] { display: none !important; }
 
-        .sa-shell {
-            max-width: 1120px;
+        .ra-shell {
+            max-width: 1180px;
             margin: 0 auto;
         }
-        .sa-nav-pill {
+
+        .ra-view-pills {
+            display: inline-flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ra-view-pill {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            padding: 7px 15px;
+            gap: 7px;
+            padding: 7px 14px;
             border-radius: 999px;
-            font-size: 13px;
+            font-size: 12.5px;
             font-weight: 600;
             text-decoration: none;
             color: #b8a29a;
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(34, 22, 27, 0.72);
             border: 1px solid rgba(229, 184, 168, 0.16);
-            transition: all 0.16s ease;
-        }
-        .sa-nav-pill:hover {
-            color: #f8efe6;
-            border-color: rgba(229, 184, 168, 0.38);
-        }
-        .sa-nav-pill.active {
-            background: linear-gradient(135deg, #e5b8a8 0%, #d49a89 100%);
-            color: #1f1417;
-            border-color: transparent;
-            box-shadow: 0 6px 16px rgba(229, 184, 168, 0.22);
+            transition: all 0.15s ease;
         }
 
-        .sa-card {
-            background: linear-gradient(180deg, rgba(34, 22, 27, 0.92) 0%, rgba(21, 14, 18, 0.96) 100%);
-            border: 1px solid rgba(229, 184, 168, 0.14);
-            border-radius: 16px;
-            overflow: visible;
+        .ra-view-pill:hover {
+            color: #f8efe6;
+            border-color: rgba(229, 184, 168, 0.34);
         }
-        .sa-card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 12px;
-            padding: 18px 22px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+
+        .ra-view-pill.is-active {
+            background: rgba(229, 184, 168, 0.16);
+            color: #f8efe6;
+            border-color: rgba(229, 184, 168, 0.44);
+        }
+
+        .ra-view-count {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 1px 7px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #e5b8a8;
         }
 
         .sa-btn-rosegold {
-            background: linear-gradient(135deg, #e5b8a8 0%, #d49a89 100%);
-            color: #1f1417 !important;
+            background: linear-gradient(135deg, #d98f83, #c19a8c);
+            color: #1c110f !important;
             border: none;
             border-radius: 999px;
             font-weight: 700;
@@ -88,464 +113,459 @@
             align-items: center;
             gap: 6px;
             cursor: pointer;
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            text-decoration: none;
+            transition: filter 0.15s ease;
         }
-        .sa-btn-rosegold:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 8px 20px rgba(229, 184, 168, 0.25);
-        }
+
+        .sa-btn-rosegold:hover { filter: brightness(1.06); }
 
         .sa-btn-ghost {
             background: rgba(255, 255, 255, 0.04);
             color: #f8efe6;
             border: 1px solid rgba(229, 184, 168, 0.24);
             border-radius: 999px;
-            font-size: 13px;
+            font-size: 12.5px;
             font-weight: 600;
-            padding: 7px 15px;
+            padding: 7px 14px;
             display: inline-flex;
             align-items: center;
             gap: 6px;
             text-decoration: none;
             cursor: pointer;
         }
+
         .sa-btn-ghost:hover {
             background: rgba(229, 184, 168, 0.12);
             color: #f8efe6;
         }
 
-        .sa-inline-chip {
+        .sa-card {
+            background: linear-gradient(180deg, rgba(34, 22, 27, 0.92) 0%, rgba(21, 14, 18, 0.96) 100%);
+            border: 1px solid rgba(229, 184, 168, 0.14);
+            border-radius: 16px;
+            overflow: visible;
+        }
+
+        .sa-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .ra-table thead th {
             font-size: 11px;
-            font-weight: 600;
-            padding: 2px 9px;
-            border-radius: 999px;
-            background: rgba(212, 163, 115, 0.14);
-            color: #d4a373;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #9e8780;
+            padding: 11px 16px;
+            border-bottom: 1px solid rgba(229, 184, 168, 0.14);
+            background: rgba(18, 12, 14, 0.35);
         }
 
-        .sa-preset-btn {
-            background: rgba(229, 184, 168, 0.1);
-            color: #e5b8a8;
-            border: 1px solid rgba(229, 184, 168, 0.28);
-            border-radius: 999px;
-            font-size: 11.5px;
-            font-weight: 600;
-            padding: 3px 11px;
-            cursor: pointer;
-            transition: background 0.15s ease;
-        }
-        .sa-preset-btn:hover {
-            background: rgba(229, 184, 168, 0.2);
-            color: #f8efe6;
+        .ra-table tbody td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            vertical-align: middle;
         }
 
-        /* Role Badges */
+        .ra-table tbody tr:last-child td { border-bottom: none; }
+
         .sa-role-badge {
             display: inline-flex;
             align-items: center;
             padding: 3px 10px;
             border-radius: 999px;
             font-size: 11.5px;
-            font-weight: 600;
+            font-weight: 700;
             background: rgba(229, 184, 168, 0.12);
             color: #e5b8a8;
-            border: 1px solid rgba(229, 184, 168, 0.22);
+            border: 1px solid rgba(229, 184, 168, 0.24);
         }
+
         .sa-role-badge.role-admin {
             background: rgba(110, 231, 183, 0.12);
             color: #6ee7b7;
             border-color: rgba(110, 231, 183, 0.28);
         }
+
+        .sa-role-badge.role-salon_staff {
+            background: rgba(212, 163, 115, 0.16);
+            color: #f3d9a4;
+            border-color: rgba(212, 163, 115, 0.34);
+        }
+
         .sa-role-badge.role-marketing_specialist,
         .sa-role-badge.role-social_media_editor {
-            background: rgba(212, 163, 115, 0.16);
+            background: rgba(212, 163, 115, 0.14);
             color: #d4a373;
-            border-color: rgba(212, 163, 115, 0.32);
+            border-color: rgba(212, 163, 115, 0.3);
         }
 
-        /* Dark Espresso Modals & Custom Selects (Zero White/Blue Native Dropdown) */
-        .sa-modal .modal-dialog,
-        .sa-modal .modal-content,
-        .sa-modal .modal-body {
-            overflow: visible !important;
+        .ra-status-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
         }
-        .sa-modal .modal-content {
-            background: linear-gradient(180deg, #22161b 0%, #160e12 100%) !important;
-            border: 1px solid rgba(229, 184, 168, 0.2) !important;
-            color: #f8efe6;
-            border-radius: 18px !important;
+
+        .ra-status-pill.is-active {
+            background: rgba(110, 231, 183, 0.12);
+            color: #6ee7b7;
+            border: 1px solid rgba(110, 231, 183, 0.28);
         }
-        .sa-modal .modal-header,
-        .sa-modal .modal-footer {
-            border-color: rgba(255, 255, 255, 0.06) !important;
+
+        .ra-status-pill.is-disabled {
+            background: rgba(253, 164, 175, 0.12);
+            color: #fda4af;
+            border: 1px solid rgba(253, 164, 175, 0.3);
         }
-        .sa-modal .modal-header .btn-close {
-            background-color: #1b1214 !important;
-            border: 1px solid rgba(229, 184, 168, 0.24) !important;
-            border-radius: 10px !important;
-            filter: invert(1) grayscale(100%) brightness(180%);
-            opacity: 0.85;
+
+        .ra-unlinked-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 9px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            background: rgba(245, 158, 11, 0.13);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.32);
         }
-        .sa-modal .modal-header .btn-close:hover {
-            border-color: #e5b8a8 !important;
-            opacity: 1;
+
+        .ra-mini-link-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid rgba(229, 184, 168, 0.28);
+            background: rgba(229, 184, 168, 0.08);
+            color: #f3dfd7;
+            cursor: pointer;
+            text-decoration: none;
         }
-        .sa-modal .form-control,
-        .sa-modal .form-select,
-        .sa-filter-bar .form-control,
-        .sa-filter-bar .form-select {
+
+        .ra-mini-link-btn:hover {
+            background: rgba(229, 184, 168, 0.18);
+            border-color: #d98f83;
+            color: #fff;
+        }
+
+        .ra-filter-bar .form-control,
+        .ra-filter-bar .form-select {
             background-color: #1b1214 !important;
             color: #f5ebe6 !important;
-            border: 1px solid rgba(229, 184, 168, 0.22);
+            border: 1px solid rgba(229, 184, 168, 0.22) !important;
             border-radius: 10px;
             color-scheme: dark;
-        }
-        .sa-modal .form-select option,
-        .sa-filter-bar .form-select option {
-            background-color: #1b1214 !important;
-            color: #f5ebe6 !important;
-        }
-        .sa-modal .form-control:focus,
-        .sa-filter-bar .form-control:focus {
-            border-color: #e5b8a8;
-            box-shadow: 0 0 0 3px rgba(229, 184, 168, 0.12);
+            height: 40px;
+            line-height: 1.4;
         }
 
-        .sa-cselect-wrap {
-            position: relative;
-            width: 100%;
-        }
-        .sa-cselect-wrap.is-open {
-            z-index: 70;
-        }
-        .sa-cselect-trigger {
-            width: 100%;
-            min-height: 39px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            background: #1b1214;
-            color: #f5ebe6;
-            border: 1px solid rgba(229, 184, 168, 0.22);
-            border-radius: 10px;
-            padding: 8px 12px;
-            font-size: 13px;
-            line-height: 1.35;
-            text-align: left;
-            cursor: pointer;
-            transition: border-color 0.15s ease, box-shadow 0.15s ease;
-        }
-        .sa-cselect-trigger:hover,
-        .sa-cselect-wrap.is-open .sa-cselect-trigger {
-            border-color: #e5b8a8;
-            box-shadow: 0 0 0 3px rgba(229, 184, 168, 0.1);
-        }
-        .sa-cselect-label {
-            min-width: 0;
-            flex: 1 1 auto;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .sa-cselect-caret {
-            color: #e5b8a8;
-            font-size: 11px;
-            flex-shrink: 0;
-        }
-        .sa-cselect-menu {
-            position: absolute;
-            top: calc(100% + 6px);
-            left: 0;
-            right: 0;
-            min-width: 100%;
-            max-height: 260px;
-            overflow-y: auto;
-            background: #1b1214;
-            border: 1px solid rgba(229, 184, 168, 0.3);
-            border-radius: 12px;
-            padding: 6px;
-            z-index: 1120;
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.68);
-        }
-        .sa-cselect-option {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            width: 100%;
-            border: none;
-            background: transparent;
-            color: #f5ebe6;
-            padding: 7px 10px;
-            border-radius: 8px;
-            font-size: 13px;
-            text-align: left;
-            cursor: pointer;
-        }
-        .sa-cselect-option:hover,
-        .sa-cselect-option.is-selected {
-            background: rgba(229, 184, 168, 0.16);
-            color: #f8efe6;
+        .ra-filter-bar .form-select {
+            appearance: none;
+            -webkit-appearance: none;
+            padding: 0.45rem 2.25rem 0.45rem 0.85rem;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23d4a373' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+            background-repeat: no-repeat !important;
+            background-position: right 0.8rem center !important;
+            background-size: 13px 10px !important;
         }
 
-        /* Clean Hairline Module Permission Matrix */
-        .sa-perm-table-wrap {
-            max-height: 360px;
-            overflow-y: auto;
-            padding-right: 2px;
+        .ra-filter-bar .sa-btn-rosegold,
+        .ra-filter-bar .sa-btn-ghost {
+            height: 40px;
         }
-        .sa-perm-table th {
-            font-size: 11px;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            color: #b8a29a !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-            padding: 8px 10px;
-            position: sticky;
-            top: 0;
-            background: #1b1115;
-            z-index: 2;
-        }
-        .sa-perm-table td {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
-            padding: 7px 10px;
-            font-size: 13px;
-        }
-        .sa-perm-table tr:last-child td {
-            border-bottom: none !important;
-        }
-        .sa-radio {
-            cursor: pointer;
+
+        .ra-filter-bar .form-select option {
             background-color: #1b1214;
-            border-color: rgba(229, 184, 168, 0.35);
+            color: #f5ebe6;
         }
-        .sa-radio:checked {
-            background-color: #e5b8a8 !important;
-            border-color: #e5b8a8 !important;
+
+        .ra-more-btn::after {
+            display: none !important;
         }
     </style>
 
-    <div class="sa-shell">
-        <!-- Top Navigation Pills & Primary CTA -->
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <a href="{{ route('staffs.index') }}" class="sa-nav-pill">Team Members</a>
-                <a href="{{ route('shifts.index') }}" class="sa-nav-pill">Scheduled Shifts</a>
-                <a href="{{ route('users.index') }}" class="sa-nav-pill active">Staff Access</a>
+    <div class="ra-shell">
+        {{-- Shared Unified 5-Tab Staff Management Header + Primary + Add Login CTA --}}
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 pt-1 mb-3">
+            <div class="laleen-top-pill-wrap">
+                @include('staff.partials.top-pill-nav', ['inPlaceTabs' => false, 'activePill' => 'roles_access'])
             </div>
-            <button type="button" class="sa-btn-rosegold" data-bs-toggle="modal" data-bs-target="#addUserModal">
-                <i class="bx bx-plus"></i> Add Staff
+            <button type="button" class="sa-btn-rosegold" onclick="openAddLoginModal()">
+                <i class="bx bx-plus"></i> Add Login
             </button>
         </div>
 
-        <!-- Inline Filter Row -->
-        <form method="GET" action="{{ route('users.index') }}" class="sa-filter-bar mb-4" x-data="staffAccessFilter">
+        {{-- Status / View Pills + Filter Bar --}}
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+            <div class="ra-view-pills" role="tablist" aria-label="Account Views">
+                <a href="{{ route('users.index', array_filter(['view' => 'all', 'role' => request('role'), 'search' => request('search')])) }}"
+                   class="ra-view-pill {{ $activeView === 'all' ? 'is-active' : '' }}">
+                    <span>All Accounts</span>
+                    <span class="ra-view-count">{{ $allAccountsCount }}</span>
+                </a>
+                <a href="{{ route('users.index', array_filter(['view' => 'unlinked_staff', 'search' => request('search')])) }}"
+                   class="ra-view-pill {{ $activeView === 'unlinked_staff' ? 'is-active' : '' }}">
+                    <span>Staff Without Login</span>
+                    <span class="ra-view-count">{{ $staffWithoutLoginCount }}</span>
+                </a>
+                <a href="{{ route('users.index', array_filter(['view' => 'disabled', 'role' => request('role'), 'search' => request('search')])) }}"
+                   class="ra-view-pill {{ $activeView === 'disabled' ? 'is-active' : '' }}">
+                    <span>Disabled Accounts</span>
+                    <span class="ra-view-count">{{ $disabledAccountsCount }}</span>
+                </a>
+            </div>
+        </div>
+
+        <form method="GET" action="{{ route('users.index') }}" class="ra-filter-bar mb-4">
+            <input type="hidden" name="view" value="{{ $activeView }}">
             <div class="row g-2 align-items-end">
-                <div class="col-md-4">
-                    <label class="form-label small mb-1" style="color: #b8a29a;">Role</label>
-                    <div class="sa-cselect-wrap" :class="{ 'is-open': filterRoleOpen }" @click.outside="filterRoleOpen = false">
-                        <input type="hidden" name="role" :value="filterRole">
-                        <button type="button" class="sa-cselect-trigger" @click="filterRoleOpen = !filterRoleOpen">
-                            <span class="sa-cselect-label" x-text="filterRoleLabel()">{{ $selectedFilterRoleLabel }}</span>
-                            <span class="sa-cselect-caret">▾</span>
-                        </button>
-                        <div class="sa-cselect-menu z-50" x-show="filterRoleOpen" x-cloak>
-                            <button type="button" class="sa-cselect-option" :class="{ 'is-selected': filterRole === '' }" @click="selectFilterRole('')">All Roles</button>
+                @if ($activeView !== 'unlinked_staff')
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1" style="color: #b8a29a;">Role</label>
+                        <select name="role" class="form-select">
+                            <option value="">All Roles</option>
                             @foreach ($rolesMap as $rKey => $rLabel)
-                                <button type="button" class="sa-cselect-option" :class="{ 'is-selected': filterRole === '{{ $rKey }}' }" @click="selectFilterRole('{{ $rKey }}')">{{ $rLabel }}</button>
+                                <option value="{{ $rKey }}" {{ $selectedFilterRole === $rKey ? 'selected' : '' }}>
+                                    {{ $rKey === 'agent' ? 'Chat Agent' : $rLabel }}
+                                </option>
                             @endforeach
-                        </div>
+                        </select>
                     </div>
-                </div>
-                <div class="col-md-5">
+                @endif
+                <div class="{{ $activeView === 'unlinked_staff' ? 'col-md-9' : 'col-md-6' }}">
                     <label class="form-label small mb-1" style="color: #b8a29a;">Name / Email</label>
                     <input type="text" name="search" class="form-control" value="{{ request('search') }}" placeholder="Search by name or email">
                 </div>
                 <div class="col-md-3 d-flex gap-2">
                     <button type="submit" class="sa-btn-rosegold w-100 justify-content-center">Filter</button>
-                    <a href="{{ route('users.index') }}" class="sa-btn-ghost w-100 justify-content-center">Reset</a>
+                    <a href="{{ route('users.index', ['view' => $activeView]) }}" class="sa-btn-ghost w-100 justify-content-center">Reset</a>
                 </div>
             </div>
         </form>
 
-        <!-- Staff Access Accounts Table -->
-        <div class="sa-card">
-            <div class="sa-card-header">
-                <div class="d-flex align-items-center gap-2">
-                    <h5 class="fw-bold mb-0" style="color: #f8efe6; font-size: 16px;">Staff Access Accounts</h5>
-                    <span class="sa-inline-chip">{{ $users->count() }} Accounts</span>
+        {{-- VIEW A: STAFF WITHOUT LOGIN --}}
+        @if ($activeView === 'unlinked_staff')
+            <div class="sa-card">
+                <div class="sa-card-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <h5 class="fw-bold mb-0" style="color: #f8efe6; font-size: 16px;">Staff Without Login</h5>
+                        <span class="sa-inline-chip">{{ $unlinkedStaff->count() }} Team Members</span>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table ra-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Team Member</th>
+                                <th>Branch &amp; Type</th>
+                                <th>Contact</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse ($unlinkedStaff as $st)
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            @include('partials.avatar', [
+                                                'src' => $st->profile_picture,
+                                                'name' => $st->name,
+                                                'size' => 38,
+                                            ])
+                                            <div>
+                                                <div class="fw-semibold" style="color: #f8efe6;">{{ $st->name }}</div>
+                                                <div class="small" style="color: #9e8780;">
+                                                    Suggested: {{ $st->bookable ? 'Salon Staff' : 'Chat Agent' }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="color: #f5ebe6; font-size: 13px;">{{ $formatBranchLabel($st->branch, null, (bool) $st->bookable) }}</div>
+                                        <div class="small" style="color: #9e8780;">{{ $st->bookable ? 'Bookable Specialist' : 'Operations / Support' }}</div>
+                                    </td>
+                                    <td>
+                                        <div class="small" style="color: #cbb8b0;">{{ $st->email ?: '—' }}</div>
+                                        @if ($st->phone)
+                                            <div class="small" style="color: #9e8780;">{{ $st->phone }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-inline-flex align-items-center gap-2">
+                                            <a href="{{ route('portal.admin-preview', $st) }}" class="ra-mini-link-btn" title="Preview Portal Profile">
+                                                <i class="bx bx-show"></i> Preview
+                                            </a>
+                                            <button type="button" class="sa-btn-rosegold py-1 px-3" style="font-size: 12px;"
+                                                    onclick="openAddLoginModal({ mode: 'existing_staff', staffId: {{ $st->id }} })">
+                                                <i class="bx bx-user-plus"></i> Grant Access
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="4" class="text-center py-4" style="color: #9e8780;">
+                                        Every team member in the Staff Directory already has a login account.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            <div class="table-responsive text-nowrap" style="overflow: visible;">
-                <table class="table align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Profile</th>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Role</th>
-                            <th>Status</th>
-                            <th>Created</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse($users as $user)
+        @else
+            {{-- VIEW B: ALL ACCOUNTS / DISABLED ACCOUNTS --}}
+            <div class="sa-card">
+                <div class="sa-card-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <h5 class="fw-bold mb-0" style="color: #f8efe6; font-size: 16px;">
+                            {{ $activeView === 'disabled' ? 'Disabled Accounts' : 'Roles & Access Accounts' }}
+                        </h5>
+                        <span class="sa-inline-chip">{{ $users->count() }} {{ $users->count() === 1 ? 'Account' : 'Accounts' }}</span>
+                    </div>
+                </div>
+                <div class="table-responsive" style="overflow: visible;">
+                    <table class="table ra-table align-middle mb-0">
+                        <thead>
                             <tr>
-                                <td>
-                                    @if($user->profile_photo)
-                                        <img src="{{ asset($user->profile_photo) }}" alt="Profile" class="rounded-circle" width="38" height="38" style="object-fit: cover;">
-                                    @else
-                                        <i class="bx bx-user-circle fs-2" style="color: #b8a29a;"></i>
-                                    @endif
-                                </td>
-                                <td class="fw-semibold" style="color: #f8efe6;">{{ $user->name }}</td>
-                                <td style="color: #cbb8b0;">{{ $user->email }}</td>
-                                <td>
-                                    <span class="sa-role-badge role-{{ $user->role }}">
-                                        {{ $user->roleBadgeLabel() }}
-                                    </span>
-                                </td>
-                                <td>
-                                    @if ($user->is_active)
-                                        <span class="badge" style="background: rgba(110, 231, 183, 0.14); color: #6ee7b7; border: 1px solid rgba(110, 231, 183, 0.28);">Active</span>
-                                    @else
-                                        <span class="badge" style="background: rgba(255, 255, 255, 0.06); color: #b8a29a;">Deactivated</span>
-                                    @endif
-                                </td>
-                                <td style="color: #b8a29a;">{{ $user->created_at->format('d M Y') }}</td>
-                                <td class="text-end">
-                                    <div class="dropdown">
-                                        <button type="button" class="sa-btn-ghost py-1 px-2 dropdown-toggle" data-bs-toggle="dropdown">
-                                            <i class="bx bx-dots-horizontal-rounded"></i>
-                                        </button>
-                                        <div class="dropdown-menu dropdown-menu-end" style="background: #1b1214; border: 1px solid rgba(229, 184, 168, 0.24);">
-                                            <a class="dropdown-item" style="color: #f5ebe6;" href="javascript:void(0);" data-bs-toggle="modal"
-                                                data-bs-target="#editUserModal{{ $user->id }}">
-                                                <i class="bx bx-edit-alt me-1"></i> Edit
-                                            </a>
-                                            @if ($user->id !== auth()->id())
-                                                <form action="{{ route('users.toggle-active', $user->id) }}" method="POST" class="d-inline">
-                                                    @csrf
-                                                    @method('PATCH')
-                                                    <button class="dropdown-item" style="color: #f5ebe6;" type="submit">
-                                                        @if ($user->is_active)
-                                                            <i class="bx bx-block me-1"></i> Deactivate
-                                                        @else
-                                                            <i class="bx bx-check-circle me-1"></i> Reactivate
-                                                        @endif
-                                                    </button>
-                                                </form>
-                                                <form action="{{ route('users.destroy', $user->id) }}" method="POST" class="d-inline"
-                                                    onsubmit="return confirm('Permanently delete this staff account? This cannot be undone.');">
-                                                    @csrf
-                                                    @method('DELETE')
-                                                    <button class="dropdown-item" style="color: #fda4af;" type="submit">
-                                                        <i class="bx bx-trash me-1"></i> Delete
-                                                    </button>
-                                                </form>
-                                            @endif
+                                <th>Account</th>
+                                <th>Role &amp; Access Scope</th>
+                                <th>Linked HR Profile</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse ($users as $user)
+                                @php
+                                    $linkedStaff = $user->staff;
+                                    $displayRole = $user->role === 'agent' ? 'Chat Agent' : $user->roleBadgeLabel();
+                                    $scopeSubtitle = $formatAccessScope($user);
+                                    $avatarSource = $linkedStaff?->profile_picture ?: $user->profile_photo;
+                                @endphp
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            @include('partials.avatar', [
+                                                'src' => $avatarSource,
+                                                'name' => $user->name,
+                                                'size' => 38,
+                                            ])
+                                            <div class="min-w-0">
+                                                <div class="fw-semibold" style="color: #f8efe6;">{{ $user->name }}</div>
+                                                <div class="small" style="color: #b8a29a;">{{ $user->email }}</div>
+                                            </div>
                                         </div>
-                                    </div>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="7" class="text-center text-muted py-4">No staff members found</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex flex-column align-items-start gap-1">
+                                            <span class="sa-role-badge role-{{ $user->role }}">{{ $displayRole }}</span>
+                                            <span class="small" style="color: #9e8780;">{{ $scopeSubtitle }}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        @if ($linkedStaff)
+                                            <div class="d-flex flex-column gap-1">
+                                                <div class="fw-medium" style="color: #f5ebe6; font-size: 13px;">
+                                                    {{ $linkedStaff->name }}
+                                                    <span style="color: #9e8780;">&middot; {{ $formatBranchLabel($linkedStaff->branch, $user->role, (bool) $linkedStaff->bookable) }}</span>
+                                                </div>
+                                            </div>
+                                        @else
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <span class="ra-unlinked-badge">Unlinked</span>
+                                                <button type="button" class="ra-mini-link-btn"
+                                                        onclick="openManageAccessModal({{ $user->id }}, true)">
+                                                    <i class="bx bx-link"></i> Link Profile
+                                                </button>
+                                            </div>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if ($user->is_active)
+                                            <span class="ra-status-pill is-active">Active</span>
+                                        @else
+                                            <span class="ra-status-pill is-disabled">Disabled</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-inline-flex align-items-center gap-2">
+                                            <button type="button" class="ra-mini-link-btn"
+                                                    onclick="openManageAccessModal({{ $user->id }})">
+                                                Manage
+                                            </button>
+                                            <div class="dropdown">
+                                                <button type="button" class="sa-btn-ghost ra-more-btn hide-arrow py-1 px-2 dropdown-toggle" data-bs-toggle="dropdown" aria-label="More actions for {{ $user->name }}">
+                                                    <i class="bx bx-dots-horizontal-rounded"></i>
+                                                </button>
+                                                <div class="dropdown-menu dropdown-menu-end" style="background: #1b1315; border: 1px solid rgba(229, 184, 168, 0.24);">
+                                                    <button type="button" class="dropdown-item" style="color: #f5ebe6;"
+                                                            onclick="openManageAccessModal({{ $user->id }})">
+                                                        <i class="bx bx-slider-alt me-1"></i> Manage Role &amp; Access
+                                                    </button>
+                                                    @if ($linkedStaff)
+                                                        <a class="dropdown-item" style="color: #f3d9a4;" href="{{ route('portal.admin-preview', $linkedStaff) }}">
+                                                            <i class="bx bx-show me-1"></i> Preview Portal Profile
+                                                        </a>
+                                                    @endif
+                                                    <button type="button" class="dropdown-item" style="color: #f5ebe6;"
+                                                            onclick="openQuickResetPasswordModal({{ $user->id }}, {{ \Illuminate\Support\Js::from($user->name) }}, {{ \Illuminate\Support\Js::from($user->email) }})">
+                                                        <i class="bx bx-key me-1"></i> Reset Password
+                                                    </button>
+                                                    @if ((int) $user->id !== (int) auth()->id())
+                                                        <div class="dropdown-divider" style="border-color: rgba(255,255,255,0.08);"></div>
+                                                        <form action="{{ route('users.toggle-active', $user->id) }}" method="POST" class="m-0">
+                                                            @csrf
+                                                            @method('PATCH')
+                                                            <button class="dropdown-item" style="color: {{ $user->is_active ? '#fbbf24' : '#6ee7b7' }};" type="submit">
+                                                                @if ($user->is_active)
+                                                                    <i class="bx bx-block me-1"></i> Disable Account
+                                                                @else
+                                                                    <i class="bx bx-check-circle me-1"></i> Re-enable Account
+                                                                @endif
+                                                            </button>
+                                                        </form>
+                                                        <form action="{{ route('users.destroy', $user->id) }}" method="POST" class="m-0"
+                                                              onsubmit="return confirm('Permanently delete this login account? Their HR profile will stay intact.');">
+                                                            @csrf
+                                                            @method('DELETE')
+                                                            <button class="dropdown-item" style="color: #fda4af;" type="submit">
+                                                                <i class="bx bx-trash me-1"></i> Delete Account
+                                                            </button>
+                                                        </form>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="5" class="text-center py-4" style="color: #9e8780;">No accounts match the current filter.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
+        @endif
     </div>
 
-    {{-- Modals rendered outside table --}}
-    @foreach ($users as $user)
-        @include('users.edit', ['user' => $user])
-    @endforeach
-
-    @include('users.create')
-
-    <script>
-        (function () {
-            const rolesMap = {{ \Illuminate\Support\Js::from($rolesMap) }};
-            const modulesMap = {{ \Illuminate\Support\Js::from($modulesMap) }};
-            const rolePresets = {{ \Illuminate\Support\Js::from($rolePresetsMap) }};
-            const initialStates = {{ \Illuminate\Support\Js::from($initialFormStates) }};
-            const initialFilterRole = {{ \Illuminate\Support\Js::from($selectedFilterRole) }};
-
-            window.__saRolesMap = rolesMap;
-
-            const registerStaffAccessForms = function () {
-                if (!window.Alpine || window.__laleenStaffAccessAlpineRegistered) {
-                    return;
-                }
-                window.__laleenStaffAccessAlpineRegistered = true;
-
-                window.Alpine.data('staffAccessFilter', function () {
-                    return {
-                        filterRoleOpen: false,
-                        filterRole: initialFilterRole || '',
-
-                        filterRoleLabel() {
-                            return this.filterRole ? (rolesMap[this.filterRole] || this.filterRole) : 'All Roles';
-                        },
-
-                        selectFilterRole(roleKey) {
-                            this.filterRole = roleKey;
-                            this.filterRoleOpen = false;
-                        },
-                    };
-                });
-
-                window.Alpine.data('staffAccessUserForm', function (uid) {
-                    const seed = initialStates[String(uid)] || initialStates['new'] || { role: 'user', permissions: {} };
-
-                    return {
-                        uid: String(uid),
-                        role: seed.role || 'user',
-                        permissions: Object.assign({}, seed.permissions || {}),
-                        overriddenSlugs: {},
-                        roleMenuOpen: false,
-
-                        roleLabel(rKey) {
-                            return rolesMap[rKey] || rKey || 'User';
-                        },
-
-                        selectRole(newRole) {
-                            this.role = newRole;
-                            this.roleMenuOpen = false;
-
-                            const preset = rolePresets[newRole] || rolePresets['user'] || {};
-                            Object.keys(modulesMap).forEach((slug) => {
-                                if (!this.overriddenSlugs[slug]) {
-                                    this.permissions[slug] = preset[slug] || 'none';
-                                }
-                            });
-                        },
-
-                        setModulePermission(slug, level) {
-                            this.permissions[slug] = level;
-                            this.overriddenSlugs[slug] = true;
-                        },
-
-                        applyRolePreset() {
-                            this.overriddenSlugs = {};
-                            const preset = rolePresets[this.role] || rolePresets['user'] || {};
-                            Object.keys(modulesMap).forEach((slug) => {
-                                this.permissions[slug] = preset[slug] || 'none';
-                            });
-                        },
-                    };
-                });
-            };
-
-            if (window.Alpine) {
-                registerStaffAccessForms();
-            } else {
-                document.addEventListener('alpine:init', registerStaffAccessForms);
-            }
-        })();
-    </script>
+    {{-- Shared Unified Add Login, Manage Role & Access, and Reset Password Modals --}}
+    @include('users.partials.unified-access-modals', [
+        'linkableStaffList' => $allLinkableStaff,
+        'accessUsersMap' => $accessUsersMap,
+    ])
 @endsection

@@ -360,9 +360,14 @@
 
             if (member.profile_picture) {
                 const preview = document.getElementById('stfPhotoPreview');
+                const placeholder = document.getElementById('stfPhotoPlaceholder');
+                preview.onerror = function () {
+                    preview.classList.add('d-none');
+                    placeholder.classList.remove('d-none');
+                };
                 preview.src = `/${member.profile_picture}`;
                 preview.classList.remove('d-none');
-                document.getElementById('stfPhotoPlaceholder').classList.add('d-none');
+                placeholder.classList.add('d-none');
             }
 
             document.getElementById('stfHasAccess').checked = hasAccess;

@@ -9,6 +9,7 @@ use App\Models\KpiAgentTargetReport;
 use App\Models\KpiChatEvaluation;
 use App\Models\KpiContentReport;
 use App\Models\Lead;
+use App\Models\OpsActionItem;
 use App\Models\Sale;
 use App\Models\SocialContentPlan;
 use App\Models\Staff;
@@ -269,36 +270,110 @@ class UserController extends Controller
 
     public function index(Request $request)
     {
-        $query = User::query();
+        $rawView = strtolower(trim((string) $request->query('view', 'all')));
+        $activeView = in_array($rawView, ['all', 'unlinked_staff', 'disabled'], true) ? $rawView : 'all';
+
+        $allAccountsCount = User::count();
+        $disabledAccountsCount = User::where('is_active', false)->count();
+        $staffWithoutLoginCount = Staff::whereNull('user_id')->count();
+
+        $query = User::with('staff');
+
+        if ($activeView === 'disabled') {
+            $query->where('is_active', false);
+        }
 
         if ($request->filled('role')) {
             $query->where('role', $request->role);
         }
 
         if ($request->filled('search')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('name', 'like', '%' . $request->search . '%')
-                    ->orWhere('email', 'like', '%' . $request->search . '%');
+            $search = trim((string) $request->search);
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%')
+                    ->orWhere('email', 'like', '%' . $search . '%')
+                    ->orWhereHas('staff', fn ($sq) => $sq->where('name', 'like', '%' . $search . '%'));
             });
         }
 
-        $users = $query->orderBy('created_at', 'desc')->get();
+        $users = $query->orderByDesc('is_active')->orderBy('name')->get();
 
-        return view('users.index', compact('users'));
+        $unlinkedStaffQuery = Staff::whereNull('user_id')->orderBy('name');
+        if ($request->filled('search')) {
+            $search = trim((string) $request->search);
+            $unlinkedStaffQuery->where(function ($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%')
+                    ->orWhere('email', 'like', '%' . $search . '%')
+                    ->orWhere('phone', 'like', '%' . $search . '%');
+            });
+        }
+        $unlinkedStaff = $unlinkedStaffQuery->get();
+
+        $allLinkableStaff = Staff::orderBy('name')
+            ->get(['id', 'name', 'email', 'phone', 'branch', 'bookable', 'user_id', 'profile_picture', 'availability_status']);
+
+        $pendingOwnerActionCount = 0;
+        try {
+            $opsMonday = Carbon::now('Asia/Qatar')->startOfWeek(Carbon::MONDAY);
+            OpsActionItem::$referenceWeekMonday = $opsMonday->toDateString();
+            $usersById = User::where('is_active', true)->get(['id', 'name', 'email', 'role'])->keyBy('id');
+            $pendingOwnerActionCount = OpsActionItem::forWeek($opsMonday)
+                ->get()
+                ->filter(fn (OpsActionItem $item) => !$item->is_completed && $item->involvesBucket('owner', $usersById))
+                ->count();
+        } catch (\Throwable) {
+            $pendingOwnerActionCount = 0;
+        }
+
+        return view('users.index', compact(
+            'users',
+            'activeView',
+            'allAccountsCount',
+            'staffWithoutLoginCount',
+            'disabledAccountsCount',
+            'unlinkedStaff',
+            'allLinkableStaff',
+            'pendingOwnerActionCount'
+        ));
     }
 
-    // Store new user
+    // Store new user (supports creating a brand-new account OR granting login to an existing unlinked Staff record)
     public function store(Request $request)
     {
+        $existingStaffId = $request->filled('existing_staff_id') ? (int) $request->input('existing_staff_id') : null;
+        $existingStaff = null;
+
+        if ($existingStaffId !== null) {
+            $existingStaff = Staff::find($existingStaffId);
+            if (!$existingStaff) {
+                return $this->accessValidationFailure($request, 'existing_staff_id', 'Selected staff profile was not found.');
+            }
+            if ($existingStaff->user_id && User::whereKey($existingStaff->user_id)->exists()) {
+                return $this->accessValidationFailure($request, 'existing_staff_id', "{$existingStaff->name} already has a login account.");
+            }
+            if (!$request->filled('name')) {
+                $request->merge(['name' => $existingStaff->name]);
+            }
+        }
+
+        $passwordRules = $request->has('password_confirmation')
+            ? ['required', 'string', 'min:8', 'max:128', 'confirmed']
+            : ['required', 'string', 'min:8', 'max:128'];
+
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
-            'password' => 'required|string|min:8|confirmed',
+            'password' => $passwordRules,
             'role' => ['required', Rule::in(User::validRoleSlugs())],
             'profile_photo' => 'nullable|image|max:2048',
+            'create_staff_profile' => 'nullable|boolean',
+            'staff_branch' => ['nullable', Rule::in(['old_airport', 'wakrah', 'both', 'remote'])],
         ]);
 
-        $permissions = $this->validatedPermissions($request, (string) $request->role);
+        $role = (string) $request->role;
+        $permissions = $role === 'salon_staff'
+            ? User::defaultPermissionsForRole('salon_staff')
+            : $this->validatedPermissions($request, $role);
 
         $profilePath = null;
         if ($request->hasFile('profile_photo')) {
@@ -312,16 +387,53 @@ class UserController extends Controller
             $profilePath = 'user/profile-picture/' . $fileName;
         }
 
-        User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => $request->role,
-            'permissions' => $permissions,
-            'profile_photo' => $profilePath,
-        ]);
+        $user = DB::transaction(function () use ($request, $role, $permissions, $profilePath, $existingStaff) {
+            $created = User::create([
+                'name' => trim((string) $request->name),
+                'email' => strtolower(trim((string) $request->email)),
+                'password' => Hash::make($request->password),
+                'role' => $role,
+                'permissions' => $permissions,
+                'profile_photo' => $profilePath,
+                'is_active' => true,
+            ]);
 
-        return redirect()->route('users.index')->with('success', 'Staff member added successfully');
+            if ($existingStaff) {
+                $staffUpdates = ['user_id' => $created->id];
+                if (empty($existingStaff->email)) {
+                    $staffUpdates['email'] = $created->email;
+                }
+                $existingStaff->update($staffUpdates);
+            } elseif ($request->boolean('create_staff_profile')) {
+                $this->provisionLinkedStaffForUser($created, (string) $request->input('staff_branch', ''));
+            }
+
+            return $created;
+        });
+
+        $message = $existingStaff
+            ? "Portal login created and linked for {$existingStaff->name}."
+            : 'Staff account added successfully.';
+
+        if ($request->expectsJson() || $request->ajax()) {
+            $user->load('staff');
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                    'role_label' => $user->role === 'agent' ? 'Chat Agent' : $user->roleBadgeLabel(),
+                    'is_active' => (bool) $user->is_active,
+                    'staff_id' => $user->staff?->id,
+                ],
+            ], 201);
+        }
+
+        return redirect()->route('users.index')->with('success', $message);
     }
 
     /**
@@ -361,29 +473,78 @@ class UserController extends Controller
         return $permissions;
     }
 
-    public function destroy(User $user)
+    public function destroy(Request $request, User $user)
     {
-        $user->delete();
+        if ((int) $user->id === (int) Auth::id()) {
+            $msg = 'You cannot delete your own account.';
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return redirect()->route('users.index')->with('error', $msg);
+        }
+
+        DB::transaction(function () use ($user) {
+            Staff::where('user_id', $user->id)->update(['user_id' => null]);
+            if (Schema::hasTable('sessions')) {
+                DB::table('sessions')->where('user_id', $user->id)->delete();
+            }
+            $user->delete();
+        });
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['success' => true, 'message' => 'Staff account deleted successfully.']);
+        }
+
         return redirect()->route('users.index')->with('success', 'Staff member deleted successfully');
     }
 
     public function update(Request $request, User $user)
     {
+        $passwordRules = $request->has('password_confirmation')
+            ? ['nullable', 'string', 'min:8', 'max:128', 'confirmed']
+            : ['nullable', 'string', 'min:8', 'max:128'];
+
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'role' => ['required', Rule::in(User::validRoleSlugs())],
             'profile_photo' => 'nullable|image|max:2048',
-            'password' => 'nullable|string|min:8|confirmed',
+            'password' => $passwordRules,
+            'is_active' => 'nullable|boolean',
+            'staff_id' => 'nullable|integer|exists:staff,id',
         ]);
 
-        $permissions = $this->validatedPermissions($request, (string) $request->role, $user);
+        // Validate 1-to-1 staff link target if submitted
+        $shouldSyncStaffLink = $request->exists('staff_id');
+        $targetStaffId = $request->filled('staff_id') ? (int) $request->input('staff_id') : null;
+        if ($shouldSyncStaffLink && $targetStaffId !== null) {
+            $targetStaff = Staff::find($targetStaffId);
+            if ($targetStaff && $targetStaff->user_id !== null && (int) $targetStaff->user_id !== (int) $user->id) {
+                return $this->accessValidationFailure(
+                    $request,
+                    'staff_id',
+                    "{$targetStaff->name} is already linked to another login account."
+                );
+            }
+        }
 
-        $user->name = $request->name;
-        $user->email = $request->email;
-        $user->role = $request->role;
-        $user->permissions = $permissions;
+        $role = (string) $request->role;
+        $permissions = $role === 'salon_staff'
+            ? User::defaultPermissionsForRole('salon_staff')
+            : $this->validatedPermissions($request, $role, $user);
 
+        // Enforce self-protection if is_active was explicitly sent
+        $desiredActive = $user->is_active;
+        if ($request->exists('is_active')) {
+            $requestedActive = $request->boolean('is_active');
+            if (!$requestedActive && (int) $user->id === (int) Auth::id()) {
+                return $this->accessValidationFailure($request, 'is_active', 'You cannot deactivate your own account.');
+            }
+            $desiredActive = $requestedActive;
+        }
+
+        $profilePath = $user->profile_photo;
         if ($request->hasFile('profile_photo')) {
             $destinationPath = public_path('user/profile-picture');
             if (!file_exists($destinationPath)) {
@@ -392,14 +553,62 @@ class UserController extends Controller
             $file = $request->file('profile_photo');
             $fileName = time() . '_' . $file->getClientOriginalName();
             $file->move($destinationPath, $fileName);
-            $user->profile_photo = 'user/profile-picture/' . $fileName;
+            $profilePath = 'user/profile-picture/' . $fileName;
         }
 
-        if ($request->password) {
-            $user->password = Hash::make($request->password);
-        }
+        DB::transaction(function () use ($request, $user, $role, $permissions, $desiredActive, $profilePath, $shouldSyncStaffLink, $targetStaffId) {
+            $user->name = trim((string) $request->name);
+            $user->email = strtolower(trim((string) $request->email));
+            $user->role = $role;
+            $user->permissions = $permissions;
+            $user->is_active = $desiredActive;
+            $user->profile_photo = $profilePath;
 
-        $user->save();
+            if ($request->filled('password')) {
+                $user->password = Hash::make($request->password);
+            }
+
+            $user->save();
+
+            if (!$user->is_active && Schema::hasTable('sessions')) {
+                DB::table('sessions')->where('user_id', $user->id)->delete();
+            }
+
+            if ($shouldSyncStaffLink) {
+                Staff::where('user_id', $user->id)
+                    ->when($targetStaffId !== null, fn ($q) => $q->where('id', '!=', $targetStaffId))
+                    ->update(['user_id' => null]);
+
+                if ($targetStaffId !== null) {
+                    $staffToLink = Staff::find($targetStaffId);
+                    if ($staffToLink) {
+                        $updates = ['user_id' => $user->id];
+                        if (empty($staffToLink->email)) {
+                            $updates['email'] = $user->email;
+                        }
+                        $staffToLink->update($updates);
+                    }
+                }
+            }
+        });
+
+        if ($request->expectsJson() || $request->ajax()) {
+            $user->refresh()->load('staff');
+
+            return response()->json([
+                'success' => true,
+                'message' => "Access settings updated for {$user->name}.",
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                    'role_label' => $user->role === 'agent' ? 'Chat Agent' : $user->roleBadgeLabel(),
+                    'is_active' => (bool) $user->is_active,
+                    'staff_id' => $user->staff?->id,
+                ],
+            ]);
+        }
 
         return redirect()->route('users.index')->with('success', 'Staff member updated successfully');
     }
@@ -407,8 +616,13 @@ class UserController extends Controller
     // Toggle a staff member's login access on/off without deleting their account or history.
     public function toggleActive(Request $request, User $user)
     {
-        if ($user->id === Auth::id()) {
-            return redirect()->route('users.index')->with('error', 'You cannot deactivate your own account.');
+        if ((int) $user->id === (int) Auth::id()) {
+            $msg = 'You cannot deactivate your own account.';
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return redirect()->route('users.index')->with('error', $msg);
         }
 
         $user->is_active = !$user->is_active;
@@ -418,7 +632,178 @@ class UserController extends Controller
             DB::table('sessions')->where('user_id', $user->id)->delete();
         }
 
-        return redirect()->route('users.index')->with('success', $user->is_active ? 'Staff member reactivated.' : 'Staff member deactivated.');
+        $message = $user->is_active ? 'Staff member reactivated.' : 'Staff member deactivated.';
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'is_active' => (bool) $user->is_active,
+                'message' => $message,
+            ]);
+        }
+
+        return redirect()->route('users.index')->with('success', $message);
+    }
+
+    /**
+     * Admin-only quick password reset directly from Roles & Access or the unified Access modal.
+     */
+    public function resetPassword(Request $request, User $user)
+    {
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'max:128'],
+        ]);
+
+        $user->forceFill([
+            'password' => Hash::make($validated['password']),
+        ])->save();
+
+        $message = "Password updated for {$user->name}.";
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['success' => true, 'message' => $message]);
+        }
+
+        return redirect()->route('users.index')->with('success', $message);
+    }
+
+    /**
+     * Admin-only 1-to-1 link/unlink between an existing User login and a Staff HR profile.
+     */
+    public function linkStaff(Request $request, User $user)
+    {
+        $request->validate([
+            'staff_id' => 'nullable|integer|exists:staff,id',
+        ]);
+
+        $targetStaffId = $request->filled('staff_id') ? (int) $request->input('staff_id') : null;
+
+        if ($targetStaffId !== null) {
+            $targetStaff = Staff::find($targetStaffId);
+            if ($targetStaff && $targetStaff->user_id !== null && (int) $targetStaff->user_id !== (int) $user->id) {
+                return $this->accessValidationFailure(
+                    $request,
+                    'staff_id',
+                    "{$targetStaff->name} is already linked to another login account."
+                );
+            }
+        }
+
+        DB::transaction(function () use ($user, $targetStaffId) {
+            Staff::where('user_id', $user->id)
+                ->when($targetStaffId !== null, fn ($q) => $q->where('id', '!=', $targetStaffId))
+                ->update(['user_id' => null]);
+
+            if ($targetStaffId !== null) {
+                $staff = Staff::find($targetStaffId);
+                if ($staff) {
+                    $updates = ['user_id' => $user->id];
+                    if (empty($staff->email)) {
+                        $updates['email'] = $user->email;
+                    }
+                    $staff->update($updates);
+                }
+            }
+        });
+
+        $linked = Staff::where('user_id', $user->id)->first();
+        $message = $linked
+            ? "Linked {$user->name} to HR profile {$linked->name}."
+            : "Unlinked HR profile from {$user->name}.";
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'staff' => $linked ? [
+                    'id' => $linked->id,
+                    'name' => $linked->name,
+                    'branch' => $linked->branch,
+                    'bookable' => (bool) $linked->bookable,
+                ] : null,
+            ]);
+        }
+
+        return redirect()->route('users.index')->with('success', $message);
+    }
+
+    /**
+     * Admin-only 1-click creation of a linked Staff HR profile for an existing unlinked User
+     * (e.g., Zoya, Areeba, Sundus, Sana Kazi) so their /my-profile portal is immediately ready.
+     */
+    public function createStaffProfile(Request $request, User $user)
+    {
+        $existing = $user->staff()->first();
+        if ($existing) {
+            $msg = "{$user->name} is already linked to HR profile {$existing->name}.";
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return redirect()->route('users.index')->with('error', $msg);
+        }
+
+        $request->validate([
+            'branch' => ['nullable', Rule::in(['old_airport', 'wakrah', 'both', 'remote'])],
+        ]);
+
+        $staff = $this->provisionLinkedStaffForUser($user, (string) $request->input('branch', ''));
+        $message = "Created and linked Staff HR profile for {$user->name}.";
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'staff' => [
+                    'id' => $staff->id,
+                    'name' => $staff->name,
+                    'branch' => $staff->branch,
+                    'bookable' => (bool) $staff->bookable,
+                    'preview_url' => route('portal.admin-preview', $staff),
+                ],
+            ], 201);
+        }
+
+        return redirect()->route('users.index')->with('success', $message);
+    }
+
+    private function provisionLinkedStaffForUser(User $user, string $requestedBranch = ''): Staff
+    {
+        $parts = preg_split('/\s+/', trim($user->name), 2);
+        $firstName = $parts[0] ?? $user->name;
+        $lastName = $parts[1] ?? null;
+
+        $isSalonStaff = $user->isSalonStaff();
+        $isRemoteRole = in_array(strtolower((string) $user->role), ['agent', 'marketing_specialist', 'social_media_editor'], true);
+
+        $branch = in_array($requestedBranch, ['old_airport', 'wakrah', 'both'], true)
+            ? $requestedBranch
+            : 'old_airport';
+
+        return Staff::create([
+            'name' => $user->name,
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'email' => $user->email,
+            'branch' => $branch,
+            'bookable' => $isSalonStaff && !$isRemoteRole && $requestedBranch !== 'remote',
+            'availability_status' => 'present',
+            'employment_type' => 'full_time',
+            'user_id' => $user->id,
+        ]);
+    }
+
+    private function accessValidationFailure(Request $request, string $field, string $message)
+    {
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+                'errors' => [$field => [$message]],
+            ], 422);
+        }
+
+        return redirect()->back()->withErrors([$field => $message])->withInput();
     }
 
     public function profile_edit()

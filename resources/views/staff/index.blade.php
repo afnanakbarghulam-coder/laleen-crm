@@ -1033,9 +1033,6 @@
         <div class="laleen-top-pill-wrap">
             @include('staff.partials.top-pill-nav', ['inPlaceTabs' => true, 'activePill' => $activeTab])
         </div>
-        @if (auth()->user()->isSuperAdmin())
-            <a href="{{ route('users.index') }}" class="sc-btn-ghost">Staff Access</a>
-        @endif
     </div>
 
     {{-- ================= 1. DIRECTORY & PROFILES (COMBINES DIRECTORY + WORKSPACE) ================= --}}
@@ -1121,7 +1118,11 @@
                             <tr>
                                 <td>
                                     <div class="d-flex align-items-center gap-2">
-                                        <img class="team-avatar" src="{{ $member->profile_picture ? asset(str_replace('\\', '/', $member->profile_picture)) : asset('design/sneat-admin-template/assets/img/avatars/1.png') }}">
+                                        @include('partials.avatar', [
+                                            'src' => $member->profile_picture,
+                                            'name' => $member->name,
+                                            'size' => 38,
+                                        ])
                                         <div>
                                             <div class="team-name">{{ $member->name }}</div>
                                             <div class="text-muted small">{{ ucwords(str_replace('_', ' ', $member->branch)) }}</div>
@@ -1142,58 +1143,36 @@
                                 <td data-portal-cell="{{ $member->id }}">
                                     @php
                                         $linkedUser = $member->user;
-                                        $suggestedPortalRole = $member->bookable ? 'salon_staff' : 'agent';
                                         $portalRoleText = $linkedUser
                                             ? ($linkedUser->role === 'agent' ? 'Chat Agent' : $linkedUser->roleBadgeLabel())
                                             : null;
                                     @endphp
-                                    <div class="portal-access-cell">
-                                        @if ($linkedUser)
-                                            <div class="portal-access-top">
-                                                <span class="access-badge {{ $linkedUser->role }}">{{ $portalRoleText }}</span>
-                                                <span class="portal-status-pill {{ $linkedUser->is_active ? 'is-active' : 'is-disabled' }}"
-                                                    data-portal-status-badge="{{ $member->id }}">
-                                                    {{ $linkedUser->is_active ? 'Active' : 'Disabled' }}
-                                                </span>
-                                            </div>
-                                            <div class="portal-login-email">{{ $linkedUser->email }}</div>
-                                            @if ($isAdminViewer)
-                                                <div class="portal-access-controls">
-                                                    @if ((int) $linkedUser->id !== (int) auth()->id())
-                                                        <label class="portal-switch-wrap form-check form-switch">
-                                                            <input type="checkbox"
-                                                                class="form-check-input portal-toggle-active-input"
-                                                                data-staff-id="{{ $member->id }}"
-                                                                data-staff-name="{{ $member->name }}"
-                                                                {{ $linkedUser->is_active ? 'checked' : '' }}
-                                                                aria-label="Toggle portal access for {{ $member->name }}">
-                                                            <span data-portal-toggle-label="{{ $member->id }}">{{ $linkedUser->is_active ? 'Active' : 'Disabled' }}</span>
-                                                        </label>
-                                                    @endif
-                                                    <button type="button"
-                                                        class="portal-mini-btn portal-reset-pw-btn"
-                                                        data-staff-id="{{ $member->id }}"
-                                                        data-staff-name="{{ $member->name }}"
-                                                        data-staff-email="{{ $linkedUser->email }}">
-                                                        <i class="bx bx-key"></i> Reset Password
-                                                    </button>
-                                                </div>
-                                            @endif
-                                        @else
-                                            <span class="text-muted small">No portal login</span>
+                                    @if ($linkedUser)
+                                        <div class="d-flex align-items-center flex-wrap gap-2">
+                                            <span class="portal-status-pill {{ $linkedUser->is_active ? 'is-active' : 'is-disabled' }}"
+                                                data-portal-status-badge="{{ $member->id }}"
+                                                title="{{ $linkedUser->email }}">
+                                                {{ $portalRoleText }} &middot; {{ $linkedUser->is_active ? 'Active' : 'Disabled' }}
+                                            </span>
                                             @if ($isAdminViewer)
                                                 <button type="button"
-                                                    class="portal-create-btn portal-open-create-btn"
-                                                    data-staff-id="{{ $member->id }}"
-                                                    data-staff-name="{{ $member->name }}"
-                                                    data-staff-branch="{{ ucwords(str_replace('_', ' ', (string) $member->branch)) }}"
-                                                    data-staff-email="{{ $member->email ?? '' }}"
-                                                    data-suggested-role="{{ $suggestedPortalRole }}">
-                                                    <i class="bx bx-user-plus"></i> Create Portal Login
+                                                    class="portal-mini-btn"
+                                                    onclick="openManageAccessModal({{ $linkedUser->id }})">
+                                                    Manage
                                                 </button>
                                             @endif
+                                        </div>
+                                    @else
+                                        @if ($isAdminViewer)
+                                            <button type="button"
+                                                class="portal-create-btn"
+                                                onclick="openAddLoginModal({ mode: 'existing_staff', staffId: {{ $member->id }} })">
+                                                <i class="bx bx-plus"></i> Grant Access
+                                            </button>
+                                        @else
+                                            <span class="text-muted small">No portal login</span>
                                         @endif
-                                    </div>
+                                    @endif
                                 </td>
                                 <td class="team-rating">No reviews yet</td>
                                 <td>
@@ -2538,103 +2517,27 @@
         </div>
 
         @if ($isAdminViewer)
-        {{-- Create Portal Login Modal (Admin-Only) --}}
-        <div class="modal fade" id="createPortalLoginModal" tabindex="-1" aria-labelledby="createPortalLoginTitle" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <div>
-                            <h5 class="modal-title fw-bold mb-0" id="createPortalLoginTitle">Create Portal Login</h5>
-                            <div class="small" style="color:#b8a29a;" id="cplStaffMeta"></div>
-                        </div>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <form id="createPortalLoginForm">
-                        <div class="modal-body">
-                            <input type="hidden" id="cplStaffId">
-                            <div id="cplError" class="ded-modal-error d-none"></div>
-
-                            <div class="mb-3">
-                                <label class="form-label" for="cplEmail">Login Email *</label>
-                                <input type="email" id="cplEmail" name="email" class="form-control" required maxlength="255" placeholder="name@laleen.qa" autocomplete="off">
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label" for="cplRole">Portal Role *</label>
-                                <select id="cplRole" name="role" class="form-select" required>
-                                    <option value="salon_staff">Salon Staff — Self-Service Portal Only</option>
-                                    <option value="agent">Chat Agent — CRM Operations &amp; My Profile</option>
-                                    <option value="manager">Manager — Branch Oversight &amp; My Profile</option>
-                                    <option value="staff">Staff — Calendar &amp; Bookings</option>
-                                    <option value="marketing_specialist">Marketing Specialist</option>
-                                    <option value="social_media_editor">Social Media Editor</option>
-                                </select>
-                                <div class="small mt-1" style="color:#8f7a73;" id="cplRoleHint">Salon Staff accounts can only access their own My Profile portal.</div>
-                            </div>
-
-                            <div class="mb-1">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <label class="form-label mb-0" for="cplPassword">Temporary Password *</label>
-                                    <button type="button" class="portal-mini-btn" id="cplGeneratePwBtn">
-                                        <i class="bx bx-refresh"></i> Generate
-                                    </button>
-                                </div>
-                                <div class="input-group">
-                                    <input type="password" id="cplPassword" name="password" class="form-control" required minlength="8" maxlength="128" placeholder="Minimum 8 characters" autocomplete="new-password">
-                                    <button type="button" class="btn btn-outline-secondary" id="cplTogglePwVis" title="Show or hide password" style="border-color:rgba(229,184,168,0.22); color:#e5b8a8;">
-                                        <i class="bx bx-show"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="sc-btn-ghost" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="sc-btn-rosegold" id="cplSubmitBtn">Create Login</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        {{-- Reset Portal Password Modal (Admin-Only) --}}
-        <div class="modal fade" id="resetPortalPasswordModal" tabindex="-1" aria-labelledby="resetPortalPasswordTitle" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <div>
-                            <h5 class="modal-title fw-bold mb-0" id="resetPortalPasswordTitle">Reset Portal Password</h5>
-                            <div class="small" style="color:#b8a29a;" id="rppStaffMeta"></div>
-                        </div>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <form id="resetPortalPasswordForm">
-                        <div class="modal-body">
-                            <input type="hidden" id="rppStaffId">
-                            <div id="rppError" class="ded-modal-error d-none"></div>
-
-                            <div class="mb-1">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <label class="form-label mb-0" for="rppPassword">New Temporary Password *</label>
-                                    <button type="button" class="portal-mini-btn" id="rppGeneratePwBtn">
-                                        <i class="bx bx-refresh"></i> Generate
-                                    </button>
-                                </div>
-                                <div class="input-group">
-                                    <input type="password" id="rppPassword" name="password" class="form-control" required minlength="8" maxlength="128" placeholder="Minimum 8 characters" autocomplete="new-password">
-                                    <button type="button" class="btn btn-outline-secondary" id="rppTogglePwVis" title="Show or hide password" style="border-color:rgba(229,184,168,0.22); color:#e5b8a8;">
-                                        <i class="bx bx-show"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="sc-btn-ghost" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="sc-btn-rosegold" id="rppSubmitBtn">Update Password</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
+            @php
+                $dirAccessUsersMap = [];
+                foreach ($allStaff as $stRow) {
+                    if ($stRow->user) {
+                        $u = $stRow->user;
+                        $dirAccessUsersMap[(string) $u->id] = [
+                            'id' => (int) $u->id,
+                            'name' => (string) $u->name,
+                            'email' => (string) $u->email,
+                            'role' => (string) $u->role,
+                            'is_active' => (bool) $u->is_active,
+                            'staff_id' => (int) $stRow->id,
+                            'permissions' => $u->effectivePermissionsMap(),
+                        ];
+                    }
+                }
+            @endphp
+            @include('users.partials.unified-access-modals', [
+                'linkableStaffList' => $allStaff,
+                'accessUsersMap' => $dirAccessUsersMap,
+            ])
         @endif
 
         @include('staff.main-form')
@@ -4239,250 +4142,6 @@
                 });
             });
         });
-
-        /* ---------- ADMIN PORTAL ACCESS CONTROLS (DIRECTORY & PROFILES) ---------- */
-        (function initPortalAccessControls() {
-            function generateTempPassword() {
-                const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-                const lower = 'abcdefghijkmnopqrstuvwxyz';
-                const digits = '23456789';
-                const symbols = '!@#$%&*';
-                const all = upper + lower + digits + symbols;
-                let pw = upper[Math.floor(Math.random() * upper.length)]
-                    + lower[Math.floor(Math.random() * lower.length)]
-                    + digits[Math.floor(Math.random() * digits.length)]
-                    + symbols[Math.floor(Math.random() * symbols.length)];
-                for (let i = 0; i < 8; i++) {
-                    pw += all[Math.floor(Math.random() * all.length)];
-                }
-                return pw.split('').sort(() => 0.5 - Math.random()).join('');
-            }
-
-            function bindPasswordHelpers(inputId, toggleBtnId, genBtnId) {
-                const input = document.getElementById(inputId);
-                const toggleBtn = document.getElementById(toggleBtnId);
-                const genBtn = document.getElementById(genBtnId);
-                if (toggleBtn && input) {
-                    toggleBtn.addEventListener('click', function () {
-                        const showing = input.type === 'text';
-                        input.type = showing ? 'password' : 'text';
-                        const icon = toggleBtn.querySelector('i');
-                        if (icon) icon.className = showing ? 'bx bx-show' : 'bx bx-hide';
-                    });
-                }
-                if (genBtn && input) {
-                    genBtn.addEventListener('click', function () {
-                        input.value = generateTempPassword();
-                        input.type = 'text';
-                        const icon = toggleBtn?.querySelector('i');
-                        if (icon) icon.className = 'bx bx-hide';
-                        input.focus();
-                        input.select();
-                    });
-                }
-            }
-
-            bindPasswordHelpers('cplPassword', 'cplTogglePwVis', 'cplGeneratePwBtn');
-            bindPasswordHelpers('rppPassword', 'rppTogglePwVis', 'rppGeneratePwBtn');
-
-            const cplModalEl = document.getElementById('createPortalLoginModal');
-            const cplForm = document.getElementById('createPortalLoginForm');
-            const cplError = document.getElementById('cplError');
-            const cplRoleEl = document.getElementById('cplRole');
-            const cplRoleHint = document.getElementById('cplRoleHint');
-
-            function updateRoleHint() {
-                if (!cplRoleEl || !cplRoleHint) return;
-                if (cplRoleEl.value === 'salon_staff') {
-                    cplRoleHint.textContent = 'Salon Staff accounts are isolated to their self-service My Profile portal.';
-                } else if (cplRoleEl.value === 'agent') {
-                    cplRoleHint.textContent = 'Chat Agent accounts receive standard CRM access plus My Profile.';
-                } else {
-                    cplRoleHint.textContent = 'Grants role-based CRM access plus My Profile.';
-                }
-            }
-            cplRoleEl?.addEventListener('change', updateRoleHint);
-
-            document.addEventListener('click', function (e) {
-                const createBtn = e.target.closest('.portal-open-create-btn');
-                if (createBtn && cplModalEl) {
-                    document.getElementById('cplStaffId').value = createBtn.dataset.staffId || '';
-                    document.getElementById('cplStaffMeta').textContent = `${createBtn.dataset.staffName || ''}${createBtn.dataset.staffBranch ? ' · ' + createBtn.dataset.staffBranch : ''}`;
-                    document.getElementById('cplEmail').value = createBtn.dataset.staffEmail || '';
-                    const pwInput = document.getElementById('cplPassword');
-                    pwInput.value = '';
-                    pwInput.type = 'password';
-                    const visIcon = document.querySelector('#cplTogglePwVis i');
-                    if (visIcon) visIcon.className = 'bx bx-show';
-                    if (cplRoleEl) {
-                        cplRoleEl.value = createBtn.dataset.suggestedRole || 'salon_staff';
-                        updateRoleHint();
-                    }
-                    cplError?.classList.add('d-none');
-                    bootstrap.Modal.getOrCreateInstance(cplModalEl).show();
-                    return;
-                }
-
-                const resetBtn = e.target.closest('.portal-reset-pw-btn');
-                if (resetBtn) {
-                    const rppModalEl = document.getElementById('resetPortalPasswordModal');
-                    if (!rppModalEl) return;
-                    document.getElementById('rppStaffId').value = resetBtn.dataset.staffId || '';
-                    document.getElementById('rppStaffMeta').textContent = `${resetBtn.dataset.staffName || ''} · ${resetBtn.dataset.staffEmail || ''}`;
-                    const pwInput = document.getElementById('rppPassword');
-                    pwInput.value = '';
-                    pwInput.type = 'password';
-                    const visIcon = document.querySelector('#rppTogglePwVis i');
-                    if (visIcon) visIcon.className = 'bx bx-show';
-                    document.getElementById('rppError')?.classList.add('d-none');
-                    bootstrap.Modal.getOrCreateInstance(rppModalEl).show();
-                }
-            });
-
-            if (cplForm) {
-                cplForm.addEventListener('submit', function (e) {
-                    e.preventDefault();
-                    const staffId = document.getElementById('cplStaffId').value;
-                    const submitBtn = document.getElementById('cplSubmitBtn');
-                    cplError?.classList.add('d-none');
-                    submitBtn.disabled = true;
-                    submitBtn.textContent = 'Creating…';
-
-                    fetch(`/staffs/${staffId}/portal-access`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            email: document.getElementById('cplEmail').value.trim(),
-                            role: document.getElementById('cplRole').value,
-                            password: document.getElementById('cplPassword').value,
-                        }),
-                    })
-                    .then(async res => ({ ok: res.ok, data: await res.json().catch(() => ({})) }))
-                    .then(({ ok, data }) => {
-                        if (ok && data.success) {
-                            bootstrap.Modal.getInstance(cplModalEl)?.hide();
-                            showStaffToast(data.message || 'Portal login created.');
-                            window.location.reload();
-                        } else {
-                            const errMsg = data.errors
-                                ? Object.values(data.errors).flat()[0]
-                                : (data.message || 'Could not create portal login.');
-                            if (cplError) {
-                                cplError.textContent = errMsg;
-                                cplError.classList.remove('d-none');
-                            }
-                            submitBtn.disabled = false;
-                            submitBtn.textContent = 'Create Login';
-                        }
-                    })
-                    .catch(() => {
-                        if (cplError) {
-                            cplError.textContent = 'Network error. Please try again.';
-                            cplError.classList.remove('d-none');
-                        }
-                        submitBtn.disabled = false;
-                        submitBtn.textContent = 'Create Login';
-                    });
-                });
-            }
-
-            const rppForm = document.getElementById('resetPortalPasswordForm');
-            const rppError = document.getElementById('rppError');
-            if (rppForm) {
-                rppForm.addEventListener('submit', function (e) {
-                    e.preventDefault();
-                    const staffId = document.getElementById('rppStaffId').value;
-                    const submitBtn = document.getElementById('rppSubmitBtn');
-                    rppError?.classList.add('d-none');
-                    submitBtn.disabled = true;
-                    submitBtn.textContent = 'Updating…';
-
-                    fetch(`/staffs/${staffId}/portal-access/reset-password`, {
-                        method: 'PATCH',
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            password: document.getElementById('rppPassword').value,
-                        }),
-                    })
-                    .then(async res => ({ ok: res.ok, data: await res.json().catch(() => ({})) }))
-                    .then(({ ok, data }) => {
-                        if (ok && data.success) {
-                            bootstrap.Modal.getInstance(document.getElementById('resetPortalPasswordModal'))?.hide();
-                            showStaffToast(data.message || 'Password updated.');
-                        } else {
-                            const errMsg = data.errors
-                                ? Object.values(data.errors).flat()[0]
-                                : (data.message || 'Could not reset password.');
-                            if (rppError) {
-                                rppError.textContent = errMsg;
-                                rppError.classList.remove('d-none');
-                            }
-                        }
-                    })
-                    .catch(() => {
-                        if (rppError) {
-                            rppError.textContent = 'Network error. Please try again.';
-                            rppError.classList.remove('d-none');
-                        }
-                    })
-                    .finally(() => {
-                        submitBtn.disabled = false;
-                        submitBtn.textContent = 'Update Password';
-                    });
-                });
-            }
-
-            document.addEventListener('change', function (e) {
-                const toggle = e.target.closest('.portal-toggle-active-input');
-                if (!toggle) return;
-                const staffId = toggle.dataset.staffId;
-                const prevState = !toggle.checked;
-                toggle.disabled = true;
-
-                fetch(`/staffs/${staffId}/portal-access/toggle`, {
-                    method: 'PATCH',
-                    headers: {
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                    },
-                })
-                .then(async res => ({ ok: res.ok, data: await res.json().catch(() => ({})) }))
-                .then(({ ok, data }) => {
-                    if (ok && data.success) {
-                        const isActive = Boolean(data.is_active);
-                        toggle.checked = isActive;
-                        const badge = document.querySelector(`[data-portal-status-badge="${staffId}"]`);
-                        const lbl = document.querySelector(`[data-portal-toggle-label="${staffId}"]`);
-                        if (badge) {
-                            badge.textContent = isActive ? 'Active' : 'Disabled';
-                            badge.classList.toggle('is-active', isActive);
-                            badge.classList.toggle('is-disabled', !isActive);
-                        }
-                        if (lbl) lbl.textContent = isActive ? 'Active' : 'Disabled';
-                        showStaffToast(data.message || (isActive ? 'Portal access activated.' : 'Portal access disabled.'));
-                    } else {
-                        toggle.checked = prevState;
-                        showStaffToast(data.message || 'Could not update portal access.', 'error');
-                    }
-                })
-                .catch(() => {
-                    toggle.checked = prevState;
-                    showStaffToast('Network error updating portal access.', 'error');
-                })
-                .finally(() => {
-                    toggle.disabled = false;
-                });
-            });
-        })();
 
     </script>
 @endsection

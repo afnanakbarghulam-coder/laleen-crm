@@ -10,13 +10,12 @@
 
                 <div class="modal-body text-center">
 
-                    <div class="mb-3">
-                        @if ($user?->profile_photo)
-                            <img src="{{ asset($user->profile_photo) }}"
-                                 class="rounded-circle mb-3" width="120" height="120">
-                        @else
-                            <i class="bx bx-user" style="font-size:100px"></i>
-                        @endif
+                    <div class="mb-3 d-flex justify-content-center">
+                        @include('partials.avatar', [
+                            'src' => $user?->profile_photo,
+                            'name' => $user?->name ?? 'User',
+                            'size' => 104,
+                        ])
                     </div>
 
                     <input type="text" name="name"

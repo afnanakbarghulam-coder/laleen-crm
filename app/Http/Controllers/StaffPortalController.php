@@ -55,6 +55,42 @@ class StaffPortalController extends Controller
         $rawTab = strtolower(trim((string) $request->query('tab', 'overview')));
         $activeTab = in_array($rawTab, self::ALLOWED_TABS, true) ? $rawTab : 'overview';
 
+        return view('portal.my-profile', $this->buildPortalViewData($user, $staff, $activeTab, false));
+    }
+
+    /**
+     * Admin-only read-only preview of a staff member's Staff Self-Service Portal view.
+     * Strictly gated behind Admin authorization (`role:admin` + explicit `isAdmin()` check).
+     */
+    public function adminPreview(Request $request, Staff $staff)
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can preview staff portal profiles.');
+
+        $staff->load([
+            'user',
+            'services' => fn ($q) => $q->with('category')->orderBy('name'),
+            'shiftPatterns.blocks',
+            'timeOffs' => fn ($q) => $q->orderBy('start_date'),
+        ]);
+
+        $targetUser = $staff->user;
+        if (!$targetUser) {
+            $targetUser = new User([
+                'name' => $staff->name,
+                'email' => $staff->email ?: 'No portal login assigned yet',
+                'role' => $staff->bookable ? 'salon_staff' : 'agent',
+                'is_active' => true,
+            ]);
+        }
+
+        $rawTab = strtolower(trim((string) $request->query('tab', 'overview')));
+        $activeTab = in_array($rawTab, self::ALLOWED_TABS, true) ? $rawTab : 'overview';
+
+        return view('portal.my-profile', $this->buildPortalViewData($targetUser, $staff, $activeTab, true));
+    }
+
+    private function buildPortalViewData(User $user, ?Staff $staff, string $activeTab, bool $isAdminPreview): array
+    {
         $nowQatar = Carbon::now('Asia/Qatar');
         $todayQatar = $nowQatar->copy()->startOfDay();
         $windowEndQatar = $todayQatar->copy()->addDays(29);
@@ -111,15 +147,20 @@ class StaffPortalController extends Controller
         // ---- Off Days (Weekly Fixed + Upcoming 30 Days in Asia/Qatar) ----
         $offDaysPayload = $this->buildOffDaysPayload($staff, $activePattern, $todayQatar, $windowEndQatar);
 
-        return view('portal.my-profile', [
+        return [
             'user' => $user,
             'staff' => $staff,
             'activeTab' => $activeTab,
             'isSalonStaff' => $isSalonStaff,
             'isAgent' => $isAgent,
+            'isAdminPreview' => $isAdminPreview,
+            'portalTabRoute' => $isAdminPreview && $staff
+                ? fn (string $tab) => route('portal.admin-preview', ['staff' => $staff->id, 'tab' => $tab])
+                : fn (string $tab) => route('portal.profile', ['tab' => $tab]),
             'profile' => [
                 'name' => $displayName,
                 'initials' => $initials,
+                'avatar_raw' => $avatarPath,
                 'avatar' => $avatarPath ? asset(str_replace('\\', '/', $avatarPath)) : null,
                 'role_badge' => $roleBadge,
                 'job_subtitle' => $jobSubtitle,
@@ -135,7 +176,7 @@ class StaffPortalController extends Controller
             'skillsPayload' => $skillsPayload,
             'offDaysPayload' => $offDaysPayload,
             'todayQatarLabel' => $nowQatar->format('D, d M Y'),
-        ]);
+        ];
     }
 
     /**

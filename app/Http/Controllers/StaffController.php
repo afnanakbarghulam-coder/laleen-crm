@@ -82,6 +82,7 @@ class StaffController extends Controller
         // Full roster, used by the pickers in Payroll/Shifts/Complaints tabs.
         $allStaff = $hasDirectoryFilter
             ? Staff::with([
+                'user',
                 'services:id',
                 'shiftPatterns.blocks',
                 'timeOffs' => fn ($q) => $q->orderByDesc('start_date'),
