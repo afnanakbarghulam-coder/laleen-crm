@@ -244,27 +244,28 @@ class ChatAgentKpiPipelineAuditFixesTest extends TestCase
 
             $this->assertSame($this->areeba->id, $areebaAppt->fresh()->booking_agent_id, 'Another agent cannot steal existing booking_agent_id');
 
-            // Verify /kpis, /kpis/agents liveAgentScorecards, and KpiAgentTargetReport all show Areeba = 2, Zoya = 1, Laden = 3
+            // Verify /kpis, /kpis/agents liveAgentScorecards, and KpiAgentTargetReport exclude cancelled bookings
+            // (Areeba = 1 active, cancelled excluded; Zoya = 1 no_show; Laden = 2)
             $scorecard = $this->actingAs($this->admin)
                 ->get(route('kpi.hub', ['month' => '2026-11']))
                 ->viewData('scorecard');
 
-            $this->assertSame(2, $scorecard['areeba']['today_bookings']);
-            $this->assertSame(2, $scorecard['areeba']['mtd_bookings']);
+            $this->assertSame(1, $scorecard['areeba']['today_bookings']);
+            $this->assertSame(1, $scorecard['areeba']['mtd_bookings']);
             $this->assertSame(1, $scorecard['zoya']['today_bookings']);
             $this->assertSame(1, $scorecard['zoya']['mtd_bookings']);
-            $this->assertSame(3, $scorecard['laden']['today_bookings_count']);
-            $this->assertSame(3, $scorecard['laden']['mtd_bookings_count']);
+            $this->assertSame(2, $scorecard['laden']['today_bookings_count']);
+            $this->assertSame(2, $scorecard['laden']['mtd_bookings_count']);
 
             $liveCards = collect(KpiAgentTargetReport::liveAgentScorecards('2026-11'))->keyBy('id');
-            $this->assertSame(2, $liveCards[$this->areeba->id]['today_bookings']);
+            $this->assertSame(1, $liveCards[$this->areeba->id]['today_bookings']);
             $this->assertSame(1, $liveCards[$this->zoya->id]['today_bookings']);
 
             $report = new KpiAgentTargetReport([
                 'date_from' => Carbon::parse('2026-11-01', 'Asia/Qatar'),
                 'date_to' => Carbon::parse('2026-11-13', 'Asia/Qatar'),
             ]);
-            $this->assertSame(3, $report->combined()['bookings']);
+            $this->assertSame(2, $report->combined()['bookings']);
             $this->assertSame(390, $report->recoveryMath()['monthly_target_per_shift'], 'November 30-day target must be 390, not hardcoded 403');
         } finally {
             Carbon::setTestNow();

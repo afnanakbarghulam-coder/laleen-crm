@@ -566,14 +566,14 @@ class CrmPhaseThreeFinanceAndIsolationTest extends TestCase
         }
 
         $liveCards = collect(KpiAgentTargetReport::liveAgentScorecards())->keyBy('id');
-        $this->assertSame(3, $liveCards[$zoya->id]['today_bookings'], 'Zoya must keep +1 credit for all 3 booking_agent_id rows including cancelled & no_show');
+        $this->assertSame(2, $liveCards[$zoya->id]['today_bookings'], 'Zoya must exclude cancelled and count active + no_show rows (2)');
         $this->assertSame(1, $liveCards[$areeba->id]['today_bookings'], 'Areeba must get 1 credit strictly for explicit booking_agent_id row');
 
         $report = new KpiAgentTargetReport([
             'date_from' => $now->copy()->startOfDay(),
             'date_to' => $now->copy()->endOfDay(),
         ]);
-        $this->assertSame(4, $report->combined()['bookings'], 'Combined shift report must count all 4 Chat Agent bookings including cancelled & no_show');
+        $this->assertSame(3, $report->combined()['bookings'], 'Combined shift report must exclude cancelled and count 3 non-cancelled Chat Agent bookings');
 
         // Sana Content Plan on Day 11 (2026-11-11 -> completedDays = 10 -> Option A target = 10 Stories + floor(40/7)=5 Reels = 15):
         // Seed 11 items in Week 1 (2026-11-02) and 0 items in Week 2 (2026-11-09) -> 11/15 = 73.3% FAIL (NOT 100%!)
@@ -594,9 +594,9 @@ class CrmPhaseThreeFinanceAndIsolationTest extends TestCase
             ->get(route('kpi.hub', ['month' => '2026-11']))
             ->viewData('scorecard');
 
-        $this->assertSame(3, $scorecardHalf['zoya']['today_bookings']);
+        $this->assertSame(2, $scorecardHalf['zoya']['today_bookings']);
         $this->assertSame(1, $scorecardHalf['areeba']['today_bookings']);
-        $this->assertSame(4, $scorecardHalf['laden']['today_bookings_count']);
+        $this->assertSame(3, $scorecardHalf['laden']['today_bookings_count']);
 
         $this->assertSame(2, $scorecardHalf['sana']['elapsed_weeks']);
         $this->assertSame(15, $scorecardHalf['sana']['cumulative_mtd_target']);

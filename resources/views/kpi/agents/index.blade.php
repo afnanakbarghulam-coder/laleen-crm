@@ -17,11 +17,12 @@
                 <div class="col-md-6">
                     <div class="kpi-stat-card">
                         <div class="d-flex justify-content-between align-items-center mb-1">
-                            <div class="kpi-stat-label">{{ $card['name'] }} &mdash; Daily &amp; MTD Booking Target (13/Day)</div>
+                            <div class="kpi-stat-label" title="{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}">{{ $card['name'] }} &mdash; Daily &amp; MTD Booking Target (13/Day)</div>
                             <span class="kpi-badge {{ $card['mtd_pct'] >= 85 ? 'kpi-badge-green' : ($card['mtd_pct'] >= 70 ? 'kpi-badge-amber' : 'kpi-badge-red') }}">
                                 {{ number_format($card['mtd_pct'], 1) }}% MTD
                             </span>
                         </div>
+                        <div class="text-muted mb-1" style="font-size:11.5px;">{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}</div>
                         <div class="kpi-stat-value">{{ $card['mtd_bookings'] }} / {{ $card['mtd_target'] }} <span class="text-muted small fw-normal">Bookings MTD</span></div>
                         <div class="kpi-stat-sub d-flex flex-wrap align-items-center justify-content-between gap-2 mt-1">
                             <span>Today: <strong>{{ $card['today_bookings'] }} / {{ $card['daily_target'] }}</strong> ({{ number_format($card['today_pct'], 1) }}%) &bull; Full Month: {{ $card['full_month_target'] }}</span>

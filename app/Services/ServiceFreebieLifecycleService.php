@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Appointment;
+use App\Models\AppointmentPriceOverride;
 use App\Models\AppointmentService;
 use App\Models\ClientFreebieCredit;
 use App\Models\Customer;
@@ -10,6 +11,7 @@ use App\Models\Service;
 use App\Models\ServiceFreebiePackage;
 use App\Models\Staff;
 use App\Support\BookingConflictValidator;
+use App\Support\LineDiscountCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
@@ -44,6 +46,10 @@ class ServiceFreebieLifecycleService
             $items[] = [
                 'package_id' => (int) $request->input('freebie_package_id'),
                 'anchor_staff_id' => $request->input('anchor_staff_id') ?: $request->input('staff_id'),
+                'discount_type' => $request->input('freebie_discount_type'),
+                'discount_value' => $request->input('freebie_discount_value'),
+                'price' => $request->input('freebie_price'),
+                'discount_reason' => $request->input('freebie_discount_reason'),
                 'slots' => is_array($request->input('freebie_slots')) ? $request->input('freebie_slots') : [],
             ];
         }
@@ -156,6 +162,22 @@ class ServiceFreebieLifecycleService
             $eligibleById = $package->eligibleServices->keyBy('id');
             $choicesCount = $package->effective_choices_count;
 
+            $pricing = LineDiscountCalculator::resolve(
+                (float) $package->price,
+                isset($rawPkg['discount_type']) ? (string) $rawPkg['discount_type'] : null,
+                $rawPkg['discount_value'] ?? null,
+                $rawPkg['price'] ?? ($rawPkg['final_price'] ?? null),
+                isset($rawPkg['discount_reason']) ? (string) $rawPkg['discount_reason'] : null,
+                $package->name
+            );
+            if ($pricing['error'] !== null) {
+                return [[], $pricing['error'], [
+                    'reason' => 'validation',
+                    'field' => 'freebie_packages',
+                    'message' => $pricing['error'],
+                ]];
+            }
+
             $anchorStaffId = !empty($rawPkg['anchor_staff_id'])
                 ? (int) $rawPkg['anchor_staff_id']
                 : $defaultStaffId;
@@ -240,6 +262,7 @@ class ServiceFreebieLifecycleService
                 'anchor_staff_id' => $anchorStaffId,
                 'anchor_sort_order' => isset($rawPkg['anchor_sort_order']) && $rawPkg['anchor_sort_order'] !== '' ? (int) $rawPkg['anchor_sort_order'] : null,
                 'anchor_is_parallel' => filter_var($rawPkg['anchor_is_parallel'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                'pricing' => $pricing,
                 'slots' => $normalizedSlots,
             ];
         }
@@ -413,7 +436,16 @@ class ServiceFreebieLifecycleService
             $anchorSvc = $plan['anchor_service'];
             $anchorSliceMeta = $anchorScheduleByPlan[$pIdx] ?? null;
 
-            AppointmentService::create([
+            $pricing = $plan['pricing'] ?? [
+                'original_price' => (float) $pkg->price,
+                'price' => (float) $pkg->price,
+                'discount_type' => null,
+                'discount_value' => 0.0,
+                'discount_amount' => 0.0,
+                'discount_reason' => null,
+            ];
+
+            $anchorLine = AppointmentService::create([
                 'appointment_id' => $appointment->id,
                 'service_id' => $anchorSvc->id,
                 'freebie_package_id' => $pkg->id,
@@ -422,16 +454,30 @@ class ServiceFreebieLifecycleService
                 'sort_order' => $anchorSliceMeta['sort_order'] ?? 0,
                 'is_parallel' => (bool) ($anchorSliceMeta['is_parallel'] ?? false),
                 'name' => $anchorSvc->name,
-                'price' => $pkg->price,
-                'original_price' => $pkg->price,
+                'price' => $pricing['price'],
+                'original_price' => $pricing['original_price'],
                 'duration' => (int) ($anchorSvc->duration ?: 60),
                 'start_time' => $anchorSliceMeta['start'] ?? null,
                 'status' => 'scheduled',
                 'is_pending' => false,
-                'discount_type' => null,
-                'discount_value' => 0,
-                'discount_reason' => "Anchor package: {$pkg->name}",
+                'discount_type' => $pricing['discount_type'],
+                'discount_value' => $pricing['discount_value'],
+                'discount_amount' => $pricing['discount_amount'],
+                'discount_reason' => $pricing['discount_reason'],
             ]);
+
+            if ($anchorLine->discount_amount > 0 && Schema::hasTable('appointment_price_overrides')) {
+                AppointmentPriceOverride::create([
+                    'appointment_id' => $appointment->id,
+                    'appointment_service_id' => $anchorLine->id,
+                    'service_name' => $anchorLine->name,
+                    'original_price' => $anchorLine->original_price,
+                    'new_price' => $anchorLine->price,
+                    'discount_amount' => $anchorLine->discount_amount,
+                    'discount_reason' => $anchorLine->discount_reason,
+                    'changed_by' => auth()->id(),
+                ]);
+            }
 
             $expiresAt = ClientFreebieCredit::computeExpiresAt($appointmentDateString, $pkg->effective_validity_days);
 

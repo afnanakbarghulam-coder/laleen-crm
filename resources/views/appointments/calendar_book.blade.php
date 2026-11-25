@@ -242,7 +242,7 @@
     }
 
     .fb-price-edit .price-input {
-        width: 62px;
+        width: 64px;
         background: transparent;
         border: none;
         border-bottom: 1px solid rgba(217, 143, 131, 0.4);
@@ -268,12 +268,107 @@
         -moz-appearance: textfield;
     }
 
+    .fb-orig-strike {
+        font-size: 11.5px;
+        font-weight: 500;
+        color: #8a7d76;
+        text-decoration: line-through;
+        white-space: nowrap;
+    }
+
+    .fb-discount-toggle-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px dashed rgba(217, 143, 131, 0.38);
+        background: transparent;
+        color: #c9a39a;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 9px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: all 0.14s ease;
+        white-space: nowrap;
+    }
+
+    .fb-discount-toggle-btn:hover {
+        border-color: rgba(217, 143, 131, 0.72);
+        color: #f3e6e2;
+        background: rgba(217, 143, 131, 0.1);
+    }
+
+    .fb-discount-toggle-btn.has-discount {
+        border-style: solid;
+        border-color: rgba(142, 168, 138, 0.42);
+        background: rgba(142, 168, 138, 0.14);
+        color: #9ec099;
+        font-weight: 700;
+    }
+
     .fb-discount-row {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding-top: 6px;
-        border-top: 1px dashed rgba(217, 143, 131, 0.25);
+        gap: 7px;
+        padding-top: 7px;
+        margin-top: 4px;
+        border-top: 1px dashed rgba(217, 143, 131, 0.22);
+        flex-wrap: nowrap;
+    }
+
+    .fb-disc-mode-toggle {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid rgba(217, 143, 131, 0.32);
+        border-radius: 999px;
+        overflow: hidden;
+        flex-shrink: 0;
+        background: rgba(17, 13, 11, 0.55);
+    }
+
+    .fb-disc-mode-btn {
+        border: none;
+        background: transparent;
+        color: #b7a29c;
+        font-size: 10.5px;
+        font-weight: 700;
+        padding: 3px 8px;
+        line-height: 1.2;
+        cursor: pointer;
+        transition: all 0.12s ease;
+    }
+
+    .fb-disc-mode-btn.is-active {
+        background: rgba(217, 143, 131, 0.24);
+        color: #f6ebe6;
+    }
+
+    .fb-disc-val-input {
+        width: 64px;
+        flex-shrink: 0;
+        background: rgba(17, 13, 11, 0.5);
+        border: 1px solid rgba(217, 143, 131, 0.32);
+        border-radius: 6px;
+        color: #f3e6e2;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: right;
+        padding: 2px 6px;
+    }
+
+    .fb-disc-val-input:focus {
+        outline: none;
+        border-color: #d98f83;
+    }
+
+    .fb-disc-val-input::-webkit-outer-spin-button,
+    .fb-disc-val-input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    .fb-disc-val-input[type=number] {
+        -moz-appearance: textfield;
     }
 
     .fb-discount-badge {
@@ -292,10 +387,10 @@
         min-width: 0;
         background: transparent;
         border: none;
-        border-bottom: 1px solid rgba(217, 143, 131, 0.3);
+        border-bottom: 1px solid rgba(217, 143, 131, 0.28);
         color: #e6d9d5;
-        font-size: 12px;
-        padding: 1px 4px;
+        font-size: 11.5px;
+        padding: 2px 4px;
     }
 
     .fb-discount-reason:focus {
@@ -307,10 +402,26 @@
         color: #8a7d76;
     }
 
+    .fb-disc-clear-btn {
+        border: none;
+        background: transparent;
+        color: #a98f87;
+        font-size: 14px;
+        line-height: 1;
+        padding: 0 3px;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .fb-disc-clear-btn:hover {
+        color: #e79a91;
+    }
+
     .fb-footer .total-discount {
-        font-size: 11.5px;
-        font-weight: 700;
-        color: #8ea88a;
+        font-size: 11px;
+        font-weight: 600;
+        color: #9ec099;
+        letter-spacing: 0.01em;
     }
 
     .fb-svc-row .remove-btn {
@@ -988,6 +1099,75 @@
         color: #fca5a5;
         line-height: 1.35;
     }
+
+    .fb-edit-mode-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 7px 12px;
+        margin-bottom: 10px;
+        border-radius: 10px;
+        background: rgba(229, 184, 168, 0.1);
+        border: 1px solid rgba(229, 184, 168, 0.28);
+    }
+
+    .fb-edit-mode-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #f8efe6;
+        letter-spacing: 0.02em;
+    }
+
+    .fb-edit-mode-pill i {
+        color: #e5b8a8;
+        font-size: 14px;
+    }
+
+    .fb-edit-mode-hint {
+        font-size: 11px;
+        color: #b8a29a;
+    }
+
+    .fb-combo-swap-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 7px;
+        padding-top: 7px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .fb-combo-swap-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #c9a39a;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .fb-combo-swap-select {
+        background-color: #181113 !important;
+        border: 1px solid rgba(229, 184, 168, 0.24) !important;
+        color: #f8efe6 !important;
+        font-size: 11.5px !important;
+        border-radius: 8px !important;
+        padding: 3px 26px 3px 9px !important;
+        max-width: 240px;
+    }
+
+    .fb-combo-swap-select:focus {
+        border-color: #e5b8a8 !important;
+        box-shadow: 0 0 0 2px rgba(229, 184, 168, 0.14) !important;
+    }
 </style>
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="calendarBookModal" aria-labelledby="calendarBookModalLabel">
@@ -995,6 +1175,7 @@
 
     <form action="{{ route('appointments.store') }}" method="POST" id="calendarBookForm" class="offcanvas-body">
         @csrf
+        <input type="hidden" name="_method" id="bookMethodHidden" value="" disabled>
         <input type="hidden" name="then" id="bookThen" value="">
         <input type="hidden" name="appointment_datetime" id="bookDatetimeHidden">
         <input type="hidden" name="booking_date" id="bookDateHidden">
@@ -1040,6 +1221,10 @@
             <div class="fb-content-col">
                 <!-- PANEL: MAIN -->
                 <div id="fbPanelMain" class="fb-content">
+                    <div id="fbEditModeBanner" class="fb-edit-mode-banner d-none">
+                        <span class="fb-edit-mode-pill"><i class="bx bx-edit-alt"></i> Editing Booking</span>
+                        <span class="fb-edit-mode-hint">Swap combos, change services, or update specialists</span>
+                    </div>
                     <div class="fb-date-label" id="fbDateLabel">&nbsp;</div>
                     <div class="fb-date-sub" id="fbDateSub"></div>
 
@@ -1496,6 +1681,8 @@
             fbUpdateBookStaffOvertimeAlert();
         }
 
+        let editingAppointmentId = null;
+        const FB_STORE_URL = "{{ route('appointments.store') }}";
         let selectedServices = [];
         let decideInSalon = false;
         let selectedCombos = [];
@@ -1689,7 +1876,7 @@
                             endMin: sl.endMin,
                             clickedStaffId: pendingStaffId,
                             daySnapshot: daySnap,
-                            excludeApptId: null,
+                            excludeApptId: editingAppointmentId || null,
                             priorSlices: prior,
                             allStaffs: ALL_STAFFS
                         });
@@ -1709,7 +1896,7 @@
                             endMin: sl.endMin,
                             clickedStaffId: pendingStaffId,
                             daySnapshot: daySnap,
-                            excludeApptId: null,
+                            excludeApptId: editingAppointmentId || null,
                             priorSlices: prior,
                             allStaffs: ALL_STAFFS
                         });
@@ -1730,7 +1917,7 @@
                             endMin: sl.endMin,
                             clickedStaffId: pendingStaffId,
                             daySnapshot: daySnap,
-                            excludeApptId: null,
+                            excludeApptId: editingAppointmentId || null,
                             priorSlices: prior,
                             allStaffs: ALL_STAFFS
                         });
@@ -1752,7 +1939,7 @@
                             endMin: sl.endMin,
                             clickedStaffId: pendingStaffId,
                             daySnapshot: daySnap,
-                            excludeApptId: null,
+                            excludeApptId: editingAppointmentId || null,
                             priorSlices: prior,
                             allStaffs: ALL_STAFFS
                         });
@@ -1774,7 +1961,7 @@
                             endMin: sl.endMin,
                             clickedStaffId: null,
                             daySnapshot: daySnap,
-                            excludeApptId: null,
+                            excludeApptId: editingAppointmentId || null,
                             priorSlices: prior,
                             allStaffs: ALL_STAFFS
                         });
@@ -1795,7 +1982,7 @@
                             endMin: sl.endMin,
                             clickedStaffId: pendingStaffId,
                             daySnapshot: daySnap,
-                            excludeApptId: null,
+                            excludeApptId: editingAppointmentId || null,
                             priorSlices: prior,
                             allStaffs: ALL_STAFFS
                         });
@@ -1837,8 +2024,36 @@
             fbSyncHiddenAndTotals();
         }
 
+        function fbSetModalMode(appointmentId) {
+            const form = document.getElementById('calendarBookForm');
+            const methodInput = document.getElementById('bookMethodHidden');
+            const editBanner = document.getElementById('fbEditModeBanner');
+            const saveBtn = document.getElementById('fbSaveBtn');
+
+            if (appointmentId) {
+                editingAppointmentId = Number(appointmentId);
+                if (form) form.action = `/appointments/${editingAppointmentId}/full-edit`;
+                if (methodInput) {
+                    methodInput.value = 'PUT';
+                    methodInput.disabled = false;
+                }
+                if (editBanner) editBanner.classList.remove('d-none');
+                if (saveBtn) saveBtn.textContent = 'Save Changes';
+            } else {
+                editingAppointmentId = null;
+                if (form) form.action = FB_STORE_URL;
+                if (methodInput) {
+                    methodInput.value = '';
+                    methodInput.disabled = true;
+                }
+                if (editBanner) editBanner.classList.add('d-none');
+                if (saveBtn) saveBtn.textContent = 'Save';
+            }
+        }
+
         window.openCalendarBookModal = function(prefill) {
             prefill = prefill || {};
+            fbSetModalMode(null);
 
             selectedServices = [];
             decideInSalon = false;
@@ -1909,8 +2124,14 @@
                     const matchName = svc.name && wantedNames.includes(svc.name.trim().toLowerCase());
                     if ((matchId || matchName) && !selectedServices.some(s => s.name === svc.name)) {
                         selectedServices.push(Object.assign({}, svc, {
-                            original_price: svc.price,
+                            catalog_price: Number(svc.price) || 0,
+                            original_price: Number(svc.price) || 0,
+                            price: Number(svc.price) || 0,
+                            discount_type: 'fixed',
+                            discount_value: 0,
+                            discount_amount: 0,
                             discount_reason: '',
+                            discountOpen: false,
                             staff_id: '',
                             is_parallel: false,
                             manualStaff: false
@@ -1954,6 +2175,251 @@
                 fbLoadClientPendingPackages();
             } else if (selectedClient && selectedClient.phone) {
                 fbResolveClientByPhone(selectedClient.phone);
+            }
+            fbUpdateDateLabel();
+            fbShowPanel('main');
+
+            const modalEl = document.getElementById('calendarBookModal');
+            const drawer = bootstrap.Offcanvas.getOrCreateInstance(modalEl);
+            drawer.show();
+
+            fbEnsureDaySnapshotAndRefresh();
+            loadAvailableStaff();
+        };
+
+        window.openCalendarEditModal = function(appt) {
+            if (!appt || !appt.id) return;
+            fbSetModalMode(appt.id);
+
+            selectedServices = [];
+            decideInSalon = false;
+            document.getElementById('bookDecideInSalonHidden').value = '0';
+            selectedCombos = [];
+            fbActiveComboDraft = null;
+            selectedFreebiePackages = [];
+            selectedClient = {
+                id: appt.customer_id || null,
+                name: appt.customer_name || 'Client',
+                phone: appt.phone || ''
+            };
+            clientPendingPackages = [];
+            selectedRedemptions = [];
+            redeemStaffMap = {};
+            redeemParallelMap = {};
+            redeemStaffOptionsMap = {};
+            clientFreebieCredits = [];
+            selectedFreebieRedemptions = [];
+            pendingAutoRedeemFreebieCreditId = null;
+            pendingStaffId = appt.staff_id ? String(appt.staff_id) : null;
+            fbClearBookingError();
+            fbClearAgentError();
+
+            fbLatestAvailableStaffMeta = new Map();
+            document.getElementById('bookStaffSelect').innerHTML = '<option value="">-- Select Staff (Unassigned) --</option>';
+            document.getElementById('bookStaffSelect').classList.remove('is-overtime');
+            const otAlertEl = document.getElementById('bookStaffOvertimeAlert');
+            if (otAlertEl) otAlertEl.innerHTML = '';
+            document.getElementById('bookStaffHelp').classList.add('d-none');
+
+            const bookAgentEl = document.getElementById('bookAgent');
+            if (bookAgentEl) {
+                const existingAgentVal = appt.booking_agent_select_value ? String(appt.booking_agent_select_value) : '';
+                bookAgentEl.value = fbIsValidBookingAgentSelection(existingAgentVal) ? existingAgentVal : '';
+            }
+
+            document.getElementById('bookNotes').value = appt.notes || '';
+            document.getElementById('bookThen').value = '';
+            document.getElementById('fbAddClientForm').classList.add('d-none');
+            document.getElementById('fbClientSearch').value = '';
+            document.getElementById('fbClientResults').innerHTML = '';
+            document.getElementById('fbNewClientName').value = '';
+            document.getElementById('fbNewClientPhone').value = '';
+            document.getElementById('fbNewClientPhoneError').classList.add('d-none');
+
+            const resolvedBranch = fbNormalizeBranch(appt.branch_raw) || fbResolveActiveCalendarBranch();
+            document.getElementById('bookBranch').value = resolvedBranch;
+            document.getElementById('bookDateInput').value = appt.date || '';
+            const isUnsched = Boolean(appt.is_unscheduled) || !appt.time;
+            document.getElementById('bookUnscheduledToggle').checked = isUnsched;
+            document.getElementById('bookTimeInput').disabled = isUnsched;
+            document.getElementById('bookTimeInput').value = isUnsched ? '' : (appt.time || '');
+
+            // 1. Pre-populate Originating Combo Packages & External Package Redemptions
+            const comboPkgs = Array.isArray(appt.combo_packages) ? appt.combo_packages : [];
+            comboPkgs.forEach(pkg => {
+                const poolArr = Array.isArray(pkg.pool_services)
+                    ? pkg.pool_services
+                    : (Array.isArray(pkg.pool) ? pkg.pool : []);
+                if (pkg.is_originating) {
+                    const catalogCombo = ALL_COMBOS.find(c => Number(c.id) === Number(pkg.combo_id)) || {
+                        id: Number(pkg.combo_id),
+                        name: pkg.combo_name || 'Combo',
+                        price: Number(pkg.price_paid || 0),
+                        quantity_included: Number(pkg.quantity_included || poolArr.length || 1),
+                        effective_duration: 60,
+                        services: poolArr.map(s => ({
+                            id: Number(s.id),
+                            name: s.name,
+                            duration: Number(s.duration || 30),
+                            price: Number(s.catalog_price || 0)
+                        }))
+                    };
+
+                    const todayEntries = poolArr
+                        .filter(s => s.state === 'today')
+                        .sort((a, b) => (Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0)));
+                    const immediateIds = (Array.isArray(pkg.ordered_today_ids) && pkg.ordered_today_ids.length)
+                        ? pkg.ordered_today_ids.map(id => Number(id))
+                        : todayEntries.map(s => Number(s.id));
+                    const pendingIds = poolArr.filter(s => s.state === 'pending').map(s => Number(s.id));
+                    const serviceStaff = {};
+                    const serviceParallel = {};
+                    todayEntries.forEach(s => {
+                        if (s.staff_id) serviceStaff[Number(s.id)] = String(s.staff_id);
+                        serviceParallel[Number(s.id)] = Boolean(s.is_parallel);
+                    });
+
+                    selectedCombos.push({
+                        id: ++comboRowSeq,
+                        combo: catalogCombo,
+                        immediateIds,
+                        pendingIds,
+                        serviceStaff,
+                        serviceParallel
+                    });
+                } else {
+                    poolArr.filter(s => s.state === 'today').forEach(s => {
+                        const token = `${pkg.client_package_id}:${s.id}`;
+                        selectedRedemptions.push({
+                            id: token,
+                            client_package_id: Number(pkg.client_package_id),
+                            service_id: Number(s.id),
+                            service_name: s.name,
+                            combo_name: pkg.combo_name || 'Package',
+                            duration: Number(s.duration || 30)
+                        });
+                        if (s.staff_id) redeemStaffMap[token] = String(s.staff_id);
+                        redeemParallelMap[token] = Boolean(s.is_parallel);
+                    });
+                }
+            });
+
+            // 2. Pre-populate Service + Freebies Anchor Packages
+            const freebiePkgs = Array.isArray(appt.freebie_packages) ? appt.freebie_packages : [];
+            freebiePkgs.forEach(fp => {
+                const catalogFp = ALL_FREEBIE_PACKAGES.find(p => Number(p.id) === Number(fp.package_id));
+                if (!catalogFp) return;
+                const slots = (Array.isArray(fp.slots) && fp.slots.length)
+                    ? fp.slots.map((sl, i) => ({
+                        slotNumber: Number(sl.slot_number || (i + 1)),
+                        serviceId: sl.mode === 'same_day' && sl.service_id ? Number(sl.service_id) : '',
+                        staffId: sl.staff_id ? String(sl.staff_id) : '',
+                        isParallel: Boolean(sl.is_parallel)
+                    }))
+                    : Array.from({ length: Number(catalogFp.free_choices_count) || 1 }, (_, i) => ({
+                        slotNumber: i + 1,
+                        serviceId: '',
+                        staffId: '',
+                        isParallel: false
+                    }));
+
+                const fpCatalogPrice = Number(fp.catalog_price !== undefined ? fp.catalog_price : catalogFp.price) || 0;
+                const fpOrigPrice = Number(fp.original_price !== undefined ? fp.original_price : fpCatalogPrice) || 0;
+                const fpNetPrice = Number(fp.price !== undefined ? fp.price : fpCatalogPrice) || 0;
+                const fpDiscAmt = Number(fp.discount_amount !== undefined ? fp.discount_amount : Math.max(0, fpOrigPrice - fpNetPrice)) || 0;
+                const fpDiscType = fp.discount_type === 'percent' ? 'percent' : 'fixed';
+                const fpDiscVal = Number(fp.discount_value !== undefined ? fp.discount_value : (fpDiscType === 'fixed' ? fpDiscAmt : 0)) || 0;
+
+                selectedFreebiePackages.push({
+                    rowId: ++freebieRowSeq,
+                    pkg: catalogFp,
+                    anchorStaffId: fp.anchor_staff_id ? String(fp.anchor_staff_id) : '',
+                    anchorParallel: Boolean(fp.anchor_is_parallel),
+                    catalog_price: fpCatalogPrice,
+                    original_price: fpOrigPrice,
+                    price: fpNetPrice,
+                    discount_type: fpDiscType,
+                    discount_value: fpDiscVal,
+                    discount_amount: fpDiscAmt,
+                    discount_reason: fp.discount_reason || '',
+                    discountOpen: fpDiscAmt > 0,
+                    slots
+                });
+            });
+
+            // 3. Pre-populate External Freebie Credit Redemptions
+            const freebieRedeems = Array.isArray(appt.freebie_redemptions) ? appt.freebie_redemptions : [];
+            freebieRedeems.forEach(fr => {
+                selectedFreebieRedemptions.push({
+                    credit_id: Number(fr.credit_id),
+                    package_name: fr.package_name || 'Service + Freebies',
+                    slot_number: Number(fr.slot_number || 1),
+                    days_left: Number(fr.days_left || 0),
+                    eligible_services: Array.isArray(fr.eligible_services) ? fr.eligible_services : [],
+                    service_id: Number(fr.service_id || 0),
+                    staff_id: fr.staff_id ? String(fr.staff_id) : '',
+                    is_parallel: Boolean(fr.is_parallel)
+                });
+            });
+
+            // 4. Pre-populate Standalone Services
+            const allSvcLines = Array.isArray(appt.services) ? appt.services : [];
+            const standaloneLines = allSvcLines.filter(s =>
+                !s.is_pending
+                && !s.client_package_id
+                && !s.combo_id
+                && !s.combo_name
+                && !s.is_package_redemption
+                && !s.freebie_package_id
+                && !s.is_freebie_redemption
+            );
+            standaloneLines.forEach(s => {
+                const catalogMatch = ALL_SERVICES.find(c =>
+                    (s.service_id && Number(c.id) === Number(s.service_id))
+                    || String(c.name || '').trim().toLowerCase() === String(s.name || '').trim().toLowerCase()
+                );
+                const catalogP = catalogMatch ? (Number(catalogMatch.price) || 0) : (Number(s.original_price !== undefined ? s.original_price : s.price) || 0);
+                const origP = Number(s.original_price !== undefined ? s.original_price : catalogP) || 0;
+                const netP = Number(s.final_price !== undefined ? s.final_price : s.price) || 0;
+                const discAmt = Number(s.discount_amount !== undefined ? s.discount_amount : Math.max(0, origP - netP)) || 0;
+                const discType = s.discount_type === 'percent' ? 'percent' : 'fixed';
+                const discVal = Number(s.discount_value !== undefined ? s.discount_value : (discType === 'fixed' ? discAmt : 0)) || 0;
+
+                selectedServices.push({
+                    id: catalogMatch ? Number(catalogMatch.id) : (s.service_id ? Number(s.service_id) : null),
+                    name: s.name,
+                    duration: Number(s.duration || (catalogMatch ? catalogMatch.duration : 30)),
+                    catalog_price: catalogP,
+                    price: netP,
+                    original_price: origP,
+                    discount_type: discType,
+                    discount_value: discVal,
+                    discount_amount: discAmt,
+                    discount_reason: s.discount_reason || '',
+                    discountOpen: discAmt > 0,
+                    staff_id: s.staff_id ? String(s.staff_id) : '',
+                    is_parallel: Boolean(s.is_parallel),
+                    manualStaff: Boolean(s.staff_id)
+                });
+            });
+
+            // 5. Decide in Salon fallback
+            if (
+                appt.decide_in_salon
+                && !selectedServices.length
+                && !selectedCombos.length
+                && !selectedRedemptions.length
+                && !selectedFreebiePackages.length
+                && !selectedFreebieRedemptions.length
+            ) {
+                decideInSalon = true;
+            }
+
+            fbUpdateRail();
+            fbRenderAllListsWithoutRecursion();
+            fbUpdateRedeemButton();
+            if (selectedClient && selectedClient.id) {
+                fbLoadClientPendingPackages();
             }
             fbUpdateDateLabel();
             fbShowPanel('main');
@@ -2502,7 +2968,7 @@
                         endMin: sl ? sl.endMin : null,
                         selectedStaffId: redeemStaffMap[r.id] || '',
                         daySnapshot: daySnap,
-                        excludeApptId: null,
+                        excludeApptId: editingAppointmentId || null,
                         priorSlices,
                         allStaffs: ALL_STAFFS
                     })
@@ -2735,9 +3201,273 @@
             clientSearchTimer = setTimeout(() => fbRenderClientResults(q), 300);
         });
 
-        /* ---------------- SERVICES ---------------- */
-        function fbServiceDiscount(s) {
-            return Math.max(0, (Number(s.original_price) || 0) - (Number(s.price) || 0));
+        /* ---------------- SERVICES & ITEM DISCOUNTS ---------------- */
+        function fbRound2(v) {
+            return Math.round((Number(v) || 0) * 100) / 100;
+        }
+
+        function fbItemCatalogPrice(item) {
+            if (item && item.catalog_price !== undefined && item.catalog_price !== null) {
+                return fbRound2(Math.max(0, Number(item.catalog_price) || 0));
+            }
+            if (item && item.pkg && item.pkg.price !== undefined) {
+                return fbRound2(Math.max(0, Number(item.pkg.price) || 0));
+            }
+            return fbRound2(Math.max(0, Number(item?.original_price ?? item?.price) || 0));
+        }
+
+        function fbServiceDiscount(item) {
+            const orig = Number(item?.original_price ?? fbItemCatalogPrice(item)) || 0;
+            const net = Number(item?.price) || 0;
+            return fbRound2(Math.max(0, orig - net));
+        }
+
+        function fbFormatCompactNum(n) {
+            const r = fbRound2(n);
+            return Number.isInteger(r) ? String(r) : r.toFixed(2).replace(/\.?0+$/, '');
+        }
+
+        function fbDiscountPillText(item) {
+            const disc = fbServiceDiscount(item);
+            if (disc <= 0) return '+ Discount';
+            if (item.discount_type === 'percent' && Number(item.discount_value) > 0) {
+                return `−${disc.toFixed(2)} QAR (${fbFormatCompactNum(item.discount_value)}%)`;
+            }
+            return `−${disc.toFixed(2)} QAR`;
+        }
+
+        function fbApplyDiscountToItem(item, mode, rawVal) {
+            const base = fbItemCatalogPrice(item);
+            const normMode = mode === 'percent' ? 'percent' : 'fixed';
+            let val = parseFloat(rawVal);
+            let clamped = false;
+            if (isNaN(val) || val < 0) {
+                val = 0;
+            }
+            if (normMode === 'percent') {
+                if (val > 100) {
+                    val = 100;
+                    clamped = true;
+                }
+                val = fbRound2(val);
+                const discAmt = fbRound2(Math.min(base, base * (val / 100)));
+                item.catalog_price = base;
+                item.original_price = base;
+                item.discount_type = 'percent';
+                item.discount_value = val;
+                item.discount_amount = discAmt;
+                item.price = fbRound2(Math.max(0, base - discAmt));
+            } else {
+                if (val > base) {
+                    val = base;
+                    clamped = true;
+                }
+                val = fbRound2(val);
+                item.catalog_price = base;
+                item.original_price = base;
+                item.discount_type = 'fixed';
+                item.discount_value = val;
+                item.discount_amount = val;
+                item.price = fbRound2(Math.max(0, base - val));
+            }
+            return clamped;
+        }
+
+        function fbApplyFinalPriceToItem(item, rawFinal) {
+            const catalog = fbItemCatalogPrice(item);
+            let entered = parseFloat(rawFinal);
+            if (isNaN(entered) || entered < 0) {
+                entered = 0;
+            }
+            entered = fbRound2(entered);
+            item.catalog_price = catalog;
+
+            if (entered < catalog) {
+                const discAmt = fbRound2(catalog - entered);
+                item.original_price = catalog;
+                item.price = entered;
+                item.discount_type = 'fixed';
+                item.discount_value = discAmt;
+                item.discount_amount = discAmt;
+                item.discountOpen = true;
+            } else {
+                item.original_price = entered;
+                item.price = entered;
+                item.discount_type = 'fixed';
+                item.discount_value = 0;
+                item.discount_amount = 0;
+            }
+        }
+
+        function fbResetItemDiscount(item) {
+            const catalog = fbItemCatalogPrice(item);
+            item.catalog_price = catalog;
+            item.original_price = catalog;
+            item.price = catalog;
+            item.discount_type = 'fixed';
+            item.discount_value = 0;
+            item.discount_amount = 0;
+            item.discount_reason = '';
+            item.discountOpen = false;
+        }
+
+        function fbRenderDiscountEditorHtml(item, kind, keyAttr) {
+            const disc = fbServiceDiscount(item);
+            const isOpen = Boolean(item.discountOpen);
+            const activeType = item.discount_type === 'percent' ? 'percent' : 'fixed';
+            const valStr = Number(item.discount_value) > 0 ? fbFormatCompactNum(item.discount_value) : '';
+            const safeReason = String(item.discount_reason || '').replace(/"/g, '&quot;');
+            const placeholderVal = activeType === 'percent' ? '0%' : '0.00';
+
+            return `
+                <div class="fb-discount-row fb-discount-editor ${isOpen ? '' : 'd-none'}" data-disc-kind="${kind}" data-disc-key="${keyAttr}">
+                    <div class="fb-disc-mode-toggle" role="group" aria-label="Discount type">
+                        <button type="button" class="fb-disc-mode-btn ${activeType === 'fixed' ? 'is-active' : ''}" data-disc-kind="${kind}" data-disc-key="${keyAttr}" data-mode="fixed">QAR</button>
+                        <button type="button" class="fb-disc-mode-btn ${activeType === 'percent' ? 'is-active' : ''}" data-disc-kind="${kind}" data-disc-key="${keyAttr}" data-mode="percent">%</button>
+                    </div>
+                    <input type="number" step="0.01" min="0" max="${activeType === 'percent' ? '100' : fbItemCatalogPrice(item).toFixed(2)}" inputmode="decimal"
+                        class="fb-disc-val-input" data-disc-kind="${kind}" data-disc-key="${keyAttr}"
+                        placeholder="${placeholderVal}" value="${valStr}" aria-label="Discount value">
+                    <input type="text" maxlength="150" class="fb-discount-reason" data-disc-kind="${kind}" data-disc-key="${keyAttr}"
+                        placeholder="Reason (optional)" value="${safeReason}">
+                    <button type="button" class="fb-disc-clear-btn ${disc > 0 ? '' : 'd-none'}" data-disc-kind="${kind}" data-disc-key="${keyAttr}" title="Remove discount" aria-label="Remove discount">&times;</button>
+                </div>
+            `;
+        }
+
+        function fbSyncDiscountCardDom(cardEl, item, source) {
+            if (!cardEl || !item) return;
+            const disc = fbServiceDiscount(item);
+            const isOpen = Boolean(item.discountOpen);
+            const activeType = item.discount_type === 'percent' ? 'percent' : 'fixed';
+
+            const strikeEl = cardEl.querySelector('.fb-orig-strike');
+            if (strikeEl) {
+                strikeEl.textContent = Number(item.original_price || fbItemCatalogPrice(item)).toFixed(2);
+                strikeEl.classList.toggle('d-none', disc <= 0);
+            }
+
+            const priceInput = cardEl.querySelector('.price-input');
+            if (priceInput && source !== 'price') {
+                priceInput.value = Number(item.price || 0).toFixed(2);
+            }
+
+            const toggleBtn = cardEl.querySelector('.fb-discount-toggle-btn');
+            if (toggleBtn) {
+                toggleBtn.textContent = fbDiscountPillText(item);
+                toggleBtn.classList.toggle('has-discount', disc > 0);
+            }
+
+            const editorEl = cardEl.querySelector('.fb-discount-editor');
+            if (editorEl) {
+                editorEl.classList.toggle('d-none', !isOpen);
+            }
+
+            cardEl.querySelectorAll('.fb-disc-mode-btn').forEach(btn => {
+                btn.classList.toggle('is-active', btn.dataset.mode === activeType);
+            });
+
+            const valInput = cardEl.querySelector('.fb-disc-val-input');
+            if (valInput) {
+                valInput.max = activeType === 'percent' ? '100' : fbItemCatalogPrice(item).toFixed(2);
+                valInput.placeholder = activeType === 'percent' ? '0%' : '0.00';
+                if (source !== 'discount') {
+                    valInput.value = Number(item.discount_value) > 0 ? fbFormatCompactNum(item.discount_value) : '';
+                }
+            }
+
+            const clearBtn = cardEl.querySelector('.fb-disc-clear-btn');
+            if (clearBtn) {
+                clearBtn.classList.toggle('d-none', disc <= 0);
+            }
+        }
+
+        function fbBindDiscountEvents(containerEl, kind, resolveItemFn) {
+            if (!containerEl) return;
+
+            containerEl.querySelectorAll(`.fb-discount-toggle-btn[data-disc-kind="${kind}"]`).forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const item = resolveItemFn(btn.dataset.discKey);
+                    if (!item) return;
+                    const cardEl = btn.closest('.fb-svc-row');
+                    item.discountOpen = !item.discountOpen;
+                    fbSyncDiscountCardDom(cardEl, item, 'toggle');
+                    if (item.discountOpen) {
+                        cardEl?.querySelector('.fb-disc-val-input')?.focus();
+                    }
+                });
+            });
+
+            containerEl.querySelectorAll(`.fb-disc-mode-btn[data-disc-kind="${kind}"]`).forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const item = resolveItemFn(btn.dataset.discKey);
+                    if (!item) return;
+                    const cardEl = btn.closest('.fb-svc-row');
+                    const nextMode = btn.dataset.mode === 'percent' ? 'percent' : 'fixed';
+                    const valInput = cardEl?.querySelector('.fb-disc-val-input');
+                    const currentVal = valInput ? valInput.value : item.discount_value;
+                    item.discountOpen = true;
+                    fbApplyDiscountToItem(item, nextMode, currentVal);
+                    fbSyncDiscountCardDom(cardEl, item, 'mode');
+                    fbSyncHiddenAndTotals();
+                    valInput?.focus();
+                });
+            });
+
+            containerEl.querySelectorAll(`.fb-disc-val-input[data-disc-kind="${kind}"]`).forEach(input => {
+                input.addEventListener('input', () => {
+                    const item = resolveItemFn(input.dataset.discKey);
+                    if (!item) return;
+                    const cardEl = input.closest('.fb-svc-row');
+                    item.discountOpen = true;
+                    const clamped = fbApplyDiscountToItem(item, item.discount_type || 'fixed', input.value);
+                    if (clamped) {
+                        input.value = fbFormatCompactNum(item.discount_value);
+                    }
+                    fbSyncDiscountCardDom(cardEl, item, 'discount');
+                    fbSyncHiddenAndTotals();
+                });
+                input.addEventListener('focus', () => input.select());
+            });
+
+            containerEl.querySelectorAll(`.fb-discount-reason[data-disc-kind="${kind}"]`).forEach(input => {
+                input.addEventListener('input', () => {
+                    const item = resolveItemFn(input.dataset.discKey);
+                    if (!item) return;
+                    item.discount_reason = input.value;
+                    fbSyncHiddenAndTotals();
+                });
+            });
+
+            containerEl.querySelectorAll(`.fb-disc-clear-btn[data-disc-kind="${kind}"]`).forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const item = resolveItemFn(btn.dataset.discKey);
+                    if (!item) return;
+                    const cardEl = btn.closest('.fb-svc-row');
+                    fbResetItemDiscount(item);
+                    const reasonEl = cardEl?.querySelector('.fb-discount-reason');
+                    if (reasonEl) reasonEl.value = '';
+                    fbSyncDiscountCardDom(cardEl, item, 'clear');
+                    fbSyncHiddenAndTotals();
+                });
+            });
+
+            containerEl.querySelectorAll(`.price-input[data-disc-kind="${kind}"]`).forEach(input => {
+                input.addEventListener('input', () => {
+                    const item = resolveItemFn(input.dataset.discKey);
+                    if (!item) return;
+                    const cardEl = input.closest('.fb-svc-row');
+                    fbApplyFinalPriceToItem(item, input.value);
+                    fbSyncDiscountCardDom(cardEl, item, 'price');
+                    fbSyncHiddenAndTotals();
+                });
+                input.addEventListener('blur', () => {
+                    const item = resolveItemFn(input.dataset.discKey);
+                    if (!item) return;
+                    input.value = Number(item.price || 0).toFixed(2);
+                });
+                input.addEventListener('focus', () => input.select());
+            });
         }
 
         function fbRenderServices(skipSync = false) {
@@ -2793,7 +3523,7 @@
                         endMin: sl ? sl.endMin : null,
                         selectedStaffId: s.staff_id || '',
                         daySnapshot: daySnap,
-                        excludeApptId: null,
+                        excludeApptId: editingAppointmentId || null,
                         priorSlices,
                         allStaffs: ALL_STAFFS
                     })
@@ -2811,7 +3541,7 @@
                     </button>` : '';
 
                 return `
-                <div class="fb-svc-row">
+                <div class="fb-svc-row" data-svc-idx="${i}">
                     <div class="fb-svc-row-main">
                         <div class="d-flex align-items-center gap-1 min-w-0">
                             ${reorderBtns}
@@ -2823,26 +3553,28 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="d-flex align-items-center gap-2">
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            <span class="fb-orig-strike ${discount > 0 ? '' : 'd-none'}">${Number(s.original_price || fbItemCatalogPrice(s)).toFixed(2)}</span>
                             <div class="fb-price-edit">
                                 <span class="currency">QAR</span>
-                                <input type="number" step="0.01" min="0" inputmode="decimal" class="price-input" data-idx="${i}" value="${s.price.toFixed(2)}">
+                                <input type="number" step="0.01" min="0" inputmode="decimal" class="price-input" data-idx="${i}" data-disc-kind="svc" data-disc-key="${i}" value="${Number(s.price || 0).toFixed(2)}" aria-label="Final price for ${fbEscHtml(s.name)}">
                             </div>
                             <button type="button" class="remove-btn fb-svc-remove-btn" data-idx="${i}"><i class="bx bx-x"></i></button>
                         </div>
                     </div>
-                    <div class="d-flex align-items-center justify-content-end gap-2 pt-1">
-                        ${parallelBtn}
-                        <select class="form-select form-select-sm laleen-specialist-pill fb-svc-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.isOvertime ? 'is-overtime' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-idx="${i}">
-                            ${meta.html}
-                        </select>
+                    <div class="d-flex align-items-center justify-content-between gap-2 pt-1 flex-wrap">
+                        <button type="button" class="fb-discount-toggle-btn ${discount > 0 ? 'has-discount' : ''}" data-disc-kind="svc" data-disc-key="${i}">
+                            ${fbDiscountPillText(s)}
+                        </button>
+                        <div class="d-flex align-items-center gap-2 ms-auto">
+                            ${parallelBtn}
+                            <select class="form-select form-select-sm laleen-specialist-pill fb-svc-staff-select ${meta.needsSelection ? 'is-needs-specialist' : ''} ${meta.isOvertime ? 'is-overtime' : ''} ${meta.hasConflict ? 'is-conflict' : ''}" data-idx="${i}">
+                                ${meta.html}
+                            </select>
+                        </div>
                     </div>
+                    ${fbRenderDiscountEditorHtml(s, 'svc', i)}
                     ${window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(meta) : ''}
-                    ${discount > 0 ? `
-                    <div class="fb-discount-row">
-                        <span class="fb-discount-badge">−${discount.toFixed(2)} QAR off ${s.original_price.toFixed(2)}</span>
-                        <input type="text" class="fb-discount-reason" data-idx="${i}" placeholder="Reason (optional)" value="${(s.discount_reason || '').replace(/"/g,'&quot;')}">
-                    </div>` : ''}
                 </div>
             `;
             }).join('');
@@ -2883,32 +3615,7 @@
                 });
             });
 
-            list.querySelectorAll('.price-input').forEach(input => {
-                input.addEventListener('input', () => {
-                    const idx = Number(input.dataset.idx);
-                    const val = parseFloat(input.value);
-                    const hadDiscount = fbServiceDiscount(selectedServices[idx]) > 0;
-                    selectedServices[idx].price = (isNaN(val) || val < 0) ? 0 : val;
-                    const hasDiscount = fbServiceDiscount(selectedServices[idx]) > 0;
-
-                    if (hadDiscount !== hasDiscount) {
-                        fbRenderServices(true);
-                        list.querySelector(`.price-input[data-idx="${idx}"]`)?.focus();
-                    } else if (hasDiscount) {
-                        const badge = list.querySelector(`.fb-svc-row:nth-child(${idx + 1}) .fb-discount-badge`);
-                        if (badge) badge.textContent = `−${fbServiceDiscount(selectedServices[idx]).toFixed(2)} QAR off ${selectedServices[idx].original_price.toFixed(2)}`;
-                    }
-                    fbSyncHiddenAndTotals();
-                });
-                input.addEventListener('focus', () => input.select());
-            });
-
-            list.querySelectorAll('.fb-discount-reason').forEach(input => {
-                input.addEventListener('input', () => {
-                    selectedServices[Number(input.dataset.idx)].discount_reason = input.value;
-                    fbSyncHiddenAndTotals();
-                });
-            });
+            fbBindDiscountEvents(list, 'svc', key => selectedServices[Number(key)]);
 
             if (!skipSync) {
                 fbUpdateTeamMemberVisibility();
@@ -2942,9 +3649,14 @@
                 const sl = byUid.get(`svc:${idx}`);
                 const sortOrd = sl ? sl.sort_order : idx;
                 const isPar = sl && sl.is_parallel ? '1' : '0';
+                const discAmt = fbServiceDiscount(s);
+                const discType = discAmt > 0 ? (s.discount_type === 'percent' ? 'percent' : 'fixed') : '';
+                const discVal = discAmt > 0 ? Number(s.discount_value || discAmt).toFixed(2) : '0';
                 return `
                 <input type="hidden" name="service_name[]" value="${s.name.replace(/"/g,'&quot;')}">
-                <input type="hidden" name="service_price[]" value="${s.price}">
+                <input type="hidden" name="service_price[]" value="${Number(s.price || 0).toFixed(2)}">
+                <input type="hidden" name="service_discount_type[]" value="${discType}">
+                <input type="hidden" name="service_discount_value[]" value="${discVal}">
                 <input type="hidden" name="service_discount_reason[]" value="${(s.discount_reason || '').replace(/"/g,'&quot;')}">
                 <input type="hidden" name="service_staff[]" value="${s.staff_id || ''}">
                 <input type="hidden" name="service_sort_order[]" value="${sortOrd}">
@@ -2996,6 +3708,10 @@
                     const anchorSl = byUid.get(`freebie_anchor:${fpRow.rowId}`);
                     const anchorSort = anchorSl ? anchorSl.sort_order : 0;
                     const anchorPar = anchorSl && anchorSl.is_parallel ? '1' : '0';
+                    const fpDiscAmt = fbServiceDiscount(fpRow);
+                    const fpDiscType = fpDiscAmt > 0 ? (fpRow.discount_type === 'percent' ? 'percent' : 'fixed') : '';
+                    const fpDiscVal = fpDiscAmt > 0 ? Number(fpRow.discount_value || fpDiscAmt).toFixed(2) : '0';
+                    const fpNetPrice = Number(fpRow.price !== undefined ? fpRow.price : fpRow.pkg.price).toFixed(2);
                     const slotInputs = (fpRow.slots || []).map((slotObj, sIdx) => {
                         const mode = slotObj.serviceId ? 'same_day' : 'save_for_later';
                         const sl = slotObj.serviceId ? byUid.get(`freebie_slot:${fpRow.rowId}:${slotObj.slotNumber}`) : null;
@@ -3014,6 +3730,10 @@
                         <input type="hidden" name="freebie_packages[${fpIdx}][anchor_staff_id]" value="${fpRow.anchorStaffId || ''}">
                         <input type="hidden" name="freebie_packages[${fpIdx}][anchor_sort_order]" value="${anchorSort}">
                         <input type="hidden" name="freebie_packages[${fpIdx}][anchor_is_parallel]" value="${anchorPar}">
+                        <input type="hidden" name="freebie_packages[${fpIdx}][price]" value="${fpNetPrice}">
+                        <input type="hidden" name="freebie_packages[${fpIdx}][discount_type]" value="${fpDiscType}">
+                        <input type="hidden" name="freebie_packages[${fpIdx}][discount_value]" value="${fpDiscVal}">
+                        <input type="hidden" name="freebie_packages[${fpIdx}][discount_reason]" value="${(fpRow.discount_reason || '').replace(/"/g,'&quot;')}">
                         ${slotInputs}
                     `;
                 }).join('');
@@ -3049,9 +3769,17 @@
             }
 
             const comboPackagesPrice = selectedCombos.reduce((sum, r) => sum + (Number(r.combo.price) || 0), 0);
-            const freebiePackagesPrice = selectedFreebiePackages.reduce((sum, fp) => sum + (Number(fp.pkg.price) || 0), 0);
-            const totalPrice = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0) + comboPackagesPrice + freebiePackagesPrice;
-            const totalDiscount = selectedServices.reduce((sum, s) => sum + fbServiceDiscount(s), 0);
+            const freebiePackagesNet = selectedFreebiePackages.reduce((sum, fp) => sum + (Number(fp.price !== undefined ? fp.price : fp.pkg.price) || 0), 0);
+            const freebiePackagesOrig = selectedFreebiePackages.reduce((sum, fp) => sum + (Number(fp.original_price !== undefined ? fp.original_price : fp.pkg.price) || 0), 0);
+            const standaloneNet = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
+            const standaloneOrig = selectedServices.reduce((sum, s) => sum + (Number(s.original_price !== undefined ? s.original_price : s.price) || 0), 0);
+
+            const totalPrice = fbRound2(standaloneNet + comboPackagesPrice + freebiePackagesNet);
+            const subtotalBeforeDiscount = fbRound2(standaloneOrig + comboPackagesPrice + freebiePackagesOrig);
+            const totalDiscount = fbRound2(
+                selectedServices.reduce((sum, s) => sum + fbServiceDiscount(s), 0)
+                + selectedFreebiePackages.reduce((sum, fp) => sum + fbServiceDiscount(fp), 0)
+            );
 
             let totalMin = timeline.spanMinutes || 0;
             if (totalMin === 0 && selectedCombos.length > 0) {
@@ -3065,7 +3793,7 @@
 
             const discountEl = document.getElementById('fbFooterDiscount');
             discountEl.classList.toggle('d-none', totalDiscount <= 0);
-            discountEl.textContent = `Discount: −${totalDiscount.toFixed(2)} QAR`;
+            discountEl.textContent = `Subtotal ${subtotalBeforeDiscount.toFixed(2)} · Discount −${totalDiscount.toFixed(2)}`;
 
             const hrs = Math.floor(totalMin / 60);
             const mins = totalMin % 60;
@@ -3101,6 +3829,14 @@
             const { timeline, byUid } = fbComputeUnifiedTimeline();
             const poolById = new Map((combo.services || []).map(cs => [Number(cs.id), cs]));
 
+            const swapComboHtml = ALL_COMBOS.length > 1 ? `
+                <div class="fb-combo-swap-row" onclick="event.stopPropagation()">
+                    <span class="fb-combo-swap-label"><i class="bx bx-transfer-alt"></i> Change Combo</span>
+                    <select class="form-select form-select-sm fb-combo-swap-select" data-row="${row.id}" aria-label="Change Combo">
+                        ${ALL_COMBOS.map(c => `<option value="${c.id}" ${Number(c.id) === Number(combo.id) ? 'selected' : ''}>${fbEscHtml(c.name)} (${Number(c.price).toFixed(0)} QAR)</option>`).join('')}
+                    </select>
+                </div>` : '';
+
             if (pickedCount === 0) {
                 return `
                     <div class="fb-svc-row fb-combo-card" data-row-id="${row.id}" role="button" tabindex="0" aria-label="Configure ${fbEscHtml(combo.name)}">
@@ -3114,6 +3850,7 @@
                                 <button type="button" class="remove-btn fb-combo-remove-btn" data-row="${row.id}" title="Remove combo"><i class="bx bx-x"></i></button>
                             </div>
                         </div>
+                        ${swapComboHtml}
                         <div class="fb-combo-trigger-row">
                             <span>0 / ${qty} Selected &middot; Decide in Salon &mdash; Click to choose services</span>
                             <span class="fb-combo-edit-cta">&rsaquo;</span>
@@ -3136,7 +3873,7 @@
                         endMin: sl ? sl.endMin : null,
                         selectedStaffId: (row.serviceStaff && row.serviceStaff[sid]) ? row.serviceStaff[sid] : '',
                         daySnapshot: daySnap,
-                        excludeApptId: null,
+                        excludeApptId: editingAppointmentId || null,
                         priorSlices,
                         allStaffs: ALL_STAFFS
                     })
@@ -3200,14 +3937,44 @@
                             <button type="button" class="remove-btn fb-combo-remove-btn" data-row="${row.id}" title="Remove combo"><i class="bx bx-x"></i></button>
                         </div>
                     </div>
+                    ${swapComboHtml}
                     ${todayRowsHtml ? `<div class="laleen-slice-track">${todayRowsHtml}</div>` : ''}
                     ${pendingHtml}
                 </div>`;
         }
 
+        function fbSwapComboRow(rowId, newComboId) {
+            const row = selectedCombos.find(r => Number(r.id) === Number(rowId));
+            const newCombo = ALL_COMBOS.find(c => Number(c.id) === Number(newComboId));
+            if (!row || !newCombo || Number(row.combo.id) === Number(newCombo.id)) return;
+
+            const qty = Math.max(0, Number(newCombo.quantity_included) || 0);
+            const pool = Array.isArray(newCombo.services) ? newCombo.services : [];
+            const defaultImmediateIds = pool.slice(0, qty > 0 ? qty : pool.length).map(s => Number(s.id));
+
+            row.combo = newCombo;
+            row.immediateIds = defaultImmediateIds;
+            row.pendingIds = [];
+            row.serviceStaff = {};
+            row.serviceParallel = {};
+
+            fbClearBookingError();
+            fbAutoAssignUnpickedTodaySlices();
+            fbRenderAllListsWithoutRecursion();
+            loadAvailableStaff();
+        }
+
         function fbRenderCombos(skipSync = false) {
             const container = document.getElementById('fbComboList');
             container.innerHTML = selectedCombos.map(fbComboCardHtml).join('');
+
+            container.querySelectorAll('.fb-combo-swap-select').forEach(sel => {
+                sel.addEventListener('click', (e) => e.stopPropagation());
+                sel.addEventListener('change', (e) => {
+                    e.stopPropagation();
+                    fbSwapComboRow(Number(sel.dataset.row), Number(sel.value));
+                });
+            });
 
             container.querySelectorAll('.fb-combo-remove-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -3471,7 +4238,7 @@
                             endMin: sl ? sl.endMin : null,
                             selectedStaffId: draft.serviceStaff[sid] || '',
                             daySnapshot: daySnap,
-                            excludeApptId: null,
+                            excludeApptId: editingAppointmentId || null,
                             priorSlices,
                             allStaffs: ALL_STAFFS
                         })
@@ -3557,7 +4324,7 @@
                                 endMin: sl ? sl.endMin : null,
                                 clickedStaffId: pendingStaffId,
                                 daySnapshot: daySnap,
-                                excludeApptId: null,
+                                excludeApptId: editingAppointmentId || null,
                                 priorSlices: previewTl.slices.slice(0, fbActiveComboDraft.immediateIds.length - 1),
                                 allStaffs: ALL_STAFFS
                             });
@@ -3769,6 +4536,14 @@
                         pkg,
                         anchorStaffId: '',
                         anchorParallel: false,
+                        catalog_price: Number(pkg.price) || 0,
+                        original_price: Number(pkg.price) || 0,
+                        price: Number(pkg.price) || 0,
+                        discount_type: 'fixed',
+                        discount_value: 0,
+                        discount_amount: 0,
+                        discount_reason: '',
+                        discountOpen: false,
                         slots
                     });
                     fbAutoAssignUnpickedTodaySlices();
@@ -3805,7 +4580,7 @@
                         endMin: anchorSl ? anchorSl.endMin : null,
                         selectedStaffId: fpRow.anchorStaffId || '',
                         daySnapshot: daySnap,
-                        excludeApptId: null,
+                        excludeApptId: editingAppointmentId || null,
                         priorSlices: anchorPrior,
                         allStaffs: ALL_STAFFS
                     })
@@ -3833,7 +4608,7 @@
                                 endMin: sl ? sl.endMin : null,
                                 selectedStaffId: slotObj.staffId || '',
                                 daySnapshot: daySnap,
-                                excludeApptId: null,
+                                excludeApptId: editingAppointmentId || null,
                                 priorSlices: slPrior,
                                 allStaffs: ALL_STAFFS
                             })
@@ -3876,6 +4651,17 @@
                 }).join('');
 
                 const anchorOtAlertHtml = window.LaleenSliceEngine ? window.LaleenSliceEngine.renderOvertimeAlert(anchorMeta) : '';
+                if (fpRow.catalog_price === undefined) {
+                    fpRow.catalog_price = Number(pkg.price) || 0;
+                    fpRow.original_price = Number(pkg.price) || 0;
+                    fpRow.price = Number(pkg.price) || 0;
+                    fpRow.discount_type = 'fixed';
+                    fpRow.discount_value = 0;
+                    fpRow.discount_amount = 0;
+                    fpRow.discount_reason = '';
+                    fpRow.discountOpen = false;
+                }
+                const fpDisc = fbServiceDiscount(fpRow);
 
                 return `
                     <div class="fb-svc-row fb-combo-card" data-freebie-row="${fpRow.rowId}">
@@ -3884,11 +4670,22 @@
                                 <span class="fb-combo-header-pill">Service + Freebies</span>
                                 <span class="name">${fbEscHtml(pkg.name)}</span>
                             </div>
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="fb-combo-price-lock">${Number(pkg.price).toFixed(2)} QAR</span>
+                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                <span class="fb-orig-strike ${fpDisc > 0 ? '' : 'd-none'}">${Number(fpRow.original_price || pkg.price).toFixed(2)}</span>
+                                <div class="fb-price-edit">
+                                    <span class="currency">QAR</span>
+                                    <input type="number" step="0.01" min="0" inputmode="decimal" class="price-input" data-disc-kind="freebie" data-disc-key="${fpRow.rowId}" value="${Number(fpRow.price !== undefined ? fpRow.price : pkg.price).toFixed(2)}" aria-label="Final price for ${fbEscHtml(pkg.name)}">
+                                </div>
                                 <button type="button" class="remove-btn fb-freebie-remove-btn" data-row="${fpRow.rowId}" title="Remove package"><i class="bx bx-x"></i></button>
                             </div>
                         </div>
+                        <div class="d-flex align-items-center justify-content-between gap-2 pt-1">
+                            <button type="button" class="fb-discount-toggle-btn ${fpDisc > 0 ? 'has-discount' : ''}" data-disc-kind="freebie" data-disc-key="${fpRow.rowId}">
+                                ${fbDiscountPillText(fpRow)}
+                            </button>
+                            <span style="font-size:11px; color:#9a8981;">Base: ${Number(pkg.price).toFixed(2)} QAR</span>
+                        </div>
+                        ${fbRenderDiscountEditorHtml(fpRow, 'freebie', fpRow.rowId)}
                         <div class="laleen-slice-row flex-column align-items-stretch mt-1">
                             <div class="d-flex align-items-center justify-content-between gap-2">
                                 <div class="laleen-slice-left">
@@ -3965,6 +4762,8 @@
                 });
             });
 
+            fbBindDiscountEvents(container, 'freebie', key => selectedFreebiePackages.find(r => Number(r.rowId) === Number(key)));
+
             if (!skipSync) {
                 fbUpdateTeamMemberVisibility();
                 fbSyncHiddenAndTotals();
@@ -4039,7 +4838,7 @@
                         endMin: sl ? sl.endMin : null,
                         selectedStaffId: fr.staff_id || '',
                         daySnapshot: daySnap,
-                        excludeApptId: null,
+                        excludeApptId: editingAppointmentId || null,
                         priorSlices: slPrior,
                         allStaffs: ALL_STAFFS
                     })
@@ -4133,8 +4932,14 @@
                     }
                     decideInSalon = false;
                     selectedServices.push(Object.assign({}, svc, {
-                        original_price: svc.price,
+                        catalog_price: Number(svc.price) || 0,
+                        original_price: Number(svc.price) || 0,
+                        price: Number(svc.price) || 0,
+                        discount_type: 'fixed',
+                        discount_value: 0,
+                        discount_amount: 0,
                         discount_reason: '',
+                        discountOpen: false,
                         staff_id: '',
                         is_parallel: false,
                         manualStaff: false
@@ -4216,6 +5021,9 @@
             }
             params.append('appointment_datetime', datetime);
             params.append('branch', branch);
+            if (editingAppointmentId) {
+                params.append('exclude_appointment_id', String(editingAppointmentId));
+            }
 
             fetch("{{ route('appointments.availableStaff') }}?" + params.toString())
                 .then(res => res.json())
@@ -4334,7 +5142,12 @@
 
                 const modalEl = document.getElementById('calendarBookModal');
                 const drawer = bootstrap.Offcanvas.getInstance(modalEl);
+                const editedId = editingAppointmentId;
                 if (drawer) drawer.hide();
+
+                if (window.LaleenSliceEngine) {
+                    window.LaleenSliceEngine.invalidateSnapshots();
+                }
 
                 if (typeof window.refreshCalendarView === 'function') {
                     window.refreshCalendarView();
@@ -4342,8 +5155,12 @@
                     window.location.reload();
                 }
 
+                if (editedId && typeof window.refreshOpenAppointmentDrawer === 'function') {
+                    window.refreshOpenAppointmentDrawer(editedId);
+                }
+
                 if (typeof window.showCalToast === 'function') {
-                    window.showCalToast(payload.message || 'Appointment booked successfully.', 'success');
+                    window.showCalToast(payload.message || (editedId ? 'Booking updated successfully.' : 'Appointment booked successfully.'), 'success');
                 }
             } catch (err) {
                 fbShowPanel('main');

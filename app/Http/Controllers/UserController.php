@@ -28,16 +28,17 @@ class UserController extends Controller
 
     public function dashboard(Request $request)
     {
-        // ---- Date range (defaults automatically to Month-to-Date; honors optional ?from=&to= or ?date_from=&date_to=) ----
+        // ---- Date range (defaults automatically to Month-to-Date in Asia/Qatar; honors optional ?from=&to= or ?date_from=&date_to=) ----
         $rawFrom = $request->input('from') ?: $request->input('date_from');
         $rawTo = $request->input('to') ?: $request->input('date_to');
+        $nowQatar = now('Asia/Qatar');
 
         $dashFrom = filled($rawFrom)
-            ? Carbon::parse($rawFrom)->startOfDay()
-            : now()->startOfMonth();
+            ? Carbon::parse($rawFrom, 'Asia/Qatar')->startOfDay()
+            : $nowQatar->copy()->startOfMonth()->startOfDay();
         $dashTo = filled($rawTo)
-            ? Carbon::parse($rawTo)->endOfDay()
-            : now()->endOfDay();
+            ? Carbon::parse($rawTo, 'Asia/Qatar')->endOfDay()
+            : $nowQatar->copy()->endOfDay();
 
         if ($dashFrom->gt($dashTo)) {
             [$dashFrom, $dashTo] = [$dashTo->copy()->startOfDay(), $dashFrom->copy()->endOfDay()];

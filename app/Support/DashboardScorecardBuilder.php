@@ -117,7 +117,8 @@ class DashboardScorecardBuilder
         string $valueLabel,
         float $pct,
         bool $isPrimary = false,
-        ?bool $explicitPassing = null
+        ?bool $explicitPassing = null,
+        ?string $tooltip = null
     ): array {
         $clampedPct = max(0.0, min(100.0, round($pct, 1)));
         $color = match (true) {
@@ -133,6 +134,7 @@ class DashboardScorecardBuilder
             'color' => $color,
             'passing' => $explicitPassing ?? ($clampedPct >= 85.0),
             'is_primary' => $isPrimary,
+            'tooltip' => $tooltip,
         ];
     }
 
@@ -454,32 +456,20 @@ class DashboardScorecardBuilder
         $dailyTarget = self::AGENT_DAILY_BOOKING_QUOTA;
         $mtdTarget = max(1, $dailyTarget * $periodDays);
 
-        $refDateStr = $referenceDate->toDateString();
-        $todayStart = Carbon::parse($refDateStr)->startOfDay();
-        $todayEnd = Carbon::parse($refDateStr)->endOfDay();
+        $todayBounds = AgentBookingQuotaCalculator::qatarDayBounds($referenceDate);
 
         $mtdBookings = 0;
         $todayBookings = 0;
 
         if ($agentUserIds->isNotEmpty()) {
-            $rawAppointments = Appointment::query()
-                ->scheduledForAgentQuota($agentUserIds)
-                ->whereBetween('created_at', [$this->from, $this->to])
-                ->get([
-                    'id',
-                    'booking_agent_id',
-                    'customer_id',
-                    'phone',
-                    'customer_name',
-                    'booking_date',
-                    'appointment_datetime',
-                    'created_at',
-                ]);
-
-            $deduped = Appointment::deduplicateForAgentQuota($rawAppointments);
+            $deduped = AgentBookingQuotaCalculator::fetchForRange(
+                $agentUserIds,
+                $this->from->toDateString(),
+                $this->to->toDateString()
+            );
             $mtdBookings = $deduped->count();
             $todayBookings = $deduped
-                ->filter(fn (Appointment $appt) => $appt->created_at && $appt->created_at->between($todayStart, $todayEnd))
+                ->filter(fn (Appointment $appt) => AgentBookingQuotaCalculator::isCreatedWithinBounds($appt, $todayBounds))
                 ->count();
         }
 
@@ -504,12 +494,17 @@ class DashboardScorecardBuilder
                 'Bookings MTD',
                 $mtdBookings . ' / ' . $mtdTarget,
                 $mtdPct,
-                true
+                true,
+                null,
+                AgentBookingQuotaCalculator::UI_TOOLTIP_COPY
             ),
             $this->makeKpiBar(
                 "Today's Quota",
                 $todayBookings . ' / ' . $dailyTarget,
-                $todayPct
+                $todayPct,
+                false,
+                null,
+                AgentBookingQuotaCalculator::UI_TOOLTIP_COPY
             ),
             $this->makeKpiBar(
                 'Chat QA (<5m)',
@@ -541,21 +536,11 @@ class DashboardScorecardBuilder
         $mtdBookings = 0;
 
         if ($chatAgentIds->isNotEmpty()) {
-            $rawAppointments = Appointment::query()
-                ->scheduledForAgentQuota($chatAgentIds)
-                ->whereBetween('created_at', [$this->from, $this->to])
-                ->get([
-                    'id',
-                    'booking_agent_id',
-                    'customer_id',
-                    'phone',
-                    'customer_name',
-                    'booking_date',
-                    'appointment_datetime',
-                    'created_at',
-                ]);
-
-            $deduped = Appointment::deduplicateForAgentQuota($rawAppointments);
+            $deduped = AgentBookingQuotaCalculator::fetchForRange(
+                $chatAgentIds,
+                $this->from->toDateString(),
+                $this->to->toDateString()
+            );
             $mtdBookings = $deduped->count();
         }
 

@@ -38,6 +38,10 @@ class AppointmentService extends Model
         'sort_order' => 'integer',
         'is_parallel' => 'boolean',
         'is_freebie_redemption' => 'boolean',
+        'price' => 'float',
+        'original_price' => 'float',
+        'discount_value' => 'float',
+        'discount_amount' => 'float',
         'start_time' => 'datetime',
         'slice_end_at' => 'datetime',
         'is_overtime' => 'boolean',
@@ -157,16 +161,39 @@ class AppointmentService extends Model
 
     public function getFinalPriceAttribute(): float
     {
-        $price = (float) $this->price;
+        $price = round(max(0.0, (float) $this->price), 2);
+        $discountType = strtolower(trim((string) ($this->discount_type ?? '')));
+        $discountVal = max(0.0, (float) $this->discount_value);
+        $original = $this->original_price !== null ? round(max(0.0, (float) $this->original_price), 2) : null;
 
-        if ($this->discount_type === 'percent') {
-            return round(max(0, $price * (1 - min((float) $this->discount_value, 100) / 100)), 2);
+        if ($discountType === 'percent') {
+            $expectedNetFromOriginal = $original !== null
+                ? round(max(0.0, $original * (1.0 - min($discountVal, 100.0) / 100.0)), 2)
+                : null;
+
+            // Net price is already stored in `price` (new standard) — never double-discount.
+            if ($expectedNetFromOriginal !== null && abs($price - $expectedNetFromOriginal) <= 0.02) {
+                return $price;
+            }
+
+            // Legacy gross-price rows where `price` still holds the pre-discount value.
+            return round(max(0.0, $price * (1.0 - min($discountVal, 100.0) / 100.0)), 2);
         }
 
-        if ($this->discount_type === 'flat') {
-            return round(max(0, $price - (float) $this->discount_value), 2);
+        if ($discountType === 'fixed' || $discountType === 'flat') {
+            $expectedNetFromOriginal = $original !== null
+                ? round(max(0.0, $original - $discountVal), 2)
+                : null;
+
+            // Net price is already stored in `price` (new standard) — never double-discount.
+            if ($expectedNetFromOriginal !== null && abs($price - $expectedNetFromOriginal) <= 0.02) {
+                return $price;
+            }
+
+            // Legacy gross-price rows where `price` still holds the pre-discount value.
+            return round(max(0.0, $price - $discountVal), 2);
         }
 
-        return round($price, 2);
+        return $price;
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\AgentBookingQuotaCalculator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
@@ -53,7 +54,6 @@ class KpiAgentTargetReport extends Model
     private function rawShiftBookings(): array
     {
         $shiftTz = AgentShiftLog::SHIFT_TIMEZONE;
-        $bounds = $this->dateRangeBounds();
 
         $logs = AgentShiftLog::whereDate('date', '>=', $this->date_from->format('Y-m-d'))
             ->whereDate('date', '<=', $this->date_to->format('Y-m-d'))
@@ -74,21 +74,11 @@ class KpiAgentTargetReport extends Model
             return ['morning' => 0, 'evening' => 0];
         }
 
-        $rawAppointments = Appointment::query()
-            ->scheduledForAgentQuota($agentIds)
-            ->whereBetween('created_at', $bounds)
-            ->get([
-                'id',
-                'booking_agent_id',
-                'customer_id',
-                'phone',
-                'customer_name',
-                'booking_date',
-                'appointment_datetime',
-                'created_at',
-            ]);
-
-        $appointments = Appointment::deduplicateForAgentQuota($rawAppointments);
+        $appointments = AgentBookingQuotaCalculator::fetchForRange(
+            $agentIds,
+            $this->date_from->format('Y-m-d'),
+            $this->date_to->format('Y-m-d')
+        );
 
         $counts = ['morning' => 0, 'evening' => 0];
 
@@ -98,7 +88,10 @@ class KpiAgentTargetReport extends Model
                 continue;
             }
 
-            $createdAtQatar = $appointment->created_at->copy()->timezone($shiftTz);
+            $createdAtQatar = AgentBookingQuotaCalculator::createdAtQatar($appointment);
+            if (! $createdAtQatar) {
+                continue;
+            }
             $key = $attributedAgentId . '|' . $createdAtQatar->format('Y-m-d');
             $dayLogs = $logsByAgentAndDate->get($key, collect());
 
@@ -134,7 +127,6 @@ class KpiAgentTargetReport extends Model
     public static function liveAgentScorecards(?string $month = null): array
     {
         $shiftTz = AgentShiftLog::SHIFT_TIMEZONE;
-        $appTz = config('app.timezone', $shiftTz);
         $now = now($shiftTz);
 
         $selectedMonth = (is_string($month) && preg_match('/^\d{4}-\d{2}$/', $month))
@@ -146,10 +138,8 @@ class KpiAgentTargetReport extends Model
         $monthEnd = $monthStart->copy()->endOfMonth()->endOfDay();
         $referenceDay = $isCurrentMonth ? $now->copy() : $monthEnd->copy();
 
-        $todayStart = $referenceDay->copy()->startOfDay()->timezone($appTz);
-        $todayEnd = $referenceDay->copy()->endOfDay()->timezone($appTz);
-        $periodStart = $monthStart->copy()->timezone($appTz);
-        $periodEnd = ($isCurrentMonth ? $now->copy()->endOfDay() : $monthEnd->copy())->timezone($appTz);
+        $todayBounds = AgentBookingQuotaCalculator::qatarDayBounds($referenceDay);
+        $periodEndDay = $isCurrentMonth ? $now->copy() : $monthEnd->copy();
         $daysElapsed = $isCurrentMonth ? max(1, (int) $now->day) : max(1, (int) $monthStart->daysInMonth);
         $daysInMonth = max(1, (int) $monthStart->daysInMonth);
         $dailyTarget = self::DAILY_TARGET_PER_SHIFT; // 13
@@ -164,28 +154,18 @@ class KpiAgentTargetReport extends Model
             ->get()
             ->groupBy('user_id');
 
-        $mtdRawAppointments = Appointment::query()
-            ->scheduledForAgentQuota($agentIds)
-            ->whereBetween('created_at', [$periodStart, $periodEnd])
-            ->get([
-                'id',
-                'booking_agent_id',
-                'customer_id',
-                'phone',
-                'customer_name',
-                'booking_date',
-                'appointment_datetime',
-                'created_at',
-            ]);
-
-        $mtdAppointments = Appointment::deduplicateForAgentQuota($mtdRawAppointments);
+        $mtdAppointments = AgentBookingQuotaCalculator::fetchForRange(
+            $agentIds,
+            $monthStart->toDateString(),
+            $periodEndDay->toDateString()
+        );
         $mtdByAgent = $mtdAppointments->groupBy(fn (Appointment $appt) => (int) $appt->booking_agent_id);
 
-        return $agents->map(function (User $agent) use ($todayStart, $todayEnd, $daysElapsed, $daysInMonth, $dailyTarget, $todayShiftLogs, $mtdByAgent) {
+        return $agents->map(function (User $agent) use ($todayBounds, $daysElapsed, $daysInMonth, $dailyTarget, $todayShiftLogs, $mtdByAgent) {
             $agentAppointments = $mtdByAgent->get($agent->id, collect());
             $mtdBookings = $agentAppointments->count();
             $todayBookings = $agentAppointments
-                ->filter(fn (Appointment $appt) => $appt->created_at && $appt->created_at->between($todayStart, $todayEnd))
+                ->filter(fn (Appointment $appt) => AgentBookingQuotaCalculator::isCreatedWithinBounds($appt, $todayBounds))
                 ->count();
 
             $mtdTarget = $dailyTarget * $daysElapsed;

@@ -581,8 +581,8 @@ class KpiExecutiveScorecardTest extends TestCase
         ]);
         $futureAppt->forceFill(['created_at' => $now])->saveQuietly();
 
-        // Agent & Supervisor Booking Rule: Once a Chat Agent books an appointment, all statuses (including cancelled & no_show) count as +1
-        foreach (['confirmed' => 1, 'completed' => 1, 'cancelled' => 1, 'no_show' => 1] as $statusToTest => $expectedCount) {
+        // Agent & Supervisor Booking Rule: Active bookings (confirmed, completed, no_show) count as +1; cancelled bookings are excluded (0)
+        foreach (['confirmed' => 1, 'completed' => 1, 'cancelled' => 0, 'no_show' => 1] as $statusToTest => $expectedCount) {
             $futureAppt->update(['status' => $statusToTest]);
 
             $report = new \App\Models\KpiAgentTargetReport([

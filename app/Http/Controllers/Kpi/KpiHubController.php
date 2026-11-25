@@ -18,6 +18,7 @@ use App\Models\SocialLateReplyLog;
 use App\Models\Staff;
 use App\Models\StaffComplaint;
 use App\Models\User;
+use App\Support\AgentBookingQuotaCalculator;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -636,36 +637,20 @@ class KpiHubController extends Controller
         $agentMtdTarget = $dailyTarget * $daysElapsed;
         $agentFullMonthTarget = $dailyTarget * $daysInMonth;
 
-        $qatarTz = 'Asia/Qatar';
-        $appTz = config('app.timezone', $qatarTz);
-        $refDateStr = $referenceDate->copy()->timezone($qatarTz)->format('Y-m-d');
-        $todayStart = Carbon::createFromFormat('Y-m-d', $refDateStr, $qatarTz)->startOfDay()->timezone($appTz);
-        $todayEnd = Carbon::createFromFormat('Y-m-d', $refDateStr, $qatarTz)->endOfDay()->timezone($appTz);
-        $mtdStart = Carbon::createFromFormat('Y-m-d', $periodStart->copy()->timezone($qatarTz)->format('Y-m-d'), $qatarTz)->startOfDay()->timezone($appTz);
-        $mtdEnd = Carbon::createFromFormat('Y-m-d', $periodEnd->copy()->timezone($qatarTz)->format('Y-m-d'), $qatarTz)->endOfDay()->timezone($appTz);
+        $todayBounds = AgentBookingQuotaCalculator::qatarDayBounds($referenceDate);
 
         $todayBookings = 0;
         $mtdBookings = 0;
 
         if ($agentUserIds->isNotEmpty()) {
-            $mtdRawAppointments = Appointment::query()
-                ->scheduledForAgentQuota($agentUserIds)
-                ->whereBetween('created_at', [$mtdStart, $mtdEnd])
-                ->get([
-                    'id',
-                    'booking_agent_id',
-                    'customer_id',
-                    'phone',
-                    'customer_name',
-                    'booking_date',
-                    'appointment_datetime',
-                    'created_at',
-                ]);
-
-            $dedupedMtdAppointments = Appointment::deduplicateForAgentQuota($mtdRawAppointments);
+            $dedupedMtdAppointments = AgentBookingQuotaCalculator::fetchForRange(
+                $agentUserIds,
+                $periodStart,
+                $periodEnd
+            );
             $mtdBookings = $dedupedMtdAppointments->count();
             $todayBookings = $dedupedMtdAppointments
-                ->filter(fn (Appointment $appt) => $appt->created_at && $appt->created_at->between($todayStart, $todayEnd))
+                ->filter(fn (Appointment $appt) => AgentBookingQuotaCalculator::isCreatedWithinBounds($appt, $todayBounds))
                 ->count();
         }
 
@@ -859,38 +844,23 @@ class KpiHubController extends Controller
         int $daysInMonth,
         int $daysElapsed
     ): array {
-        $qatarTz = 'Asia/Qatar';
-        $appTz = config('app.timezone', $qatarTz);
+        $qatarTz = AgentBookingQuotaCalculator::QATAR_TIMEZONE;
         $referenceDate = $isCurrentMonth ? now($qatarTz) : $monthEnd->copy()->timezone($qatarTz);
-        $refDateStr = $referenceDate->format('Y-m-d');
-        $todayStart = Carbon::createFromFormat('Y-m-d', $refDateStr, $qatarTz)->startOfDay()->timezone($appTz);
-        $todayEnd = Carbon::createFromFormat('Y-m-d', $refDateStr, $qatarTz)->endOfDay()->timezone($appTz);
-        $mtdStart = Carbon::createFromFormat('Y-m-d', $periodStart->copy()->timezone($qatarTz)->format('Y-m-d'), $qatarTz)->startOfDay()->timezone($appTz);
-        $mtdEnd = Carbon::createFromFormat('Y-m-d', $periodEnd->copy()->timezone($qatarTz)->format('Y-m-d'), $qatarTz)->endOfDay()->timezone($appTz);
+        $todayBounds = AgentBookingQuotaCalculator::qatarDayBounds($referenceDate);
 
         $chatAgentIds = User::where('role', 'agent')->pluck('id');
         $todayBookingsCount = 0;
         $mtdBookingsCount = 0;
 
         if ($chatAgentIds->isNotEmpty()) {
-            $mtdRawAppointments = Appointment::query()
-                ->scheduledForAgentQuota($chatAgentIds)
-                ->whereBetween('created_at', [$mtdStart, $mtdEnd])
-                ->get([
-                    'id',
-                    'booking_agent_id',
-                    'customer_id',
-                    'phone',
-                    'customer_name',
-                    'booking_date',
-                    'appointment_datetime',
-                    'created_at',
-                ]);
-
-            $dedupedMtdAppointments = Appointment::deduplicateForAgentQuota($mtdRawAppointments);
+            $dedupedMtdAppointments = AgentBookingQuotaCalculator::fetchForRange(
+                $chatAgentIds,
+                $periodStart,
+                $periodEnd
+            );
             $mtdBookingsCount = $dedupedMtdAppointments->count();
             $todayBookingsCount = $dedupedMtdAppointments
-                ->filter(fn (Appointment $appt) => $appt->created_at && $appt->created_at->between($todayStart, $todayEnd))
+                ->filter(fn (Appointment $appt) => AgentBookingQuotaCalculator::isCreatedWithinBounds($appt, $todayBounds))
                 ->count();
         }
 

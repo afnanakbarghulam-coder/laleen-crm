@@ -173,6 +173,7 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('module:bookings|calendar,edit')->group(function () {
         Route::post('/appointments', [AppointmentController::class, 'store'])->name('appointments.store');
         Route::put('/appointments/{appointment}', [AppointmentController::class, 'update'])->name('appointments.update');
+        Route::match(['put', 'patch'], '/appointments/{appointment}/full-edit', [AppointmentController::class, 'fullUpdate'])->name('appointments.fullUpdate');
         Route::delete('/appointments/{appointment}', [AppointmentController::class, 'destroy'])->name('appointments.destroy');
         Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus'])->name('appointments.updateStatus');
         Route::post('/appointments/{appointment}/services', [AppointmentController::class, 'addService'])->name('appointments.services.store');

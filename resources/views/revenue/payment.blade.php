@@ -286,7 +286,11 @@
                                     </span>
                                 @elseif (($item['discount_amount'] ?? 0) > 0)
                                     <span class="discount-note">
-                                        <i class="bx bx-purchase-tag"></i> −{{ number_format($item['discount_amount'], 2) }} QAR off
+                                        <i class="bx bx-purchase-tag"></i> −{{ number_format($item['discount_amount'], 2) }} QAR
+                                        @if (($item['discount_type'] ?? null) === 'percent' && ($item['discount_value'] ?? 0) > 0)
+                                            ({{ rtrim(rtrim(number_format($item['discount_value'], 2), '0'), '.') }}%)
+                                        @endif
+                                        off
                                         @if (!empty($item['discount_reason']))
                                             · {{ $item['discount_reason'] }}
                                         @endif

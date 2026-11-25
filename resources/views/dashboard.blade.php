@@ -576,7 +576,7 @@
                     {{-- Right Column (~70%): Strictly 3 Single-Line Thin-Bar KPIs --}}
                     <div class="ld-split-right">
                         @foreach ($card['kpis'] as $kpi)
-                            <div class="ld-kpi-row">
+                            <div class="ld-kpi-row" @if(!empty($kpi['tooltip'])) title="{{ $kpi['tooltip'] }}" @endif>
                                 <div class="ld-kpi-line">
                                     <span class="ld-kpi-label">{{ $kpi['label'] }}</span>
                                     <span class="ld-kpi-val">{{ $kpi['value_label'] }}</span>

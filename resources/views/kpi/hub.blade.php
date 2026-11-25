@@ -1049,7 +1049,8 @@
                     <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-areeba" title="Open Agent Booking Targets">AREEBA &nearr;</a>
                 </div>
 
-                <div class="luxe-card-label">MTD Booking Quota</div>
+                <div class="luxe-card-label" title="{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}">MTD Booking Quota</div>
+                <div class="luxe-card-subnote">{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}</div>
 
                 <div class="luxe-card-hero">
                     {{ $areebaMtdBk }} <span class="luxe-unit">/ {{ $areebaMtdTarget }}</span>
@@ -1082,13 +1083,14 @@
                     <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-areeba" title="Open Agent Shift Logs">AREEBA &nearr;</a>
                 </div>
 
-                <div class="luxe-card-label">
+                <div class="luxe-card-label" title="{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}">
                     @if($isCurrentMonthView)
                         Today's Daily Booking Target
                     @else
                         Daily Avg Pace
                     @endif
                 </div>
+                <div class="luxe-card-subnote">{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}</div>
 
                 <div class="luxe-card-hero">
                     {{ $isCurrentMonthView ? $areebaTodayBk : $areebaDailyAvg }} <span class="luxe-unit">/ 13</span>
@@ -1127,7 +1129,8 @@
                     <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-zoya" title="Open Agent Booking Targets">ZOYA &nearr;</a>
                 </div>
 
-                <div class="luxe-card-label">MTD Booking Quota</div>
+                <div class="luxe-card-label" title="{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}">MTD Booking Quota</div>
+                <div class="luxe-card-subnote">{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}</div>
 
                 <div class="luxe-card-hero">
                     {{ $zoyaMtdBk }} <span class="luxe-unit">/ {{ $zoyaMtdTarget }}</span>
@@ -1160,13 +1163,14 @@
                     <a href="{{ route('kpi.agents.index', ['month' => $effectiveMonthStr]) }}" class="luxe-owner-tag tag-zoya" title="Open Agent Shift Logs">ZOYA &nearr;</a>
                 </div>
 
-                <div class="luxe-card-label">
+                <div class="luxe-card-label" title="{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}">
                     @if($isCurrentMonthView)
                         Today's Daily Booking Target
                     @else
                         Daily Avg Pace
                     @endif
                 </div>
+                <div class="luxe-card-subnote">{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}</div>
 
                 <div class="luxe-card-hero">
                     {{ $isCurrentMonthView ? $zoyaTodayBk : $zoyaDailyAvg }} <span class="luxe-unit">/ 13</span>
@@ -1819,6 +1823,16 @@
             color: var(--lx-cream);
             line-height: 1.35;
             margin-bottom: 10px;
+        }
+
+        .luxe-card-subnote {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--lx-muted);
+            line-height: 1.35;
+            margin-top: -6px;
+            margin-bottom: 10px;
+            opacity: 0.85;
         }
 
         .luxe-card-hero {

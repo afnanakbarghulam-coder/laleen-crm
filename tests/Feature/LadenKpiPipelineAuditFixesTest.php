@@ -106,7 +106,7 @@ class LadenKpiPipelineAuditFixesTest extends TestCase
                 $appt->forceFill(['created_at' => $now])->saveQuietly();
             }
 
-            // 2. Shared booking: created_by Areeba, booking_agent_id = Zoya (cancelled) -> +1 ONLY for Zoya, 0 for Areeba
+            // 2. Shared booking: created_by Areeba, booking_agent_id = Zoya (confirmed) -> +1 ONLY for Zoya, 0 for Areeba
             $sharedAppt = Appointment::create([
                 'customer_name' => 'Zoya Attributed Guest',
                 'phone' => '55100099',
@@ -118,7 +118,7 @@ class LadenKpiPipelineAuditFixesTest extends TestCase
                 'branch' => 'wakrah',
                 'booking_agent_id' => $this->zoya->id,
                 'created_by' => $this->areeba->id,
-                'status' => 'cancelled',
+                'status' => 'confirmed',
                 'price' => 150,
             ]);
             $sharedAppt->forceFill(['created_at' => $now])->saveQuietly();
@@ -152,16 +152,16 @@ class LadenKpiPipelineAuditFixesTest extends TestCase
             ]);
             $walkInAdmin->forceFill(['created_at' => $now])->saveQuietly();
 
-            // Assert KpiAgentTargetReport::rawShiftBookings & liveAgentScorecards
+            // Assert KpiAgentTargetReport::rawShiftBookings & liveAgentScorecards (cancelled excluded: Areeba=2, Zoya=1, Laden=3)
             $report = new KpiAgentTargetReport([
                 'date_from' => $now->copy()->startOfDay(),
                 'date_to' => $now->copy()->endOfDay(),
             ]);
-            $this->assertSame(4, $report->combined()['bookings']);
+            $this->assertSame(3, $report->combined()['bookings']);
 
             $liveCards = collect(KpiAgentTargetReport::liveAgentScorecards('2026-11'))->keyBy('id');
-            $this->assertSame(3, $liveCards[$this->areeba->id]['today_bookings']);
-            $this->assertSame(3, $liveCards[$this->areeba->id]['mtd_bookings']);
+            $this->assertSame(2, $liveCards[$this->areeba->id]['today_bookings']);
+            $this->assertSame(2, $liveCards[$this->areeba->id]['mtd_bookings']);
             $this->assertSame(1, $liveCards[$this->zoya->id]['today_bookings']);
             $this->assertSame(1, $liveCards[$this->zoya->id]['mtd_bookings']);
 
@@ -170,17 +170,17 @@ class LadenKpiPipelineAuditFixesTest extends TestCase
                 ->get(route('kpi.hub', ['month' => '2026-11']))
                 ->viewData('scorecard');
 
-            $this->assertSame(3, $scorecard['areeba']['today_bookings']);
-            $this->assertSame(3, $scorecard['areeba']['mtd_bookings']);
+            $this->assertSame(2, $scorecard['areeba']['today_bookings']);
+            $this->assertSame(2, $scorecard['areeba']['mtd_bookings']);
             $this->assertSame(1, $scorecard['zoya']['today_bookings']);
             $this->assertSame(1, $scorecard['zoya']['mtd_bookings']);
-            $this->assertSame(4, $scorecard['laden']['today_bookings_count']);
-            $this->assertSame(4, $scorecard['laden']['mtd_bookings_count']);
+            $this->assertSame(3, $scorecard['laden']['today_bookings_count']);
+            $this->assertSame(3, $scorecard['laden']['mtd_bookings_count']);
 
             // 4. Single-day OR pass loophole test:
-            // Add 10 more bookings today for Areeba (total 13 today vs 130 MTD target on Nov 10)
+            // Add 11 more bookings today for Areeba (total 13 today vs 130 MTD target on Nov 10)
             // and 12 more bookings today for Zoya (total 13 today; Laden = 26 today vs 260 MTD target on Nov 10)
-            for ($i = 1; $i <= 10; $i++) {
+            for ($i = 1; $i <= 11; $i++) {
                 $a = Appointment::create([
                     'customer_name' => "Areeba Extra {$i}",
                     'phone' => '5531' . str_pad((string) $i, 4, '0', STR_PAD_LEFT),

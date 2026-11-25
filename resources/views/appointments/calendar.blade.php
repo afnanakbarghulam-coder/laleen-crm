@@ -1505,6 +1505,36 @@
         background: rgba(217, 143, 131,0.06);
     }
 
+    #apptDrawer .drawer-change-booking-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid rgba(229, 184, 168, 0.34);
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        background: rgba(229, 184, 168, 0.08);
+        color: #e5b8a8;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+    }
+
+    #apptDrawer .drawer-change-booking-btn:hover:not(:disabled) {
+        background: rgba(229, 184, 168, 0.18);
+        border-color: rgba(229, 184, 168, 0.62);
+        color: #f8efe6;
+    }
+
+    #apptDrawer .drawer-change-booking-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        border-color: rgba(255, 255, 255, 0.14);
+        color: #9b8982;
+        background: rgba(255, 255, 255, 0.03);
+    }
+
     #apptDrawer .drawer-back-btn {
         width: 28px;
         height: 28px;
@@ -2263,7 +2293,14 @@
                 <div class="drawer-section px-3" id="drawerServicesSection">
                     <!-- LIST VIEW -->
                     <div id="drawerServicesListView">
-                        <h6 class="text-uppercase small fw-bold text-muted mb-2">Services &amp; Combos</h6>
+                        <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                            <h6 class="text-uppercase small fw-bold text-muted mb-0">Services &amp; Combos</h6>
+                            <span id="drawerChangeBookingWrap" class="d-none">
+                                <button type="button" class="drawer-change-booking-btn" id="drawerChangeBookingBtn">
+                                    <i class="bx bx-edit-alt"></i> Change / Edit Booking
+                                </button>
+                            </span>
+                        </div>
                         <div id="drawerComboPackagesList"></div>
                         <div id="drawerServices"></div>
                         <div class="d-flex flex-wrap gap-2">
@@ -2326,7 +2363,7 @@
                                 <label class="form-label small mb-1">Discount</label>
                                 <select id="editSvcDiscountType" class="form-select form-select-sm">
                                     <option value="">No discount</option>
-                                    <option value="flat">Flat (QAR)</option>
+                                    <option value="fixed">Fixed (QAR)</option>
                                     <option value="percent">Percent (%)</option>
                                 </select>
                             </div>
@@ -2336,7 +2373,7 @@
                         <div class="d-flex align-items-center gap-2 mt-2 p-2 rounded d-none" id="editSvcDiscountSummary" style="background: rgba(142,168,138,0.14);">
                             <span class="fw-bold small" style="color:#8ea88a;">Discount: <span id="editSvcDiscountAmount">0.00</span> QAR</span>
                         </div>
-                        <input type="text" id="editSvcDiscountReason" class="form-control form-control-sm mt-2" placeholder="Discount reason (optional)">
+                        <input type="text" id="editSvcDiscountReason" maxlength="150" class="form-control form-control-sm mt-2" placeholder="Discount reason (optional)">
 
                         <div class="row g-2 mt-1">
                             <div class="col-6">
@@ -2444,6 +2481,7 @@
                         <i class="bx bx-cog"></i> Quick actions
                     </button>
                     <ul class="dropdown-menu w-100">
+                        <li><a class="dropdown-item" href="#" id="drawerQuickChangeBookingBtn"><i class="bx bx-edit-alt me-1"></i> Change / Edit Booking</a></li>
                         <li><a class="dropdown-item" href="#" id="drawerRescheduleBtn"><i class="bx bx-calendar-edit me-1"></i> Reschedule</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item text-warning" href="#" id="drawerNoShowBtn"><i class="bx bx-block me-1"></i> No show</a></li>
@@ -3886,6 +3924,7 @@
             lastDrawerData = a;
             const color = (latestData && latestData.status_colors[a.status]) || '#c9a39a';
             const isPaid = Boolean(a.is_paid);
+            const isCompletedOrPaid = Boolean(a.is_completed_or_paid) || isPaid || a.status === 'completed';
             const isCancelledOrNoShow = ['cancelled', 'no_show'].includes(a.status);
             const isFinal = isCancelledOrNoShow || (a.status === 'completed' && isPaid);
 
@@ -3964,9 +4003,27 @@
 
             renderDrawerServiceList(a, isFinal);
             showDrawerServicesView('list');
-            document.getElementById('drawerAddServiceBtn').classList.toggle('d-none', isFinal || !CAN_EDIT_BOOKINGS);
+            document.getElementById('drawerAddServiceBtn').classList.toggle('d-none', isFinal || isCompletedOrPaid || !CAN_EDIT_BOOKINGS);
             const hasRedeemablePkgs = Array.isArray(a.redeemable_package_services) && a.redeemable_package_services.length > 0;
-            document.getElementById('drawerRedeemPkgBtn')?.classList.toggle('d-none', isFinal || !CAN_EDIT_BOOKINGS || !hasRedeemablePkgs);
+            document.getElementById('drawerRedeemPkgBtn')?.classList.toggle('d-none', isFinal || isCompletedOrPaid || !CAN_EDIT_BOOKINGS || !hasRedeemablePkgs);
+
+            const changeWrap = document.getElementById('drawerChangeBookingWrap');
+            const changeBtn = document.getElementById('drawerChangeBookingBtn');
+            if (changeWrap && changeBtn) {
+                if (!CAN_EDIT_BOOKINGS || isCancelledOrNoShow) {
+                    changeWrap.classList.add('d-none');
+                } else if (isCompletedOrPaid) {
+                    changeWrap.classList.remove('d-none');
+                    changeWrap.setAttribute('title', 'Checked-out appointments cannot be modified');
+                    changeBtn.disabled = true;
+                    changeBtn.setAttribute('title', 'Checked-out appointments cannot be modified');
+                } else {
+                    changeWrap.classList.remove('d-none');
+                    changeWrap.setAttribute('title', 'Swap combo, change services, or edit booking details');
+                    changeBtn.disabled = false;
+                    changeBtn.setAttribute('title', 'Swap combo, change services, or edit booking details');
+                }
+            }
 
             renderDrawerUpsellList(a, isFinal);
             showDrawerUpsellsView('list');
@@ -3994,8 +4051,12 @@
                 statusRow.appendChild(btn);
             }
 
-            // Quick actions dropdown (Reschedule / No show / Cancel)
-            document.getElementById('drawerQuickActionsWrap').classList.toggle('d-none', isFinal || !CAN_EDIT_BOOKINGS);
+            // Quick actions dropdown (Change / Edit Booking / Reschedule / No show / Cancel)
+            document.getElementById('drawerQuickActionsWrap').classList.toggle('d-none', isFinal || isCompletedOrPaid || !CAN_EDIT_BOOKINGS);
+            const quickChangeBtn = document.getElementById('drawerQuickChangeBookingBtn');
+            if (quickChangeBtn) {
+                quickChangeBtn.classList.toggle('disabled', isCompletedOrPaid || isFinal);
+            }
             document.getElementById('drawerNoShowBtn').classList.toggle('disabled', isFinal);
             document.getElementById('drawerCancelBtn').classList.toggle('disabled', isFinal);
 
@@ -4844,7 +4905,10 @@
                 el.innerHTML = standaloneServices.map((s, idx) => {
                     const sl = tl.slices[idx] || null;
                     const priorSlices = tl.slices.slice(0, idx);
-                    const hasDiscount = Number(s.discount_amount) > 0;
+                    const hasDiscount = !s.is_package_redemption && Number(s.discount_amount) > 0;
+                    const discountPctLabel = (hasDiscount && s.discount_type === 'percent' && Number(s.discount_value) > 0)
+                        ? ` (${String(Number(s.discount_value)).replace(/\.00$/, '')}%)`
+                        : '';
                     const comboBadge = s.combo_name
                         ? `<span class="cal-combo-badge ms-1">${escapeHtml(s.combo_name)}</span>`
                         : '';
@@ -4908,9 +4972,11 @@
                             </div>
                         </div>
                         ${hasDiscount ? `
-                            <div class="meta mt-1" style="color:#8ea88a;" title="${s.discount_reason ? escapeHtml(s.discount_reason) : ''}">
-                                <i class="bx bx-purchase-tag"></i> −${Number(s.discount_amount).toFixed(2)} QAR off ${Number(s.original_price).toFixed(2)}
-                                ${s.discount_reason ? ` · ${escapeHtml(s.discount_reason)}` : ''}
+                            <div class="meta mt-1 d-flex align-items-center gap-2 flex-wrap" style="color:#9ec099;" title="${s.discount_reason ? escapeHtml(s.discount_reason) : ''}">
+                                <span style="display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;background:rgba(142,168,138,0.14);border:1px solid rgba(142,168,138,0.34);color:#9ec099;">
+                                    <i class="bx bx-purchase-tag"></i> −${Number(s.discount_amount).toFixed(2)} QAR${discountPctLabel}
+                                </span>
+                                <span style="font-size:11px;color:#b9a8a0;">off ${Number(s.original_price).toFixed(2)} QAR${s.discount_reason ? ` · ${escapeHtml(s.discount_reason)}` : ''}</span>
                             </div>
                         ` : ''}
                         <div class="d-flex align-items-center justify-content-end gap-2 mt-1">
@@ -5121,12 +5187,13 @@
                 `<option value="${s.id}" ${s.name === line.name ? 'selected' : ''}>${s.name}, ${s.duration}min</option>`
             ).join('');
 
-            document.getElementById('editSvcPrice').value = line.price;
+            document.getElementById('editSvcPrice').value = Number(line.final_price !== undefined ? line.final_price : line.price).toFixed(2);
             document.getElementById('editSvcOriginalPriceWrap').classList.remove('d-none');
             document.getElementById('editSvcOriginalPrice').textContent = Number(line.original_price).toFixed(2);
-            document.getElementById('editSvcDiscountType').value = line.discount_type || '';
+            const normEditType = line.discount_type === 'flat' ? 'fixed' : (line.discount_type || '');
+            document.getElementById('editSvcDiscountType').value = normEditType;
             document.getElementById('editSvcDiscountValue').value = line.discount_value || 0;
-            document.getElementById('editSvcDiscountValue').classList.toggle('d-none', !line.discount_type);
+            document.getElementById('editSvcDiscountValue').classList.toggle('d-none', !normEditType);
             document.getElementById('editSvcDiscountReason').value = line.discount_reason || '';
             const editDrawerBranch = (lastDrawerData && normalizeCalendarBranch(lastDrawerData.branch_raw)) || state.branch;
             scopeSelectOptionsToBranch(document.getElementById('editSvcStaff'), editDrawerBranch, line.staff_id);
@@ -5135,7 +5202,7 @@
             document.getElementById('editSvcStaff').value = line.staff_id || '';
 
             editSvcOriginalPrice = Number(line.original_price);
-            updateEditSvcDiscountSummary();
+            updateEditSvcDiscountSummary('init');
 
             showDrawerServicesView('edit');
         }
@@ -5145,19 +5212,44 @@
         // whatever's currently sitting in the price field.
         let editSvcOriginalPrice = 0;
 
-        function updateEditSvcDiscountSummary() {
-            const price = parseFloat(document.getElementById('editSvcPrice').value) || 0;
-            const discountType = document.getElementById('editSvcDiscountType').value;
-            const discountValue = parseFloat(document.getElementById('editSvcDiscountValue').value) || 0;
+        function updateEditSvcDiscountSummary(source = 'discount') {
+            const priceInput = document.getElementById('editSvcPrice');
+            const discountTypeEl = document.getElementById('editSvcDiscountType');
+            const discountValueEl = document.getElementById('editSvcDiscountValue');
 
-            let finalPrice = price;
-            if (discountType === 'percent') {
-                finalPrice = Math.max(0, price * (1 - Math.min(discountValue, 100) / 100));
-            } else if (discountType === 'flat') {
-                finalPrice = Math.max(0, price - discountValue);
+            let discountType = discountTypeEl.value;
+            let discountValue = parseFloat(discountValueEl.value) || 0;
+            let finalPrice = parseFloat(priceInput.value) || 0;
+
+            if (source === 'price') {
+                if (finalPrice < editSvcOriginalPrice) {
+                    const diff = Math.round((editSvcOriginalPrice - finalPrice) * 100) / 100;
+                    discountType = 'fixed';
+                    discountValue = diff;
+                    discountTypeEl.value = 'fixed';
+                    discountValueEl.value = diff.toFixed(2);
+                    discountValueEl.classList.remove('d-none');
+                } else {
+                    discountType = '';
+                    discountValue = 0;
+                    discountTypeEl.value = '';
+                    discountValueEl.value = 0;
+                    discountValueEl.classList.add('d-none');
+                }
+            } else if (discountType === 'percent') {
+                discountValue = Math.max(0, Math.min(100, discountValue));
+                finalPrice = Math.round(Math.max(0, editSvcOriginalPrice * (1 - discountValue / 100)) * 100) / 100;
+                priceInput.value = finalPrice.toFixed(2);
+            } else if (discountType === 'fixed' || discountType === 'flat') {
+                discountValue = Math.max(0, Math.min(editSvcOriginalPrice, discountValue));
+                finalPrice = Math.round(Math.max(0, editSvcOriginalPrice - discountValue) * 100) / 100;
+                priceInput.value = finalPrice.toFixed(2);
+            } else if (source === 'type') {
+                finalPrice = editSvcOriginalPrice;
+                priceInput.value = finalPrice.toFixed(2);
             }
 
-            const discountAmount = Math.max(0, editSvcOriginalPrice - finalPrice);
+            const discountAmount = Math.max(0, Math.round((editSvcOriginalPrice - finalPrice) * 100) / 100);
             const summary = document.getElementById('editSvcDiscountSummary');
             summary.classList.toggle('d-none', discountAmount <= 0);
             document.getElementById('editSvcDiscountAmount').textContent = discountAmount.toFixed(2);
@@ -5172,18 +5264,20 @@
                 // discounted against, matching the controller's behavior.
                 editSvcOriginalPrice = svc.price;
                 document.getElementById('editSvcOriginalPrice').textContent = Number(svc.price).toFixed(2);
-                updateEditSvcDiscountSummary();
+                updateEditSvcDiscountSummary('discount');
             }
         });
 
         document.getElementById('editSvcDiscountType').addEventListener('change', function() {
             document.getElementById('editSvcDiscountValue').classList.toggle('d-none', !this.value);
-            updateEditSvcDiscountSummary();
+            if (!this.value) {
+                document.getElementById('editSvcDiscountValue').value = 0;
+            }
+            updateEditSvcDiscountSummary('type');
         });
 
-        ['editSvcPrice', 'editSvcDiscountValue'].forEach(id => {
-            document.getElementById(id).addEventListener('input', updateEditSvcDiscountSummary);
-        });
+        document.getElementById('editSvcPrice').addEventListener('input', () => updateEditSvcDiscountSummary('price'));
+        document.getElementById('editSvcDiscountValue').addEventListener('input', () => updateEditSvcDiscountSummary('discount'));
 
         ['editSvcServiceSelect', 'editSvcStartTime', 'editSvcDuration', 'editSvcStaff'].forEach(id => {
             const el = document.getElementById(id);
@@ -5458,6 +5552,34 @@
             const el = document.getElementById(id);
             if (el) el.addEventListener('change', clearDrawerConflict);
         });
+
+        function openDrawerFullEdit() {
+            if (!lastDrawerData || !CAN_EDIT_BOOKINGS) return;
+            if (lastDrawerData.is_completed_or_paid || lastDrawerData.is_paid || lastDrawerData.status === 'completed') {
+                showCalToast('Checked-out appointments cannot be modified.', 'error');
+                return;
+            }
+            if (typeof window.openCalendarEditModal !== 'function') return;
+            const snapshot = lastDrawerData;
+            if (drawerInstance) {
+                drawerInstance.hide();
+            }
+            window.openCalendarEditModal(snapshot);
+        }
+
+        document.getElementById('drawerChangeBookingBtn')?.addEventListener('click', function(e) {
+            e.preventDefault();
+            openDrawerFullEdit();
+        });
+        document.getElementById('drawerQuickChangeBookingBtn')?.addEventListener('click', function(e) {
+            e.preventDefault();
+            openDrawerFullEdit();
+        });
+
+        window.refreshOpenAppointmentDrawer = function(appointmentId) {
+            if (!appointmentId) return;
+            openDrawer(appointmentId);
+        };
 
         document.getElementById('drawerRescheduleBtn').addEventListener('click', function(e) {
             e.preventDefault();

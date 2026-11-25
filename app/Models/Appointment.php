@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class Appointment extends Model
 {
@@ -45,6 +46,8 @@ class Appointment extends Model
         'notes',
         'branch',
         'price',
+        'original_price',
+        'discount_amount',
         'lifetime_revenue',
         'booking_agent_id',
         'booking_agent_type',
@@ -64,6 +67,8 @@ class Appointment extends Model
         'overtime_minutes' => 'integer',
         'freebie_package_id' => 'integer',
         'is_freebie_redemption' => 'boolean',
+        'original_price' => 'float',
+        'discount_amount' => 'float',
     ];
 
     protected static function booted(): void
@@ -521,6 +526,8 @@ class Appointment extends Model
                 $this->hold_duration = $this->effective_hold_duration;
                 if (!$this->sale()->exists()) {
                     $this->price = 0;
+                    $this->original_price = 0;
+                    $this->discount_amount = 0;
                 }
                 $this->save();
             }
@@ -531,7 +538,16 @@ class Appointment extends Model
         if (!$this->sale()->exists()) {
             $unpaidPackagesTotal = (float) $attachedPackages->whereNull('sale_id')->sum('price_paid');
             $activeLinesTotal = (float) $activeServices->sum(fn (AppointmentService $s) => $s->final_price);
+            $activeLinesOriginal = (float) $activeServices->sum(
+                fn (AppointmentService $s) => $s->isPackageRedemptionLine() ? 0.0 : (float) ($s->original_price ?? $s->price)
+            );
+            $activeLinesDiscount = (float) $activeServices->sum(
+                fn (AppointmentService $s) => $s->isPackageRedemptionLine() ? 0.0 : (float) $s->discount_amount
+            );
+
             $this->price = round($activeLinesTotal + $unpaidPackagesTotal, 2);
+            $this->original_price = round($activeLinesOriginal + $unpaidPackagesTotal, 2);
+            $this->discount_amount = round($activeLinesDiscount, 2);
         }
 
         $this->save();
@@ -547,13 +563,12 @@ class Appointment extends Model
     }
 
     /**
-     * Scope to confirmed/scheduled Chat Agent bookings eligible for booking quota credit:
+     * Scope to active scheduled Enhanced Calendar bookings eligible for Chat Agent quota credit:
      * - Explicit `booking_agent_id` belonging to a Chat Agent (`role = 'agent'`) ONLY
-     *   (no `created_by` fallback).
+     *   (no `created_by` fallback, never `Salon Staff`).
      * - Scheduled onto the calendar (`start_time IS NOT NULL` and `staff_id IS NOT NULL`),
      *   excluding unscheduled sidebar queue placeholders until placed on the grid.
-     * - Keeps all statuses (`pending`, `confirmed`, `arrived`, `in_progress`, `completed`,
-     *   `cancelled`, `no_show`) because once booked onto the calendar, the agent did her job.
+     * - Excludes cancelled and soft-deleted bookings consistently.
      */
     public function scopeScheduledForAgentQuota($query, iterable $agentUserIds)
     {
@@ -563,9 +578,23 @@ class Appointment extends Model
             return $query->whereRaw('1 = 0');
         }
 
-        return $query->whereIn('booking_agent_id', $ids)
+        $query->whereIn('booking_agent_id', $ids)
+            ->where(function ($q) {
+                $q->whereNull('booking_agent_type')
+                    ->orWhere('booking_agent_type', '!=', self::BOOKING_AGENT_SALON_STAFF);
+            })
             ->whereNotNull('start_time')
-            ->whereNotNull('staff_id');
+            ->whereNotNull('staff_id')
+            ->where(function ($q) {
+                $q->whereNull('status')
+                    ->orWhereRaw('LOWER(status) != ?', ['cancelled']);
+            });
+
+        if (Schema::hasColumn($this->getTable(), 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+
+        return $query;
     }
 
     /**
