@@ -26,7 +26,7 @@ class StaffPortalController extends Controller
         private readonly StaffKpiScorecardService $scorecardService
     ) {}
 
-    private const ALLOWED_TABS = ['overview', 'performance', 'contracts', 'documents', 'leaves'];
+    private const ALLOWED_TABS = ['overview', 'performance', 'skills', 'contracts', 'documents', 'leaves'];
 
     private const DAY_NAMES = [
         0 => 'Sunday',
@@ -69,9 +69,14 @@ class StaffPortalController extends Controller
 
         $rawTab = strtolower(trim((string) $request->query('tab', 'overview')));
         $isLeaveEligible = $user->isLeaveEligible();
+        $isSkillsEligible = $isLeaveEligible;
 
         if ($rawTab === 'leaves' && !$isLeaveEligible) {
             abort(403, 'Leave tracking is only available for branch-assigned Salon Managers and Salon Staff.');
+        }
+
+        if ($rawTab === 'skills' && !$isSkillsEligible) {
+            abort(403, 'Assigned service skills are only available for branch-assigned Salon Managers and Salon Staff.');
         }
 
         $activeTab = in_array($rawTab, self::ALLOWED_TABS, true) ? $rawTab : 'overview';
@@ -108,9 +113,14 @@ class StaffPortalController extends Controller
         $isLeaveEligible = $targetUser->exists
             ? $targetUser->isLeaveEligible()
             : $staff->isLeaveEligible();
+        $isSkillsEligible = $isLeaveEligible;
 
         if ($rawTab === 'leaves' && !$isLeaveEligible) {
             abort(403, 'Leave tracking is only available for branch-assigned Salon Managers and Salon Staff.');
+        }
+
+        if ($rawTab === 'skills' && !$isSkillsEligible) {
+            abort(403, 'Assigned service skills are only available for branch-assigned Salon Managers and Salon Staff.');
         }
 
         $activeTab = in_array($rawTab, self::ALLOWED_TABS, true) ? $rawTab : 'overview';
@@ -200,6 +210,7 @@ class StaffPortalController extends Controller
         $isLeaveEligible = $user->exists
             ? $user->isLeaveEligible()
             : ($staff ? $staff->isLeaveEligible() : false);
+        $isSkillsEligible = $isLeaveEligible;
 
         // ---- Identity & Status ----
         $displayName = $staff?->name ?: $user->name;
@@ -244,8 +255,8 @@ class StaffPortalController extends Controller
         $shiftSchedule = $this->buildWeeklyShiftSummary($staff, $activePattern);
         $branchInfo['compact_subtitle'] = $this->buildCompactLocationSubtitle($branchInfo, $shiftSchedule);
 
-        // ---- Skills Card (Salon Staff ONLY) ----
-        $skillsPayload = $isSalonStaff ? $this->buildSalonSkillsPayload($staff) : null;
+        // ---- Dedicated Skills Tab (Salon Manager & Salon Staff ONLY) ----
+        $skillsPayload = $isSkillsEligible ? $this->buildSalonSkillsPayload($staff, $branchInfo['label']) : null;
 
         // ---- Off Days (Weekly Fixed + Next 30 Days incl. Approved Leaves & Time Off) ----
         $offDaysPayload = $this->buildOffDaysPayload($staff, $activePattern, $todayQatar, $windowEndQatar);
@@ -324,6 +335,7 @@ class StaffPortalController extends Controller
             'isMarketingSpecialist' => $isMarketingSpecialist,
             'isSocialMediaEditor' => $isSocialMediaEditor,
             'isLeaveEligible' => $isLeaveEligible,
+            'isSkillsEligible' => $isSkillsEligible,
             'isAdminPreview' => $isAdminPreview,
             'portalTabRoute' => $isAdminPreview && $staff
                 ? fn (string $tab, array $extra = []) => route('portal.admin-preview', array_merge(['staff' => $staff->id, 'tab' => $tab], $extra))
@@ -496,26 +508,51 @@ class StaffPortalController extends Controller
         return number_format($amount, $decimals) . ' ' . $cleanCurrency;
     }
 
-    private function buildSalonSkillsPayload(?Staff $staff): array
+    private function buildSalonSkillsPayload(?Staff $staff, string $branchLabel = 'Salon'): array
     {
         $serviceSkills = [];
         if ($staff && $staff->services->isNotEmpty()) {
             $serviceSkills = $staff->services->map(fn ($s) => [
                 'name' => $s->name,
                 'duration' => (int) ($s->duration ?: 30),
-                'category' => $s->category?->name,
+                'category' => filled($s->category?->name) ? trim((string) $s->category->name) : 'General Services',
             ])->values()->all();
         } elseif ($staff && is_array($staff->skills) && !empty($staff->skills)) {
             $serviceSkills = collect($staff->skills)
                 ->filter(fn ($v) => is_string($v) && trim($v) !== '')
-                ->map(fn ($name) => ['name' => trim($name), 'duration' => null, 'category' => null])
+                ->map(fn ($name) => [
+                    'name' => trim($name),
+                    'duration' => null,
+                    'category' => 'General Services',
+                ])
                 ->values()
                 ->all();
         }
 
+        $grouped = collect($serviceSkills)
+            ->groupBy(fn (array $item) => $item['category'] ?: 'General Services')
+            ->map(function ($items, $categoryName) {
+                $sorted = collect($items)->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
+
+                return [
+                    'name' => (string) $categoryName,
+                    'count' => count($sorted),
+                    'items' => $sorted,
+                ];
+            })
+            ->sortBy(fn (array $group) => ($group['name'] === 'General Services' ? 'zzz_' : '') . strtolower($group['name']))
+            ->values()
+            ->all();
+
         return [
             'title' => 'Assigned Service Skills',
+            'total_count' => count($serviceSkills),
+            'branch_label' => $branchLabel,
+            'categories' => $grouped,
             'items' => $serviceSkills,
+            'assign_url' => $staff
+                ? route('staffs.index', ['tab' => 'workspace', 'staff' => $staff->id])
+                : route('staffs.index'),
         ];
     }
 
@@ -929,10 +966,10 @@ class StaffPortalController extends Controller
     {
         $year = (int) $nowQatar->year;
         $annualEntitled = (int) ($staff?->annual_leave_days ?? 21);
-        $sickEntitled = (int) ($staff?->sick_leave_days ?? 14);
 
         $allLeaves = ($staff && Schema::hasTable('staff_leaves'))
             ? StaffLeave::query()
+                ->with('deduction')
                 ->where('staff_id', $staff->id)
                 ->orderByDesc('start_date')
                 ->orderByDesc('id')
@@ -941,8 +978,9 @@ class StaffPortalController extends Controller
 
         $annualUsed = 0;
         $annualPending = 0;
-        $sickUsed = 0;
+        $sickTaken = 0;
         $sickPending = 0;
+        $sickDeductedUnapproved = 0;
 
         foreach ($allLeaves as $leave) {
             $daysInYear = $leave->daysWithinYear($year);
@@ -957,9 +995,12 @@ class StaffPortalController extends Controller
                 }
             } elseif ($leave->leave_type === StaffLeave::TYPE_SICK) {
                 if ($leave->status === StaffLeave::STATUS_APPROVED) {
-                    $sickUsed += $daysInYear;
+                    $sickTaken += $daysInYear;
                 } elseif ($leave->status === StaffLeave::STATUS_PENDING) {
                     $sickPending += $daysInYear;
+                }
+                if ($leave->status === StaffLeave::STATUS_REJECTED || (bool) $leave->deduction_applied) {
+                    $sickDeductedUnapproved += $daysInYear;
                 }
             }
         }
@@ -980,10 +1021,16 @@ class StaffPortalController extends Controller
             'status' => $l->status,
             'status_label' => $l->statusLabel(),
             'admin_notes' => $l->admin_notes,
+            'submitted_within_window' => (bool) ($l->submitted_within_window ?? true),
+            'deduction_applied' => (bool) ($l->deduction_applied ?? false),
+            'deduction_amount' => $l->deduction ? round((float) $l->deduction->amount, 2) : null,
+            'compliance_badges' => $l->complianceBadges(),
             'has_certificate' => !empty($l->medical_certificate_path),
             'certificate_url' => !empty($l->medical_certificate_path)
                 ? route('staff-leaves.certificate', ['leave' => $l->id, 'inline' => 1])
                 : null,
+            'can_upload_certificate' => $l->canUploadMissingCertificate($nowQatar),
+            'upload_certificate_url' => route('portal.leaves.certificate.upload', $l->id),
             'can_cancel' => $l->status === StaffLeave::STATUS_PENDING,
             'cancel_url' => route('portal.leaves.cancel', $l->id),
         ])->values()->all();
@@ -991,6 +1038,7 @@ class StaffPortalController extends Controller
         return [
             'year' => $year,
             'filter' => $typeFilter,
+            'policy_notice' => StaffLeave::SICK_POLICY_NOTICE,
             'annual' => [
                 'entitled' => $annualEntitled,
                 'used' => $annualUsed,
@@ -998,10 +1046,9 @@ class StaffPortalController extends Controller
                 'remaining' => max(0, $annualEntitled - $annualUsed),
             ],
             'sick' => [
-                'entitled' => $sickEntitled,
-                'used' => $sickUsed,
+                'taken' => $sickTaken,
                 'pending' => $sickPending,
-                'remaining' => max(0, $sickEntitled - $sickUsed),
+                'deducted_unapproved' => $sickDeductedUnapproved,
             ],
             'history' => $history,
         ];

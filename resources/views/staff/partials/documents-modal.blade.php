@@ -48,7 +48,7 @@
                             <input type="file" id="sdFile" name="file" class="form-control" required accept=".pdf,.jpg,.jpeg,.png,.webp">
                         </div>
                         <div class="col-md-2 d-flex align-items-end">
-                            <button type="submit" id="sdUploadBtn" class="sa-btn-rosegold w-100 justify-content-center">
+                            <button type="submit" id="sdUploadBtn" class="sc-btn-rosegold w-100 justify-content-center">
                                 <i class="bx bx-upload"></i> Upload
                             </button>
                         </div>
@@ -62,7 +62,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="sa-btn-ghost" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="sc-btn-ghost" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>

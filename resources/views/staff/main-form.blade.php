@@ -244,10 +244,7 @@
                                     <div class="col-md-6">
                                         <label class="form-label">Annual leave entitlement (days / yr)</label>
                                         <input type="number" name="annual_leave_days" id="stfAnnualLeaveDays" class="form-control" min="0" max="90" value="21">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Sick leave entitlement (days / yr)</label>
-                                        <input type="number" name="sick_leave_days" id="stfSickLeaveDays" class="form-control" min="0" max="90" value="14">
+                                        <small class="text-muted">Sick leaves are tracked by medical certificate &amp; management approval (no entitlement cap).</small>
                                     </div>
                                 @endif
                             </div>
@@ -406,8 +403,6 @@
             document.getElementById('stfMemberId').value = member.staff_member_id || '';
             const annEl = document.getElementById('stfAnnualLeaveDays');
             if (annEl) annEl.value = member.annual_leave_days ?? 21;
-            const sickEl = document.getElementById('stfSickLeaveDays');
-            if (sickEl) sickEl.value = member.sick_leave_days ?? 14;
             document.getElementById('stfNotes').value = member.internal_notes || '';
 
             if (member.profile_picture) {

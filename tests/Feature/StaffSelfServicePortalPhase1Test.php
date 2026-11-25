@@ -156,8 +156,7 @@ class StaffSelfServicePortalPhase1Test extends TestCase
         $profileRes->assertSee('Salon Staff');
         $profileRes->assertSee('Old Airport');
         $profileRes->assertSee('10:00 AM – 9:00 PM');
-        $profileRes->assertSee('Haircut');
-        $profileRes->assertSee('Keratin Treatment');
+        $profileRes->assertSee('?tab=skills', false);
         $profileRes->assertSee('Wednesday');
         $profileRes->assertSee('Family trip');
         $profileRes->assertSee('Laleen');
@@ -165,7 +164,12 @@ class StaffSelfServicePortalPhase1Test extends TestCase
         $profileRes->assertDontSee('Fatima Secret');
         $profileRes->assertDontSee('id="layout-menu"', false);
 
-        // Portal tabs work cleanly
+        // Portal tabs work cleanly (including dedicated Skills tab!)
+        $this->actingAs($salonUser)->get('/my-profile?tab=skills')
+            ->assertOk()
+            ->assertSee('Assigned Service Skills')
+            ->assertSee('Haircut')
+            ->assertSee('Keratin Treatment');
         $this->actingAs($salonUser)->get('/my-profile?tab=contracts')->assertOk()->assertSee('Active Employment Contract');
         $this->actingAs($salonUser)->get('/my-profile?tab=documents')->assertOk()->assertSee('Personal Documents');
         $this->actingAs($salonUser)->get('/my-profile?tab=leaves')->assertOk()->assertSee('Annual Leave');

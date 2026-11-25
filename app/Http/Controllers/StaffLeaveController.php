@@ -4,10 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Appointment;
 use App\Models\Staff;
+use App\Models\StaffContract;
+use App\Models\StaffDeduction;
 use App\Models\StaffLeave;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -17,6 +21,7 @@ class StaffLeaveController extends Controller
     /**
      * Self-service Leave Request submission from `/my-profile?tab=leaves`.
      * Strictly scoped to `auth()->user()->staff` and blocked (HTTP 403) for all Remote / non-eligible roles.
+     * Enforces the 3-day submission window check for Sick Leave without imposing any sick leave entitlement cap.
      */
     public function storePortalRequest(Request $request)
     {
@@ -48,8 +53,13 @@ class StaffLeaveController extends Controller
             );
         }
 
+        $isSick = $validated['leave_type'] === StaffLeave::TYPE_SICK;
+        $submittedWithinWindow = $isSick
+            ? StaffLeave::isSubmittedWithinWindow($startStr)
+            : true;
+
         $certPath = null;
-        if ($validated['leave_type'] === StaffLeave::TYPE_SICK && $request->hasFile('medical_certificate')) {
+        if ($isSick && $request->hasFile('medical_certificate')) {
             $file = $request->file('medical_certificate');
             $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
             $certPath = Storage::disk('local')->putFileAs(
@@ -71,10 +81,25 @@ class StaffLeaveController extends Controller
                 ? trim((string) $validated['reason'])
                 : null,
             'medical_certificate_path' => $certPath,
+            'submitted_within_window' => $submittedWithinWindow,
+            'deduction_applied' => false,
+            'deduction_id' => null,
             'status' => StaffLeave::STATUS_PENDING,
         ]);
 
         $message = "{$leave->typeLabel()} request submitted ({$totalDays} " . ($totalDays === 1 ? 'day' : 'days') . ').';
+        if ($isSick) {
+            $warnings = [];
+            if (!$submittedWithinWindow) {
+                $warnings[] = 'flagged as late (>3 days)';
+            }
+            if (!$certPath) {
+                $warnings[] = 'missing medical certificate';
+            }
+            if (!empty($warnings)) {
+                $message .= ' Note: ' . implode(' and ', $warnings) . ' — subject to management deduction review.';
+            }
+        }
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
@@ -82,6 +107,62 @@ class StaffLeaveController extends Controller
                 'message' => $message,
                 'leave' => $this->serializeLeave($leave),
             ], 201);
+        }
+
+        return redirect()->route('portal.profile', ['tab' => 'leaves'])->with('success', $message);
+    }
+
+    /**
+     * Allow a leave-eligible employee to attach a missing Medical Certificate to their own
+     * Pending sick leave while still within the 3-day submission window.
+     */
+    public function uploadPortalCertificate(Request $request, StaffLeave $leave)
+    {
+        $user = $request->user();
+        abort_unless($user && ($user->isAdmin() || $user->isLeaveEligible()), 403, 'Leave requests are only available for Salon Managers and Salon Staff.');
+
+        Gate::authorize('uploadCertificate', $leave);
+
+        if (!$leave->isSick() || $leave->status !== StaffLeave::STATUS_PENDING) {
+            return $this->errorResponse($request, 'Medical certificates can only be attached to pending sick leave requests.', 422, 'medical_certificate');
+        }
+
+        if (!$user->isAdmin() && !StaffLeave::isSubmittedWithinWindow($leave->start_date)) {
+            return $this->errorResponse(
+                $request,
+                'The 3-day window to attach a Medical Certificate for this sick leave has expired.',
+                422,
+                'medical_certificate'
+            );
+        }
+
+        $request->validate([
+            'medical_certificate' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+        ]);
+
+        $file = $request->file('medical_certificate');
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
+        $newPath = Storage::disk('local')->putFileAs(
+            'private/staff-leaves/' . $leave->staff_id,
+            $file,
+            Str::uuid()->toString() . '.' . $ext
+        );
+
+        $oldPath = $leave->medical_certificate_path;
+        $leave->update(['medical_certificate_path' => $newPath]);
+
+        if ($oldPath && $oldPath !== $newPath && Storage::disk('local')->exists($oldPath)) {
+            Storage::disk('local')->delete($oldPath);
+        }
+
+        $message = 'Medical Certificate attached to your sick leave request.';
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'leave' => $this->serializeLeave($leave->fresh(['staff', 'reviewer', 'deduction'])),
+            ]);
         }
 
         return redirect()->route('portal.profile', ['tab' => 'leaves'])->with('success', $message);
@@ -109,7 +190,7 @@ class StaffLeaveController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Leave request cancelled.',
-                'leave' => $this->serializeLeave($leave->fresh()),
+                'leave' => $this->serializeLeave($leave->fresh(['staff', 'reviewer', 'deduction'])),
             ]);
         }
 
@@ -167,7 +248,8 @@ class StaffLeaveController extends Controller
     }
 
     /**
-     * Admin-only: approve, reject, or revoke/cancel a leave request.
+     * Admin-only: approve, reject, or revoke/cancel a leave request — with atomic, strictly idempotent
+     * linked Salary Deduction creation for rejected, uncertified, or late (>3 days) Sick Leaves.
      */
     public function review(Request $request, StaffLeave $leave)
     {
@@ -176,6 +258,9 @@ class StaffLeaveController extends Controller
         $validated = $request->validate([
             'action' => ['required', Rule::in(['approve', 'reject', 'cancel'])],
             'admin_notes' => ['nullable', 'string', 'max:500'],
+            'record_deduction' => ['nullable', 'boolean'],
+            'deduction_amount' => ['nullable', 'numeric', 'min:0.01', 'max:999999'],
+            'deduction_reason' => ['nullable', 'string', 'max:500'],
         ]);
 
         $newStatus = match ($validated['action']) {
@@ -183,6 +268,21 @@ class StaffLeaveController extends Controller
             'reject' => StaffLeave::STATUS_REJECTED,
             'cancel' => StaffLeave::STATUS_CANCELLED,
         };
+
+        $wantsDeduction = $request->boolean('record_deduction')
+            && $leave->isSick()
+            && in_array($newStatus, [StaffLeave::STATUS_REJECTED, StaffLeave::STATUS_APPROVED], true);
+
+        if ($wantsDeduction && !$leave->deduction_applied && $leave->deduction_id === null) {
+            if (!isset($validated['deduction_amount']) || (float) $validated['deduction_amount'] <= 0) {
+                return $this->errorResponse(
+                    $request,
+                    'Please enter a valid Deduction Amount (QAR) when recording a salary deduction.',
+                    422,
+                    'deduction_amount'
+                );
+            }
+        }
 
         $conflicts = [];
         if ($newStatus === StaffLeave::STATUS_APPROVED) {
@@ -197,28 +297,62 @@ class StaffLeaveController extends Controller
             );
         }
 
-        $leave->update([
-            'status' => $newStatus,
-            'reviewed_by' => $request->user()?->id,
-            'reviewed_at' => now(),
-            'admin_notes' => isset($validated['admin_notes']) && trim((string) $validated['admin_notes']) !== ''
-                ? trim((string) $validated['admin_notes'])
-                : $leave->admin_notes,
-        ]);
+        $createdDeduction = null;
+        $updatedLeave = DB::transaction(function () use ($leave, $newStatus, $validated, $wantsDeduction, $request, &$createdDeduction) {
+            /** @var StaffLeave $locked */
+            $locked = StaffLeave::whereKey($leave->id)->lockForUpdate()->firstOrFail();
+
+            $locked->status = $newStatus;
+            $locked->reviewed_by = $request->user()?->id;
+            $locked->reviewed_at = now();
+            if (isset($validated['admin_notes']) && trim((string) $validated['admin_notes']) !== '') {
+                $locked->admin_notes = trim((string) $validated['admin_notes']);
+            }
+
+            // Strictly idempotent deduction creation: NEVER double-deduct a leave
+            if ($wantsDeduction && !$locked->deduction_applied && $locked->deduction_id === null) {
+                $amount = round((float) $validated['deduction_amount'], 2);
+                $reason = isset($validated['deduction_reason']) && trim((string) $validated['deduction_reason']) !== ''
+                    ? trim((string) $validated['deduction_reason'])
+                    : $locked->defaultDeductionReason();
+
+                $createdDeduction = StaffDeduction::create([
+                    'staff_id' => $locked->staff_id,
+                    'deduction_date' => Carbon::now('Asia/Qatar')->toDateString(),
+                    'amount' => $amount,
+                    'reason' => $reason,
+                    'complaint_id' => null,
+                    'created_by' => $request->user()?->id,
+                ]);
+
+                $locked->deduction_applied = true;
+                $locked->deduction_id = $createdDeduction->id;
+            }
+
+            $locked->save();
+
+            return $locked->fresh(['staff', 'reviewer', 'deduction']);
+        });
 
         $verb = match ($newStatus) {
             StaffLeave::STATUS_APPROVED => 'approved',
             StaffLeave::STATUS_REJECTED => 'rejected',
             default => 'cancelled',
         };
-        $staffName = $leave->staff?->name ?? 'Staff member';
-        $message = "{$leave->typeLabel()} for {$staffName} {$verb}.";
+        $staffName = $updatedLeave->staff?->name ?? 'Staff member';
+        $message = "{$updatedLeave->typeLabel()} for {$staffName} {$verb}.";
+        if ($createdDeduction) {
+            $amtFmt = number_format((float) $createdDeduction->amount, abs($createdDeduction->amount - round($createdDeduction->amount)) < 0.005 ? 0 : 2);
+            $message .= " Salary deduction of {$amtFmt} QAR recorded in Deductions & Penalties.";
+        }
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
                 'message' => $message,
-                'leave' => $this->serializeLeave($leave->fresh(['staff', 'reviewer'])),
+                'leave' => $this->serializeLeave($updatedLeave),
+                'deduction_created' => $createdDeduction !== null,
+                'deduction_id' => $updatedLeave->deduction_id,
                 'conflicts' => $conflicts,
             ]);
         }
@@ -273,6 +407,9 @@ class StaffLeaveController extends Controller
 
         $totalDays = StaffLeave::inclusiveDays($startStr, $endStr);
         $conflicts = self::findBookingConflicts($staff->id, $startStr, $endStr);
+        $submittedWithinWindow = $validated['leave_type'] === StaffLeave::TYPE_SICK
+            ? StaffLeave::isSubmittedWithinWindow($startStr)
+            : true;
 
         $leave = StaffLeave::create([
             'staff_id' => $staff->id,
@@ -284,6 +421,9 @@ class StaffLeaveController extends Controller
                 ? trim((string) $validated['reason'])
                 : null,
             'medical_certificate_path' => $certPath,
+            'submitted_within_window' => $submittedWithinWindow,
+            'deduction_applied' => false,
+            'deduction_id' => null,
             'status' => StaffLeave::STATUS_APPROVED,
             'reviewed_by' => $request->user()?->id,
             'reviewed_at' => now(),
@@ -298,12 +438,56 @@ class StaffLeaveController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $message,
-                'leave' => $this->serializeLeave($leave->load(['staff', 'reviewer'])),
+                'leave' => $this->serializeLeave($leave->load(['staff', 'reviewer', 'deduction'])),
                 'conflicts' => $conflicts,
             ], 201);
         }
 
         return redirect()->route('staffs.index', ['tab' => 'leaves'])->with('success', $message);
+    }
+
+    /**
+     * Resolve an employee's active monthly base salary in QAR for automatic pro-rata sick-leave deduction suggestions.
+     */
+    public static function resolveMonthlySalaryQar(Staff $staff, ?array $activeContractSalaryMap = null): ?float
+    {
+        if ($activeContractSalaryMap !== null && array_key_exists($staff->id, $activeContractSalaryMap)) {
+            $mapped = $activeContractSalaryMap[$staff->id];
+            if ($mapped !== null && $mapped > 0) {
+                return (float) $mapped;
+            }
+        } elseif (Schema::hasTable('staff_contracts')) {
+            $activeContract = StaffContract::query()
+                ->where(function ($q) use ($staff) {
+                    $q->where('staff_id', $staff->id);
+                    if ($staff->user_id) {
+                        $q->orWhere('user_id', $staff->user_id);
+                    }
+                })
+                ->where('status', StaffContract::STATUS_ACTIVE)
+                ->whereRaw("UPPER(COALESCE(currency, 'QAR')) = 'QAR'")
+                ->orderByDesc('id')
+                ->first(['base_salary']);
+
+            if ($activeContract && (float) $activeContract->base_salary > 0) {
+                return (float) $activeContract->base_salary;
+            }
+        }
+
+        if ((float) ($staff->base_salary ?? 0) > 0) {
+            return (float) $staff->base_salary;
+        }
+
+        return null;
+    }
+
+    public static function suggestedDeductionAmount(?float $monthlySalaryQar, int $totalDays): ?float
+    {
+        if ($monthlySalaryQar === null || $monthlySalaryQar <= 0) {
+            return null;
+        }
+
+        return round(($monthlySalaryQar / 30) * max(1, $totalDays), 2);
     }
 
     /**
@@ -375,6 +559,11 @@ class StaffLeaveController extends Controller
             'status' => $leave->status,
             'status_label' => $leave->statusLabel(),
             'admin_notes' => $leave->admin_notes,
+            'submitted_within_window' => (bool) ($leave->submitted_within_window ?? true),
+            'deduction_applied' => (bool) ($leave->deduction_applied ?? false),
+            'deduction_id' => $leave->deduction_id,
+            'deduction_amount' => $leave->deduction ? (float) $leave->deduction->amount : null,
+            'compliance_badges' => $leave->complianceBadges(),
             'has_certificate' => !empty($leave->medical_certificate_path),
             'certificate_url' => !empty($leave->medical_certificate_path)
                 ? route('staff-leaves.certificate', ['leave' => $leave->id, 'inline' => 1])

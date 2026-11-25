@@ -581,23 +581,51 @@ class StaffController extends Controller
         $pendingLeavesCount = 0;
         $staffLeaves = collect();
         $leaveConflictsById = [];
+        $leaveDeductionSuggestionsById = [];
         $leaveEligibleStaff = $allStaff->filter(fn (Staff $s) => $s->isLeaveEligible())->values();
 
         if ($activeTab === 'shifts_ops' || $rawTab === 'directory') {
             if (Schema::hasTable('staff_leaves') && $isAdminViewer) {
                 if ($activeTab === 'shifts_ops') {
-                    $staffLeaves = StaffLeave::with(['staff.user', 'reviewer:id,name'])
+                    $staffLeaves = StaffLeave::with(['staff.user', 'reviewer:id,name', 'deduction'])
                         ->orderByRaw("CASE status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 WHEN 'rejected' THEN 3 ELSE 4 END ASC")
                         ->orderByDesc('start_date')
                         ->get();
                     $pendingLeavesCount = $staffLeaves->where('status', StaffLeave::STATUS_PENDING)->count();
 
-                    foreach ($staffLeaves->where('status', StaffLeave::STATUS_PENDING) as $pendingLeave) {
-                        $leaveConflictsById[$pendingLeave->id] = StaffLeaveController::findBookingConflicts(
-                            (int) $pendingLeave->staff_id,
-                            $pendingLeave->start_date->toDateString(),
-                            $pendingLeave->end_date->toDateString()
-                        );
+                    // Single O(1) batch lookup of active QAR contracts for pro-rata sick-leave deduction prefill
+                    $activeContractSalaryMap = [];
+                    $leaveStaffIds = $staffLeaves->pluck('staff_id')->filter()->unique()->values()->all();
+                    if (!empty($leaveStaffIds) && Schema::hasTable('staff_contracts')) {
+                        StaffContract::query()
+                            ->whereIn('staff_id', $leaveStaffIds)
+                            ->where('status', StaffContract::STATUS_ACTIVE)
+                            ->whereRaw("UPPER(COALESCE(currency, 'QAR')) = 'QAR'")
+                            ->orderByDesc('id')
+                            ->get(['staff_id', 'base_salary'])
+                            ->each(function (StaffContract $c) use (&$activeContractSalaryMap) {
+                                if ($c->staff_id && !isset($activeContractSalaryMap[$c->staff_id]) && (float) $c->base_salary > 0) {
+                                    $activeContractSalaryMap[$c->staff_id] = (float) $c->base_salary;
+                                }
+                            });
+                    }
+
+                    foreach ($staffLeaves as $lv) {
+                        if ($lv->status === StaffLeave::STATUS_PENDING) {
+                            $leaveConflictsById[$lv->id] = StaffLeaveController::findBookingConflicts(
+                                (int) $lv->staff_id,
+                                $lv->start_date->toDateString(),
+                                $lv->end_date->toDateString()
+                            );
+                        }
+                        if ($lv->isSick() && $lv->staff) {
+                            $monthlyQar = StaffLeaveController::resolveMonthlySalaryQar($lv->staff, $activeContractSalaryMap);
+                            $leaveDeductionSuggestionsById[$lv->id] = [
+                                'monthly_salary' => $monthlyQar,
+                                'suggested_amount' => StaffLeaveController::suggestedDeductionAmount($monthlyQar, (int) $lv->total_days),
+                                'default_reason' => $lv->defaultDeductionReason(),
+                            ];
+                        }
                     }
                 } else {
                     $pendingLeavesCount = StaffLeave::pending()->count();
@@ -620,7 +648,7 @@ class StaffController extends Controller
             'payrollBranch', 'payrollFrom', 'payrollTo', 'payrollRows',
             'shiftWeekStart', 'shiftWeekEnd', 'shiftDays', 'shiftRoster', 'shiftDayTotals', 'shiftConfigs', 'shiftBranch',
             'attendanceDate', 'attendanceBranch', 'attendanceStaffMembers', 'attendanceMap',
-            'pendingLeavesCount', 'staffLeaves', 'leaveConflictsById', 'leaveEligibleStaff',
+            'pendingLeavesCount', 'staffLeaves', 'leaveConflictsById', 'leaveDeductionSuggestionsById', 'leaveEligibleStaff',
             'opsItems', 'opsOpenCount', 'opsCompletedCount', 'opsTotalCount', 'opsCompletionRate',
             'opsMyOpenCount', 'opsStatus', 'opsMine', 'opsSelectedStaffId', 'opsSelectedStaffName',
             'opsAssigneeOptions', 'opsMonday', 'opsSunday', 'opsPrevWeek', 'opsNextWeek', 'opsIsCurrentWeek',
@@ -971,7 +999,6 @@ class StaffController extends Controller
             'end_date' => 'nullable|date|after_or_equal:start_date',
             'branch' => ['nullable', Rule::in(['old_airport', 'wakrah', 'both', 'remote'])],
             'annual_leave_days' => 'nullable|integer|min:0|max:90',
-            'sick_leave_days' => 'nullable|integer|min:0|max:90',
             'employment_type' => 'nullable|string|max:30',
             'staff_member_id' => 'nullable|string|max:100',
             'internal_notes' => 'nullable|string|max:1000',
@@ -985,9 +1012,9 @@ class StaffController extends Controller
         unset($data['profile_picture']);
 
         if (!$request->user()?->isAdmin()) {
-            unset($data['hourly_wage'], $data['commission_rate'], $data['base_salary'], $data['annual_leave_days'], $data['sick_leave_days']);
+            unset($data['hourly_wage'], $data['commission_rate'], $data['base_salary'], $data['annual_leave_days']);
         } else {
-            foreach (['hourly_wage', 'commission_rate', 'base_salary', 'annual_leave_days', 'sick_leave_days'] as $adminField) {
+            foreach (['hourly_wage', 'commission_rate', 'base_salary', 'annual_leave_days'] as $adminField) {
                 if (!$request->has($adminField) || $request->input($adminField) === null || $request->input($adminField) === '') {
                     unset($data[$adminField]);
                 }

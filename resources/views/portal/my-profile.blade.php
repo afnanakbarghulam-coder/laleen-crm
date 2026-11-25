@@ -1,6 +1,7 @@
 @php
     $isAdminPreview = (bool) ($isAdminPreview ?? false);
     $isLeaveEligible = (bool) ($isLeaveEligible ?? false);
+    $isSkillsEligible = (bool) ($isSkillsEligible ?? false);
     $layoutView = (!$isAdminPreview && ($isSalonStaff ?? false)) ? 'layouts.portal' : 'layouts.app';
     $makeTabUrl = $portalTabRoute ?? fn (string $tab, array $extra = []) => route('portal.profile', array_merge(['tab' => $tab], $extra));
 
@@ -415,6 +416,54 @@
         white-space: nowrap;
     }
 
+    .mp-btn-disabled-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        background: rgba(255, 255, 255, 0.035);
+        color: #9e8780;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: not-allowed;
+        opacity: 0.78;
+        white-space: nowrap;
+    }
+
+    .mp-policy-notice {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 11px 14px;
+        border-radius: 12px;
+        background: rgba(245, 158, 11, 0.08);
+        border: 1px solid rgba(245, 158, 11, 0.24);
+        color: #f4d9ab;
+        font-size: 12.5px;
+        line-height: 1.5;
+    }
+
+    .mp-policy-notice i {
+        color: #fbbf24;
+        font-size: 16px;
+        margin-top: 2px;
+        flex-shrink: 0;
+    }
+
+    .mp-skill-cat-block {
+        padding-top: 16px;
+        margin-top: 16px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .mp-skill-cat-block:first-child {
+        padding-top: 0;
+        margin-top: 0;
+        border-top: none;
+    }
+
     .mp-modal .modal-content {
         background: #1b1315 !important;
         backdrop-filter: none !important;
@@ -494,7 +543,7 @@
         @endif
     </div>
 
-    {{-- Navigation Tabs: Overview | Performance | Contracts | Documents | Leaves (branch eligible only) --}}
+    {{-- Navigation Tabs: Overview | Performance | Skills (salon roles) | Contracts | Documents | Leaves (salon roles) --}}
     <nav class="mp-tabs" role="tablist" aria-label="My Profile Sections">
         <a href="{{ $makeTabUrl('overview') }}"
            class="mp-tab-link {{ $activeTab === 'overview' ? 'is-active' : '' }}" role="tab">
@@ -506,6 +555,16 @@
             <i class="bx bx-bar-chart-alt-2"></i>
             <span>Performance</span>
         </a>
+        @if ($isSkillsEligible)
+            <a href="{{ $makeTabUrl('skills') }}"
+               class="mp-tab-link {{ $activeTab === 'skills' ? 'is-active' : '' }}" role="tab">
+                <i class="bx bx-spa"></i>
+                <span>Skills</span>
+                @if (!empty($skillsPayload['total_count']))
+                    <span class="badge rounded-pill mp-num" style="background:rgba(0,0,0,0.22); color:inherit; font-size:10.5px;">{{ $skillsPayload['total_count'] }}</span>
+                @endif
+            </a>
+        @endif
         <a href="{{ $makeTabUrl('contracts') }}"
            class="mp-tab-link {{ $activeTab === 'contracts' ? 'is-active' : '' }}" role="tab">
             <i class="bx bx-file"></i>
@@ -718,93 +777,39 @@
                 </div>
             </div>
 
-            {{-- Right Card (6 cols): Role Essentials (Skills for Salon Staff) & Recent Deductions --}}
+            {{-- Right Card (6 cols): Recent Deductions & Penalties (Clean & Uniform Across All Roles) --}}
             <div class="col-12 col-lg-6">
                 <div class="mp-card h-100">
-                    @if ($isSalonStaff && $skillsPayload)
-                        <div class="mp-section-header">
-                            <h2 class="mp-section-title">
-                                <span class="mp-icon-badge"><i class="bx bx-spa"></i></span>
-                                <span>{{ $skillsPayload['title'] }}</span>
-                            </h2>
-                            @if (!empty($skillsPayload['items']))
-                                <span class="mp-pill mp-pill-muted mp-num">{{ count($skillsPayload['items']) }}</span>
-                            @endif
-                        </div>
+                    <div class="mp-section-header">
+                        <h2 class="mp-section-title">
+                            <span class="mp-icon-badge"><i class="bx bx-receipt"></i></span>
+                            <span>Recent Deductions &amp; Penalties</span>
+                        </h2>
+                        <span class="mp-pill mp-num {{ $dedMonthTotal > 0 ? 'mp-pill-danger' : 'mp-pill-emerald' }}">
+                            {{ $deductionsPayload['month_label'] }}: {{ $dedFormattedSummary }}
+                        </span>
+                    </div>
 
-                        @if (!empty($skillsPayload['items']))
-                            <div class="mp-skill-grid">
-                                @foreach ($skillsPayload['items'] as $skill)
-                                    <span class="mp-skill-chip">
-                                        <span>{{ $skill['name'] }}</span>
-                                        @if (!empty($skill['duration']))
-                                            <span class="mp-skill-meta mp-num">{{ $skill['duration'] }}m</span>
-                                        @endif
-                                    </span>
-                                @endforeach
-                            </div>
-                        @else
-                            <div class="small" style="color:#9e8780;">No service skills assigned yet.</div>
-                        @endif
-
-                        {{-- Compact Recent Deductions below Skills --}}
-                        <div class="mp-zone">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div class="mp-sub-heading mb-0">Recent Deductions &amp; Penalties</div>
-                                <span class="mp-pill mp-num {{ $dedMonthTotal > 0 ? 'mp-pill-danger' : 'mp-pill-emerald' }}">
-                                    {{ $deductionsPayload['month_label'] }}: {{ $dedFormattedSummary }}
+                    @if (!empty($deductionsPayload['items']))
+                        @foreach (array_slice($deductionsPayload['items'], 0, 8) as $ded)
+                            <div class="mp-list-row">
+                                <div class="min-w-0">
+                                    <div class="fw-semibold" style="color:#f8efe6;">{{ $ded['reason'] }}</div>
+                                    <div class="small mp-num" style="color:#9e8780;">
+                                        {{ $ded['date_label'] }} &middot;
+                                        <span style="color:{{ $ded['is_manual'] ? '#a8938b' : '#fbbf24' }};">{{ $ded['source'] }}</span>
+                                    </div>
+                                </div>
+                                <span class="fw-bold text-nowrap mp-num" style="color:#fda4af;">
+                                    -{{ number_format($ded['amount'], 2) }} QAR
                                 </span>
                             </div>
-                            @if (!empty($deductionsPayload['items']))
-                                @foreach (array_slice($deductionsPayload['items'], 0, 5) as $ded)
-                                    <div class="mp-list-row">
-                                        <div class="min-w-0">
-                                            <div class="fw-semibold" style="color:#f8efe6;">{{ $ded['reason'] }}</div>
-                                            <div class="small mp-num" style="color:#9e8780;">
-                                                {{ $ded['date_label'] }} &middot; {{ $ded['source'] }}
-                                            </div>
-                                        </div>
-                                        <span class="fw-bold text-nowrap mp-num" style="color:#fda4af;">
-                                            -{{ number_format($ded['amount'], 2) }} QAR
-                                        </span>
-                                    </div>
-                                @endforeach
-                            @else
-                                <div class="small" style="color:#9e8780;">No deductions or penalties recorded on your profile.</div>
-                            @endif
-                        </div>
+                        @endforeach
                     @else
-                        <div class="mp-section-header">
-                            <h2 class="mp-section-title">
-                                <span class="mp-icon-badge"><i class="bx bx-receipt"></i></span>
-                                <span>Recent Deductions &amp; Penalties</span>
-                            </h2>
-                            <span class="mp-pill mp-num {{ $dedMonthTotal > 0 ? 'mp-pill-danger' : 'mp-pill-emerald' }}">
-                                {{ $deductionsPayload['month_label'] }}: {{ $dedFormattedSummary }}
-                            </span>
+                        <div class="py-4 text-center">
+                            <div class="small fw-semibold mb-1" style="color:#cbb8b0;">No deductions or penalties</div>
+                            <div class="small" style="color:#8f7a73;">Your payroll record is clear with no deductions logged.</div>
                         </div>
-
-                        @if (!empty($deductionsPayload['items']))
-                            @foreach (array_slice($deductionsPayload['items'], 0, 8) as $ded)
-                                <div class="mp-list-row">
-                                    <div class="min-w-0">
-                                        <div class="fw-semibold" style="color:#f8efe6;">{{ $ded['reason'] }}</div>
-                                        <div class="small mp-num" style="color:#9e8780;">
-                                            {{ $ded['date_label'] }} &middot;
-                                            <span style="color:{{ $ded['is_manual'] ? '#a8938b' : '#fbbf24' }};">{{ $ded['source'] }}</span>
-                                        </div>
-                                    </div>
-                                    <span class="fw-bold text-nowrap mp-num" style="color:#fda4af;">
-                                        -{{ number_format($ded['amount'], 2) }} QAR
-                                    </span>
-                                </div>
-                            @endforeach
-                        @else
-                            <div class="py-4 text-center">
-                                <div class="small fw-semibold mb-1" style="color:#cbb8b0;">No deductions or penalties</div>
-                                <div class="small" style="color:#8f7a73;">Your payroll record is clear with no deductions logged.</div>
-                            </div>
-                        @endif
                     @endif
                 </div>
             </div>
@@ -1022,7 +1027,66 @@
         </div>
 
     {{-- ===================================================================== --}}
-    {{-- TAB 3: CONTRACTS (STRICTLY OWN, SALARY-ALIGNED, READ-ONLY)            --}}
+    {{-- TAB 3: SKILLS (SALON MANAGER & SALON STAFF ONLY, GROUPED BY CATEGORY) --}}
+    {{-- ===================================================================== --}}
+    @elseif ($activeTab === 'skills' && $isSkillsEligible && $skillsPayload)
+        <div class="mp-card">
+            <div class="mp-section-header">
+                <h2 class="mp-section-title">
+                    <span class="mp-icon-badge"><i class="bx bx-spa"></i></span>
+                    <span>Assigned Service Skills</span>
+                </h2>
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    <span class="mp-pill mp-pill-muted mp-num">
+                        {{ $skillsPayload['total_count'] }} {{ $skillsPayload['total_count'] === 1 ? 'skill' : 'skills' }}
+                        &middot; {{ $skillsPayload['branch_label'] }}
+                    </span>
+                    @if ($isAdminPreview && !empty($skillsPayload['assign_url']))
+                        <a href="{{ $skillsPayload['assign_url'] }}" class="mp-btn-ghost py-1 px-3">
+                            <i class="bx bx-edit-alt"></i>
+                            <span>Assign / Edit Skills &nearr;</span>
+                        </a>
+                    @endif
+                </div>
+            </div>
+
+            @if (!empty($skillsPayload['categories']))
+                @foreach ($skillsPayload['categories'] as $catGroup)
+                    <div class="mp-skill-cat-block">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <div class="mp-sub-heading mb-0">{{ $catGroup['name'] }}</div>
+                            <span class="small mp-num" style="color:#9e8780;">{{ $catGroup['count'] }}</span>
+                        </div>
+                        <div class="mp-skill-grid">
+                            @foreach ($catGroup['items'] as $skill)
+                                <span class="mp-skill-chip">
+                                    <span>{{ $skill['name'] }}</span>
+                                    @if (!empty($skill['duration']))
+                                        <span class="mp-skill-meta mp-num">{{ $skill['duration'] }} min</span>
+                                    @endif
+                                </span>
+                            @endforeach
+                        </div>
+                    </div>
+                @endforeach
+            @else
+                <div class="text-center py-5">
+                    <div class="fw-semibold mb-1" style="color:#cbb8b0; font-size:14px;">No service skills assigned yet</div>
+                    <div class="small mb-3" style="color:#8f7a73; max-width:440px; margin:0 auto;">
+                        Services linked to this profile in Directory &amp; Profiles appear here by category and control Enhanced Calendar specialist eligibility.
+                    </div>
+                    @if ($isAdminPreview && !empty($skillsPayload['assign_url']))
+                        <a href="{{ $skillsPayload['assign_url'] }}" class="mp-btn-ghost">
+                            <i class="bx bx-plus"></i>
+                            <span>Assign Skills in Directory &amp; Profiles &nearr;</span>
+                        </a>
+                    @endif
+                </div>
+            @endif
+        </div>
+
+    {{-- ===================================================================== --}}
+    {{-- TAB 4: CONTRACTS (STRICTLY OWN, SALARY-ALIGNED, READ-ONLY)            --}}
     {{-- ===================================================================== --}}
     @elseif ($activeTab === 'contracts')
         <div class="d-flex flex-column gap-3">
@@ -1257,27 +1321,35 @@
                                 <span class="mp-icon-badge"><i class="bx bx-plus-medical"></i></span>
                                 <span>Sick Leave ({{ $leavesPayload['year'] }})</span>
                             </h2>
-                            <span class="mp-pill mp-pill-emerald mp-num">{{ $leavesPayload['sick']['remaining'] }} days left</span>
+                            @php $sickTakenCount = (int) ($leavesPayload['sick']['taken'] ?? 0); @endphp
+                            <span class="mp-pill {{ $sickTakenCount > 0 ? 'mp-pill-danger' : 'mp-pill-muted' }} mp-num">
+                                {{ $sickTakenCount }} {{ $sickTakenCount === 1 ? 'day' : 'days' }} taken
+                            </span>
                         </div>
-                        <div class="row text-center g-2 mp-num">
-                            <div class="col-3">
-                                <div class="mp-sub-heading mb-1">Entitled</div>
-                                <div class="fw-bold fs-4">{{ $leavesPayload['sick']['entitled'] }}</div>
+                        <div class="row text-center g-2 mp-num align-items-end">
+                            <div class="col-4 d-flex flex-column justify-content-between">
+                                <div class="mp-sub-heading mb-1">Taken</div>
+                                <div class="fw-bold fs-4" style="color:#e5b8a8;">{{ $leavesPayload['sick']['taken'] }}</div>
                             </div>
-                            <div class="col-3">
-                                <div class="mp-sub-heading mb-1">Used</div>
-                                <div class="fw-bold fs-4" style="color:#fda4af;">{{ $leavesPayload['sick']['used'] }}</div>
-                            </div>
-                            <div class="col-3">
+                            <div class="col-4 d-flex flex-column justify-content-between">
                                 <div class="mp-sub-heading mb-1">Pending</div>
                                 <div class="fw-bold fs-4" style="color:#fbbf24;">{{ $leavesPayload['sick']['pending'] }}</div>
                             </div>
-                            <div class="col-3">
-                                <div class="mp-sub-heading mb-1">Remaining</div>
-                                <div class="fw-bold fs-4" style="color:#6ee7b7;">{{ $leavesPayload['sick']['remaining'] }}</div>
+                            <div class="col-4 d-flex flex-column justify-content-between">
+                                <div class="mp-sub-heading mb-1">Deducted / Unapproved</div>
+                                <div class="fw-bold fs-4" style="color:#fda4af;">{{ $leavesPayload['sick']['deducted_unapproved'] }}</div>
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            {{-- Sick Leave Compliance & Deduction Policy Notice --}}
+            <div class="mp-policy-notice" role="note">
+                <i class="bx bx-info-circle"></i>
+                <div>
+                    <span class="fw-semibold" style="color:#f8efe6;">Sick Leave Policy:</span>
+                    {{ $leavesPayload['policy_notice'] }}
                 </div>
             </div>
 
@@ -1300,6 +1372,11 @@
                         <button type="button" class="mp-btn-rosegold" data-bs-toggle="modal" data-bs-target="#portalRequestLeaveModal">
                             <i class="bx bx-plus"></i> Request Leave
                         </button>
+                    @else
+                        <button type="button" class="mp-btn-disabled-pill" disabled aria-disabled="true"
+                                title="Employees submit leave requests directly from their own portal login.">
+                            <i class="bx bx-plus"></i> Request Leave (Staff self-service)
+                        </button>
                     @endif
                 </div>
 
@@ -1308,7 +1385,7 @@
                         <table class="mp-table">
                             <thead>
                                 <tr>
-                                    <th>Type</th>
+                                    <th>Type &amp; Compliance</th>
                                     <th>Dates</th>
                                     <th>Days</th>
                                     <th>Reason</th>
@@ -1324,18 +1401,37 @@
                                 @foreach ($leavesPayload['history'] as $lv)
                                     <tr>
                                         <td>
-                                            <span class="mp-pill {{ $lv['leave_type'] === 'sick' ? 'mp-pill-danger' : 'mp-pill-role' }}">
-                                                {{ $lv['type_label'] }}
-                                            </span>
+                                            <div class="d-flex flex-column align-items-start gap-1">
+                                                <span class="mp-pill {{ $lv['leave_type'] === 'sick' ? 'mp-pill-danger' : 'mp-pill-role' }}">
+                                                    {{ $lv['type_label'] }}
+                                                </span>
+                                                @if (!empty($lv['compliance_badges']))
+                                                    <div class="d-flex flex-wrap gap-1 mt-1">
+                                                        @foreach ($lv['compliance_badges'] as $cb)
+                                                            <span class="mp-pill mp-pill-{{ $cb['tone'] }}" style="font-size:10.5px;">
+                                                                {{ $cb['label'] }}
+                                                            </span>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
+                                            </div>
                                         </td>
                                         <td class="text-nowrap mp-num">{{ $lv['date_range'] }}</td>
                                         <td class="mp-num">{{ $lv['total_days'] }}</td>
                                         <td style="color:#cbb8b0;">{{ $lv['reason'] ?: '—' }}</td>
-                                        <td>
+                                        <td class="text-nowrap">
                                             @if ($lv['has_certificate'])
                                                 <a href="{{ $lv['certificate_url'] }}" target="_blank" class="mp-btn-ghost py-1 px-2">
                                                     <i class="bx bx-file"></i> View
                                                 </a>
+                                            @elseif (!$isAdminPreview && !empty($lv['can_upload_certificate']))
+                                                <button type="button"
+                                                        class="mp-btn-ghost py-1 px-2 js-open-upload-med-cert"
+                                                        style="color:#fbbf24; border-color:rgba(245,158,11,0.38);"
+                                                        data-upload-url="{{ $lv['upload_certificate_url'] }}"
+                                                        data-date-range="{{ $lv['date_range'] }}">
+                                                    <i class="bx bx-upload"></i> Upload Med Cert
+                                                </button>
                                             @else
                                                 <span style="color:#8f7a73;">—</span>
                                             @endif
@@ -1447,6 +1543,10 @@
                             <option value="sick">Sick Leave</option>
                         </select>
                     </div>
+                    <div class="mp-policy-notice mb-3 d-none" id="plSickPolicyNotice" role="note">
+                        <i class="bx bx-error-circle"></i>
+                        <div>{{ \App\Models\StaffLeave::SICK_POLICY_NOTICE }}</div>
+                    </div>
                     <div class="row g-2 mb-3">
                         <div class="col-md-5">
                             <label class="form-label" for="plStartDate">Start Date *</label>
@@ -1467,13 +1567,45 @@
                         <textarea id="plReason" name="reason" class="form-control" rows="3" maxlength="1000" placeholder="Optional note for management"></textarea>
                     </div>
                     <div class="mb-1 d-none" id="plMedCertWrap">
-                        <label class="form-label" for="plMedCert">Medical Certificate (optional, PDF/Image max 10 MB)</label>
+                        <label class="form-label" for="plMedCert">Medical Certificate (required within 3 days to avoid deduction &middot; PDF/Image max 10 MB)</label>
                         <input type="file" id="plMedCert" name="medical_certificate" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.webp">
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="mp-btn-ghost" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="mp-btn-rosegold">Submit Leave Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- Upload Missing Medical Certificate Modal (within 3-day window) --}}
+<div class="modal fade mp-modal" id="portalUploadMedCertModal" tabindex="-1" aria-labelledby="portalUploadMedCertTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 460px;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0" id="portalUploadMedCertTitle">Attach Medical Certificate</h5>
+                    <div class="small" style="color:#b8a29a;" id="portalUploadMedCertDateLabel">Pending Sick Leave</div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" id="portalUploadMedCertForm" action="" enctype="multipart/form-data">
+                @csrf
+                <div class="modal-body">
+                    <div class="mp-policy-notice mb-3">
+                        <i class="bx bx-info-circle"></i>
+                        <div>Upload your Medical Certificate within 3 days of the sick leave start date to clear the missing-certificate warning before management review.</div>
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label" for="plAttachCertFile">Medical Certificate File * (PDF, JPG, PNG, WEBP &middot; max 10 MB)</label>
+                        <input type="file" id="plAttachCertFile" name="medical_certificate" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="mp-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="mp-btn-rosegold">Upload Certificate</button>
                 </div>
             </form>
         </div>
@@ -1511,13 +1643,18 @@
 
         const typeSel = document.getElementById('plLeaveType');
         const certWrap = document.getElementById('plMedCertWrap');
+        const sickNotice = document.getElementById('plSickPolicyNotice');
         const startEl = document.getElementById('plStartDate');
         const endEl = document.getElementById('plEndDate');
         const badgeEl = document.getElementById('plTotalDaysBadge');
 
         function syncLeaveForm() {
-            if (typeSel && certWrap) {
-                certWrap.classList.toggle('d-none', typeSel.value !== 'sick');
+            const isSick = typeSel && typeSel.value === 'sick';
+            if (certWrap) {
+                certWrap.classList.toggle('d-none', !isSick);
+            }
+            if (sickNotice) {
+                sickNotice.classList.toggle('d-none', !isSick);
             }
             if (startEl && endEl && badgeEl) {
                 if (startEl.value && endEl.value) {
@@ -1540,6 +1677,22 @@
         });
         endEl?.addEventListener('change', syncLeaveForm);
         syncLeaveForm();
+
+        const uploadModalEl = document.getElementById('portalUploadMedCertModal');
+        const uploadFormEl = document.getElementById('portalUploadMedCertForm');
+        const uploadDateLabelEl = document.getElementById('portalUploadMedCertDateLabel');
+        document.querySelectorAll('.js-open-upload-med-cert').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (!uploadModalEl || !uploadFormEl) return;
+                uploadFormEl.action = btn.dataset.uploadUrl || '';
+                if (uploadDateLabelEl) {
+                    uploadDateLabelEl.textContent = 'Sick Leave · ' + (btn.dataset.dateRange || '');
+                }
+                if (window.bootstrap) {
+                    bootstrap.Modal.getOrCreateInstance(uploadModalEl).show();
+                }
+            });
+        });
         @endif
     });
 </script>

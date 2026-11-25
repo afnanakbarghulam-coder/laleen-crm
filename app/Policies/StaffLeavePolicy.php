@@ -34,6 +34,20 @@ class StaffLeavePolicy
             && $leave->status === StaffLeave::STATUS_PENDING;
     }
 
+    public function uploadCertificate(User $user, StaffLeave $leave): bool
+    {
+        if ($user->isAdmin()) {
+            return $leave->leave_type === StaffLeave::TYPE_SICK;
+        }
+
+        $ownStaffId = $user->staff()->value('id');
+
+        return $ownStaffId !== null
+            && (int) $ownStaffId === (int) $leave->staff_id
+            && $leave->leave_type === StaffLeave::TYPE_SICK
+            && $leave->status === StaffLeave::STATUS_PENDING;
+    }
+
     public function review(User $user): bool
     {
         return $user->isAdmin();

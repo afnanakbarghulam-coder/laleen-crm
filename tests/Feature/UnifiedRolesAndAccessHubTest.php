@@ -255,15 +255,21 @@ class UnifiedRolesAndAccessHubTest extends TestCase
         $preview->assertSee("Viewing Sara Beautician's Portal Profile", false);
         $preview->assertSee('Back to Roles &amp; Access', false);
         $preview->assertSee('Al Wakrah');
-        $preview->assertSee('Luxury Blowdry');
+        $preview->assertSee('tab=skills', false);
         $preview->assertSee('Wednesday');
         $preview->assertDontSee('Change Password');
 
-        // Sub-tab inside Admin Preview stays inside admin-preview route cleanly
+        // Sub-tabs inside Admin Preview stay inside admin-preview route cleanly (Skills + Leaves)
+        $this->actingAs($this->admin)
+            ->get(route('portal.admin-preview', ['staff' => $this->linkedSpecialist->id, 'tab' => 'skills']))
+            ->assertOk()
+            ->assertSee('Assigned Service Skills')
+            ->assertSee('Luxury Blowdry');
         $this->actingAs($this->admin)
             ->get(route('portal.admin-preview', ['staff' => $this->linkedSpecialist->id, 'tab' => 'leaves']))
             ->assertOk()
-            ->assertSee('Annual Leave');
+            ->assertSee('Annual Leave')
+            ->assertSee('Request Leave (Staff self-service)');
 
         // Non-admins (Chat Agent, Manager, Salon Staff) ALL receive strict HTTP 403
         $this->actingAs($this->agentUser)

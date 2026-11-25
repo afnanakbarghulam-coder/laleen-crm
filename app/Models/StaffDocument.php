@@ -12,13 +12,13 @@ class StaffDocument extends Model
     use HasFactory;
 
     public const CATEGORIES = [
-        'qid' => 'QID',
+        'qid' => 'QID / Government ID',
         'passport' => 'Passport',
+        'national_id' => 'National ID',
         'health_card' => 'Health Card',
         'medical_certificate' => 'Medical Certificate',
         'offer_letter' => 'Offer Letter',
         'signed_contract' => 'Signed Contract',
-        'national_id' => 'National ID',
         'other' => 'Other',
     ];
 

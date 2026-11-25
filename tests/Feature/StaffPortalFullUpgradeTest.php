@@ -344,11 +344,15 @@ class StaffPortalFullUpgradeTest extends TestCase
         $stylistOverview->assertSee('Not set'); // No salary configured yet
         $stylistOverview->assertDontSee('4,500 QAR');
         $stylistOverview->assertDontSee('6,200 QAR');
-        $stylistOverview->assertSee('Assigned Service Skills');
-        $stylistOverview->assertSee('Signature Blowdry');
+        $stylistOverview->assertSee('?tab=skills', false);
+        $stylistOverview->assertDontSee('Signature Blowdry'); // Skills now live cleanly in the dedicated Skills tab
         $stylistOverview->assertSee('Recent Deductions &amp; Penalties', false);
         $stylistOverview->assertSee('Late opening penalty');
         $stylistOverview->assertSee('75.00');
+
+        $stylistSkills = $this->actingAs($stylistUser)->get('/my-profile?tab=skills')->assertOk();
+        $stylistSkills->assertSee('Assigned Service Skills');
+        $stylistSkills->assertSee('Signature Blowdry');
 
         $stylistPerf = $this->actingAs($stylistUser)->get('/my-profile?tab=performance')->assertOk();
         $stylistPerf->assertSee('Weekly Evaluation Average');
@@ -913,5 +917,258 @@ class StaffPortalFullUpgradeTest extends TestCase
         $ladenSelf->assertDontSee('Old Airport Ad Revenue');
         $ladenSelf->assertDontSee('Organic Content Plan (MTD)');
         $ladenSelf->assertDontSee('Branch Mystery Shopper Score');
+    }
+
+    public function test_sick_leave_policy_overhaul_deduction_workflow_skills_tab_and_document_category_labels(): void
+    {
+        // 1. Document category label clarity (QID / Government ID + Passport at the top)
+        $categoryKeys = array_keys(StaffDocument::CATEGORIES);
+        $this->assertSame('qid', $categoryKeys[0]);
+        $this->assertSame('passport', $categoryKeys[1]);
+        $this->assertSame('QID / Government ID', StaffDocument::CATEGORIES['qid']);
+        $this->assertSame('Passport', StaffDocument::CATEGORIES['passport']);
+
+        // Directory & Profiles renders updated document dropdown labels & omits sick_leave_days input
+        $dirHtml = $this->actingAs($this->admin)->get(route('staffs.index'))->assertOk()->getContent();
+        $this->assertStringContainsString('QID / Government ID', $dirHtml);
+        $this->assertStringContainsString('>Passport<', $dirHtml);
+        $this->assertStringNotContainsString('id="stfSickLeaveDays"', $dirHtml);
+
+        // 2. Dedicated Skills Tab for BOTH Salon Manager and Salon Staff (grouped by category), 403 for Remote roles
+        $hairCat = \App\Models\ServiceCategory::create(['name' => 'Hair Styling']);
+        $nailCat = \App\Models\ServiceCategory::create(['name' => 'Nail Care']);
+        $keratinSvc = Service::create(['name' => 'Keratin Silk Treatment', 'price' => 450, 'duration' => 90, 'category_id' => $hairCat->id]);
+        $gelManiSvc = Service::create(['name' => 'Russian Gel Manicure', 'price' => 140, 'duration' => 45, 'category_id' => $nailCat->id]);
+
+        $mgrUser = User::factory()->create([
+            'name' => 'Rhea Branch Manager',
+            'email' => 'rhea.skills@laleen.qa',
+            'role' => 'salon_manager',
+            'permissions' => User::defaultPermissionsForRole('salon_manager'),
+        ]);
+        $mgrStaff = Staff::create([
+            'name' => 'Rhea Branch Manager',
+            'branch' => 'wakrah',
+            'is_remote' => false,
+            'bookable' => false,
+            'base_salary' => 6000,
+            'user_id' => $mgrUser->id,
+        ]);
+        $mgrStaff->services()->sync([$keratinSvc->id, $gelManiSvc->id]);
+
+        $stylistUser = User::factory()->create([
+            'name' => 'Aisha Specialist',
+            'email' => 'aisha.sickpolicy@laleen.qa',
+            'role' => 'salon_staff',
+            'permissions' => User::defaultPermissionsForRole('salon_staff'),
+        ]);
+        $stylistStaff = Staff::create([
+            'name' => 'Aisha Specialist',
+            'branch' => 'old_airport',
+            'is_remote' => false,
+            'bookable' => true,
+            'base_salary' => 3000, // Pro-rata daily rate = 3000 / 30 = 100 QAR/day
+            'annual_leave_days' => 21,
+            'user_id' => $stylistUser->id,
+        ]);
+        $stylistStaff->services()->sync([$keratinSvc->id]);
+
+        // Both Salon Manager and Salon Staff see Skills tab grouped by category (and NOT inline on Overview)
+        $mgrOverview = $this->actingAs($mgrUser)->get('/my-profile')->assertOk();
+        $mgrOverview->assertSee('?tab=skills', false);
+        $mgrOverview->assertDontSee('Keratin Silk Treatment');
+
+        $mgrSkills = $this->actingAs($mgrUser)->get('/my-profile?tab=skills')->assertOk();
+        $mgrSkills->assertSee('Assigned Service Skills');
+        $mgrSkills->assertSee('Hair Styling');
+        $mgrSkills->assertSee('Nail Care');
+        $mgrSkills->assertSee('Keratin Silk Treatment');
+        $mgrSkills->assertSee('90 min');
+        $mgrSkills->assertSee('Russian Gel Manicure');
+        $mgrSkills->assertSee('45 min');
+
+        $stylistSkills = $this->actingAs($stylistUser)->get('/my-profile?tab=skills')->assertOk();
+        $stylistSkills->assertSee('Hair Styling');
+        $stylistSkills->assertSee('Keratin Silk Treatment');
+        $stylistSkills->assertDontSee('Russian Gel Manicure');
+
+        // Admin Preview Skills tab includes Assign / Edit Skills shortcut
+        $previewSkills = $this->actingAs($this->admin)
+            ->get(route('portal.admin-preview', ['staff' => $mgrStaff->id, 'tab' => 'skills']))
+            ->assertOk();
+        $previewSkills->assertSee('Hair Styling');
+        $previewSkills->assertSee('Assign / Edit Skills');
+
+        // Remote roles NEVER see Skills tab link & get HTTP 403 on ?tab=skills
+        foreach (['agent', 'sales_coordinator', 'ops_lead', 'marketing_specialist', 'social_media_editor'] as $remoteRole) {
+            $ru = User::factory()->create([
+                'name' => 'Remote ' . $remoteRole,
+                'email' => $remoteRole . '.noskills@laleen.qa',
+                'role' => $remoteRole,
+                'permissions' => User::defaultPermissionsForRole($remoteRole),
+            ]);
+            $rs = Staff::create([
+                'name' => $ru->name,
+                'branch' => null,
+                'is_remote' => true,
+                'bookable' => false,
+                'user_id' => $ru->id,
+            ]);
+            $this->actingAs($ru)->get('/my-profile')->assertOk()->assertDontSee('?tab=skills', false);
+            $this->actingAs($ru)->get('/my-profile?tab=skills')->assertForbidden();
+            $this->actingAs($this->admin)
+                ->get(route('portal.admin-preview', ['staff' => $rs->id, 'tab' => 'skills']))
+                ->assertForbidden();
+        }
+
+        // 3. Sick Leave card removes Entitled / Remaining / 14 days left & shows policy notice + Admin Preview disabled button
+        $selfLeavesBefore = $this->actingAs($stylistUser)->get('/my-profile?tab=leaves')->assertOk();
+        $selfLeavesBefore->assertSee('Sick Leave (2026)');
+        $selfLeavesBefore->assertSee('0 days taken');
+        $selfLeavesBefore->assertSee('Taken');
+        $selfLeavesBefore->assertSee('Deducted / Unapproved');
+        $selfLeavesBefore->assertSee('Sick leave must be submitted within 3 days with a valid Medical Certificate and approved by management.');
+        $selfLeavesBefore->assertDontSee('14 days left');
+        $selfLeavesBefore->assertSee('Request Leave');
+        $selfLeavesBefore->assertDontSee('Request Leave (Staff self-service)');
+
+        $previewLeaves = $this->actingAs($this->admin)
+            ->get(route('portal.admin-preview', ['staff' => $stylistStaff->id, 'tab' => 'leaves']))
+            ->assertOk();
+        $previewLeaves->assertSee('0 days taken');
+        $previewLeaves->assertDontSee('14 days left');
+        $previewLeaves->assertSee('Request Leave (Staff self-service)');
+
+        // 4. Uncertified Sick Leave submitted WITHIN 3-day window (2026-11-24 vs now 2026-11-25)
+        $withinRes = $this->actingAs($stylistUser)->postJson(route('portal.leaves.store'), [
+            'leave_type' => 'sick',
+            'start_date' => '2026-11-24',
+            'end_date' => '2026-11-24',
+            'reason' => 'Sudden migraine',
+        ])->assertCreated()
+            ->assertJsonPath('leave.submitted_within_window', true)
+            ->assertJsonPath('leave.has_certificate', false);
+
+        $withinLeave = StaffLeave::findOrFail($withinRes->json('leave.id'));
+        $this->assertTrue($withinLeave->submitted_within_window);
+        $this->assertTrue($withinLeave->canUploadMissingCertificate(Carbon::now('Asia/Qatar')));
+
+        // Portal shows Missing Med Cert badge + Upload Med Cert CTA
+        $this->actingAs($stylistUser)->get('/my-profile?tab=leaves')
+            ->assertOk()
+            ->assertSee('Missing Med Cert')
+            ->assertSee('Upload Med Cert');
+
+        // Another user cannot upload a certificate to Aisha's leave (HTTP 403)
+        $this->actingAs($mgrUser)->postJson(route('portal.leaves.certificate.upload', $withinLeave), [
+            'medical_certificate' => UploadedFile::fake()->create('hijack.pdf', 50, 'application/pdf'),
+        ])->assertForbidden();
+
+        // Owner uploads Medical Certificate within 3-day window -> succeeds & badge switches to Med Cert Attached!
+        $this->actingAs($stylistUser)->postJson(route('portal.leaves.certificate.upload', $withinLeave), [
+            'medical_certificate' => UploadedFile::fake()->create('valid-med-cert.pdf', 80, 'application/pdf'),
+        ])->assertOk()
+            ->assertJsonPath('leave.has_certificate', true);
+
+        $withinLeave->refresh();
+        Storage::disk('local')->assertExists($withinLeave->medical_certificate_path);
+        $this->assertFalse($withinLeave->isComplianceRisk());
+
+        // 5. Late (>3 days) & Uncertified Sick Leave (2026-11-20 to 2026-11-21 -> 5 days before 2026-11-25, 2 days total)
+        $lateRes = $this->actingAs($stylistUser)->postJson(route('portal.leaves.store'), [
+            'leave_type' => 'sick',
+            'start_date' => '2026-11-20',
+            'end_date' => '2026-11-21',
+            'reason' => 'Stomach flu reported late',
+        ])->assertCreated()
+            ->assertJsonPath('leave.submitted_within_window', false)
+            ->assertJsonPath('leave.total_days', 2);
+
+        $lateLeave = StaffLeave::findOrFail($lateRes->json('leave.id'));
+        $this->assertFalse($lateLeave->submitted_within_window);
+        $this->assertTrue($lateLeave->isComplianceRisk());
+        $this->assertFalse($lateLeave->canUploadMissingCertificate(Carbon::now('Asia/Qatar')));
+
+        // Attempting to attach Med Cert after 3-day window expired -> rejected with HTTP 422!
+        $this->actingAs($stylistUser)->postJson(route('portal.leaves.certificate.upload', $lateLeave), [
+            'medical_certificate' => UploadedFile::fake()->create('too-late.pdf', 60, 'application/pdf'),
+        ])->assertStatus(422);
+
+        // No 14-day entitlement cap: requesting a 16-day Sick Leave is accepted cleanly (201)
+        $longSickRes = $this->actingAs($stylistUser)->postJson(route('portal.leaves.store'), [
+            'leave_type' => 'sick',
+            'start_date' => '2026-12-01',
+            'end_date' => '2026-12-16',
+            'reason' => 'Extended medical recovery',
+        ])->assertCreated()
+            ->assertJsonPath('leave.total_days', 16);
+        $longSickLeave = StaffLeave::findOrFail($longSickRes->json('leave.id'));
+
+        // 6. Admin Leave Queue renders compliance badges + pro-rata deduction suggestion (3000 / 30 * 2 = 200 QAR)
+        $adminQueue = $this->actingAs($this->admin)->get(route('staffs.index', ['tab' => 'leaves']))->assertOk();
+        $adminQueue->assertSee('Missing Med Cert · Deduction Risk');
+        $adminQueue->assertSee('Late (&gt;3 Days) · Deduction Risk', false);
+        $adminQueue->assertSee('Approve / Close with Deduction');
+        $suggestions = $adminQueue->viewData('leaveDeductionSuggestionsById');
+        $this->assertEquals(200.0, $suggestions[$lateLeave->id]['suggested_amount'] ?? null);
+
+        // 7. Admin Rejects late/uncertified Sick Leave with linked Salary Deduction (200 QAR)
+        $rejectRes = $this->actingAs($this->admin)->patchJson(route('staff-leaves.review', $lateLeave), [
+            'action' => 'reject',
+            'admin_notes' => 'Submitted past 3-day window without medical certificate.',
+            'record_deduction' => true,
+            'deduction_amount' => 200,
+            'deduction_reason' => 'Unapproved sick leave (20 Nov – 21 Nov 2026) — missing medical certificate & submitted after 3-day limit',
+        ])->assertOk()
+            ->assertJsonPath('leave.status', 'rejected')
+            ->assertJsonPath('leave.deduction_applied', true)
+            ->assertJsonPath('deduction_created', true);
+
+        $lateLeave->refresh();
+        $this->assertTrue($lateLeave->deduction_applied);
+        $this->assertNotNull($lateLeave->deduction_id);
+        $this->assertSame(1, StaffDeduction::where('staff_id', $stylistStaff->id)->count());
+
+        // Strict Idempotency: repeating the exact review request MUST NOT create a duplicate deduction!
+        $this->actingAs($this->admin)->patchJson(route('staff-leaves.review', $lateLeave), [
+            'action' => 'reject',
+            'record_deduction' => true,
+            'deduction_amount' => 200,
+            'deduction_reason' => 'Duplicate click attempt',
+        ])->assertOk()
+            ->assertJsonPath('deduction_created', false);
+        $this->assertSame(1, StaffDeduction::where('staff_id', $stylistStaff->id)->count());
+
+        // 8. Admin Approves / Closes an uncertified Sick Leave WITH Deduction -> 1 linked deduction, counts in Taken & Deducted
+        $this->actingAs($this->admin)->patchJson(route('staff-leaves.review', $longSickLeave), [
+            'action' => 'approve',
+            'admin_notes' => 'Approved off roster with unpaid deduction (no medical cert).',
+            'record_deduction' => true,
+            'deduction_amount' => 150,
+            'deduction_reason' => 'Uncertified sick leave deduction',
+        ])->assertOk()
+            ->assertJsonPath('leave.status', 'approved')
+            ->assertJsonPath('leave.deduction_applied', true)
+            ->assertJsonPath('deduction_created', true);
+
+        $this->assertSame(2, StaffDeduction::where('staff_id', $stylistStaff->id)->count());
+
+        // 9. Verify Aisha's /my-profile immediately reflects MTD Deductions (350 QAR), Recent Deductions, and Sick Leave stats!
+        $aishaOverview = $this->actingAs($stylistUser)->get('/my-profile')->assertOk();
+        $aishaOverview->assertSee('-350 QAR');
+        $aishaOverview->assertSee('Unapproved sick leave (20 Nov – 21 Nov 2026) — missing medical certificate &amp; submitted after 3-day limit', false);
+        $aishaOverview->assertSee('Uncertified sick leave deduction');
+
+        $aishaLeaves = $this->actingAs($stylistUser)->get('/my-profile?tab=leaves')->assertOk();
+        $leavesVm = $aishaLeaves->viewData('leavesPayload');
+        $this->assertArrayNotHasKey('entitled', $leavesVm['sick']);
+        $this->assertArrayNotHasKey('remaining', $leavesVm['sick']);
+        $this->assertSame(16, $leavesVm['sick']['taken']); // 16-day approved sick leave
+        $this->assertSame(1, $leavesVm['sick']['pending']); // 1-day pending sick leave (with med cert)
+        $this->assertSame(18, $leavesVm['sick']['deducted_unapproved']); // 2 rejected/deducted + 16 approved-with-deduction
+        $aishaLeaves->assertSee('16 days taken');
+        $aishaLeaves->assertSee('Deducted (200 QAR)');
+        $aishaLeaves->assertSee('Deducted (150 QAR)');
+        $aishaLeaves->assertSee('Med Cert Attached');
     }
 }

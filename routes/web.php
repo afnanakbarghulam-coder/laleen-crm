@@ -100,6 +100,9 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->whereNumber('contract')
         ->name('portal.contracts.pdf');
     Route::post('/my-profile/leaves', [StaffLeaveController::class, 'storePortalRequest'])->name('portal.leaves.store');
+    Route::post('/my-profile/leaves/{leave}/certificate', [StaffLeaveController::class, 'uploadPortalCertificate'])
+        ->whereNumber('leave')
+        ->name('portal.leaves.certificate.upload');
     Route::patch('/my-profile/leaves/{leave}/cancel', [StaffLeaveController::class, 'cancelPortalRequest'])
         ->whereNumber('leave')
         ->name('portal.leaves.cancel');
