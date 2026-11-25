@@ -89,6 +89,13 @@
             return '<span class="badge" style="background:rgba(110,231,183,0.14); color:#6ee7b7; border:1px solid rgba(110,231,183,0.3);">Valid</span>';
         }
 
+        function verificationBadgeHtml(ver) {
+            if (!ver || ver.key !== 'pending_review') {
+                return '<span class="badge" style="background:rgba(52,211,153,0.14); color:#6ee7b7; border:1px solid rgba(52,211,153,0.30);">Verified</span>';
+            }
+            return '<span class="badge" style="background:rgba(245,158,11,0.16); color:#fbbf24; border:1px solid rgba(245,158,11,0.34);">Pending HR Review</span>';
+        }
+
         function renderDocs(docs) {
             const wrap = document.getElementById('staffDocsListWrap');
             if (!wrap) return;
@@ -103,6 +110,7 @@
                         <div class="d-flex align-items-center flex-wrap gap-2">
                             <span class="badge" style="background:rgba(212,163,115,0.16); color:#f3d9a4;">${escHtml(d.category_label)}</span>
                             <span class="fw-semibold" style="color:#f8efe6; font-size:13.5px;">${escHtml(d.title)}</span>
+                            ${verificationBadgeHtml(d.verification_badge)}
                             ${expiryBadgeHtml(d.expiry_status)}
                         </div>
                         <div class="small mt-1" style="color:#9e8780;">
@@ -113,6 +121,11 @@
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2">
+                        ${d.is_pending_review ? `
+                            <button type="button" class="portal-mini-btn" style="border-color:rgba(110,231,183,0.42); color:#6ee7b7;" onclick="verifyStaffDocument('${escHtml(d.verify_url)}')">
+                                <i class="bx bx-check-circle"></i> Verify
+                            </button>
+                        ` : ''}
                         <a href="${escHtml(d.inline_url)}" target="_blank" class="portal-mini-btn text-decoration-none">
                             <i class="bx bx-show"></i> View
                         </a>
@@ -158,6 +171,25 @@
             const modalEl = document.getElementById('staffDocumentsModal');
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
             loadStaffDocuments(staffId);
+        };
+
+        window.verifyStaffDocument = async function (verifyUrl) {
+            const staffId = document.getElementById('staffDocStaffId').value;
+            try {
+                const res = await fetch(verifyUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    if (typeof showStaffToast === 'function') showStaffToast(data.message);
+                    loadStaffDocuments(staffId);
+                } else {
+                    alert(data.message || 'Failed to verify document.');
+                }
+            } catch (e) {
+                alert('Network error verifying document.');
+            }
         };
 
         window.deleteStaffDocument = async function (deleteUrl) {

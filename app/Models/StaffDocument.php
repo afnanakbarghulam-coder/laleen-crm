@@ -11,6 +11,9 @@ class StaffDocument extends Model
 {
     use HasFactory;
 
+    public const STATUS_PENDING_REVIEW = 'pending_review';
+    public const STATUS_VERIFIED = 'verified';
+
     public const CATEGORIES = [
         'qid' => 'QID / Government ID',
         'passport' => 'Passport',
@@ -20,6 +23,18 @@ class StaffDocument extends Model
         'offer_letter' => 'Offer Letter',
         'signed_contract' => 'Signed Contract',
         'other' => 'Other',
+    ];
+
+    /**
+     * Personal document categories permitted for employee self-upload from `/my-profile?tab=documents`.
+     * HR-only contract & offer documents (`offer_letter`, `signed_contract`) are strictly blocked for staff.
+     */
+    public const SELF_UPLOAD_CATEGORIES = [
+        'qid' => 'QID / Government ID',
+        'passport' => 'Passport',
+        'national_id' => 'National ID',
+        'health_card' => 'Health Card',
+        'medical_certificate' => 'Medical Certificate',
     ];
 
     protected $table = 'staff_documents';
@@ -36,12 +51,16 @@ class StaffDocument extends Model
         'mime_type',
         'file_size',
         'uploaded_by',
+        'verification_status',
+        'verified_by',
+        'verified_at',
     ];
 
     protected $casts = [
         'issue_date' => 'date',
         'expiry_date' => 'date',
         'file_size' => 'integer',
+        'verified_at' => 'datetime',
     ];
 
     public function staff(): BelongsTo
@@ -52,6 +71,41 @@ class StaffDocument extends Model
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    public function verifier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    public function isPendingReview(): bool
+    {
+        return ($this->verification_status ?? self::STATUS_VERIFIED) === self::STATUS_PENDING_REVIEW;
+    }
+
+    public function isVerified(): bool
+    {
+        return !$this->isPendingReview();
+    }
+
+    /**
+     * @return array{key: string, label: string, tone: string}
+     */
+    public function verificationStatusBadge(): array
+    {
+        if ($this->isPendingReview()) {
+            return [
+                'key' => self::STATUS_PENDING_REVIEW,
+                'label' => 'Pending HR Review',
+                'tone' => 'amber',
+            ];
+        }
+
+        return [
+            'key' => self::STATUS_VERIFIED,
+            'label' => 'Verified',
+            'tone' => 'emerald',
+        ];
     }
 
     public function categoryLabel(): string

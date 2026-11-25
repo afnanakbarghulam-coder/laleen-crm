@@ -494,16 +494,41 @@
         color: #f8efe6;
     }
 
-    .mp-modal .modal-header { border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+    .mp-modal .modal-header {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        align-items: flex-start;
+    }
+    .mp-modal .modal-header .btn-close {
+        position: static !important;
+        transform: none !important;
+        margin: 2px 0 0 auto !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+    }
     .mp-modal .modal-footer { border-top: 1px solid rgba(255, 255, 255, 0.06); }
     .mp-modal .form-label { font-size: 12px; font-weight: 600; color: #d6c3bc; }
     .mp-modal .form-control,
     .mp-modal .form-select {
+        background: #130d0f !important;
         background-color: #130d0f !important;
         border: 1px solid rgba(229, 184, 168, 0.22) !important;
         color: #f8efe6 !important;
         border-radius: 10px;
         color-scheme: dark;
+    }
+    .mp-modal .form-select {
+        -webkit-appearance: none !important;
+        -moz-appearance: none !important;
+        appearance: none !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23e5b8a8' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 0.85rem center !important;
+        background-size: 12px 10px !important;
+        padding-right: 2.25rem !important;
+    }
+    .mp-modal .form-select option {
+        background: #130d0f;
+        color: #f8efe6;
     }
     .mp-modal .form-control:focus,
     .mp-modal .form-select:focus {
@@ -889,11 +914,21 @@
     {{-- ===================================================================== --}}
     @elseif ($activeTab === 'performance' && $performanceScorecard)
         <div class="d-flex flex-column gap-3">
+            {{-- SALON STAFF: MTD Service Production right at the top of Performance --}}
+            @if ($isSalonStaff && !empty($mtdProduction))
+                @include('portal.partials.mtd-production-cards', ['mtdProduction' => $mtdProduction])
+            @endif
+
             {{-- Shared Exact KPIs Module Scorecard Header + KPI Card Grid --}}
             @include('kpi.partials.staff-scorecard-panel', [
                 'scorecardVm' => $performanceScorecard,
                 'showBackButton' => false,
             ])
+
+            {{-- SALON MANAGER: MTD Service Production below Executive KPIs and above Pending Complaints --}}
+            @if (!$isSalonStaff && !empty($mtdProduction))
+                @include('portal.partials.mtd-production-cards', ['mtdProduction' => $mtdProduction])
+            @endif
 
             {{-- OPS LEAD: Pending Ops Tracker Items Table --}}
             @if ($isOpsLead && array_key_exists('ops_items', $performanceScorecard))
@@ -1284,16 +1319,23 @@
         </div>
 
     {{-- ===================================================================== --}}
-    {{-- TAB 4: DOCUMENTS (STRICTLY OWN PRIVATE STORAGE, READ-ONLY)            --}}
+    {{-- TAB 4: DOCUMENTS (PRIVATE HR VAULT: SELF-UPLOAD + ADMIN VERIFICATION) --}}
     {{-- ===================================================================== --}}
     @elseif ($activeTab === 'documents')
         <div class="mp-card">
             <div class="mp-section-header">
-                <h2 class="mp-section-title">
-                    <span class="mp-icon-badge"><i class="bx bx-folder"></i></span>
-                    <span>Personal Documents</span>
-                </h2>
-                <span class="small" style="color:#9e8780;">Private HR Vault &middot; Read-only</span>
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    <h2 class="mp-section-title">
+                        <span class="mp-icon-badge"><i class="bx bx-folder"></i></span>
+                        <span>Personal Documents</span>
+                    </h2>
+                    <span class="small" style="color:#9e8780;">Private HR Vault</span>
+                </div>
+                @if (!empty($canUploadDocuments))
+                    <button type="button" class="mp-btn-rosegold" data-bs-toggle="modal" data-bs-target="#portalUploadDocumentModal">
+                        <i class="bx bx-upload"></i> Upload Document
+                    </button>
+                @endif
             </div>
 
             @if (!empty($documentsPayload))
@@ -1303,36 +1345,69 @@
                             <tr>
                                 <th>Category</th>
                                 <th>Title &amp; Reference</th>
-                                <th>Issue Date</th>
-                                <th>Expiry Date</th>
+                                <th>Dates</th>
                                 <th>Status</th>
-                                <th class="text-end">File</th>
+                                <th class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach ($documentsPayload as $doc)
                                 <tr>
-                                    <td><span class="mp-pill mp-pill-role">{{ $doc['category_label'] }}</span></td>
+                                    <td class="text-nowrap"><span class="mp-pill mp-pill-role">{{ $doc['category_label'] }}</span></td>
                                     <td>
                                         <div class="fw-semibold">{{ $doc['title'] }}</div>
                                         @if ($doc['document_number'])
                                             <div class="small mp-num" style="color:#9e8780;">No. {{ $doc['document_number'] }}</div>
                                         @endif
                                     </td>
-                                    <td class="text-nowrap mp-num">{{ $doc['issue_date_label'] }}</td>
-                                    <td class="text-nowrap mp-num">{{ $doc['expiry_date_label'] }}</td>
-                                    <td>
-                                        <span class="mp-pill mp-pill-{{ $doc['expiry_status']['tone'] }}">
-                                            {{ $doc['expiry_status']['label'] }}
-                                        </span>
+                                    <td class="text-nowrap mp-num small">
+                                        @if (($doc['issue_date_label'] ?? '—') === '—' && ($doc['expiry_date_label'] ?? '—') === '—')
+                                            <span style="color:#9e8780;">&mdash;</span>
+                                        @else
+                                            @if (($doc['issue_date_label'] ?? '—') !== '—')
+                                                <div style="color:#cbb8b0;">Iss: {{ $doc['issue_date_label'] }}</div>
+                                            @endif
+                                            @if (($doc['expiry_date_label'] ?? '—') !== '—')
+                                                <div style="color:#9e8780;">Exp: {{ $doc['expiry_date_label'] }}</div>
+                                            @endif
+                                        @endif
                                     </td>
-                                    <td class="text-end text-nowrap">
-                                        <a href="{{ $doc['view_url'] }}" target="_blank" class="mp-btn-ghost py-1 px-2 me-1">
-                                            <i class="bx bx-show"></i> View
-                                        </a>
-                                        <a href="{{ $doc['download_url'] }}" class="mp-btn-ghost py-1 px-2">
-                                            <i class="bx bx-download"></i> Download
-                                        </a>
+                                    <td>
+                                        <div class="d-flex flex-wrap align-items-center gap-1">
+                                            <span class="mp-pill mp-pill-{{ $doc['verification_badge']['tone'] }}">
+                                                {{ $doc['verification_badge']['label'] }}
+                                            </span>
+                                            <span class="mp-pill mp-pill-{{ $doc['expiry_status']['tone'] }}">
+                                                {{ $doc['expiry_status']['label'] }}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-inline-flex flex-wrap justify-content-end align-items-center gap-1">
+                                            @if (!empty($doc['can_verify']))
+                                                <form method="POST" action="{{ $doc['verify_url'] }}" class="m-0 d-inline">
+                                                    @csrf
+                                                    <button type="submit" class="mp-btn-ghost py-1 px-2" style="color:#6ee7b7; border-color:rgba(52,211,153,0.42);">
+                                                        <i class="bx bx-check-circle"></i> Verify
+                                                    </button>
+                                                </form>
+                                            @endif
+                                            <a href="{{ $doc['view_url'] }}" target="_blank" class="mp-btn-ghost py-1 px-2" title="View document">
+                                                <i class="bx bx-show"></i> View
+                                            </a>
+                                            <a href="{{ $doc['download_url'] }}" class="mp-btn-ghost py-1 px-2" title="Download document" aria-label="Download document">
+                                                <i class="bx bx-download"></i>
+                                            </a>
+                                            @if (!empty($doc['can_delete']))
+                                                <form method="POST" action="{{ $doc['delete_url'] }}" class="m-0 d-inline" onsubmit="return confirm('Delete this document permanently?');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="mp-btn-ghost py-1 px-2" style="color:#fda4af; border-color:rgba(253,164,175,0.34);" title="Delete document" aria-label="Delete document">
+                                                        <i class="bx bx-trash"></i>
+                                                    </button>
+                                                </form>
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                             @endforeach
@@ -1341,7 +1416,7 @@
                 </div>
             @else
                 <div class="text-center py-4 small" style="color:#9e8780;">
-                    No personal documents (QID, Passport, Health Card, Offer Letter, etc.) have been uploaded by HR yet.
+                    No personal documents (QID, Passport, Health Card, Medical Certificate, etc.) have been uploaded yet.
                 </div>
             @endif
         </div>
@@ -1544,6 +1619,72 @@
         </div>
     @endif
 </div>
+
+@if (!empty($canUploadDocuments))
+{{-- Upload Personal / HR Document Modal (Works in BOTH Self-View & Admin Preview) --}}
+<div class="modal mp-modal" id="portalUploadDocumentModal" tabindex="-1" aria-labelledby="portalUploadDocTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 520px;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0" id="portalUploadDocTitle">
+                        {{ $isAdminPreview ? ("Upload Document — {$profile['name']}") : 'Upload Personal Document' }}
+                    </h5>
+                    <div class="small" style="color:#b8a29a;">
+                        @if ($isAdminPreview)
+                            Admin upload — stored privately and marked Verified immediately.
+                        @else
+                            Stored in your private HR vault and submitted for HR verification.
+                        @endif
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ $documentUploadUrl }}" enctype="multipart/form-data">
+                @csrf
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="pDocCategory">Category *</label>
+                            <select id="pDocCategory" name="category" class="form-select" required>
+                                @foreach (($documentUploadCategories ?? \App\Models\StaffDocument::SELF_UPLOAD_CATEGORIES) as $catKey => $catLabel)
+                                    <option value="{{ $catKey }}">{{ $catLabel }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="pDocNumber">Document Number</label>
+                            <input type="text" id="pDocNumber" name="document_number" class="form-control" maxlength="120" placeholder="Optional ID / Passport #">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="pDocTitle">Document Title *</label>
+                            <input type="text" id="pDocTitle" name="title" class="form-control" required maxlength="255" placeholder="e.g., Qatar ID 2026 or Passport Copy">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="pDocIssue">Issue Date</label>
+                            <input type="date" id="pDocIssue" name="issue_date" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="pDocExpiry">Expiry Date</label>
+                            <input type="date" id="pDocExpiry" name="expiry_date" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="pDocFile">Private File * (PDF, JPG, PNG, WEBP &middot; max 10 MB)</label>
+                            <input type="file" id="pDocFile" name="file" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="mp-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="mp-btn-rosegold">
+                        <i class="bx bx-upload"></i> {{ $isAdminPreview ? 'Upload & Verify' : 'Upload Document' }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
 
 @if (!$isAdminPreview)
 {{-- Change Password Modal --}}

@@ -106,6 +106,11 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::patch('/my-profile/leaves/{leave}/cancel', [StaffLeaveController::class, 'cancelPortalRequest'])
         ->whereNumber('leave')
         ->name('portal.leaves.cancel');
+    Route::post('/my-profile/documents', [StaffDocumentController::class, 'storeSelfUpload'])
+        ->name('portal.documents.store');
+    Route::delete('/my-profile/documents/{document}', [StaffDocumentController::class, 'destroySelfUpload'])
+        ->whereNumber('document')
+        ->name('portal.documents.destroy');
 
     // ---- Policy-Protected Private Staff Documents & Leave Certificates (ONLY Admin or exact owner; 403 otherwise) ----
     Route::get('/staff-documents/{document}/download', [StaffDocumentController::class, 'download'])
@@ -269,6 +274,7 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
 
             Route::get('/staffs/{staff}/documents', [StaffDocumentController::class, 'index'])->whereNumber('staff')->name('staff-documents.index');
             Route::post('/staffs/{staff}/documents', [StaffDocumentController::class, 'store'])->whereNumber('staff')->name('staff-documents.store');
+            Route::post('/staff-documents/{document}/verify', [StaffDocumentController::class, 'verify'])->whereNumber('document')->name('staff-documents.verify');
             Route::delete('/staff-documents/{document}', [StaffDocumentController::class, 'destroy'])->whereNumber('document')->name('staff-documents.destroy');
 
             Route::get('/staff-leaves/{leave}/conflicts', [StaffLeaveController::class, 'conflicts'])->whereNumber('leave')->name('staff-leaves.conflicts');

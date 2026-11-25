@@ -14,6 +14,7 @@ use App\Models\StaffLeave;
 use App\Models\User;
 use App\Support\StaffContractPdfGenerator;
 use App\Support\StaffKpiScorecardService;
+use App\Support\StaffServiceProductionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -23,7 +24,8 @@ use Illuminate\Support\Str;
 class StaffPortalController extends Controller
 {
     public function __construct(
-        private readonly StaffKpiScorecardService $scorecardService
+        private readonly StaffKpiScorecardService $scorecardService,
+        private readonly StaffServiceProductionService $productionService
     ) {}
 
     private const ALLOWED_TABS = ['overview', 'performance', 'skills', 'contracts', 'documents', 'leaves'];
@@ -295,6 +297,8 @@ class StaffPortalController extends Controller
 
         // ---- Dedicated Performance Tab (1-to-1 Single Source of Truth via StaffKpiScorecardService) ----
         $performanceScorecard = null;
+        $mtdProduction = null;
+        $isProductionEligible = $isSkillsEligible || $isSalonManager || $isSalonStaff;
         if ($activeTab === 'performance') {
             $effectiveViewer = $isAdminPreview
                 ? ($user->exists ? $user : $request->user())
@@ -308,10 +312,24 @@ class StaffPortalController extends Controller
                 weeklyEvaluations: $weeklyEvaluations,
                 myComplaints: $myComplaints
             );
+
+            // MTD Service Production: strictly for Salon Manager & Salon Staff (hidden for all Remote roles)
+            if ($isProductionEligible && !User::isRemoteRole($roleSlug) && $staff && !$staff->isRemote()) {
+                $mtdProduction = $this->productionService->buildForStaff($staff, $nowQatar);
+            }
         }
 
-        // ---- Documents Tab (ALL roles — Read-Only, strictly own private documents) ----
-        $documentsPayload = $this->buildDocumentsPayload($staff, $todayQatar);
+        // ---- Documents Tab (Personal Self-Upload + Admin Inline Upload & Verification) ----
+        /** @var User $actorUser */
+        $actorUser = $request->user();
+        $documentsPayload = $this->buildDocumentsPayload($staff, $todayQatar, $actorUser, $isAdminPreview);
+        $canUploadDocuments = $staff !== null && ($isAdminPreview ? $actorUser->isAdmin() : true);
+        $documentUploadUrl = ($isAdminPreview && $staff)
+            ? route('staff-documents.store', $staff)
+            : route('portal.documents.store');
+        $documentUploadCategories = $isAdminPreview
+            ? StaffDocument::CATEGORIES
+            : StaffDocument::SELF_UPLOAD_CATEGORIES;
 
         // ---- Leaves Tab (Salon Manager & Salon Staff ONLY) ----
         $leaveTypeFilter = strtolower(trim((string) $request->query('leave_type', 'all')));
@@ -360,12 +378,16 @@ class StaffPortalController extends Controller
             'offDaysPayload' => $offDaysPayload,
             'absenteesPayload' => $absenteesPayload,
             'performanceScorecard' => $performanceScorecard,
+            'mtdProduction' => $mtdProduction,
             'branchPendingComplaints' => $branchPendingComplaints,
             'myComplaints' => $myComplaints,
             'weeklyEvaluations' => $weeklyEvaluations,
             'deductionsPayload' => $deductionsPayload,
             'contractsPayload' => $contractsPayload,
             'documentsPayload' => $documentsPayload,
+            'canUploadDocuments' => $canUploadDocuments,
+            'documentUploadUrl' => $documentUploadUrl,
+            'documentUploadCategories' => $documentUploadCategories,
             'leavesPayload' => $leavesPayload,
             'todayQatarLabel' => $nowQatar->format('D, d M Y'),
         ];
@@ -991,18 +1013,27 @@ class StaffPortalController extends Controller
         ];
     }
 
-    private function buildDocumentsPayload(?Staff $staff, Carbon $todayQatar): array
+    private function buildDocumentsPayload(?Staff $staff, Carbon $todayQatar, User $viewer, bool $isAdminPreview): array
     {
         if (!$staff || !Schema::hasTable('staff_documents')) {
             return [];
         }
 
         return StaffDocument::query()
+            ->with(['uploader:id,name', 'verifier:id,name'])
             ->where('staff_id', $staff->id)
+            ->orderByRaw("CASE verification_status WHEN 'pending_review' THEN 0 ELSE 1 END ASC")
             ->orderByDesc('created_at')
             ->get()
-            ->map(function (StaffDocument $d) use ($todayQatar) {
+            ->map(function (StaffDocument $d) use ($todayQatar, $viewer, $isAdminPreview) {
                 $exp = $d->expiryStatus($todayQatar);
+                $ver = $d->verificationStatusBadge();
+                $isAdmin = $viewer->isAdmin();
+                $canDelete = $isAdmin
+                    || (!$isAdminPreview
+                        && $d->isPendingReview()
+                        && $d->uploaded_by !== null
+                        && (int) $d->uploaded_by === (int) $viewer->id);
 
                 return [
                     'id' => $d->id,
@@ -1013,10 +1044,19 @@ class StaffPortalController extends Controller
                     'issue_date_label' => $d->issue_date?->format('d M Y') ?? '—',
                     'expiry_date_label' => $d->expiry_date?->format('d M Y') ?? '—',
                     'expiry_status' => $exp,
+                    'verification_status' => $d->verification_status ?? StaffDocument::STATUS_VERIFIED,
+                    'verification_badge' => $ver,
+                    'is_pending_review' => $d->isPendingReview(),
                     'original_filename' => $d->original_filename,
                     'file_size_label' => $d->formattedFileSize(),
                     'view_url' => route('staff-documents.download', ['document' => $d->id, 'inline' => 1]),
                     'download_url' => route('staff-documents.download', ['document' => $d->id]),
+                    'can_verify' => $isAdmin && $d->isPendingReview(),
+                    'verify_url' => route('staff-documents.verify', ['document' => $d->id]),
+                    'can_delete' => $canDelete,
+                    'delete_url' => $isAdmin
+                        ? route('staff-documents.destroy', ['document' => $d->id])
+                        : route('portal.documents.destroy', ['document' => $d->id]),
                 ];
             })
             ->values()

@@ -27,8 +27,28 @@ class StaffDocumentPolicy
         return $user->isAdmin();
     }
 
-    public function delete(User $user, StaffDocument $document): bool
+    public function verify(User $user, StaffDocument $document): bool
     {
         return $user->isAdmin();
+    }
+
+    /**
+     * Admin may delete any document; an employee may ONLY delete their own
+     * self-uploaded document while it is still `pending_review`. Verified or
+     * HR-uploaded documents are strictly protected (HTTP 403).
+     */
+    public function delete(User $user, StaffDocument $document): bool
+    {
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        $ownStaffId = $user->staff()->value('id');
+
+        return $ownStaffId !== null
+            && (int) $ownStaffId === (int) $document->staff_id
+            && $document->isPendingReview()
+            && $document->uploaded_by !== null
+            && (int) $document->uploaded_by === (int) $user->id;
     }
 }
