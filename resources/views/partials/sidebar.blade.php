@@ -396,6 +396,23 @@
              </li>
          @endmoduleView
 
+         @php
+             $sbUser = auth()->user();
+             $showSidebarMyProfile = $sbUser && !$sbUser->isSalonStaff() && (
+                 in_array(strtolower((string) $sbUser->role), ['agent', 'manager', 'admin', 'owner', 'super_admin', 'staff'], true)
+                 || ($sbUser->relationLoaded('staff') ? $sbUser->staff !== null : $sbUser->staff()->exists())
+             );
+         @endphp
+         @if ($showSidebarMyProfile && \Illuminate\Support\Facades\Route::has('portal.profile'))
+             <li class="menu-divider my-2"></li>
+             <li class="menu-item {{ request()->routeIs('portal.*') ? 'active' : '' }}">
+                 <a href="{{ route('portal.profile') }}" class="menu-link">
+                     <i class="bx bx-user-circle me-2"></i>
+                     <div>My Profile</div>
+                 </a>
+             </li>
+         @endif
+
      </ul>
  </aside>
 

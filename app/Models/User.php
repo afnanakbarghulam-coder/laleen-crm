@@ -29,6 +29,7 @@ class User extends Authenticatable
         'marketing_specialist' => 'Marketing Specialist',
         'social_media_editor' => 'Social Media Editor',
         'staff' => 'Staff',
+        'salon_staff' => 'Salon Staff',
         'user' => 'User',
     ];
 
@@ -156,6 +157,22 @@ class User extends Authenticatable
             'ecommerce' => 'none',
             'legal_tasks' => 'none',
             'guide' => 'view',
+        ],
+        'salon_staff' => [
+            'dashboard' => 'none',
+            'command_center' => 'none',
+            'leads' => 'none',
+            'bookings' => 'none',
+            'calendar' => 'none',
+            'finance' => 'none',
+            'clients' => 'none',
+            'staff' => 'none',
+            'services' => 'none',
+            'products' => 'none',
+            'kpis' => 'none',
+            'ecommerce' => 'none',
+            'legal_tasks' => 'none',
+            'guide' => 'none',
         ],
         'user' => [
             'dashboard' => 'view',
@@ -362,6 +379,15 @@ class User extends Authenticatable
     }
 
     /**
+     * Determine whether this account is a self-service Salon Staff portal user
+     * (beautician / specialist) strictly isolated from operational CRM modules.
+     */
+    public function isSalonStaff(): bool
+    {
+        return strtolower(trim((string) $this->role)) === 'salon_staff';
+    }
+
+    /**
      * Admins always have full access to every module; everyone else is
      * governed by their per-module permission ('none', 'view', or 'edit'),
      * with safe backward-compatibility fallbacks for records whose saved
@@ -373,6 +399,10 @@ class User extends Authenticatable
     {
         if ($this->isAdmin()) {
             return 'edit';
+        }
+
+        if ($this->isSalonStaff()) {
+            return 'none';
         }
 
         $perms = is_array($this->permissions) ? $this->permissions : [];
@@ -428,6 +458,10 @@ class User extends Authenticatable
      */
     public function defaultLandingUrl(): string
     {
+        if ($this->isSalonStaff()) {
+            return Route::has('portal.profile') ? route('portal.profile') : '/my-profile';
+        }
+
         $candidates = [
             'dashboard' => 'dashboard',
             'kpis' => 'kpi.hub',

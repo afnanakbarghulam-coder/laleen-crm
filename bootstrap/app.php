@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             \App\Http\Middleware\EnsureActiveUser::class,
+            \App\Http\Middleware\RestrictSalonStaffToPortal::class,
         ]);
 
         $middleware->alias([
@@ -26,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'super-admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
             'module' => \App\Http\Middleware\EnsureModulePermission::class,
             'active' => \App\Http\Middleware\EnsureActiveUser::class,
+            'portal-isolated' => \App\Http\Middleware\RestrictSalonStaffToPortal::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

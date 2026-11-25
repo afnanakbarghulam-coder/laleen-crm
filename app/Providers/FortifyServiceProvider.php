@@ -6,6 +6,7 @@ use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Actions\Fortify\UpdateUserPassword;
 use App\Actions\Fortify\UpdateUserProfileInformation;
+use App\Http\Middleware\EnsureActiveUser;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Actions\RedirectIfTwoFactorAuthenticatable;
 use Laravel\Fortify\Fortify;
 
@@ -28,11 +30,21 @@ class FortifyServiceProvider extends ServiceProvider
             fn () => new class implements \Laravel\Fortify\Contracts\LoginResponse {
                 public function toResponse($request)
                 {
-                    $target = $request->user()?->defaultLandingUrl() ?? '/dashboard';
+                    $user = $request->user();
+                    $target = $user?->defaultLandingUrl() ?? '/dashboard';
 
-                    return $request->wantsJson()
-                        ? response()->json(['two_factor' => false])
-                        : redirect()->intended($target);
+                    if ($request->wantsJson()) {
+                        return response()->json([
+                            'two_factor' => false,
+                            'redirect' => $target,
+                        ]);
+                    }
+
+                    if ($user && $user->isSalonStaff()) {
+                        return redirect()->to($target);
+                    }
+
+                    return redirect()->intended($target);
                 }
             }
         );
@@ -53,7 +65,13 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::authenticateUsing(function (Request $request) {
             $user = User::where('email', $request->email)->first();
 
-            if ($user && Hash::check($request->password, $user->password) && $user->is_active) {
+            if ($user && Hash::check($request->password, $user->password)) {
+                if (!$user->is_active) {
+                    throw ValidationException::withMessages([
+                        Fortify::username() => [EnsureActiveUser::DEACTIVATED_MESSAGE],
+                    ]);
+                }
+
                 return $user;
             }
 

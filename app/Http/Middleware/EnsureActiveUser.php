@@ -9,6 +9,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureActiveUser
 {
+    public const DEACTIVATED_MESSAGE = 'Your account has been deactivated. Please contact management.';
+
     /**
      * Ensure authenticated web users remain active on every request.
      * Immediately logs out and invalidates the session if an account has been deactivated.
@@ -33,8 +35,14 @@ class EnsureActiveUser
             $request->session()->regenerateToken();
         }
 
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'message' => self::DEACTIVATED_MESSAGE,
+            ], 401);
+        }
+
         return redirect('/login')
-            ->withErrors(['email' => 'Your account has been deactivated.'])
-            ->with('error', 'Your account has been deactivated.');
+            ->withErrors(['email' => self::DEACTIVATED_MESSAGE])
+            ->with('error', self::DEACTIVATED_MESSAGE);
     }
 }

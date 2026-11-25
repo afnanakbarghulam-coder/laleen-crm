@@ -58,7 +58,7 @@
                         </div>
 
                         <h4 class="mb-1">Welcome Back! 👋</h4>
-                        <p class="mb-6">Sign in to manage your salon</p>
+                        <p class="mb-6">Sign in to Laleen Ops &amp; Staff Portal</p>
 
                         <!-- Laravel Fortify Login Form -->
                         <form method="POST" action="{{ route('login') }}" id="formAuthentication">

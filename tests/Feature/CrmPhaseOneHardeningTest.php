@@ -276,7 +276,7 @@ class CrmPhaseOneHardeningTest extends TestCase
         // Deactivated user with an active session hits any authenticated route -> logged out & redirected to /login
         $response = $this->actingAs($agent)->get(route('dashboard'));
         $response->assertRedirect('/login');
-        $response->assertSessionHas('error', 'Your account has been deactivated.');
+        $response->assertSessionHas('error', 'Your account has been deactivated. Please contact management.');
         $this->assertGuest();
 
         // Also test hitting a module-protected route while deactivated

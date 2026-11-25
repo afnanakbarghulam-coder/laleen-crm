@@ -978,6 +978,157 @@ class StaffController extends Controller
         $staff->update(['user_id' => $user->id]);
     }
 
+    /**
+     * Admin-only: Create a Self-Service Portal / CRM login directly from
+     * Staff Management -> Directory & Profiles and link it 1-to-1 to $staff.
+     */
+    public function createPortalLogin(Request $request, Staff $staff)
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can create staff portal logins.');
+
+        if ($staff->user_id && User::whereKey($staff->user_id)->exists()) {
+            $msg = 'This team member already has a portal login.';
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return redirect()->back()->with('error', $msg);
+        }
+
+        $allowedRoles = array_values(array_diff(User::validRoleSlugs(), ['admin']));
+        if ($request->user()->isAdmin()) {
+            $allowedRoles = User::validRoleSlugs();
+        }
+
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
+            'password' => ['required', 'string', 'min:8', 'max:128'],
+            'role' => ['required', Rule::in($allowedRoles)],
+        ]);
+
+        $user = DB::transaction(function () use ($staff, $validated) {
+            $created = User::create([
+                'name' => $staff->name,
+                'email' => strtolower(trim($validated['email'])),
+                'password' => Hash::make($validated['password']),
+                'role' => $validated['role'],
+                'permissions' => User::defaultPermissionsForRole($validated['role']),
+                'is_active' => true,
+            ]);
+
+            $staffUpdates = ['user_id' => $created->id];
+            if (empty($staff->email)) {
+                $staffUpdates['email'] = $created->email;
+            }
+            $staff->update($staffUpdates);
+
+            return $created;
+        });
+
+        $displayRole = $user->role === 'agent' ? 'Chat Agent' : $user->roleBadgeLabel();
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Portal login created for {$staff->name} ({$displayRole}).",
+                'user' => [
+                    'id' => $user->id,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                    'role_label' => $displayRole,
+                    'is_active' => (bool) $user->is_active,
+                ],
+            ], 201);
+        }
+
+        return redirect()->back()->with('success', "Portal login created for {$staff->name} ({$displayRole}).");
+    }
+
+    /**
+     * Admin-only: Toggle a linked staff member's portal login between Active and Disabled.
+     * Disabling immediately purges all stored DB sessions (and EnsureActiveUser blocks any active session).
+     */
+    public function togglePortalAccess(Request $request, Staff $staff)
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can manage staff portal access.');
+
+        $user = $staff->user_id ? ($staff->user ?? User::find($staff->user_id)) : null;
+        if (!$user) {
+            $msg = 'This team member does not have a portal login yet.';
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return redirect()->back()->with('error', $msg);
+        }
+
+        if ((int) $user->id === (int) $request->user()->id) {
+            $msg = 'You cannot disable your own account.';
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return redirect()->back()->with('error', $msg);
+        }
+
+        $user->is_active = !$user->is_active;
+        $user->save();
+
+        if (!$user->is_active && Schema::hasTable('sessions')) {
+            DB::table('sessions')->where('user_id', $user->id)->delete();
+        }
+
+        $statusWord = $user->is_active ? 'activated' : 'disabled';
+        $message = "Portal access {$statusWord} for {$staff->name}.";
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'is_active' => (bool) $user->is_active,
+                'message' => $message,
+            ]);
+        }
+
+        return redirect()->back()->with('success', $message);
+    }
+
+    /**
+     * Admin-only: Reset the password of a linked staff member's portal login.
+     */
+    public function resetPortalPassword(Request $request, Staff $staff)
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can reset staff portal passwords.');
+
+        $user = $staff->user_id ? ($staff->user ?? User::find($staff->user_id)) : null;
+        if (!$user) {
+            $msg = 'This team member does not have a portal login yet.';
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return redirect()->back()->with('error', $msg);
+        }
+
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'max:128'],
+        ]);
+
+        $user->forceFill([
+            'password' => Hash::make($validated['password']),
+        ])->save();
+
+        $message = "Password reset for {$staff->name}.";
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+            ]);
+        }
+
+        return redirect()->back()->with('success', $message);
+    }
+
     private function formatShiftTimeRange(string $start, string $end): string
     {
         $format = function (string $t): string {

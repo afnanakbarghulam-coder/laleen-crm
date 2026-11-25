@@ -260,6 +260,7 @@
                                         <option value="marketing_specialist">Marketing Specialist — ads, ecommerce &amp; leads</option>
                                         <option value="social_media_editor">Social Media Editor — reels, stories &amp; content</option>
                                         <option value="staff">Staff — calendar &amp; appointments only</option>
+                                        <option value="salon_staff">Salon Staff — self-service portal only (/my-profile)</option>
                                         <option value="user">User — limited read-only access</option>
                                     </select>
                                 </div>

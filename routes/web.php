@@ -57,6 +57,7 @@ use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StaffDeductionController;
 use App\Http\Controllers\StaffNoticeController;
 use App\Http\Controllers\StaffOvertimeController;
+use App\Http\Controllers\StaffPortalController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -88,7 +89,13 @@ Route::middleware('role:admin')->group(function () {
         ->name('staff-contracts.update');
 });
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'active'])->group(function () {
+    // ---- Laleen Staff Self-Service Portal (strictly scoped to auth()->user() — never accepts staff_id) ----
+    Route::get('/my-profile', [StaffPortalController::class, 'index'])->name('portal.profile');
+    Route::put('/my-profile/password', [StaffPortalController::class, 'updatePassword'])->name('portal.password.update');
+});
+
+Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
     Route::middleware('module:dashboard')->get('/dashboard', [UserController::class, 'dashboard'])->name('dashboard');
     Route::middleware(['active', 'module:guide'])->group(function () {
         Route::get('/guide', [GuideController::class, 'index'])->name('guide.index');
@@ -232,6 +239,13 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/staffs/{staff}/workspace', [StaffController::class, 'updateWorkspace'])->name('staffs.workspace.update');
         Route::delete('/staffs/{staff}', [StaffController::class, 'destroy'])->name('staffs.destroy');
         Route::post('/staff-payroll/post-to-finance', [StaffController::class, 'postPayrollToFinance'])->middleware('module:finance,edit')->name('staff.payroll.post-to-finance');
+
+        // ---- Admin-Only Staff Portal Access Management (Directory & Profiles) ----
+        Route::middleware('role:admin')->group(function () {
+            Route::post('/staffs/{staff}/portal-access', [StaffController::class, 'createPortalLogin'])->name('staffs.portal-access.store');
+            Route::patch('/staffs/{staff}/portal-access/toggle', [StaffController::class, 'togglePortalAccess'])->name('staffs.portal-access.toggle');
+            Route::patch('/staffs/{staff}/portal-access/reset-password', [StaffController::class, 'resetPortalPassword'])->name('staffs.portal-access.reset-password');
+        });
 
         // ---- Native Staff Contracts Engine (Admin Only) ----
         Route::post('/staff-contracts', [StaffContractController::class, 'store'])->name('staff-contracts.store');
@@ -610,4 +624,20 @@ Route::middleware(['auth'])->group(function () {
             Route::delete('/tasks/{legalTask}', [LegalTaskController::class, 'destroy'])->name('tasks.destroy');
         });
     });
+});
+
+// Ensure `salon_staff` users manually hitting any non-portal URL alias (e.g., /enhanced-calendar, /finance, /bookings, /staff-management)
+// receive strict HTTP 403 rather than leaking route existence, while normal users get standard 404.
+Route::fallback(function (\Illuminate\Http\Request $request) {
+    $user = $request->user();
+    if ($user && !$user->is_active) {
+        return \App\Http\Middleware\EnsureActiveUser::logoutDeactivated($request);
+    }
+    if ($user && $user->isSalonStaff()) {
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['message' => 'Access restricted to the Staff Self-Service Portal.'], 403);
+        }
+        abort(403, 'Access restricted to the Staff Self-Service Portal.');
+    }
+    abort(404);
 });

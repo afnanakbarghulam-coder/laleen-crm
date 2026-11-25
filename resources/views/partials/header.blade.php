@@ -119,6 +119,22 @@
                     </a>
 
                     <ul class="dropdown-menu dropdown-menu-end">
+                        @php
+                            $hdrUser = auth()->user();
+                            $showMyProfileLink = $hdrUser && (
+                                $hdrUser->isSalonStaff()
+                                || in_array(strtolower((string) $hdrUser->role), ['agent', 'manager', 'admin', 'owner', 'super_admin', 'staff', 'marketing_specialist', 'social_media_editor'], true)
+                                || ($hdrUser->relationLoaded('staff') ? $hdrUser->staff !== null : $hdrUser->staff()->exists())
+                            );
+                        @endphp
+                        @if ($showMyProfileLink && \Illuminate\Support\Facades\Route::has('portal.profile'))
+                            <li>
+                                <a class="dropdown-item" href="{{ route('portal.profile') }}">
+                                    <i class="bx bx-id-card me-2"></i> My Profile
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                        @endif
                         <li>
                             <form method="POST" action="{{ route('logout') }}">
                                 @csrf
