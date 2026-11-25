@@ -4,7 +4,8 @@
 
 @section('content')
     @php
-        $rolesMap = \App\Models\User::ROLES;
+        $rolesMap = \App\Models\User::ACTIVE_ROLES;
+        $legacyRolesMap = \App\Models\User::LEGACY_ROLES;
         $selectedFilterRole = (string) request('role', '');
         $activeView = $activeView ?? 'all';
 
@@ -21,18 +22,22 @@
             ];
         }
 
-        $formatBranchLabel = static function (?string $branch, ?string $role = null, bool $bookable = true): string {
+        $formatBranchLabel = static function (?string $branch, ?string $role = null, bool $bookable = true, bool $isRemote = false): string {
+            if ($isRemote) {
+                return 'Remote';
+            }
+
             $cleanRole = strtolower(trim((string) $role));
             $raw = strtolower(trim((string) $branch));
-            if ($cleanRole === 'agent' && (!$bookable || $raw === '')) {
-                return 'Remote / HQ';
+            if ($raw === '' || $raw === 'remote' || ($cleanRole === 'agent' && !$bookable)) {
+                return 'Remote';
             }
 
             return match ($raw) {
                 'old_airport' => 'Old Airport',
                 'wakrah', 'al_wakrah' => 'Al Wakrah',
                 'both' => 'Old Airport & Al Wakrah',
-                default => 'Remote / HQ',
+                default => 'Remote',
             };
         };
 
@@ -338,9 +343,14 @@
                             <option value="">All Roles</option>
                             @foreach ($rolesMap as $rKey => $rLabel)
                                 <option value="{{ $rKey }}" {{ $selectedFilterRole === $rKey ? 'selected' : '' }}>
-                                    {{ $rKey === 'agent' ? 'Chat Agent' : $rLabel }}
+                                    {{ $rLabel }}
                                 </option>
                             @endforeach
+                            @if (\App\Models\User::isLegacyRole($selectedFilterRole))
+                                <option value="{{ $selectedFilterRole }}" selected>
+                                    {{ $legacyRolesMap[$selectedFilterRole] ?? $selectedFilterRole }} (Legacy)
+                                </option>
+                            @endif
                         </select>
                     </div>
                 @endif
@@ -387,14 +397,14 @@
                                             <div>
                                                 <div class="fw-semibold" style="color: #f8efe6;">{{ $st->name }}</div>
                                                 <div class="small" style="color: #9e8780;">
-                                                    Suggested: {{ $st->bookable ? 'Salon Staff' : 'Chat Agent' }}
+                                                    Suggested: {{ ($st->bookable && !$st->isRemote()) ? 'Salon Staff' : 'Chat Agent' }}
                                                 </div>
                                             </div>
                                         </div>
                                     </td>
                                     <td>
-                                        <div style="color: #f5ebe6; font-size: 13px;">{{ $formatBranchLabel($st->branch, null, (bool) $st->bookable) }}</div>
-                                        <div class="small" style="color: #9e8780;">{{ $st->bookable ? 'Bookable Specialist' : 'Operations / Support' }}</div>
+                                        <div style="color: #f5ebe6; font-size: 13px;">{{ $st->location_label }}</div>
+                                        <div class="small" style="color: #9e8780;">{{ ($st->bookable && !$st->isRemote()) ? 'Bookable Specialist' : 'Remote / Operations' }}</div>
                                     </td>
                                     <td>
                                         <div class="small" style="color: #cbb8b0;">{{ $st->email ?: '—' }}</div>
@@ -471,7 +481,12 @@
                                     </td>
                                     <td>
                                         <div class="d-flex flex-column align-items-start gap-1">
-                                            <span class="sa-role-badge role-{{ $user->role }}">{{ $displayRole }}</span>
+                                            <span class="sa-role-badge role-{{ $user->role }}">
+                                                {{ $displayRole }}
+                                                @if (\App\Models\User::isLegacyRole($user->role))
+                                                    <span class="ms-1" style="opacity:0.78; font-weight:500;">(Legacy)</span>
+                                                @endif
+                                            </span>
                                             <span class="small" style="color: #9e8780;">{{ $scopeSubtitle }}</span>
                                         </div>
                                     </td>
@@ -480,7 +495,7 @@
                                             <div class="d-flex flex-column gap-1">
                                                 <div class="fw-medium" style="color: #f5ebe6; font-size: 13px;">
                                                     {{ $linkedStaff->name }}
-                                                    <span style="color: #9e8780;">&middot; {{ $formatBranchLabel($linkedStaff->branch, $user->role, (bool) $linkedStaff->bookable) }}</span>
+                                                    <span style="color: #9e8780;">&middot; {{ $linkedStaff->location_label }}</span>
                                                 </div>
                                             </div>
                                         @else

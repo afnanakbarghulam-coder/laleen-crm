@@ -263,7 +263,7 @@ class UnifiedRolesAndAccessHubTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('portal.admin-preview', ['staff' => $this->linkedSpecialist->id, 'tab' => 'leaves']))
             ->assertOk()
-            ->assertSee('Coming soon');
+            ->assertSee('Annual Leave');
 
         // Non-admins (Chat Agent, Manager, Salon Staff) ALL receive strict HTTP 403
         $this->actingAs($this->agentUser)
@@ -280,5 +280,132 @@ class UnifiedRolesAndAccessHubTest extends TestCase
             ->assertOk();
         $ownProfile->assertSee('Sara Beautician');
         $ownProfile->assertDontSee('Aasma Stylist');
+    }
+
+    public function test_chat_agents_default_to_remote_display_cleanly_and_are_strictly_excluded_from_enhanced_calendar(): void
+    {
+        // 1. 1-click "Create Staff Profile" for Chat Agent (Zoya Ali) with NO branch payload -> auto-Remote (never Old Airport)
+        $zoyaRes = $this->actingAs($this->admin)
+            ->postJson(route('users.create-staff-profile', $this->agentUser), []);
+        $zoyaRes->assertCreated()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('staff.is_remote', true)
+            ->assertJsonPath('staff.branch', null)
+            ->assertJsonPath('staff.location_label', 'Remote')
+            ->assertJsonPath('staff.bookable', false);
+
+        $zoyaStaff = Staff::where('user_id', $this->agentUser->id)->firstOrFail();
+        $this->assertTrue($zoyaStaff->isRemote());
+        $this->assertNull($zoyaStaff->branch);
+        $this->assertSame('Remote', $zoyaStaff->location_label);
+        $this->assertFalse((bool) $zoyaStaff->bookable);
+
+        // 2. "+ Add Login" with "Also create linked Staff HR Profile" for a new Chat Agent (Areeba) -> auto-Remote
+        $areebaRes = $this->actingAs($this->admin)->postJson(route('users.store'), [
+            'name' => 'Areeba Remote',
+            'email' => 'areeba.remote@laleen.qa',
+            'password' => 'AreebaPass123!',
+            'role' => 'agent',
+            'create_staff_profile' => 1,
+            // Even if stale 'old_airport' is submitted for a Chat Agent, backend enforces Remote
+            'staff_branch' => 'old_airport',
+        ]);
+        $areebaRes->assertCreated()->assertJsonPath('success', true);
+
+        $areebaUser = User::where('email', 'areeba.remote@laleen.qa')->firstOrFail();
+        $areebaStaff = Staff::where('user_id', $areebaUser->id)->firstOrFail();
+        $this->assertTrue($areebaStaff->isRemote());
+        $this->assertNull($areebaStaff->branch);
+        $this->assertSame('Remote', $areebaStaff->location_label);
+        $this->assertFalse((bool) $areebaStaff->bookable);
+
+        // 3. Salon Staff created via "+ Add Login" requires/defaults to a physical branch (Old Airport / Al Wakrah)
+        $salonRes = $this->actingAs($this->admin)->postJson(route('users.store'), [
+            'name' => 'Mina Stylist',
+            'email' => 'mina.stylist@laleen.qa',
+            'password' => 'MinaPass123!',
+            'role' => 'salon_staff',
+            'create_staff_profile' => 1,
+            'staff_branch' => 'wakrah',
+        ]);
+        $salonRes->assertCreated()->assertJsonPath('success', true);
+        $minaStaff = Staff::where('email', 'mina.stylist@laleen.qa')->firstOrFail();
+        $this->assertFalse($minaStaff->isRemote());
+        $this->assertSame('wakrah', $minaStaff->branch);
+        $this->assertSame('Al Wakrah', $minaStaff->location_label);
+        $this->assertTrue((bool) $minaStaff->bookable);
+
+        // 4. Clean "Remote" display across Roles & Access, Team Directory (including ?branch=remote filter),
+        //    Shifts, Payroll, Deductions, and Admin Preview + /my-profile (zero null-branch errors!)
+        $usersHtml = $this->actingAs($this->admin)->get(route('users.index'))->assertOk()->getContent();
+        $this->assertStringContainsString('Zoya Ali', $usersHtml);
+        $this->assertStringContainsString('Areeba Remote', $usersHtml);
+        $this->assertStringContainsString('&middot; Remote', $usersHtml);
+
+        $dirRemoteHtml = $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'directory', 'branch' => 'remote']))
+            ->assertOk()
+            ->getContent();
+        preg_match('/<table class="table team-table[^"]*">.*?<\/table>/s', $dirRemoteHtml, $remoteTable);
+        $this->assertNotEmpty($remoteTable[0] ?? '');
+        $this->assertStringContainsString('Zoya Ali', $remoteTable[0]);
+        $this->assertStringContainsString('Areeba Remote', $remoteTable[0]);
+        $this->assertStringContainsString('Remote', $remoteTable[0]);
+        $this->assertStringNotContainsString('Mina Stylist', $remoteTable[0]);
+
+        $dirOldAirportHtml = $this->actingAs($this->admin)
+            ->get(route('staffs.index', ['tab' => 'directory', 'branch' => 'old_airport']))
+            ->assertOk()
+            ->getContent();
+        preg_match('/<table class="table team-table[^"]*">.*?<\/table>/s', $dirOldAirportHtml, $oaTable);
+        $this->assertNotEmpty($oaTable[0] ?? '');
+        $this->assertStringContainsString('Aasma Stylist', $oaTable[0]);
+        $this->assertStringNotContainsString('Zoya Ali', $oaTable[0]);
+        $this->assertStringNotContainsString('Areeba Remote', $oaTable[0]);
+
+        // Shifts & Ops, Payroll, and Deductions tabs render 200 OK with Remote (null branch) staff present
+        $this->actingAs($this->admin)->get(route('staffs.index', ['tab' => 'shifts']))->assertOk()->assertSee('Remote');
+        $this->actingAs($this->admin)->get(route('staffs.index', ['tab' => 'shifts', 'shift_branch' => 'remote']))->assertOk()->assertSee('Zoya Ali');
+        $this->actingAs($this->admin)->get(route('staffs.index', ['tab' => 'payroll']))->assertOk();
+        $this->actingAs($this->admin)->get(route('staffs.index', ['tab' => 'deductions']))->assertOk();
+
+        // Admin Portal Preview & Chat Agent's own /my-profile display "Remote" (NOT "Old Airport")
+        $areebaPreview = $this->actingAs($this->admin)
+            ->get(route('portal.admin-preview', $areebaStaff))
+            ->assertOk();
+        $areebaPreview->assertSee('Work Location');
+        $areebaPreview->assertSee('Remote');
+        $areebaPreview->assertDontSee('Old Airport');
+
+        $zoyaOwnProfile = $this->actingAs($this->agentUser)->get('/my-profile')->assertOk();
+        $zoyaOwnProfile->assertSee('Remote');
+        $zoyaOwnProfile->assertDontSee('Old Airport');
+
+        // 5. Strict Enhanced Calendar Isolation: neither Zoya nor Areeba appears in Old Airport or Al Wakrah
+        //    calendar grid columns OR bookable specialist catalogs (even if bookable were manually tampered to true!)
+        DB::table('staff')->where('id', $zoyaStaff->id)->update(['bookable' => true]);
+
+        foreach (['old_airport', 'wakrah'] as $salonBranch) {
+            $calData = $this->actingAs($this->admin)
+                ->getJson('/appointments-calendar-data?branch=' . $salonBranch . '&date=2026-11-25')
+                ->assertOk()
+                ->json();
+
+            $columnNames = collect($calData['staffs'] ?? [])->pluck('name')->all();
+            $this->assertNotContains('Zoya Ali', $columnNames);
+            $this->assertNotContains('Areeba Remote', $columnNames);
+        }
+
+        // Enhanced Calendar HTML bookable specialist lists also exclude Zoya & Areeba
+        $activeStaffNames = Staff::active()->pluck('name')->all();
+        $this->assertNotContains('Zoya Ali', $activeStaffNames);
+        $this->assertNotContains('Areeba Remote', $activeStaffNames);
+        $this->assertContains('Mina Stylist', $activeStaffNames);
+
+        // BookingConflictValidator rejects remote staff for physical salon branches
+        $validator = app(\App\Support\BookingConflictValidator::class);
+        $this->assertFalse($validator->staffMatchesBranch($zoyaStaff->fresh(), 'old_airport'));
+        $this->assertFalse($validator->staffMatchesBranch($areebaStaff->fresh(), 'wakrah'));
+        $this->assertTrue($validator->staffMatchesBranch($minaStaff->fresh(), 'wakrah'));
     }
 }

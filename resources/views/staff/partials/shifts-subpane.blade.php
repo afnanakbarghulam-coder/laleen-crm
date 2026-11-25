@@ -148,6 +148,10 @@
            class="shift-branch-pill {{ $selectedBranch === 'both' ? 'active' : '' }}">
             Both Branches
         </a>
+        <a href="{{ route('staffs.index', ['tab' => 'shifts', 'shift_branch' => 'remote', 'shift_week' => $wStart->format('Y-m-d')]) }}"
+           class="shift-branch-pill {{ $selectedBranch === 'remote' ? 'active' : '' }}">
+            Remote
+        </a>
     </div>
 
     <div class="d-flex align-items-center gap-2">
@@ -182,10 +186,14 @@
                 <tr>
                     <td class="roster-member-col">
                         <div class="roster-member">
-                            <img class="roster-avatar" src="{{ $row['staff']->profile_picture ? asset(str_replace('\\', '/', $row['staff']->profile_picture)) : asset('design/sneat-admin-template/assets/img/avatars/1.png') }}">
+                            @include('partials.avatar', [
+                                'src' => $row['staff']->profile_picture,
+                                'name' => $row['staff']->name,
+                                'size' => 34,
+                            ])
                             <div class="flex-grow-1">
                                 <div class="roster-member-name">{{ $row['staff']->name }}</div>
-                                <div class="roster-member-hours">{{ $row['weekly_hours'] }}h &bull; {{ $row['staff']->branch === 'wakrah' ? 'Al Wakrah' : ($row['staff']->branch === 'old_airport' ? 'Old Airport' : 'Both') }}</div>
+                                <div class="roster-member-hours">{{ $row['weekly_hours'] }}h &bull; {{ $row['staff']->location_label }}</div>
                             </div>
                             @moduleEdit('staff_management')
                                 <button type="button" class="roster-edit-btn shift-edit-btn" data-staff-id="{{ $row['staff']->id }}" title="Edit shift schedule">

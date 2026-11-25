@@ -2140,7 +2140,7 @@
                             <select id="filterStaff" class="cal-filter-select">
                                 <option value="">All Team Members</option>
                                 @foreach ($staffs as $staff)
-                                    <option value="{{ $staff->id }}" data-branch="{{ $staff->branch ?: 'both' }}">{{ $staff->name }}</option>
+                                    <option value="{{ $staff->id }}" data-branch="{{ $staff->branch_key }}">{{ $staff->name }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -2390,7 +2390,7 @@
                         <select id="editSvcStaff" class="form-select form-select-sm">
                             <option value="">Unassigned</option>
                             @foreach ($staffs as $staff)
-                                <option value="{{ $staff->id }}" data-branch="{{ $staff->branch ?: 'both' }}">{{ $staff->name }}</option>
+                                <option value="{{ $staff->id }}" data-branch="{{ $staff->branch_key }}">{{ $staff->name }}</option>
                             @endforeach
                         </select>
 
@@ -2438,7 +2438,7 @@
                         <select id="upsellStaff" class="form-select form-select-sm mb-2">
                             <option value="">Select staff member</option>
                             @foreach ($activeStaffs as $staff)
-                                <option value="{{ $staff->id }}" data-branch="{{ $staff->branch ?: 'both' }}">{{ $staff->name }}</option>
+                                <option value="{{ $staff->id }}" data-branch="{{ $staff->branch_key }}">{{ $staff->name }}</option>
                             @endforeach
                         </select>
 
@@ -2502,7 +2502,7 @@
                     <select id="drawerRescheduleStaff" class="form-select form-select-sm mt-2">
                         <option value="">Unassigned</option>
                         @foreach ($staffs as $staff)
-                            <option value="{{ $staff->id }}" data-branch="{{ $staff->branch ?: 'both' }}">{{ $staff->name }}</option>
+                            <option value="{{ $staff->id }}" data-branch="{{ $staff->branch_key }}">{{ $staff->name }}</option>
                         @endforeach
                     </select>
                     <div class="d-flex gap-2 mt-2">
@@ -2545,7 +2545,7 @@
                             <select name="staff_id" id="blockStaffSelect" class="form-select" required>
                                 <option value="">-- Select --</option>
                                 @foreach ($staffs as $staff)
-                                    <option value="{{ $staff->id }}" data-branch="{{ $staff->branch ?: 'both' }}">{{ $staff->name }}</option>
+                                    <option value="{{ $staff->id }}" data-branch="{{ $staff->branch_key }}">{{ $staff->name }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -2669,8 +2669,9 @@
             function getEligibleStaff(branch, serviceId, serviceName, allStaffs) {
                 const b = normBranch(branch);
                 const roster = (Array.isArray(allStaffs) ? allStaffs : []).filter(s => {
-                    const sb = s.branch ? normBranch(s.branch) : 'both';
-                    return !s.branch || s.branch === 'both' || sb === b;
+                    if (!s.branch || s.branch === 'remote' || s.is_remote) return false;
+                    const sb = normBranch(s.branch);
+                    return s.branch === 'both' || sb === b;
                 });
                 const skilled = roster.filter(s => staffHasServiceSkill(s, serviceId, serviceName));
                 if (skilled.length > 0) {
@@ -2757,8 +2758,18 @@
                 if (!staff) return { state: 'off', kind: 'day_off', suffix: ' (Unavailable)', isOvertime: false, overtimeMinutes: 0, shiftEnd: null, endHHMM: '' };
                 const sid = String(staff.id);
                 const offMap = (daySnapshot && daySnapshot.off) || {};
-                if (offMap[sid] || offMap[staff.id]) {
-                    return { state: 'off', kind: 'day_off', suffix: ' (Day Off)', isOvertime: false, overtimeMinutes: 0, shiftEnd: null, endHHMM: '' };
+                const offReason = offMap[sid] || offMap[staff.id];
+                if (offReason) {
+                    const isOnLeave = /leave/i.test(String(offReason));
+                    return {
+                        state: 'off',
+                        kind: isOnLeave ? 'on_leave' : 'day_off',
+                        suffix: isOnLeave ? ' (On Leave)' : ' (Day Off)',
+                        isOvertime: false,
+                        overtimeMinutes: 0,
+                        shiftEnd: null,
+                        endHHMM: ''
+                    };
                 }
 
                 if (startMin === null || endMin === null) {
@@ -3112,17 +3123,19 @@
     </script>
 
     @php
-        $drawerStaffsCatalog = collect($activeStaffs ?? $staffs ?? [])->map(fn($s) => [
-            'id' => $s->id,
-            'name' => $s->name,
-            'branch' => $s->branch ?: 'both',
-            'skill_ids' => $s->relationLoaded('services')
-                ? $s->services->pluck('id')->map(fn($id) => (int) $id)->values()
-                : [],
-            'skills' => $s->relationLoaded('services')
-                ? $s->services->pluck('name')->values()
-                : [],
-        ])->values();
+        $drawerStaffsCatalog = collect($activeStaffs ?? $staffs ?? [])
+            ->reject(fn($s) => method_exists($s, 'isRemote') ? $s->isRemote() : (bool) ($s->is_remote ?? empty($s->branch)))
+            ->map(fn($s) => [
+                'id' => $s->id,
+                'name' => $s->name,
+                'branch' => $s->branch,
+                'skill_ids' => $s->relationLoaded('services')
+                    ? $s->services->pluck('id')->map(fn($id) => (int) $id)->values()
+                    : [],
+                'skills' => $s->relationLoaded('services')
+                    ? $s->services->pluck('name')->values()
+                    : [],
+            ])->values();
     @endphp
 
     @moduleEdit('bookings')
@@ -3164,7 +3177,14 @@
             const normBranch = normalizeCalendarBranch(branchKey) || DEFAULT_BRANCH;
             Array.from(selectEl.options).forEach(opt => {
                 if (!opt.value) return;
-                const optBranch = normalizeCalendarBranch(opt.dataset.branch) || opt.dataset.branch || 'both';
+                const rawBranch = String(opt.dataset.branch || '').trim().toLowerCase();
+                if (!rawBranch || rawBranch === 'remote') {
+                    const keep = keepStaffId && String(opt.value) === String(keepStaffId);
+                    opt.hidden = !keep;
+                    opt.disabled = !keep;
+                    return;
+                }
+                const optBranch = normalizeCalendarBranch(rawBranch) || rawBranch;
                 const matches = optBranch === 'both'
                     || optBranch === normBranch
                     || (keepStaffId && String(opt.value) === String(keepStaffId));
@@ -4595,7 +4615,7 @@
             }
 
             const drawerBranchKey = normalizeCalendarBranch(a.branch_raw) || state.branch;
-            const branchStaffs = DRAWER_STAFFS_CATALOG.filter(st => !st.branch || st.branch === 'both' || normalizeCalendarBranch(st.branch) === drawerBranchKey);
+            const branchStaffs = DRAWER_STAFFS_CATALOG.filter(st => st.branch && st.branch !== 'remote' && (st.branch === 'both' || normalizeCalendarBranch(st.branch) === drawerBranchKey));
 
             drawerComboDrafts = {};
             pkgs.forEach(pkg => {

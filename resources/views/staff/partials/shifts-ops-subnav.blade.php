@@ -58,6 +58,19 @@
             data-so-sub="shifts">
             ⏰ Scheduled Shifts
         </button>
+        <a href="{{ route('staffs.index', ['tab' => 'attendance']) }}"
+            class="ui-chip so-sub-pill {{ $activeSub === 'attendance' ? 'active' : '' }}">
+            📋 Attendance Log
+        </a>
+        @if ($isAdminViewer ?? auth()->user()?->isAdmin())
+            <a href="{{ route('staffs.index', ['tab' => 'leaves']) }}"
+                class="ui-chip so-sub-pill {{ $activeSub === 'leaves' ? 'active' : '' }}">
+                🌿 Leave Requests
+                @if (($pendingLeavesCount ?? 0) > 0)
+                    <span class="badge rounded-pill ms-1" style="background:#f59e0b; color:#1c110f; font-size:10.5px; font-weight:700;">{{ $pendingLeavesCount }}</span>
+                @endif
+            </a>
+        @endif
         <button type="button"
             class="ui-chip so-sub-pill {{ $activeSub === 'ops_tracker' ? 'active' : '' }}"
             data-so-sub="ops_tracker">
@@ -68,6 +81,19 @@
             class="ui-chip so-sub-pill {{ $activeSub === 'shifts' ? 'active' : '' }}">
             ⏰ Scheduled Shifts
         </a>
+        <a href="{{ route('staffs.index', ['tab' => 'attendance']) }}"
+            class="ui-chip so-sub-pill {{ $activeSub === 'attendance' ? 'active' : '' }}">
+            📋 Attendance Log
+        </a>
+        @if ($isAdminViewer ?? auth()->user()?->isAdmin())
+            <a href="{{ route('staffs.index', ['tab' => 'leaves']) }}"
+                class="ui-chip so-sub-pill {{ $activeSub === 'leaves' ? 'active' : '' }}">
+                🌿 Leave Requests
+                @if (($pendingLeavesCount ?? 0) > 0)
+                    <span class="badge rounded-pill ms-1" style="background:#f59e0b; color:#1c110f; font-size:10.5px; font-weight:700;">{{ $pendingLeavesCount }}</span>
+                @endif
+            </a>
+        @endif
         <a href="{{ route('staff.ops-tracker.index') }}"
             class="ui-chip so-sub-pill {{ $activeSub === 'ops_tracker' ? 'active' : '' }}">
             ⚡ Ops &amp; Action Tracker

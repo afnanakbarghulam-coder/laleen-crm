@@ -310,7 +310,7 @@ class UserController extends Controller
         $unlinkedStaff = $unlinkedStaffQuery->get();
 
         $allLinkableStaff = Staff::orderBy('name')
-            ->get(['id', 'name', 'email', 'phone', 'branch', 'bookable', 'user_id', 'profile_picture', 'availability_status']);
+            ->get(['id', 'name', 'email', 'phone', 'branch', 'is_remote', 'bookable', 'user_id', 'profile_picture', 'availability_status']);
 
         $pendingOwnerActionCount = 0;
         try {
@@ -719,6 +719,9 @@ class UserController extends Controller
                     'id' => $linked->id,
                     'name' => $linked->name,
                     'branch' => $linked->branch,
+                    'branch_key' => $linked->branch_key,
+                    'is_remote' => $linked->isRemote(),
+                    'location_label' => $linked->location_label,
                     'bookable' => (bool) $linked->bookable,
                 ] : null,
             ]);
@@ -758,6 +761,9 @@ class UserController extends Controller
                     'id' => $staff->id,
                     'name' => $staff->name,
                     'branch' => $staff->branch,
+                    'branch_key' => $staff->branch_key,
+                    'is_remote' => $staff->isRemote(),
+                    'location_label' => $staff->location_label,
                     'bookable' => (bool) $staff->bookable,
                     'preview_url' => route('portal.admin-preview', $staff),
                 ],
@@ -773,12 +779,38 @@ class UserController extends Controller
         $firstName = $parts[0] ?? $user->name;
         $lastName = $parts[1] ?? null;
 
-        $isSalonStaff = $user->isSalonStaff();
-        $isRemoteRole = in_array(strtolower((string) $user->role), ['agent', 'marketing_specialist', 'social_media_editor'], true);
+        $role = strtolower(trim((string) $user->role));
+        $normalizedRequested = strtolower(trim($requestedBranch));
+        $isRemoteRole = Staff::isRemoteRole($role);
+        $isPhysicalSalonRole = in_array($role, ['salon_staff', 'salon_manager', 'manager', 'staff'], true);
 
-        $branch = in_array($requestedBranch, ['old_airport', 'wakrah', 'both'], true)
-            ? $requestedBranch
-            : 'old_airport';
+        if ($isRemoteRole) {
+            // All remote roles (agent, sales_coordinator, ops_lead, marketing_specialist, social_media_editor)
+            // always default to Remote (branch = null, is_remote = true, bookable = false)
+            $isRemote = true;
+            $branch = null;
+            $bookable = false;
+        } elseif ($isPhysicalSalonRole) {
+            // Salon Staff / Salon Managers require/default a physical salon branch
+            $isRemote = false;
+            $branch = in_array($normalizedRequested, Staff::PHYSICAL_BRANCHES, true)
+                ? $normalizedRequested
+                : 'old_airport';
+            $bookable = in_array($role, ['salon_staff', 'staff'], true);
+        } elseif ($normalizedRequested === 'remote') {
+            $isRemote = true;
+            $branch = null;
+            $bookable = false;
+        } elseif (in_array($normalizedRequested, Staff::PHYSICAL_BRANCHES, true)) {
+            $isRemote = false;
+            $branch = $normalizedRequested;
+            $bookable = false;
+        } else {
+            // Non-salon roles (Admin, etc.) without a physical branch default to Remote
+            $isRemote = true;
+            $branch = null;
+            $bookable = false;
+        }
 
         return Staff::create([
             'name' => $user->name,
@@ -786,7 +818,8 @@ class UserController extends Controller
             'last_name' => $lastName,
             'email' => $user->email,
             'branch' => $branch,
-            'bookable' => $isSalonStaff && !$isRemoteRole && $requestedBranch !== 'remote',
+            'is_remote' => $isRemote,
+            'bookable' => $bookable,
             'availability_status' => 'present',
             'employment_type' => 'full_time',
             'user_id' => $user->id,

@@ -148,6 +148,13 @@ class KpiStaffEvaluation extends Model
             return null;
         }
 
+        if ($cleanRole === 'salon_manager') {
+            $staffBranch = strtolower(trim((string) ($user->staff?->branch ?? '')));
+            if (in_array($staffBranch, ['old_airport', 'wakrah'], true)) {
+                return $staffBranch;
+            }
+        }
+
         return self::defaultBranchFor($user);
     }
 }

@@ -1096,7 +1096,8 @@
         function bkStaffForBranch(branch) {
             const norm = bkNormalizeBranchKey(branch);
             return (bkAllActiveStaff || []).filter(s => {
-                if (!norm || !s.branch || s.branch === 'both') return true;
+                if (!s.branch || s.branch === 'remote' || s.is_remote) return false;
+                if (!norm || s.branch === 'both') return true;
                 return bkNormalizeBranchKey(s.branch) === norm;
             });
         }

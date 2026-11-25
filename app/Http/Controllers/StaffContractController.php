@@ -1199,13 +1199,15 @@ class StaffContractController extends Controller
         $salonMembers = $allStaff
             ->filter(fn (Staff $s) => !$s->end_date || $s->end_date->gte($todayDate) || (int) $s->id === (int) $contract->staff_id)
             ->map(function (Staff $s) {
-                $branchKey = array_key_exists((string) $s->branch, StaffContract::BRANCHES)
-                    ? (string) $s->branch
-                    : 'old_airport';
+                $branchKey = $s->isRemote()
+                    ? 'remote'
+                    : (array_key_exists((string) $s->branch, StaffContract::BRANCHES)
+                        ? (string) $s->branch
+                        : 'old_airport');
 
                 return [
                     'key' => 'staff:' . $s->id,
-                    'label' => $s->name . ' — ' . (StaffContract::BRANCHES[$branchKey] ?? 'Salon Staff'),
+                    'label' => $s->name . ' — ' . ($s->isRemote() ? 'Remote' : (StaffContract::BRANCHES[$branchKey] ?? 'Salon Staff')),
                 ];
             })
             ->values()

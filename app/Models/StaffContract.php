@@ -387,11 +387,22 @@ EOT;
         $perms = is_array($user->permissions) ? $user->permissions : [];
 
         // Ops Lead / Operations
-        if (preg_match('/\b(arbab|ops|operations)\b/i', $haystack)) {
+        if ($role === 'ops_lead' || preg_match('/\b(arbab|ops|operations)\b/i', $haystack)) {
             return [
-                'tag' => 'Ops',
+                'tag' => 'Ops Lead',
                 'template_key' => 'remote_chat_creative',
-                'role_title' => 'Operations Lead',
+                'role_title' => 'Ops Lead',
+                'branch' => 'remote',
+                'currency' => 'PKR',
+            ];
+        }
+
+        // Sales Coordinator
+        if ($role === 'sales_coordinator') {
+            return [
+                'tag' => 'Sales Coordinator',
+                'template_key' => 'remote_chat_creative',
+                'role_title' => 'Sales Coordinator',
                 'branch' => 'remote',
                 'currency' => 'PKR',
             ];
@@ -448,14 +459,14 @@ EOT;
             ];
         }
 
-        // Branch Manager
-        if ($role === 'manager') {
+        // Salon Manager / Legacy Branch Manager
+        if (in_array($role, ['salon_manager', 'manager'], true)) {
             $inferredBranch = preg_match('/\b(wakrah|rhea)\b/i', $haystack) ? 'wakrah' : 'old_airport';
 
             return [
-                'tag' => 'Branch Manager',
+                'tag' => $role === 'salon_manager' ? 'Salon Manager' : 'Branch Manager',
                 'template_key' => 'branch_manager',
-                'role_title' => 'Branch Manager',
+                'role_title' => $role === 'salon_manager' ? 'Salon Manager' : 'Branch Manager',
                 'branch' => $inferredBranch,
                 'currency' => 'QAR',
             ];

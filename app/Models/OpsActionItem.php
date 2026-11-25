@@ -193,7 +193,7 @@ class OpsActionItem extends Model
             return 'owner';
         }
 
-        if ($cleanRole === 'manager' || preg_match('/\b(ops\s*lead|operations\s*lead|ops|manager)\b/i', $cleanName)) {
+        if ($cleanRole === 'ops_lead' || $cleanRole === 'manager' || preg_match('/\b(ops\s*lead|operations\s*lead|ops|manager)\b/i', $cleanName)) {
             return 'ops_lead';
         }
 
@@ -397,7 +397,7 @@ class OpsActionItem extends Model
             return false;
         }
 
-        return static::isAdminOrOwner($user) || static::isArbab($user);
+        return static::isAdminOrOwner($user) || static::isArbab($user) || $user->isOpsLead();
     }
 
     public function staff(): BelongsTo

@@ -18,18 +18,83 @@ class User extends Authenticatable
     public const DEFAULT_CONTRACT_PIN = '2456';
 
     /**
-     * Canonical first-class CRM roles and human-readable display labels.
+     * Active first-class CRM roles shown in the Roles & Access role picker.
+     *
+     * @var array<string, string>
+     */
+    public const ACTIVE_ROLES = [
+        'admin' => 'Admin',
+        'ops_lead' => 'Ops Lead',
+        'sales_coordinator' => 'Sales Coordinator',
+        'salon_manager' => 'Salon Manager',
+        'agent' => 'Chat Agent',
+        'salon_staff' => 'Salon Staff',
+        'marketing_specialist' => 'Marketing Specialist',
+        'social_media_editor' => 'Social Media Editor',
+    ];
+
+    /**
+     * Retired legacy roles hidden from new-account pickers and flagged for reassignment
+     * when held by an existing account.
+     *
+     * @var array<string, string>
+     */
+    public const LEGACY_ROLES = [
+        'manager' => 'Manager',
+        'staff' => 'Staff',
+        'user' => 'User',
+    ];
+
+    /**
+     * Remote roles that always auto-default to Remote (is_remote = true, branch = null)
+     * and are strictly excluded from Enhanced Calendar specialist columns/dropdowns.
+     *
+     * @var list<string>
+     */
+    public const REMOTE_ROLES = [
+        'agent',
+        'sales_coordinator',
+        'ops_lead',
+        'marketing_specialist',
+        'social_media_editor',
+    ];
+
+    /**
+     * Branch-assigned salon roles that require a physical branch (Old Airport or Al Wakrah).
+     *
+     * @var list<string>
+     */
+    public const BRANCH_ROLES = [
+        'salon_manager',
+        'salon_staff',
+    ];
+
+    /**
+     * Roles eligible for Annual / Sick Leave self-service tracking and requests.
+     *
+     * @var list<string>
+     */
+    public const LEAVE_ELIGIBLE_ROLES = [
+        'salon_manager',
+        'salon_staff',
+    ];
+
+    /**
+     * Canonical CRM role registry (active + legacy) for validation and label lookup.
      *
      * @var array<string, string>
      */
     public const ROLES = [
         'admin' => 'Admin',
-        'manager' => 'Manager',
-        'agent' => 'Agent',
+        'ops_lead' => 'Ops Lead',
+        'sales_coordinator' => 'Sales Coordinator',
+        'salon_manager' => 'Salon Manager',
+        'agent' => 'Chat Agent',
+        'salon_staff' => 'Salon Staff',
         'marketing_specialist' => 'Marketing Specialist',
         'social_media_editor' => 'Social Media Editor',
+        'manager' => 'Manager',
         'staff' => 'Staff',
-        'salon_staff' => 'Salon Staff',
         'user' => 'User',
     ];
 
@@ -77,6 +142,54 @@ class User extends Authenticatable
             'ecommerce' => 'edit',
             'legal_tasks' => 'edit',
             'guide' => 'edit',
+        ],
+        'ops_lead' => [
+            'dashboard' => 'view',
+            'command_center' => 'none',
+            'leads' => 'none',
+            'bookings' => 'none',
+            'calendar' => 'none',
+            'finance' => 'none',
+            'clients' => 'none',
+            'staff' => 'edit',
+            'services' => 'view',
+            'products' => 'view',
+            'kpis' => 'view',
+            'ecommerce' => 'none',
+            'legal_tasks' => 'edit',
+            'guide' => 'view',
+        ],
+        'sales_coordinator' => [
+            'dashboard' => 'view',
+            'command_center' => 'none',
+            'leads' => 'edit',
+            'bookings' => 'edit',
+            'calendar' => 'edit',
+            'finance' => 'none',
+            'clients' => 'edit',
+            'staff' => 'view',
+            'services' => 'view',
+            'products' => 'view',
+            'kpis' => 'view',
+            'ecommerce' => 'none',
+            'legal_tasks' => 'none',
+            'guide' => 'view',
+        ],
+        'salon_manager' => [
+            'dashboard' => 'view',
+            'command_center' => 'none',
+            'leads' => 'none',
+            'bookings' => 'edit',
+            'calendar' => 'edit',
+            'finance' => 'none',
+            'clients' => 'edit',
+            'staff' => 'edit',
+            'services' => 'view',
+            'products' => 'view',
+            'kpis' => 'edit',
+            'ecommerce' => 'none',
+            'legal_tasks' => 'none',
+            'guide' => 'view',
         ],
         'manager' => [
             'dashboard' => 'view',
@@ -251,6 +364,50 @@ class User extends Authenticatable
     public static function validRoleSlugs(): array
     {
         return array_keys(self::ROLES);
+    }
+
+    public static function isLegacyRole(?string $role): bool
+    {
+        return array_key_exists(strtolower(trim((string) $role)), self::LEGACY_ROLES);
+    }
+
+    public static function isRemoteRole(?string $role): bool
+    {
+        return in_array(strtolower(trim((string) $role)), self::REMOTE_ROLES, true);
+    }
+
+    public static function isBranchRole(?string $role): bool
+    {
+        return in_array(strtolower(trim((string) $role)), self::BRANCH_ROLES, true);
+    }
+
+    /**
+     * Only branch-assigned Salon Managers and Salon Staff are eligible for
+     * Annual / Sick Leave self-service tracking and requests.
+     */
+    public function isLeaveEligible(): bool
+    {
+        return in_array(strtolower(trim((string) $this->role)), self::LEAVE_ELIGIBLE_ROLES, true);
+    }
+
+    public function isOpsLead(): bool
+    {
+        return strtolower(trim((string) $this->role)) === 'ops_lead';
+    }
+
+    public function isSalesCoordinator(): bool
+    {
+        return strtolower(trim((string) $this->role)) === 'sales_coordinator';
+    }
+
+    public function isSalonManager(): bool
+    {
+        return strtolower(trim((string) $this->role)) === 'salon_manager';
+    }
+
+    public function isChatAgent(): bool
+    {
+        return strtolower(trim((string) $this->role)) === 'agent';
     }
 
     /**

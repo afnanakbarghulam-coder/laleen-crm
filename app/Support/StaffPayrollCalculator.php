@@ -263,6 +263,8 @@ class StaffPayrollCalculator
             'staff_id' => $staff->id,
             'name' => $staff->name,
             'branch' => $staff->branch,
+            'is_remote' => $staff->isRemote(),
+            'location_label' => $staff->location_label,
             'base_salary' => $this->baseSalary($staff),
             'hourly_wage' => (float) ($staff->hourly_wage ?? 0),
             'commission_rate' => (float) ($staff->commission_rate ?? 0),

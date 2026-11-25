@@ -1073,8 +1073,9 @@
                                 <select name="branch" class="form-select">
                                     <option value="">All Locations</option>
                                     <option value="old_airport" {{ request('branch') == 'old_airport' ? 'selected' : '' }}>Old Airport</option>
-                                    <option value="wakrah" {{ request('branch') == 'wakrah' ? 'selected' : '' }}>Wakrah</option>
-                                    <option value="both" {{ request('branch') == 'both' ? 'selected' : '' }}>Both</option>
+                                    <option value="wakrah" {{ request('branch') == 'wakrah' ? 'selected' : '' }}>Al Wakrah</option>
+                                    <option value="both" {{ request('branch') == 'both' ? 'selected' : '' }}>Both Branches</option>
+                                    <option value="remote" {{ request('branch') == 'remote' ? 'selected' : '' }}>Remote</option>
                                 </select>
                             </div>
                             <div class="col-md-3">
@@ -1125,7 +1126,7 @@
                                         ])
                                         <div>
                                             <div class="team-name">{{ $member->name }}</div>
-                                            <div class="text-muted small">{{ ucwords(str_replace('_', ' ', $member->branch)) }}</div>
+                                            <div class="text-muted small">{{ $member->location_label }}</div>
                                         </div>
                                     </div>
                                 </td>
@@ -1202,6 +1203,12 @@
                                                     data-access-email="{{ $member->user->email ?? '' }}">
                                                     <i class="bx bx-edit-alt me-1"></i> Edit
                                                 </button>
+                                                @if ($isAdminViewer)
+                                                    <button type="button" class="dropdown-item"
+                                                        onclick="openStaffDocumentsModal({{ $member->id }}, {{ \Illuminate\Support\Js::from($member->name) }}, {{ \Illuminate\Support\Js::from($member->location_label) }})">
+                                                        <i class="bx bx-folder me-1"></i> Documents
+                                                    </button>
+                                                @endif
                                                 <form action="{{ route('staffs.destroy', $member->id) }}" method="POST"
                                                     onsubmit="return confirm('Remove this team member?');">
                                                     @csrf @method('DELETE')
@@ -1329,8 +1336,9 @@
 
                             <select name="branch" id="wsBranch" class="form-select" style="max-width: 320px;" required>
                                 <option value="old_airport">Old Airport</option>
-                                <option value="wakrah">Wakrah</option>
-                                <option value="both">Both</option>
+                                <option value="wakrah">Al Wakrah</option>
+                                <option value="both">Both Branches</option>
+                                <option value="remote">Remote</option>
                             </select>
                         </div>
 
@@ -1463,7 +1471,7 @@
                                         <i class="bx bx-chevron-right payroll-chevron me-2"></i>
                                         <div>
                                             <div class="team-name">{{ $row['name'] }}</div>
-                                            <div class="text-muted small">{{ ucwords(str_replace('_', ' ', $row['branch'])) }}</div>
+                                            <div class="text-muted small">{{ $row['location_label'] ?? ($row['branch'] ? ucwords(str_replace('_', ' ', $row['branch'])) : 'Remote') }}</div>
                                         </div>
                                     </div>
                                 </td>
@@ -1610,7 +1618,19 @@
             @include('staff.partials.shifts-subpane')
         </div>
 
-        {{-- Isolated Sub-Tab 2: Ops & Action Tracker --}}
+        {{-- Isolated Sub-Tab 2: Daily Attendance Log (Branch + Remote) --}}
+        <div id="so-subpane-attendance" class="so-sub-pane {{ $currentShiftsOpsSub === 'attendance' ? '' : 'd-none' }}">
+            @include('staff.partials.attendance-subpane')
+        </div>
+
+        {{-- Isolated Sub-Tab 3: Admin Leave Requests Queue --}}
+        @if ($isAdminViewer)
+            <div id="so-subpane-leaves" class="so-sub-pane {{ $currentShiftsOpsSub === 'leaves' ? '' : 'd-none' }}">
+                @include('staff.partials.leaves-subpane')
+            </div>
+        @endif
+
+        {{-- Isolated Sub-Tab 4: Ops & Action Tracker --}}
         <div id="so-subpane-ops_tracker" class="so-sub-pane {{ $currentShiftsOpsSub === 'ops_tracker' ? '' : 'd-none' }}">
             @include('staff.partials.ops-tracker-subpane')
         </div>
@@ -2538,6 +2558,7 @@
                 'linkableStaffList' => $allStaff,
                 'accessUsersMap' => $dirAccessUsersMap,
             ])
+            @include('staff.partials.documents-modal')
         @endif
 
         @include('staff.main-form')
@@ -2650,6 +2671,8 @@
 
                 const mode = this.dataset.soSub;
                 document.getElementById('so-subpane-shifts')?.classList.toggle('d-none', mode !== 'shifts');
+                document.getElementById('so-subpane-attendance')?.classList.toggle('d-none', mode !== 'attendance');
+                document.getElementById('so-subpane-leaves')?.classList.toggle('d-none', mode !== 'leaves');
                 document.getElementById('so-subpane-ops_tracker')?.classList.toggle('d-none', mode !== 'ops_tracker');
 
                 const url = new URL(window.location.href);
@@ -2773,7 +2796,8 @@
             let wsSelectedStaffId = @json($selectedWorkspaceStaffId);
 
             function wsBranchLabel(branch) {
-                return branch === 'old_airport' ? 'Old Airport' : branch === 'wakrah' ? 'Wakrah' : 'Both branches';
+                if (branch === 'remote' || !branch) return 'Remote';
+                return branch === 'old_airport' ? 'Old Airport' : branch === 'wakrah' ? 'Al Wakrah' : 'Old Airport & Al Wakrah';
             }
 
             function wsInitials(name) {

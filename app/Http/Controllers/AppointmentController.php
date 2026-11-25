@@ -80,12 +80,21 @@ class AppointmentController extends Controller
     }
 
     /**
-     * Check whether a staff member is assigned to the given canonical branch
-     * ('both' or null/empty matches both branches).
+     * Check whether a staff member is assigned to the given canonical physical branch.
+     * Remote staff (is_remote = true or branch = null/'remote') and Chat Agents NEVER match salon branches.
      */
     private function staffMatchesBranch(?Staff $staff, string $branch): bool
     {
-        if (!$staff || empty($staff->branch) || $staff->branch === 'both') {
+        if (!$staff || $staff->isRemote()) {
+            return false;
+        }
+
+        $linkedUser = $staff->relationLoaded('user') ? $staff->user : ($staff->user_id ? $staff->user : null);
+        if ($linkedUser && strtolower(trim((string) $linkedUser->role)) === 'agent') {
+            return false;
+        }
+
+        if ($staff->branch === 'both') {
             return true;
         }
 
@@ -2662,13 +2671,24 @@ class AppointmentController extends Controller
             ->unique()
             ->values();
 
-        $staffQuery = Staff::select('id', 'name', 'branch', 'working_hours', 'weekly_off', 'availability_status', 'off_from', 'off_to', 'profile_picture', 'bookable', 'start_date', 'end_date')
-            ->with(['services:id,name', 'shiftPatterns.blocks', 'timeOffs'])
+        $staffQuery = Staff::select('id', 'name', 'branch', 'is_remote', 'working_hours', 'weekly_off', 'availability_status', 'off_from', 'off_to', 'profile_picture', 'bookable', 'start_date', 'end_date', 'user_id')
+            ->with([
+                'services:id,name',
+                'shiftPatterns.blocks',
+                'timeOffs',
+                'leaves' => fn ($q) => $q->approved(),
+            ])
             ->where(function ($q) use ($bookedStaffIdsOnDate) {
                 $q->active();
                 if ($bookedStaffIdsOnDate->isNotEmpty()) {
                     $q->orWhereIn('id', $bookedStaffIdsOnDate);
                 }
+            })
+            ->where(function ($q) {
+                $q->where('is_remote', false)->orWhereNull('is_remote');
+            })
+            ->whereDoesntHave('user', function ($uq) {
+                $uq->whereRaw("LOWER(TRIM(COALESCE(role, ''))) = 'agent'");
             })
             ->orderBy('name');
 
@@ -3315,7 +3335,11 @@ class AppointmentController extends Controller
 
         $staffQuery = Staff::active()
             ->where('availability_status', 'present')
-            ->with(['shiftPatterns.blocks', 'timeOffs']);
+            ->with([
+                'shiftPatterns.blocks',
+                'timeOffs',
+                'leaves' => fn ($q) => $q->approved()->coveringDate($appointmentTime),
+            ]);
 
         if ($decideInSalon) {
             // No service picked yet - offer every present staff member for
@@ -6506,6 +6530,10 @@ class AppointmentController extends Controller
     {
         return \Illuminate\Validation\Rule::exists('staff', 'id')->where(function ($query) {
             $query->where('bookable', true)
+                ->where(function ($q) {
+                    $q->where('is_remote', false)->orWhereNull('is_remote');
+                })
+                ->whereIn('branch', Staff::PHYSICAL_BRANCHES)
                 ->where(function ($q) {
                     $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
                 });

@@ -10,9 +10,11 @@ use App\Models\Appointment;
 use App\Models\AppointmentService;
 use App\Models\Expense;
 use App\Models\OpsActionItem;
+use App\Models\StaffAttendance;
 use App\Models\StaffComplaint;
 use App\Models\StaffContract;
 use App\Models\StaffDeduction;
+use App\Models\StaffLeave;
 use App\Support\StaffPayrollCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -34,14 +36,19 @@ class StaffController extends Controller
 
         $directorySubView = $rawTab === 'workspace' ? 'workspace' : 'directory';
         $payrollSubView = ($rawTab === 'payroll' && $isAdminViewer) ? 'payroll' : 'contracts';
-        $shiftsOpsSubView = $rawTab === 'ops_tracker' ? 'ops_tracker' : 'shifts';
+        $shiftsOpsSubView = match ($rawTab) {
+            'ops_tracker' => 'ops_tracker',
+            'attendance' => 'attendance',
+            'leaves' => $isAdminViewer ? 'leaves' : 'shifts',
+            default => 'shifts',
+        };
         $hrSubView = ($rawTab === 'deductions' || $request->query('hr_sub') === 'deductions') ? 'deductions' : 'complaints';
 
         if ($rawTab === 'workspace') {
             $activeTab = 'directory';
         } elseif (in_array($rawTab, ['contracts', 'payroll'], true)) {
             $activeTab = 'payroll';
-        } elseif (in_array($rawTab, ['shifts_ops', 'shifts', 'ops_tracker'], true)) {
+        } elseif (in_array($rawTab, ['shifts_ops', 'shifts', 'ops_tracker', 'attendance', 'leaves'], true)) {
             $activeTab = 'shifts_ops';
         } elseif (in_array($rawTab, ['notices', 'complaints', 'hr', 'deductions'], true)) {
             $activeTab = 'complaints';
@@ -59,7 +66,18 @@ class StaffController extends Controller
         ]);
 
         if ($request->filled('branch')) {
-            $query->where('branch', $request->branch);
+            if ($request->branch === 'remote') {
+                $query->where(function ($q) {
+                    $q->where('is_remote', true)
+                        ->orWhereNull('branch')
+                        ->orWhere('branch', 'remote');
+                });
+            } else {
+                $query->where('branch', $request->branch)
+                    ->where(function ($q) {
+                        $q->where('is_remote', false)->orWhereNull('is_remote');
+                    });
+            }
         }
 
         if ($request->filled('status')) {
@@ -95,7 +113,9 @@ class StaffController extends Controller
         $allStaffOptions = $allStaff->map(fn ($s) => [
             'id' => $s->id,
             'name' => $s->name,
-            'branch' => $s->branch,
+            'branch' => $s->branch_key,
+            'is_remote' => $s->isRemote(),
+            'location_label' => $s->location_label,
             'base_salary' => $isAdminViewer ? (float) ($s->base_salary ?? 0) : 0.0,
             'hourly_wage' => $isAdminViewer ? (float) ($s->hourly_wage ?? 0) : 0.0,
         ])->values();
@@ -113,7 +133,9 @@ class StaffController extends Controller
         $staffWorkspaceOptions = $allStaff->map(fn ($s) => [
             'id' => $s->id,
             'name' => $s->name,
-            'branch' => $s->branch,
+            'branch' => $s->branch_key,
+            'is_remote' => $s->isRemote(),
+            'location_label' => $s->location_label,
             'bookable' => (bool) $s->bookable,
             'service_ids' => $s->services->pluck('id'),
         ])->values();
@@ -150,12 +172,18 @@ class StaffController extends Controller
         }
         $shiftWeekEnd = $shiftWeekStart->copy()->addDays(6);
         $shiftDays = collect(range(0, 6))->map(fn ($i) => $shiftWeekStart->copy()->addDays($i));
-        $shiftBranch = $request->filled('shift_branch') && in_array($request->shift_branch, ['old_airport', 'wakrah', 'both'], true)
+        $shiftBranch = $request->filled('shift_branch') && in_array($request->shift_branch, ['old_airport', 'wakrah', 'both', 'remote'], true)
             ? $request->shift_branch
             : '';
 
         $shiftStaffMembers = $shiftBranch !== ''
-            ? $allStaff->filter(fn (Staff $s) => in_array($s->branch, [$shiftBranch, 'both'], true))->values()
+            ? $allStaff->filter(function (Staff $s) use ($shiftBranch) {
+                if ($shiftBranch === 'remote') {
+                    return $s->isRemote();
+                }
+
+                return !$s->isRemote() && in_array($s->branch, [$shiftBranch, 'both'], true);
+            })->values()
             : $allStaff;
 
         $shiftRoster = [];
@@ -412,20 +440,24 @@ class StaffController extends Controller
                 })->values();
 
                 $contractSalonMembers = $activeSalonStaff->map(function (Staff $s) {
-                    $branchKey = array_key_exists((string) $s->branch, StaffContract::BRANCHES)
-                        ? (string) $s->branch
-                        : 'old_airport';
+                    $isRemote = $s->isRemote();
+                    $branchKey = $isRemote
+                        ? 'remote'
+                        : (array_key_exists((string) $s->branch, StaffContract::BRANCHES)
+                            ? (string) $s->branch
+                            : 'old_airport');
+                    $isAgentUser = $s->user && strtolower(trim((string) $s->user->role)) === 'agent';
 
                     return [
                         'key' => 'staff:' . $s->id,
                         'type' => 'staff',
                         'id' => $s->id,
                         'name' => $s->name,
-                        'tag' => StaffContract::BRANCHES[$branchKey] ?? 'Salon Staff',
-                        'template_key' => 'salon_beautician',
-                        'role_title' => 'Salon Beautician',
+                        'tag' => $isRemote ? 'Remote' : (StaffContract::BRANCHES[$branchKey] ?? 'Salon Staff'),
+                        'template_key' => ($isRemote || $isAgentUser) ? 'remote_chat_creative' : 'salon_beautician',
+                        'role_title' => $isAgentUser ? 'Chat Agent' : ($isRemote ? 'Remote Team Member' : 'Salon Beautician'),
                         'branch' => $branchKey,
-                        'currency' => 'QAR',
+                        'currency' => ($isRemote || $isAgentUser) ? 'PKR' : 'QAR',
                         'base_salary' => 0.0,
                         'has_custom_pin' => $s->hasCustomContractPin(),
                     ];
@@ -525,6 +557,60 @@ class StaffController extends Controller
         })->values();
         $canManageManualDeductions = StaffDeductionController::canManage($request->user());
 
+        // ---- Attendance Log & Leave Requests Queue (scoped cleanly to keep /staffs?tab=payroll query budget low) ----
+        $attDateParam = (string) $request->input('att_date', $todayQatar);
+        try {
+            $attendanceDate = Carbon::parse($attDateParam, 'Asia/Qatar')->toDateString();
+        } catch (\Throwable) {
+            $attendanceDate = $todayQatar;
+        }
+        $rawAttBranch = strtolower(trim((string) $request->input('att_branch', '')));
+        $attendanceBranch = in_array($rawAttBranch, ['old_airport', 'wakrah', 'remote'], true) ? $rawAttBranch : '';
+
+        $attendanceStaffMembers = $attendanceBranch !== ''
+            ? $allStaff->filter(function (Staff $s) use ($attendanceBranch) {
+                if ($attendanceBranch === 'remote') {
+                    return $s->isRemote();
+                }
+
+                return !$s->isRemote() && in_array($s->branch, [$attendanceBranch, 'both'], true);
+            })->values()
+            : $allStaff;
+
+        $attendanceMap = collect();
+        $pendingLeavesCount = 0;
+        $staffLeaves = collect();
+        $leaveConflictsById = [];
+        $leaveEligibleStaff = $allStaff->filter(fn (Staff $s) => $s->isLeaveEligible())->values();
+
+        if ($activeTab === 'shifts_ops' || $rawTab === 'directory') {
+            if (Schema::hasTable('staff_leaves') && $isAdminViewer) {
+                if ($activeTab === 'shifts_ops') {
+                    $staffLeaves = StaffLeave::with(['staff.user', 'reviewer:id,name'])
+                        ->orderByRaw("CASE status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 WHEN 'rejected' THEN 3 ELSE 4 END ASC")
+                        ->orderByDesc('start_date')
+                        ->get();
+                    $pendingLeavesCount = $staffLeaves->where('status', StaffLeave::STATUS_PENDING)->count();
+
+                    foreach ($staffLeaves->where('status', StaffLeave::STATUS_PENDING) as $pendingLeave) {
+                        $leaveConflictsById[$pendingLeave->id] = StaffLeaveController::findBookingConflicts(
+                            (int) $pendingLeave->staff_id,
+                            $pendingLeave->start_date->toDateString(),
+                            $pendingLeave->end_date->toDateString()
+                        );
+                    }
+                } else {
+                    $pendingLeavesCount = StaffLeave::pending()->count();
+                }
+            }
+
+            if ($activeTab === 'shifts_ops' && Schema::hasTable('staff_attendances')) {
+                $attendanceMap = StaffAttendance::whereDate('attendance_date', $attendanceDate)
+                    ->get()
+                    ->keyBy('staff_id');
+            }
+        }
+
         return view('staff.index', compact(
             'staff', 'services', 'categories', 'activeTab',
             'directorySubView', 'payrollSubView', 'shiftsOpsSubView', 'hrSubView',
@@ -533,6 +619,8 @@ class StaffController extends Controller
             'staffWorkspaceOptions', 'selectedWorkspaceStaffId',
             'payrollBranch', 'payrollFrom', 'payrollTo', 'payrollRows',
             'shiftWeekStart', 'shiftWeekEnd', 'shiftDays', 'shiftRoster', 'shiftDayTotals', 'shiftConfigs', 'shiftBranch',
+            'attendanceDate', 'attendanceBranch', 'attendanceStaffMembers', 'attendanceMap',
+            'pendingLeavesCount', 'staffLeaves', 'leaveConflictsById', 'leaveEligibleStaff',
             'opsItems', 'opsOpenCount', 'opsCompletedCount', 'opsTotalCount', 'opsCompletionRate',
             'opsMyOpenCount', 'opsStatus', 'opsMine', 'opsSelectedStaffId', 'opsSelectedStaffName',
             'opsAssigneeOptions', 'opsMonday', 'opsSunday', 'opsPrevWeek', 'opsNextWeek', 'opsIsCurrentWeek',
@@ -552,6 +640,22 @@ class StaffController extends Controller
 
         $validated = $this->validated($request);
         $profilePath = $this->handlePhoto($request);
+
+        $requestedBranch = strtolower(trim((string) ($validated['branch'] ?? '')));
+        $isRemoteAccess = ($request->boolean('has_access') || $request->boolean('login_access'))
+            && Staff::isRemoteRole((string) $request->input('access_role', ''));
+
+        if ($requestedBranch === 'remote' || ($isRemoteAccess && !in_array($requestedBranch, Staff::PHYSICAL_BRANCHES, true))) {
+            $validated['branch'] = null;
+            $validated['is_remote'] = true;
+            $validated['bookable'] = false;
+        } elseif (in_array($requestedBranch, Staff::PHYSICAL_BRANCHES, true)) {
+            $validated['branch'] = $requestedBranch;
+            $validated['is_remote'] = false;
+        } else {
+            $validated['branch'] = 'old_airport';
+            $validated['is_remote'] = false;
+        }
 
         $staff = Staff::create(array_merge($validated, [
             'name' => $this->fullName($validated),
@@ -589,8 +693,20 @@ class StaffController extends Controller
 
         $validated['name'] = $this->fullName($validated);
 
-        // Branch, bookability, and services are managed on the Staff
-        // Workspace tab now, not this form - leave them untouched here.
+        if ($request->filled('branch')) {
+            $requestedBranch = strtolower(trim((string) $validated['branch']));
+            if ($requestedBranch === 'remote') {
+                $validated['branch'] = null;
+                $validated['is_remote'] = true;
+                $validated['bookable'] = false;
+            } else {
+                $validated['branch'] = $requestedBranch;
+                $validated['is_remote'] = false;
+            }
+        } else {
+            unset($validated['branch']);
+        }
+
         $staff->update($validated);
         $this->syncAccess($request, $staff);
 
@@ -607,12 +723,18 @@ class StaffController extends Controller
     public function updateWorkspace(Request $request, Staff $staff)
     {
         $validated = $request->validate([
-            'branch' => ['required', Rule::in(['old_airport', 'wakrah', 'both'])],
+            'branch' => ['required', Rule::in(['old_airport', 'wakrah', 'both', 'remote'])],
             'bookable' => 'nullable|boolean',
         ]);
-        $validated['bookable'] = $request->boolean('bookable');
 
-        $staff->update($validated);
+        $isRemote = $validated['branch'] === 'remote';
+        $isAgent = $staff->user && strtolower(trim((string) $staff->user->role)) === 'agent';
+
+        $staff->update([
+            'branch' => $isRemote ? null : $validated['branch'],
+            'is_remote' => $isRemote,
+            'bookable' => ($isRemote || $isAgent) ? false : $request->boolean('bookable'),
+        ]);
         $staff->services()->sync($request->input('service_ids', []));
 
         return redirect()->route('staffs.index', ['tab' => 'workspace', 'staff' => $staff->id])
@@ -727,7 +849,11 @@ class StaffController extends Controller
 
         foreach ($allRows as $row) {
             $net = round((float) ($row['net_salary'] ?? 0), 2);
-            $staffBranch = (string) ($row['branch'] ?? 'old_airport');
+            $staffBranch = strtolower(trim((string) ($row['branch'] ?? '')));
+
+            if ($staffBranch === '' || $staffBranch === 'remote' || !empty($row['is_remote'])) {
+                continue;
+            }
 
             if ($staffBranch === 'both') {
                 $oaShare = round($net * 0.5, 2);
@@ -843,6 +969,9 @@ class StaffController extends Controller
 
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
+            'branch' => ['nullable', Rule::in(['old_airport', 'wakrah', 'both', 'remote'])],
+            'annual_leave_days' => 'nullable|integer|min:0|max:90',
+            'sick_leave_days' => 'nullable|integer|min:0|max:90',
             'employment_type' => 'nullable|string|max:30',
             'staff_member_id' => 'nullable|string|max:100',
             'internal_notes' => 'nullable|string|max:1000',
@@ -856,11 +985,11 @@ class StaffController extends Controller
         unset($data['profile_picture']);
 
         if (!$request->user()?->isAdmin()) {
-            unset($data['hourly_wage'], $data['commission_rate'], $data['base_salary']);
+            unset($data['hourly_wage'], $data['commission_rate'], $data['base_salary'], $data['annual_leave_days'], $data['sick_leave_days']);
         } else {
-            foreach (['hourly_wage', 'commission_rate', 'base_salary'] as $wageField) {
-                if (!$request->has($wageField)) {
-                    unset($data[$wageField]);
+            foreach (['hourly_wage', 'commission_rate', 'base_salary', 'annual_leave_days', 'sick_leave_days'] as $adminField) {
+                if (!$request->has($adminField) || $request->input($adminField) === null || $request->input($adminField) === '') {
+                    unset($data[$adminField]);
                 }
             }
         }

@@ -9,28 +9,38 @@
 --}}
 @php
     $uRolesMap = \App\Models\User::ROLES;
+    $uActiveRolesMap = \App\Models\User::ACTIVE_ROLES;
+    $uLegacyRolesMap = \App\Models\User::LEGACY_ROLES;
+    $uRemoteRoles = \App\Models\User::REMOTE_ROLES;
+    $uBranchRoles = \App\Models\User::BRANCH_ROLES;
     $uModulesMap = \App\Models\User::MODULES;
     $uRolePresets = \App\Models\User::ROLE_PERMISSION_PRESETS;
     $uDefaultPerms = \App\Models\User::defaultPermissionsForRole('user');
     $uCurrentAuthId = (int) auth()->id();
 
     $uStaffList = collect($linkableStaffList ?? [])->map(function ($s) {
-        $branchRaw = strtolower((string) ($s->branch ?? ''));
-        $branchLabel = match ($branchRaw) {
-            'old_airport' => 'Old Airport',
-            'wakrah', 'al_wakrah' => 'Al Wakrah',
-            'both' => 'Old Airport & Al Wakrah',
-            default => 'Remote / HQ',
-        };
+        $isRemote = method_exists($s, 'isRemote') ? $s->isRemote() : (bool) ($s->is_remote ?? empty($s->branch));
+        $branchKey = method_exists($s, 'getBranchKeyAttribute')
+            ? $s->branch_key
+            : ($isRemote ? 'remote' : strtolower((string) ($s->branch ?? 'remote')));
+        $branchLabel = method_exists($s, 'getLocationLabelAttribute')
+            ? $s->location_label
+            : ($isRemote ? 'Remote' : match ($branchKey) {
+                'old_airport' => 'Old Airport',
+                'wakrah', 'al_wakrah' => 'Al Wakrah',
+                'both' => 'Old Airport & Al Wakrah',
+                default => 'Remote',
+            });
         return [
             'id' => (int) $s->id,
             'name' => (string) $s->name,
             'email' => (string) ($s->email ?? ''),
-            'branch' => $branchRaw,
+            'branch' => $branchKey,
+            'is_remote' => $isRemote,
             'branch_label' => $branchLabel,
             'bookable' => (bool) $s->bookable,
             'user_id' => $s->user_id ? (int) $s->user_id : null,
-            'suggested_role' => $s->bookable ? 'salon_staff' : 'agent',
+            'suggested_role' => ($s->bookable && !$isRemote) ? 'salon_staff' : 'agent',
             'preview_url' => route('portal.admin-preview', $s->id),
         ];
     })->values()->all();
@@ -270,10 +280,10 @@
                                 </div>
                             </div>
                             <div class="col-md-5">
-                                <label class="form-label" for="addLoginRole">Role *</label>
+                                <label class="form-label" for="addLoginRole">Assigned Role *</label>
                                 <select id="addLoginRole" name="role" class="form-select" x-model="role" @change="selectRole(role)" required>
-                                    @foreach ($uRolesMap as $rKey => $rLabel)
-                                        <option value="{{ $rKey }}">{{ $rKey === 'agent' ? 'Chat Agent' : $rLabel }}</option>
+                                    @foreach ($uActiveRolesMap as $rKey => $rLabel)
+                                        <option value="{{ $rKey }}">{{ $rLabel }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -289,12 +299,18 @@
                                     </label>
                                 </div>
                                 <div class="col-md-5" x-show="createStaffProfile" x-cloak>
-                                    <select class="form-select form-select-sm" name="staff_branch" x-model="staffBranch">
-                                        <option value="old_airport">Old Airport Branch</option>
-                                        <option value="wakrah">Al Wakrah Branch</option>
-                                        <option value="both">Both Branches</option>
-                                        <option value="remote">Remote / HQ</option>
+                                    <select class="form-select form-select-sm" name="staff_branch" x-model="staffBranch" :disabled="isRemoteRole(role)">
+                                        <option value="remote" :disabled="isBranchRole(role)">Remote</option>
+                                        <option value="old_airport" :disabled="isRemoteRole(role)">Old Airport Branch</option>
+                                        <option value="wakrah" :disabled="isRemoteRole(role)">Al Wakrah Branch</option>
+                                        <option value="both" :disabled="isRemoteRole(role)">Both Branches</option>
                                     </select>
+                                    <div class="small mt-1" style="color: #9e8780;" x-show="isRemoteRole(role)" x-cloak>
+                                        Remote roles are automatically assigned as Remote.
+                                    </div>
+                                    <div class="small mt-1" style="color: #9e8780;" x-show="isBranchRole(role)" x-cloak>
+                                        Requires a physical salon branch (Old Airport or Al Wakrah).
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -385,13 +401,19 @@
                     {{-- SECTION 2: ROLE & MODULE PERMISSIONS --}}
                     <div class="sa-modal-section">
                         <div class="sa-modal-section-title">2. Role &amp; Module Permissions</div>
-                        <div class="mb-3" style="max-width: 340px;">
+                        <div class="mb-3" style="max-width: 360px;">
                             <label class="form-label" for="maRole">Assigned Role *</label>
                             <select id="maRole" name="role" class="form-select" x-model="role" @change="selectRole(role)" required>
-                                @foreach ($uRolesMap as $rKey => $rLabel)
-                                    <option value="{{ $rKey }}">{{ $rKey === 'agent' ? 'Chat Agent' : $rLabel }}</option>
+                                <template x-if="legacyCurrentRole">
+                                    <option :value="legacyCurrentRole" x-text="legacyCurrentRoleLabel + ' (Legacy — please reassign)'"></option>
+                                </template>
+                                @foreach ($uActiveRolesMap as $rKey => $rLabel)
+                                    <option value="{{ $rKey }}">{{ $rLabel }}</option>
                                 @endforeach
                             </select>
+                            <div class="small mt-1" style="color: #fbbf24;" x-show="isLegacyRole(role)" x-cloak>
+                                This account uses a retired legacy role. Reassign it to an active role above.
+                            </div>
                         </div>
 
                         @include('users._permissions-panel', ['uid' => 'manage', 'permissions' => $uDefaultPerms])
@@ -481,6 +503,9 @@
 <script>
     (function () {
         const rolesMap = {{ \Illuminate\Support\Js::from($uRolesMap) }};
+        const legacyRolesMap = {{ \Illuminate\Support\Js::from($uLegacyRolesMap) }};
+        const remoteRolesList = {{ \Illuminate\Support\Js::from($uRemoteRoles) }};
+        const branchRolesList = {{ \Illuminate\Support\Js::from($uBranchRoles) }};
         const modulesMap = {{ \Illuminate\Support\Js::from($uModulesMap) }};
         const rolePresets = {{ \Illuminate\Support\Js::from($uRolePresets) }};
         const staffList = {{ \Illuminate\Support\Js::from($uStaffList) }};
@@ -525,6 +550,8 @@
                     submitting: false,
                     creatingProfile: false,
                     staffVersion: 0,
+                    legacyCurrentRole: '',
+                    legacyCurrentRoleLabel: '',
                     permissions: Object.assign({}, rolePresets['salon_staff'] || {}),
                     overriddenSlugs: {},
 
@@ -534,6 +561,18 @@
                         } else if (this.uid === 'new') {
                             window.__laleenAddLoginComponent = this;
                         }
+                    },
+
+                    isLegacyRole(rKey) {
+                        return Boolean(rKey && Object.prototype.hasOwnProperty.call(legacyRolesMap, rKey));
+                    },
+
+                    isRemoteRole(rKey) {
+                        return remoteRolesList.includes(String(rKey || ''));
+                    },
+
+                    isBranchRole(rKey) {
+                        return branchRolesList.includes(String(rKey || ''));
                     },
 
                     roleLabel(rKey) {
@@ -583,6 +622,15 @@
 
                     selectRole(newRole, forcePreset = false) {
                         this.role = newRole;
+                        if (this.isRemoteRole(newRole)) {
+                            this.staffBranch = 'remote';
+                        } else if (this.isBranchRole(newRole) && this.staffBranch === 'remote') {
+                            this.staffBranch = 'old_airport';
+                        }
+                        if (!this.isLegacyRole(newRole)) {
+                            this.legacyCurrentRole = '';
+                            this.legacyCurrentRoleLabel = '';
+                        }
                         const preset = rolePresets[newRole] || rolePresets['user'] || {};
                         if (newRole === 'salon_staff' || forcePreset) {
                             this.overriddenSlugs = {};
@@ -643,7 +691,14 @@
                         this.editingUserId = Number(userObj.id);
                         this.name = userObj.name || '';
                         this.email = userObj.email || '';
-                        this.role = userObj.role || 'user';
+                        this.role = userObj.role || 'salon_staff';
+                        if (this.isLegacyRole(this.role)) {
+                            this.legacyCurrentRole = this.role;
+                            this.legacyCurrentRoleLabel = legacyRolesMap[this.role] || this.role;
+                        } else {
+                            this.legacyCurrentRole = '';
+                            this.legacyCurrentRoleLabel = '';
+                        }
                         this.isActive = Boolean(userObj.is_active);
                         this.linkedStaffId = userObj.staff_id ? String(userObj.staff_id) : '';
                         this.password = '';
@@ -782,6 +837,9 @@
                         if (!this.editingUserId) return;
                         this.creatingProfile = true;
                         try {
+                            const reqBranch = this.isRemoteRole(this.role)
+                                ? 'remote'
+                                : '';
                             const res = await fetch(`/users/${this.editingUserId}/create-staff-profile`, {
                                 method: 'POST',
                                 headers: {
@@ -789,19 +847,23 @@
                                     'Accept': 'application/json',
                                     'Content-Type': 'application/json',
                                 },
-                                body: JSON.stringify({}),
+                                body: JSON.stringify(reqBranch ? { branch: reqBranch } : {}),
                             });
                             const data = await res.json().catch(() => ({}));
                             if (res.ok && data.success && data.staff) {
-                                const bKey = String(data.staff.branch || '').toLowerCase();
-                                const bLabel = bKey === 'wakrah' || bKey === 'al_wakrah'
-                                    ? 'Al Wakrah'
-                                    : (bKey === 'both' ? 'Old Airport & Al Wakrah' : (bKey === 'old_airport' ? 'Old Airport' : 'Remote / HQ'));
+                                const isRemote = Boolean(data.staff.is_remote) || !data.staff.branch || String(data.staff.branch).toLowerCase() === 'remote';
+                                const bKey = isRemote ? 'remote' : String(data.staff.branch || '').toLowerCase();
+                                const bLabel = data.staff.location_label || (isRemote
+                                    ? 'Remote'
+                                    : (bKey === 'wakrah' || bKey === 'al_wakrah'
+                                        ? 'Al Wakrah'
+                                        : (bKey === 'both' ? 'Old Airport & Al Wakrah' : 'Old Airport')));
                                 staffList.push({
                                     id: Number(data.staff.id),
                                     name: data.staff.name,
                                     email: this.email,
                                     branch: bKey,
+                                    is_remote: isRemote,
                                     branch_label: bLabel,
                                     bookable: Boolean(data.staff.bookable),
                                     user_id: Number(this.editingUserId),

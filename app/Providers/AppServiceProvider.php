@@ -3,8 +3,13 @@
 namespace App\Providers;
 
 use App\Models\Lead;
+use App\Models\StaffDocument;
+use App\Models\StaffLeave;
+use App\Policies\StaffDocumentPolicy;
+use App\Policies\StaffLeavePolicy;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -26,6 +31,9 @@ class AppServiceProvider extends ServiceProvider
     {
         Schema::defaultStringLength(191);
         Paginator::useBootstrapFive();
+
+        Gate::policy(StaffDocument::class, StaffDocumentPolicy::class);
+        Gate::policy(StaffLeave::class, StaffLeavePolicy::class);
 
         // @moduleView('leads') / @moduleEdit('leads') gate sidebar links and
         // action buttons the same way the `module` route middleware gates URLs.

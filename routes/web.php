@@ -50,11 +50,14 @@ use App\Http\Controllers\ServiceCategoryController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\ServiceFreebiePackageController;
 use App\Http\Controllers\ShiftController;
+use App\Http\Controllers\StaffAttendanceController;
 use App\Http\Controllers\StaffBlockController;
 use App\Http\Controllers\StaffComplaintController;
 use App\Http\Controllers\StaffContractController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StaffDeductionController;
+use App\Http\Controllers\StaffDocumentController;
+use App\Http\Controllers\StaffLeaveController;
 use App\Http\Controllers\StaffNoticeController;
 use App\Http\Controllers\StaffOvertimeController;
 use App\Http\Controllers\StaffPortalController;
@@ -93,6 +96,21 @@ Route::middleware(['auth', 'active'])->group(function () {
     // ---- Laleen Staff Self-Service Portal (strictly scoped to auth()->user() — never accepts staff_id) ----
     Route::get('/my-profile', [StaffPortalController::class, 'index'])->name('portal.profile');
     Route::put('/my-profile/password', [StaffPortalController::class, 'updatePassword'])->name('portal.password.update');
+    Route::get('/my-profile/contracts/{contract}/pdf', [StaffPortalController::class, 'downloadOwnContractPdf'])
+        ->whereNumber('contract')
+        ->name('portal.contracts.pdf');
+    Route::post('/my-profile/leaves', [StaffLeaveController::class, 'storePortalRequest'])->name('portal.leaves.store');
+    Route::patch('/my-profile/leaves/{leave}/cancel', [StaffLeaveController::class, 'cancelPortalRequest'])
+        ->whereNumber('leave')
+        ->name('portal.leaves.cancel');
+
+    // ---- Policy-Protected Private Staff Documents & Leave Certificates (ONLY Admin or exact owner; 403 otherwise) ----
+    Route::get('/staff-documents/{document}/download', [StaffDocumentController::class, 'download'])
+        ->whereNumber('document')
+        ->name('staff-documents.download');
+    Route::get('/staff-leaves/{leave}/certificate', [StaffLeaveController::class, 'certificate'])
+        ->whereNumber('leave')
+        ->name('staff-leaves.certificate');
 });
 
 Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
@@ -240,12 +258,23 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
         Route::delete('/staffs/{staff}', [StaffController::class, 'destroy'])->name('staffs.destroy');
         Route::post('/staff-payroll/post-to-finance', [StaffController::class, 'postPayrollToFinance'])->middleware('module:finance,edit')->name('staff.payroll.post-to-finance');
 
-        // ---- Admin-Only Staff Portal Access Management (Directory & Profiles) ----
+        // ---- Admin-Only Staff Portal Access, Private Documents & Leave Approval Controls ----
         Route::middleware('role:admin')->group(function () {
             Route::post('/staffs/{staff}/portal-access', [StaffController::class, 'createPortalLogin'])->name('staffs.portal-access.store');
             Route::patch('/staffs/{staff}/portal-access/toggle', [StaffController::class, 'togglePortalAccess'])->name('staffs.portal-access.toggle');
             Route::patch('/staffs/{staff}/portal-access/reset-password', [StaffController::class, 'resetPortalPassword'])->name('staffs.portal-access.reset-password');
+
+            Route::get('/staffs/{staff}/documents', [StaffDocumentController::class, 'index'])->whereNumber('staff')->name('staff-documents.index');
+            Route::post('/staffs/{staff}/documents', [StaffDocumentController::class, 'store'])->whereNumber('staff')->name('staff-documents.store');
+            Route::delete('/staff-documents/{document}', [StaffDocumentController::class, 'destroy'])->whereNumber('document')->name('staff-documents.destroy');
+
+            Route::get('/staff-leaves/{leave}/conflicts', [StaffLeaveController::class, 'conflicts'])->whereNumber('leave')->name('staff-leaves.conflicts');
+            Route::post('/staff-leaves/manual', [StaffLeaveController::class, 'storeAdminManual'])->name('staff-leaves.manual.store');
+            Route::patch('/staff-leaves/{leave}/review', [StaffLeaveController::class, 'review'])->whereNumber('leave')->name('staff-leaves.review');
         });
+
+        // ---- Attendance Log (Supports Old Airport, Al Wakrah & Remote Staff) ----
+        Route::post('/staff-attendance', [StaffAttendanceController::class, 'store'])->name('staff-attendance.store');
 
         // ---- Native Staff Contracts Engine (Admin Only) ----
         Route::post('/staff-contracts', [StaffContractController::class, 'store'])->name('staff-contracts.store');

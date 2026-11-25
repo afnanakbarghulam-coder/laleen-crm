@@ -8,11 +8,13 @@ use App\Models\Customer;
 use App\Models\Service;
 use App\Models\Staff;
 use App\Models\StaffBlock;
+use App\Models\StaffLeave;
 use App\Models\StaffTimeOff;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class BookingConflictValidator
 {
@@ -47,7 +49,16 @@ class BookingConflictValidator
 
     public function staffMatchesBranch(?Staff $staff, string $branch): bool
     {
-        if (!$staff || empty($staff->branch) || $staff->branch === 'both') {
+        if (!$staff || $staff->isRemote()) {
+            return false;
+        }
+
+        $linkedUser = $staff->relationLoaded('user') ? $staff->user : ($staff->user_id ? $staff->user : null);
+        if ($linkedUser && strtolower(trim((string) $linkedUser->role)) === 'agent') {
+            return false;
+        }
+
+        if ($staff->branch === 'both') {
             return true;
         }
 
@@ -103,7 +114,26 @@ class BookingConflictValidator
             return ['off' => true, 'kind' => 'full_day', 'reason' => $label];
         }
 
-        $dateStr = $date->toDateString();
+        $dateStr = $date->copy()->timezone('Asia/Qatar')->toDateString();
+
+        if (Schema::hasTable('staff_leaves')) {
+            $approvedLeave = $staff->relationLoaded('leaves')
+                ? $staff->leaves->first(fn (StaffLeave $l) => $l->status === StaffLeave::STATUS_APPROVED && $l->coversDate($date))
+                : StaffLeave::query()
+                    ->where('staff_id', $staff->id)
+                    ->approved()
+                    ->coveringDate($date)
+                    ->first();
+
+            if ($approvedLeave) {
+                return [
+                    'off' => true,
+                    'kind' => 'on_leave',
+                    'reason' => 'On Leave',
+                ];
+            }
+        }
+
         $timeOff = $staff->relationLoaded('timeOffs')
             ? $staff->timeOffs->first(fn ($t) => $t->coversDate($date))
             : StaffTimeOff::where('staff_id', $staff->id)
@@ -909,6 +939,14 @@ class BookingConflictValidator
                         ];
                     }
 
+                    if ($shiftEval['kind'] === 'on_leave') {
+                        return [
+                            'reason' => self::REASON_STAFF_OFF,
+                            'field' => 'staff_id',
+                            'message' => "{$prefix}: {$staff->name} is on approved leave on {$effectiveMoment->format('d M Y')}.",
+                        ];
+                    }
+
                     return [
                         'reason' => self::REASON_STAFF_OFF,
                         'field' => 'staff_id',
@@ -918,10 +956,13 @@ class BookingConflictValidator
             } else {
                 $offInfo = $this->staffOffInfo($staff, $effectiveMoment, $duration, false);
                 if ($offInfo['off']) {
+                    $offMsg = ($offInfo['kind'] ?? null) === 'on_leave'
+                        ? "{$prefix}: {$staff->name} is on approved leave on {$effectiveMoment->format('d M Y')}."
+                        : "{$prefix}: {$staff->name} is off duty on {$effectiveMoment->format('d M Y')}.";
                     return [
                         'reason' => self::REASON_STAFF_OFF,
                         'field' => 'staff_id',
-                        'message' => "{$prefix}: {$staff->name} is off duty on {$effectiveMoment->format('d M Y')}.",
+                        'message' => $offMsg,
                     ];
                 }
             }

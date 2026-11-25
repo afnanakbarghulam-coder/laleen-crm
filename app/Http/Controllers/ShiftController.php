@@ -28,7 +28,18 @@ class ShiftController extends Controller
         ]);
 
         if ($request->filled('branch')) {
-            $query->whereIn('branch', [$request->branch, 'both']);
+            if ($request->branch === 'remote') {
+                $query->where(function ($q) {
+                    $q->where('is_remote', true)
+                        ->orWhereNull('branch')
+                        ->orWhere('branch', 'remote');
+                });
+            } else {
+                $query->whereIn('branch', [$request->branch, 'both'])
+                    ->where(function ($q) {
+                        $q->where('is_remote', false)->orWhereNull('is_remote');
+                    });
+            }
         }
 
         $staff = $query->orderBy('name')->get();

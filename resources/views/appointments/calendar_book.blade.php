@@ -1655,17 +1655,19 @@
 </div>
 
 @php
-    $bookableStaffCatalog = collect($activeStaffs ?? $staffs ?? [])->map(fn($s) => [
-        'id' => $s->id,
-        'name' => $s->name,
-        'branch' => $s->branch ?: 'both',
-        'skill_ids' => $s->relationLoaded('services')
-            ? $s->services->pluck('id')->map(fn($id) => (int) $id)->values()
-            : [],
-        'skills' => $s->relationLoaded('services')
-            ? $s->services->pluck('name')->values()
-            : [],
-    ])->values();
+    $bookableStaffCatalog = collect($activeStaffs ?? $staffs ?? [])
+        ->reject(fn($s) => method_exists($s, 'isRemote') ? $s->isRemote() : (bool) ($s->is_remote ?? empty($s->branch)))
+        ->map(fn($s) => [
+            'id' => $s->id,
+            'name' => $s->name,
+            'branch' => $s->branch,
+            'skill_ids' => $s->relationLoaded('services')
+                ? $s->services->pluck('id')->map(fn($id) => (int) $id)->values()
+                : [],
+            'skills' => $s->relationLoaded('services')
+                ? $s->services->pluck('name')->values()
+                : [],
+        ])->values();
 @endphp
 
 <script>
@@ -1804,7 +1806,7 @@
             const staffSelect = document.getElementById('bookStaffSelect');
             if (!staffSelect) return;
             const normBranch = fbNormalizeBranch(branchKey) || 'old_airport';
-            const branchStaff = ALL_STAFFS.filter(s => !s.branch || s.branch === 'both' || s.branch === normBranch);
+            const branchStaff = ALL_STAFFS.filter(s => s.branch && s.branch !== 'remote' && (s.branch === 'both' || s.branch === normBranch));
 
             staffSelect.innerHTML = '<option value="">-- Select Staff (Unassigned) --</option>';
 
@@ -1839,9 +1841,14 @@
                     const suffix = entry.shift_end ? ` (OT ${deltaLabel} · shift ends ${entry.shift_end})` : ` (OT ${deltaLabel})`;
                     staffSelect.insertAdjacentHTML('beforeend', `<option value="${staff.id}">${fbEscHtml(staff.name + suffix)}</option>`);
                 });
+                const daySnap = (typeof fbCurrentDaySnapshot === 'function') ? fbCurrentDaySnapshot() : null;
+                const snapOffMap = (daySnap && daySnap.off) || {};
                 unavailableList.forEach(s => {
-                    const isPreferred = preferredId && String(s.id) === String(preferredId);
-                    staffSelect.insertAdjacentHTML('beforeend', `<option value="${s.id}" ${isPreferred ? '' : 'disabled'}>${fbEscHtml(s.name)} (Unavailable)</option>`);
+                    const offReason = snapOffMap[String(s.id)] || snapOffMap[s.id] || '';
+                    const isOnLeave = /leave/i.test(String(offReason));
+                    const isPreferred = !isOnLeave && preferredId && String(s.id) === String(preferredId);
+                    const statusSuffix = isOnLeave ? ' (On Leave)' : ' (Unavailable)';
+                    staffSelect.insertAdjacentHTML('beforeend', `<option value="${s.id}" ${isPreferred ? '' : 'disabled'}>${fbEscHtml(s.name)}${statusSuffix}</option>`);
                 });
             } else {
                 branchStaff.forEach(s => {

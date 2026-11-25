@@ -165,10 +165,10 @@ class StaffSelfServicePortalPhase1Test extends TestCase
         $profileRes->assertDontSee('Fatima Secret');
         $profileRes->assertDontSee('id="layout-menu"', false);
 
-        // Placeholder tabs work cleanly
-        $this->actingAs($salonUser)->get('/my-profile?tab=contracts')->assertOk()->assertSee('Coming soon');
-        $this->actingAs($salonUser)->get('/my-profile?tab=documents')->assertOk()->assertSee('Coming soon');
-        $this->actingAs($salonUser)->get('/my-profile?tab=leaves')->assertOk()->assertSee('Coming soon');
+        // Portal tabs work cleanly
+        $this->actingAs($salonUser)->get('/my-profile?tab=contracts')->assertOk()->assertSee('Active Employment Contract');
+        $this->actingAs($salonUser)->get('/my-profile?tab=documents')->assertOk()->assertSee('Personal Documents');
+        $this->actingAs($salonUser)->get('/my-profile?tab=leaves')->assertOk()->assertSee('Annual Leave');
 
         // Strict server-side isolation: ALL operational CRM routes & JSON endpoints return 403
         $blockedHtmlUrls = [
@@ -289,13 +289,14 @@ class StaffSelfServicePortalPhase1Test extends TestCase
         $this->actingAs($agentUser)->get(route('leads.index'))->assertOk();
         $this->actingAs($agentUser)->get(route('appointments.calendar'))->assertOk();
 
-        // /my-profile works inside standard CRM layout (sidebar present) with Remote / HQ & Chat Agent scope
+        // /my-profile works inside standard CRM layout (sidebar present) with Remote & Chat Agent scope
         $profileRes = $this->actingAs($agentUser)->get('/my-profile');
         $profileRes->assertOk();
         $profileRes->assertSee('Zoya Agent');
         $profileRes->assertSee('Chat Agent');
-        $profileRes->assertSee('Remote / HQ');
-        $profileRes->assertSee('WhatsApp Business');
+        $profileRes->assertSee('Remote');
+        $profileRes->assertDontSee('Old Airport');
+        $profileRes->assertSee("Today's Daily Booking Target");
         $profileRes->assertSee('id="layout-menu"', false);
         $profileRes->assertSee('My Profile');
 

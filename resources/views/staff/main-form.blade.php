@@ -216,6 +216,16 @@
                                     <input type="date" name="end_date" id="stfEndDate" class="form-control">
                                 </div>
                                 <div class="col-md-6">
+                                    <label class="form-label">Work location / Branch</label>
+                                    <select name="branch" id="stfBranch" class="form-select">
+                                        <option value="old_airport">Old Airport</option>
+                                        <option value="wakrah">Al Wakrah</option>
+                                        <option value="both">Both Branches</option>
+                                        <option value="remote">Remote</option>
+                                    </select>
+                                    <small class="text-muted">Chat Agents and remote team members use Remote</small>
+                                </div>
+                                <div class="col-md-6">
                                     <label class="form-label">Employment type</label>
                                     <select name="employment_type" id="stfEmploymentType" class="form-select">
                                         <option value="">-- Select an option --</option>
@@ -230,6 +240,16 @@
                                     <input type="text" name="staff_member_id" id="stfMemberId" class="form-control" maxlength="100">
                                     <small class="text-muted">An identifier used for external systems like payroll</small>
                                 </div>
+                                @if (auth()->user()?->isAdmin())
+                                    <div class="col-md-6">
+                                        <label class="form-label">Annual leave entitlement (days / yr)</label>
+                                        <input type="number" name="annual_leave_days" id="stfAnnualLeaveDays" class="form-control" min="0" max="90" value="21">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Sick leave entitlement (days / yr)</label>
+                                        <input type="number" name="sick_leave_days" id="stfSickLeaveDays" class="form-control" min="0" max="90" value="14">
+                                    </div>
+                                @endif
                             </div>
 
                             <div class="mt-3">
@@ -255,13 +275,13 @@
                                         @if (auth()->user()?->isAdmin())
                                             <option value="admin">Admin — full access to every module</option>
                                         @endif
-                                        <option value="manager">Manager — branch operations &amp; oversight</option>
-                                        <option value="agent">Agent — bookings, leads, revenue</option>
-                                        <option value="marketing_specialist">Marketing Specialist — ads, ecommerce &amp; leads</option>
-                                        <option value="social_media_editor">Social Media Editor — reels, stories &amp; content</option>
-                                        <option value="staff">Staff — calendar &amp; appointments only</option>
-                                        <option value="salon_staff">Salon Staff — self-service portal only (/my-profile)</option>
-                                        <option value="user">User — limited read-only access</option>
+                                        <option value="ops_lead">Ops Lead — Remote · Ops Tracker, Shifts &amp; Legal</option>
+                                        <option value="sales_coordinator">Sales Coordinator — Remote · Leads, Bookings &amp; KPIs</option>
+                                        <option value="salon_manager">Salon Manager — Branch · Calendar, Complaints &amp; Evals</option>
+                                        <option value="agent">Chat Agent — Remote · Bookings, Leads &amp; Calendar</option>
+                                        <option value="salon_staff">Salon Staff — Branch · Self-service portal only (/my-profile)</option>
+                                        <option value="marketing_specialist">Marketing Specialist — Remote · Ads, Ecommerce &amp; Leads</option>
+                                        <option value="social_media_editor">Social Media Editor — Remote · Reels, Stories &amp; Content</option>
                                     </select>
                                 </div>
                                 <div class="row g-3">
@@ -313,8 +333,24 @@
             document.getElementById('stfPhotoInput').click();
         });
 
+        const STF_REMOTE_ROLES = ['agent', 'sales_coordinator', 'ops_lead', 'marketing_specialist', 'social_media_editor'];
+        const STF_BRANCH_ROLES = ['salon_manager', 'salon_staff'];
+
         document.getElementById('stfHasAccess').addEventListener('change', function() {
             document.getElementById('stfAccessFields').classList.toggle('d-none', !this.checked);
+            if (this.checked && STF_REMOTE_ROLES.includes(document.getElementById('stfAccessRole').value)) {
+                document.getElementById('stfBranch').value = 'remote';
+            }
+        });
+
+        document.getElementById('stfAccessRole').addEventListener('change', function() {
+            const branchSel = document.getElementById('stfBranch');
+            if (!branchSel) return;
+            if (STF_REMOTE_ROLES.includes(this.value)) {
+                branchSel.value = 'remote';
+            } else if (STF_BRANCH_ROLES.includes(this.value) && branchSel.value === 'remote') {
+                branchSel.value = 'old_airport';
+            }
         });
 
         window.resetStaffForm = function() {
@@ -322,6 +358,13 @@
             document.getElementById('staffForm').action = '{{ route('staffs.store') }}';
             document.getElementById('staffFormMethod').value = '';
             document.getElementById('staffForm').reset();
+            const branchSel = document.getElementById('stfBranch');
+            if (branchSel) branchSel.value = 'old_airport';
+            const annEl = document.getElementById('stfAnnualLeaveDays');
+            if (annEl) annEl.value = 21;
+            const sickEl = document.getElementById('stfSickLeaveDays');
+            if (sickEl) sickEl.value = 14;
+            document.getElementById('stfAccessRole')?.querySelectorAll('option[data-legacy="1"]').forEach(o => o.remove());
             document.getElementById('stfPhotoPreview').classList.add('d-none');
             document.getElementById('stfPhotoPlaceholder').classList.remove('d-none');
             document.getElementById('stfAccessFields').classList.add('d-none');
@@ -354,8 +397,17 @@
 
             document.getElementById('stfStartDate').value = member.start_date ? member.start_date.slice(0, 10) : '';
             document.getElementById('stfEndDate').value = member.end_date ? member.end_date.slice(0, 10) : '';
+            const branchSel = document.getElementById('stfBranch');
+            if (branchSel) {
+                const isRemote = Boolean(member.is_remote) || !member.branch || String(member.branch).toLowerCase() === 'remote';
+                branchSel.value = isRemote ? 'remote' : member.branch;
+            }
             document.getElementById('stfEmploymentType').value = member.employment_type || '';
             document.getElementById('stfMemberId').value = member.staff_member_id || '';
+            const annEl = document.getElementById('stfAnnualLeaveDays');
+            if (annEl) annEl.value = member.annual_leave_days ?? 21;
+            const sickEl = document.getElementById('stfSickLeaveDays');
+            if (sickEl) sickEl.value = member.sick_leave_days ?? 14;
             document.getElementById('stfNotes').value = member.internal_notes || '';
 
             if (member.profile_picture) {
@@ -373,7 +425,15 @@
             document.getElementById('stfHasAccess').checked = hasAccess;
             document.getElementById('stfAccessFields').classList.toggle('d-none', !hasAccess);
             if (hasAccess) {
-                document.getElementById('stfAccessRole').value = accessRole;
+                const roleSel = document.getElementById('stfAccessRole');
+                if (roleSel && accessRole && !Array.from(roleSel.options).some(o => o.value === accessRole)) {
+                    const legOpt = document.createElement('option');
+                    legOpt.value = accessRole;
+                    legOpt.dataset.legacy = '1';
+                    legOpt.textContent = accessRole.charAt(0).toUpperCase() + accessRole.slice(1) + ' (Legacy — please reassign)';
+                    roleSel.insertBefore(legOpt, roleSel.firstChild);
+                }
+                roleSel.value = accessRole;
                 document.getElementById('stfAccessEmail').value = accessEmail;
             }
 

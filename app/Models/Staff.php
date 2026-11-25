@@ -14,6 +14,21 @@ class Staff extends Model
 
     public const DEFAULT_CONTRACT_PIN = '2456';
 
+    public const PHYSICAL_BRANCHES = ['old_airport', 'wakrah', 'both'];
+
+    public const REMOTE_ROLES = [
+        'agent',
+        'sales_coordinator',
+        'ops_lead',
+        'marketing_specialist',
+        'social_media_editor',
+    ];
+
+    public const BRANCH_ROLES = [
+        'salon_manager',
+        'salon_staff',
+    ];
+
     protected $table = 'staff';
 
     protected $hidden = [
@@ -34,6 +49,9 @@ class Staff extends Model
         'emergency_contact_phone',
         'emergency_contact_relationship',
         'branch',
+        'is_remote',
+        'annual_leave_days',
+        'sick_leave_days',
         'skills',
         'working_hours',
         'weekly_off',
@@ -58,11 +76,72 @@ class Staff extends Model
         'skills' => 'array',
         'working_hours' => 'array',
         'weekly_off' => 'array',
+        'is_remote' => 'boolean',
+        'annual_leave_days' => 'integer',
+        'sick_leave_days' => 'integer',
         'bookable' => 'boolean',
         'birthday' => 'date',
         'start_date' => 'date',
         'end_date' => 'date',
     ];
+
+    public static function isRemoteRole(?string $role): bool
+    {
+        return in_array(strtolower(trim((string) $role)), self::REMOTE_ROLES, true);
+    }
+
+    public function isLeaveEligible(): bool
+    {
+        if ($this->user_id) {
+            $linkedUser = $this->relationLoaded('user') ? $this->user : $this->user()->first();
+            if ($linkedUser) {
+                return $linkedUser->isLeaveEligible();
+            }
+        }
+
+        return !$this->isRemote();
+    }
+
+    public function isRemote(): bool
+    {
+        if ((bool) ($this->attributes['is_remote'] ?? false)) {
+            return true;
+        }
+
+        $rawBranch = strtolower(trim((string) ($this->attributes['branch'] ?? '')));
+
+        return $rawBranch === '' || $rawBranch === 'remote';
+    }
+
+    public function getLocationLabelAttribute(): string
+    {
+        if ($this->isRemote()) {
+            return 'Remote';
+        }
+
+        return match (strtolower(trim((string) $this->branch))) {
+            'old_airport' => 'Old Airport',
+            'wakrah', 'al_wakrah' => 'Al Wakrah',
+            'both' => 'Old Airport & Al Wakrah',
+            default => 'Remote',
+        };
+    }
+
+    public function getBranchKeyAttribute(): string
+    {
+        if ($this->isRemote()) {
+            return 'remote';
+        }
+
+        $raw = strtolower(trim((string) $this->branch));
+
+        return match ($raw) {
+            'wakrah', 'al_wakrah' => 'wakrah',
+            'both' => 'both',
+            'old_airport' => 'old_airport',
+            default => 'remote',
+        };
+    }
 
     public function appointments()
     {
@@ -90,15 +169,22 @@ class Staff extends Model
     }
 
     /**
-     * Bookable staff who are currently employed (no end date, or an end date
-     * that hasn't passed yet) — the "active staff" list used for attributing
-     * upsells and other current-team pickers.
+     * Bookable in-salon staff who are currently employed (no end date, or an end date
+     * that hasn't passed yet) — excludes Remote staff and Chat Agents so they never
+     * leak into Enhanced Calendar columns, specialist pickers, or salon upsells.
      */
     public function scopeActive($query)
     {
         $today = now('Asia/Qatar')->toDateString();
 
         return $query->where('bookable', true)
+            ->where(function ($q) {
+                $q->where('is_remote', false)->orWhereNull('is_remote');
+            })
+            ->whereIn('branch', self::PHYSICAL_BRANCHES)
+            ->whereDoesntHave('user', function ($uq) {
+                $uq->whereIn(DB::raw("LOWER(TRIM(COALESCE(role, '')))"), self::REMOTE_ROLES);
+            })
             ->where(function ($q) use ($today) {
                 $q->whereNull('start_date')->orWhereDate('start_date', '<=', $today);
             })
@@ -109,8 +195,9 @@ class Staff extends Model
 
     /**
      * Salon staff eligible for weekly Monday Branch Manager evaluations as of $asOfDate.
-     * Includes absent / sick / on-leave stylists, while excluding non-stylist CRM roles
-     * (chat agents, admins, owners, super_admins, managers) and Branch Managers (Ahana, Rhea).
+     * Includes absent / sick / on-leave stylists, while excluding Remote staff, non-stylist
+     * CRM roles (chat agents, ops_lead, sales_coordinator, salon_manager, admins, owners, super_admins, managers)
+     * and Branch Managers (Ahana, Rhea).
      */
     public function scopeSalonEvaluatable($query, ?string $branch = null, $asOfDate = null)
     {
@@ -120,6 +207,10 @@ class Staff extends Model
 
         return $query
             ->where('bookable', true)
+            ->where(function ($q) {
+                $q->where('is_remote', false)->orWhereNull('is_remote');
+            })
+            ->whereIn('branch', self::PHYSICAL_BRANCHES)
             ->when($branch, fn ($q) => $q->whereIn('branch', [$branch, 'both']))
             ->where(function ($q) use ($dateStr) {
                 $q->whereNull('start_date')->orWhereDate('start_date', '<=', $dateStr);
@@ -130,6 +221,11 @@ class Staff extends Model
             ->whereDoesntHave('user', function ($uq) {
                 $uq->whereIn(DB::raw("LOWER(TRIM(COALESCE(role, '')))"), [
                     'agent',
+                    'sales_coordinator',
+                    'ops_lead',
+                    'marketing_specialist',
+                    'social_media_editor',
+                    'salon_manager',
                     'admin',
                     'owner',
                     'super_admin',
@@ -210,6 +306,26 @@ class Staff extends Model
     public function contracts()
     {
         return $this->hasMany(StaffContract::class, 'staff_id');
+    }
+
+    public function documents()
+    {
+        return $this->hasMany(StaffDocument::class, 'staff_id');
+    }
+
+    public function leaves()
+    {
+        return $this->hasMany(StaffLeave::class, 'staff_id');
+    }
+
+    public function attendances()
+    {
+        return $this->hasMany(StaffAttendance::class, 'staff_id');
+    }
+
+    public function evaluations()
+    {
+        return $this->hasMany(KpiStaffEvaluation::class, 'staff_id');
     }
 
     public function setContractPin(string $pin): void
