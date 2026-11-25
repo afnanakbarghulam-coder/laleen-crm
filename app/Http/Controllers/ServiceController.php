@@ -19,11 +19,16 @@ class ServiceController extends Controller
     public function index(Request $request)
     {
         $categories = ServiceCategory::withCount('services')->orderBy('sort_order')->get();
+        $uncategorizedCount = Service::whereNull('category_id')->count();
+        $totalServicesCount = (int) $categories->sum('services_count') + $uncategorizedCount;
 
         $query = Service::with(['category', 'staff'])->orderBy('name');
 
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->category_id);
+        $categoryFilter = $request->query('category_id');
+        if ($categoryFilter === 'uncategorized') {
+            $query->whereNull('category_id');
+        } elseif ($request->filled('category_id') && is_numeric($categoryFilter)) {
+            $query->where('category_id', (int) $categoryFilter);
         }
 
         if ($request->filled('search')) {
@@ -42,7 +47,69 @@ class ServiceController extends Controller
             'eligibleServices.category',
         ])->orderBy('name')->get();
 
-        return view('services.index', compact('categories', 'services', 'staffList', 'allServices', 'combos', 'freebiePackages'));
+        return view('services.index', compact(
+            'categories',
+            'uncategorizedCount',
+            'totalServicesCount',
+            'services',
+            'staffList',
+            'allServices',
+            'combos',
+            'freebiePackages'
+        ));
+    }
+
+    /**
+     * Atomically assign a menu category (or null for Uncategorized) to multiple services at once.
+     * Updates ONLY `category_id` so prices, durations, staff skills, rebooking intervals, combos,
+     * and bookings remain completely untouched.
+     */
+    public function bulkUpdateCategory(Request $request)
+    {
+        $validated = $request->validate([
+            'service_ids' => ['required', 'array', 'min:1'],
+            'service_ids.*' => ['required', 'integer', 'exists:services,id'],
+            'category_id' => ['nullable', 'integer', 'exists:service_categories,id'],
+        ]);
+
+        $uniqueIds = array_values(array_unique(array_map('intval', $validated['service_ids'])));
+        $targetCategoryId = isset($validated['category_id']) && $validated['category_id'] !== null
+            ? (int) $validated['category_id']
+            : null;
+
+        $targetCategory = $targetCategoryId !== null
+            ? ServiceCategory::findOrFail($targetCategoryId)
+            : null;
+
+        $targetCategoryName = $targetCategory ? $targetCategory->name : 'Uncategorized';
+
+        DB::transaction(function () use ($uniqueIds, $targetCategoryId) {
+            Service::whereIn('id', $uniqueIds)->update([
+                'category_id' => $targetCategoryId,
+            ]);
+        });
+
+        $count = count($uniqueIds);
+        $noun = $count === 1 ? 'service' : 'services';
+        $message = "Moved {$count} {$noun} to {$targetCategoryName}";
+
+        if ($request->expectsJson() || $request->ajax()) {
+            $updatedCategories = ServiceCategory::withCount('services')->orderBy('sort_order')->get();
+            $uncategorizedCount = Service::whereNull('category_id')->count();
+
+            return response()->json([
+                'success' => true,
+                'updated_count' => $count,
+                'category_id' => $targetCategoryId,
+                'category_name' => $targetCategoryName,
+                'message' => $message,
+                'category_counts' => $updatedCategories->pluck('services_count', 'id'),
+                'uncategorized_count' => $uncategorizedCount,
+                'total_count' => (int) $updatedCategories->sum('services_count') + $uncategorizedCount,
+            ]);
+        }
+
+        return back()->with('success', $message);
     }
 
     public function store(Request $request)

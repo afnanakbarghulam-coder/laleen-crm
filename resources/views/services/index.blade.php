@@ -50,15 +50,51 @@
         color: #fff;
     }
 
+    .svc-group-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 22px 0 12px;
+    }
+
+    .svc-group-header:first-child {
+        margin-top: 0;
+    }
+
     .svc-group-title {
         font-weight: 800;
         font-size: 16px;
-        margin: 22px 0 12px;
+        margin: 0;
         color: #e79a91;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
     }
 
-    .svc-group-title:first-child {
-        margin-top: 0;
+    .svc-group-count {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(217, 143, 131, 0.12);
+        color: #cbb8b0;
+    }
+
+    .svc-group-select-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #b8a29a;
+        cursor: pointer;
+        user-select: none;
+        margin: 0;
+    }
+
+    .svc-group-select-label:hover {
+        color: #f8efe6;
     }
 
     .svc-card {
@@ -70,6 +106,205 @@
         display: flex;
         gap: 14px;
         align-items: flex-start;
+        transition: border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
+    }
+
+    .svc-card.is-selected {
+        border-color: rgba(221, 162, 158, 0.55) !important;
+        background: linear-gradient(180deg, rgba(221, 162, 158, 0.10) 0%, rgba(36, 30, 28, 0.98) 100%) !important;
+        box-shadow: 0 0 0 1px rgba(221, 162, 158, 0.22);
+    }
+
+    .svc-check-wrap {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding-top: 2px;
+        flex-shrink: 0;
+        cursor: pointer;
+    }
+
+    .svc-dark-checkbox {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 17px;
+        height: 17px;
+        border-radius: 5px;
+        border: 1.5px solid rgba(221, 162, 158, 0.36);
+        background: #161012;
+        cursor: pointer;
+        position: relative;
+        flex-shrink: 0;
+        transition: background 0.12s ease, border-color 0.12s ease;
+        margin: 0;
+    }
+
+    .svc-dark-checkbox:hover {
+        border-color: #DDA29E;
+    }
+
+    .svc-dark-checkbox:checked {
+        background: #DDA29E;
+        border-color: #DDA29E;
+    }
+
+    .svc-dark-checkbox:checked::after {
+        content: '';
+        position: absolute;
+        left: 4.5px;
+        top: 1.5px;
+        width: 5px;
+        height: 9px;
+        border: solid #1b1315;
+        border-width: 0 2px 2px 0;
+        transform: rotate(42deg);
+    }
+
+    .svc-dark-checkbox:indeterminate {
+        background: rgba(221, 162, 158, 0.28);
+        border-color: #DDA29E;
+    }
+
+    .svc-dark-checkbox:indeterminate::after {
+        content: '';
+        position: absolute;
+        left: 3px;
+        top: 6px;
+        width: 8px;
+        height: 2px;
+        background: #f8efe6;
+        border-radius: 1px;
+    }
+
+    .svc-toolbar-select-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 6px 2px 10px;
+        margin-bottom: 6px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    /* Sticky / Fixed Bottom-Center Dark Luxury Bulk Action Bar */
+    .svc-bulk-bar {
+        position: fixed;
+        bottom: 22px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1050;
+        width: min(92vw, 720px);
+        background: #1b1315;
+        border: 1px solid rgba(221, 162, 158, 0.38);
+        border-radius: 16px;
+        padding: 12px 18px;
+        box-shadow: 0 22px 60px rgba(0, 0, 0, 0.78);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .svc-bulk-count-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        background: rgba(221, 162, 158, 0.16);
+        border: 1px solid rgba(221, 162, 158, 0.34);
+        color: #f3d5d2;
+        font-size: 12.5px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .svc-bulk-clear-btn {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        color: #cbb8b0;
+        border-radius: 999px;
+        padding: 5px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .svc-bulk-clear-btn:hover {
+        color: #fff;
+        border-color: rgba(221, 162, 158, 0.45);
+    }
+
+    .svc-bulk-select {
+        min-width: 205px;
+        max-width: 260px;
+        background: #130d0f !important;
+        border: 1px solid rgba(221, 162, 158, 0.28) !important;
+        color: #f8efe6 !important;
+        border-radius: 10px !important;
+        font-size: 13px !important;
+        padding: 6px 32px 6px 12px !important;
+        color-scheme: dark;
+    }
+
+    .svc-bulk-select option {
+        background: #130d0f;
+        color: #f8efe6;
+    }
+
+    .svc-bulk-move-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 18px;
+        border-radius: 999px;
+        border: none;
+        background: linear-gradient(135deg, #DDA29E, #c68d84);
+        color: #1c110f;
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: filter 0.14s ease, opacity 0.14s ease;
+    }
+
+    .svc-bulk-move-btn:hover:not(:disabled) {
+        filter: brightness(1.07);
+    }
+
+    .svc-bulk-move-btn:disabled {
+        opacity: 0.42;
+        cursor: not-allowed;
+    }
+
+    .svc-bulk-toast {
+        position: fixed;
+        top: 22px;
+        right: 24px;
+        z-index: 1095;
+        background: #1b1315;
+        border: 1px solid rgba(110, 231, 183, 0.42);
+        color: #6ee7b7;
+        border-radius: 12px;
+        padding: 11px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        box-shadow: 0 18px 46px rgba(0, 0, 0, 0.65);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .svc-bulk-toast.is-error {
+        border-color: rgba(251, 113, 133, 0.45);
+        color: #fda4af;
+    }
+
+    .svc-cat-row .cat-dot.is-uncat {
+        background: transparent;
+        border: 1.5px dashed #b8a29a;
     }
 
     .svc-card img.svc-thumb {
@@ -248,7 +483,7 @@
     }
 
     @media print {
-        .svc-top-tabs, .svc-tab-action, .svc-cat-rail, .btn, form[method="GET"] {
+        .svc-top-tabs, .svc-tab-action, .svc-cat-rail, .svc-bulk-bar, .svc-toolbar-select-row, .svc-check-wrap, .svc-group-select-label, .btn, form[method="GET"] {
             display: none !important;
         }
         .svc-tab-pane {
@@ -269,6 +504,35 @@
 </style>
 
 @section('content')
+    <style>
+        .svc-bulk-bar {
+            background: #1b1315 !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+        .svc-bulk-select {
+            width: auto !important;
+            min-width: 210px !important;
+            max-width: 250px !important;
+            flex: 0 0 auto !important;
+            background: #130d0f !important;
+            background-color: #130d0f !important;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23DDA29E' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+            background-repeat: no-repeat !important;
+            background-position: right 0.85rem center !important;
+            background-size: 12px 10px !important;
+            -webkit-appearance: none !important;
+            -moz-appearance: none !important;
+            appearance: none !important;
+            border: 1px solid rgba(221, 162, 158, 0.30) !important;
+            color: #f8efe6 !important;
+        }
+        .svc-bulk-select:focus {
+            background: #130d0f !important;
+            border-color: #DDA29E !important;
+            box-shadow: 0 0 0 2px rgba(221, 162, 158, 0.22) !important;
+        }
+    </style>
     @php
         $initialCatalogTab = in_array(request('tab'), ['services', 'combos', 'freebies'], true) ? request('tab') : 'services';
     @endphp
@@ -298,18 +562,28 @@
 
     <!-- TAB: SERVICES -->
     <div class="svc-tab-pane {{ $initialCatalogTab === 'services' ? 'active' : '' }}" id="tab-services">
+    @php
+        $activeCatParam = request('category_id');
+        $visibleServiceCount = $services->flatten(1)->count();
+    @endphp
     <div class="row g-3">
         <div class="col-md-3">
             <div class="svc-cat-rail mb-3">
-                <a href="{{ route('services.index') }}" class="svc-cat-row {{ !request('category_id') ? 'active' : '' }}">
+                <a href="{{ route('services.index', array_filter(['search' => request('search')])) }}"
+                   class="svc-cat-row {{ !$activeCatParam ? 'active' : '' }}">
                     <span>All categories</span>
-                    <span class="badge rounded-pill">{{ $categories->sum('services_count') }}</span>
+                    <span class="badge rounded-pill" data-cat-count="all">{{ $totalServicesCount ?? $categories->sum('services_count') }}</span>
+                </a>
+                <a href="{{ route('services.index', array_filter(['category_id' => 'uncategorized', 'search' => request('search')])) }}"
+                   class="svc-cat-row {{ $activeCatParam === 'uncategorized' ? 'active' : '' }}">
+                    <span><span class="cat-dot is-uncat"></span>Uncategorized</span>
+                    <span class="badge rounded-pill" data-cat-count="uncategorized">{{ $uncategorizedCount ?? 0 }}</span>
                 </a>
                 @foreach ($categories as $cat)
-                    <a href="{{ route('services.index', ['category_id' => $cat->id]) }}"
-                        class="svc-cat-row {{ request('category_id') == $cat->id ? 'active' : '' }}">
+                    <a href="{{ route('services.index', array_filter(['category_id' => $cat->id, 'search' => request('search')])) }}"
+                        class="svc-cat-row {{ (string) $activeCatParam === (string) $cat->id ? 'active' : '' }}">
                         <span><span class="cat-dot" style="background:{{ $cat->color }}"></span>{{ $cat->name }}</span>
-                        <span class="badge rounded-pill">{{ $cat->services_count }}</span>
+                        <span class="badge rounded-pill" data-cat-count="{{ $cat->id }}">{{ $cat->services_count }}</span>
                     </a>
                 @endforeach
             </div>
@@ -320,10 +594,10 @@
             @endmoduleEdit
         </div>
 
-        <div class="col-md-9">
-            <form method="GET" action="{{ route('services.index') }}" class="mb-3">
-                @if (request('category_id'))
-                    <input type="hidden" name="category_id" value="{{ request('category_id') }}">
+        <div class="col-md-9" style="padding-bottom: 84px;">
+            <form method="GET" action="{{ route('services.index') }}" class="mb-2">
+                @if ($activeCatParam)
+                    <input type="hidden" name="category_id" value="{{ $activeCatParam }}">
                 @endif
                 <div class="input-group">
                     <span class="input-group-text bg-white"><i class="bx bx-search"></i></span>
@@ -332,11 +606,48 @@
                 </div>
             </form>
 
+            @moduleEdit('services')
+                @if ($visibleServiceCount > 0)
+                    <div class="svc-toolbar-select-row">
+                        <label class="svc-group-select-label" for="svcSelectAllVisible">
+                            <input type="checkbox" id="svcSelectAllVisible" class="svc-dark-checkbox">
+                            <span>Select all visible ({{ $visibleServiceCount }})</span>
+                        </label>
+                        <span class="small" style="color: #8f7a73;">Tip: Shift+Click to select a range</span>
+                    </div>
+                @endif
+            @endmoduleEdit
+
+            @php $groupIdx = 0; @endphp
             @forelse ($services as $groupName => $groupServices)
-                <div class="svc-group-title">{{ $groupName }}</div>
+                <div class="svc-group-header">
+                    <div class="svc-group-title">
+                        <span>{{ $groupName }}</span>
+                        <span class="svc-group-count">{{ $groupServices->count() }}</span>
+                    </div>
+                    @moduleEdit('services')
+                        <label class="svc-group-select-label">
+                            <input type="checkbox"
+                                class="svc-dark-checkbox svc-group-select-all"
+                                data-group-index="{{ $groupIdx }}">
+                            <span>Select all</span>
+                        </label>
+                    @endmoduleEdit
+                </div>
 
                 @foreach ($groupServices as $service)
-                    <div class="svc-card">
+                    <div class="svc-card" data-service-card="{{ $service->id }}">
+                        @moduleEdit('services')
+                            <label class="svc-check-wrap" title="Select {{ $service->name }}" onclick="event.stopPropagation();">
+                                <input type="checkbox"
+                                    class="svc-dark-checkbox svc-bulk-check"
+                                    value="{{ $service->id }}"
+                                    data-service-id="{{ $service->id }}"
+                                    data-group-index="{{ $groupIdx }}"
+                                    aria-label="Select {{ $service->name }}">
+                            </label>
+                        @endmoduleEdit
+
                         @if ($service->photo)
                             <img src="{{ asset($service->photo) }}" class="svc-thumb">
                         @else
@@ -386,11 +697,36 @@
                         </div>
                     </div>
                 @endforeach
+                @php $groupIdx++; @endphp
             @empty
                 <div class="text-center text-muted py-5">No services found.</div>
             @endforelse
         </div>
     </div>
+
+    @moduleEdit('services')
+    {{-- Floating Sticky Bulk Category Action Bar (Services Tab Only, appears when selectedCount > 0) --}}
+    <div id="svcBulkActionBar" class="svc-bulk-bar d-none" role="region" aria-label="Bulk category actions">
+        <div class="d-flex align-items-center gap-2">
+            <span class="svc-bulk-count-pill" id="svcBulkCountBadge">0 services selected</span>
+            <button type="button" class="svc-bulk-clear-btn" id="svcBulkClearBtn">Clear</button>
+        </div>
+
+        <div class="d-flex align-items-center flex-wrap flex-sm-nowrap gap-2">
+            <select id="svcBulkCategorySelect" class="form-select svc-bulk-select" aria-label="Target category">
+                <option value="">Move to category...</option>
+                <option value="__uncategorized__">-- Uncategorized --</option>
+                @foreach ($categories as $cat)
+                    <option value="{{ $cat->id }}">{{ $cat->name }}</option>
+                @endforeach
+            </select>
+            <button type="button" id="svcBulkMoveBtn" class="svc-bulk-move-btn" disabled>
+                <i class="bx bx-transfer-alt"></i>
+                <span id="svcBulkMoveBtnText">Move Selected</span>
+            </button>
+        </div>
+    </div>
+    @endmoduleEdit
     </div>
     <!-- /TAB: SERVICES -->
 
@@ -603,7 +939,7 @@
             modal.show();
         }
 
-        /* ---------------- TOP TABS (Services / Combos) ---------------- */
+        /* ---------------- TOP TABS (Services / Combos / Service + Freebies) ---------------- */
         document.querySelectorAll('.svc-top-tab').forEach(tabBtn => {
             tabBtn.addEventListener('click', function() {
                 const tab = this.dataset.tab;
@@ -611,7 +947,210 @@
                 document.querySelectorAll('.svc-top-tab').forEach(b => b.classList.toggle('active', b === this));
                 document.querySelectorAll('.svc-tab-pane').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
                 document.querySelectorAll('.svc-tab-action').forEach(b => b.classList.toggle('d-none', b.dataset.tab !== tab));
+
+                // Hide bulk bar cleanly when navigating away from the Services tab
+                const bulkBar = document.getElementById('svcBulkActionBar');
+                if (bulkBar && tab !== 'services') {
+                    bulkBar.classList.add('d-none');
+                } else if (typeof window.syncSvcBulkBar === 'function') {
+                    window.syncSvcBulkBar();
+                }
             });
         });
+
+        @moduleEdit('services')
+        /* ---------------- BULK CATEGORY ASSIGNMENT (Services Tab) ---------------- */
+        (function () {
+            function showSvcBulkToast(message, isError = false) {
+                const existing = document.getElementById('svcBulkToastEl');
+                if (existing) existing.remove();
+                const toast = document.createElement('div');
+                toast.id = 'svcBulkToastEl';
+                toast.className = 'svc-bulk-toast' + (isError ? ' is-error' : '');
+                toast.innerHTML = `<i class="bx ${isError ? 'bx-error-circle' : 'bx-check-circle'} fs-5"></i><span></span>`;
+                toast.querySelector('span').textContent = message;
+                document.body.appendChild(toast);
+                setTimeout(() => {
+                    toast.style.transition = 'opacity 0.25s ease';
+                    toast.style.opacity = '0';
+                    setTimeout(() => toast.remove(), 260);
+                }, 4000);
+            }
+
+            // Show toast carried across clean reload after bulk move
+            try {
+                const pendingToast = sessionStorage.getItem('svcBulkMoveToast');
+                if (pendingToast) {
+                    sessionStorage.removeItem('svcBulkMoveToast');
+                    showSvcBulkToast(pendingToast, false);
+                }
+            } catch (e) {}
+
+            const checkboxes = Array.from(document.querySelectorAll('.svc-bulk-check'));
+            const groupSelectAlls = Array.from(document.querySelectorAll('.svc-group-select-all'));
+            const selectAllVisible = document.getElementById('svcSelectAllVisible');
+            const bulkBar = document.getElementById('svcBulkActionBar');
+            const countBadge = document.getElementById('svcBulkCountBadge');
+            const clearBtn = document.getElementById('svcBulkClearBtn');
+            const categorySelect = document.getElementById('svcBulkCategorySelect');
+            const moveBtn = document.getElementById('svcBulkMoveBtn');
+            const moveBtnText = document.getElementById('svcBulkMoveBtnText');
+
+            if (!bulkBar || checkboxes.length === 0) return;
+
+            let lastCheckedIndex = null;
+
+            function getSelectedIds() {
+                return checkboxes.filter(cb => cb.checked).map(cb => Number(cb.value));
+            }
+
+            function syncBulkUI() {
+                const selectedIds = getSelectedIds();
+                const count = selectedIds.length;
+                const servicesTabActive = document.getElementById('tab-services')?.classList.contains('active');
+
+                checkboxes.forEach(cb => {
+                    const card = document.querySelector(`[data-service-card="${cb.value}"]`);
+                    if (card) card.classList.toggle('is-selected', cb.checked);
+                });
+
+                // Sync per-group "Select all" checkboxes (with indeterminate state)
+                groupSelectAlls.forEach(gcb => {
+                    const gIdx = gcb.dataset.groupIndex;
+                    const groupBoxes = checkboxes.filter(cb => cb.dataset.groupIndex === gIdx);
+                    const checkedCount = groupBoxes.filter(cb => cb.checked).length;
+                    gcb.checked = groupBoxes.length > 0 && checkedCount === groupBoxes.length;
+                    gcb.indeterminate = checkedCount > 0 && checkedCount < groupBoxes.length;
+                });
+
+                // Sync toolbar "Select all visible" checkbox
+                if (selectAllVisible) {
+                    selectAllVisible.checked = checkboxes.length > 0 && count === checkboxes.length;
+                    selectAllVisible.indeterminate = count > 0 && count < checkboxes.length;
+                }
+
+                if (countBadge) {
+                    countBadge.textContent = `${count} ${count === 1 ? 'service' : 'services'} selected`;
+                }
+
+                bulkBar.classList.toggle('d-none', count === 0 || !servicesTabActive);
+
+                if (moveBtn && categorySelect) {
+                    moveBtn.disabled = count === 0 || categorySelect.value === '';
+                }
+            }
+
+            window.syncSvcBulkBar = syncBulkUI;
+
+            // Shift+Click range selection across visible service checkboxes
+            checkboxes.forEach((cb, idx) => {
+                cb.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    if (e.shiftKey && lastCheckedIndex !== null && lastCheckedIndex !== idx) {
+                        const start = Math.min(lastCheckedIndex, idx);
+                        const end = Math.max(lastCheckedIndex, idx);
+                        const targetState = cb.checked;
+                        for (let i = start; i <= end; i++) {
+                            checkboxes[i].checked = targetState;
+                        }
+                    }
+                    lastCheckedIndex = idx;
+                    syncBulkUI();
+                });
+            });
+
+            // Per-group Select all
+            groupSelectAlls.forEach(gcb => {
+                gcb.addEventListener('change', function () {
+                    const gIdx = this.dataset.groupIndex;
+                    const targetState = this.checked;
+                    checkboxes
+                        .filter(cb => cb.dataset.groupIndex === gIdx)
+                        .forEach(cb => { cb.checked = targetState; });
+                    syncBulkUI();
+                });
+            });
+
+            // Toolbar Select all visible
+            selectAllVisible?.addEventListener('change', function () {
+                const targetState = this.checked;
+                checkboxes.forEach(cb => { cb.checked = targetState; });
+                syncBulkUI();
+            });
+
+            // Clear selection
+            clearBtn?.addEventListener('click', function () {
+                checkboxes.forEach(cb => { cb.checked = false; });
+                lastCheckedIndex = null;
+                if (categorySelect) categorySelect.value = '';
+                syncBulkUI();
+            });
+
+            categorySelect?.addEventListener('change', syncBulkUI);
+
+            // Submit Bulk Move
+            moveBtn?.addEventListener('click', async function () {
+                const serviceIds = getSelectedIds();
+                const rawTarget = categorySelect ? categorySelect.value : '';
+                if (serviceIds.length === 0 || rawTarget === '') return;
+
+                const payloadCategoryId = rawTarget === '__uncategorized__' ? null : Number(rawTarget);
+
+                moveBtn.disabled = true;
+                if (moveBtnText) moveBtnText.textContent = 'Moving…';
+
+                try {
+                    const res = await fetch('{{ route('services.bulk-category') }}', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            service_ids: serviceIds,
+                            category_id: payloadCategoryId,
+                        }),
+                    });
+
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok && data.success) {
+                        // Immediately sync sidebar badges before reloading to preserve active filter/search
+                        if (data.category_counts) {
+                            Object.entries(data.category_counts).forEach(([catId, cnt]) => {
+                                const b = document.querySelector(`[data-cat-count="${catId}"]`);
+                                if (b) b.textContent = String(cnt);
+                            });
+                        }
+                        const uncatBadge = document.querySelector('[data-cat-count="uncategorized"]');
+                        if (uncatBadge && typeof data.uncategorized_count === 'number') {
+                            uncatBadge.textContent = String(data.uncategorized_count);
+                        }
+                        const allBadge = document.querySelector('[data-cat-count="all"]');
+                        if (allBadge && typeof data.total_count === 'number') {
+                            allBadge.textContent = String(data.total_count);
+                        }
+
+                        try {
+                            sessionStorage.setItem('svcBulkMoveToast', data.message || 'Services updated.');
+                        } catch (e) {}
+
+                        window.location.reload();
+                        return;
+                    }
+
+                    const errMsg = data.errors
+                        ? Object.values(data.errors).flat()[0]
+                        : (data.message || 'Could not move selected services.');
+                    showSvcBulkToast(errMsg, true);
+                } catch (err) {
+                    showSvcBulkToast('Network error updating categories.', true);
+                } finally {
+                    if (moveBtnText) moveBtnText.textContent = 'Move Selected';
+                    syncBulkUI();
+                }
+            });
+        })();
+        @endmoduleEdit
     </script>
 @endsection
