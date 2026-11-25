@@ -289,16 +289,23 @@ class StaffSelfServicePortalPhase1Test extends TestCase
         $this->actingAs($agentUser)->get(route('leads.index'))->assertOk();
         $this->actingAs($agentUser)->get(route('appointments.calendar'))->assertOk();
 
-        // /my-profile works inside standard CRM layout (sidebar present) with Remote & Chat Agent scope
+        // /my-profile Overview works inside standard CRM layout (sidebar present) with Remote & Monthly Salary
         $profileRes = $this->actingAs($agentUser)->get('/my-profile');
         $profileRes->assertOk();
         $profileRes->assertSee('Zoya Agent');
         $profileRes->assertSee('Chat Agent');
         $profileRes->assertSee('Remote');
         $profileRes->assertDontSee('Old Airport');
-        $profileRes->assertSee("Today's Daily Booking Target");
+        $profileRes->assertSee('Monthly Salary');
+        $profileRes->assertSee('Performance');
         $profileRes->assertSee('id="layout-menu"', false);
         $profileRes->assertSee('My Profile');
+
+        // /my-profile?tab=performance displays Chat Agent Booking Targets in KPIs-module scorecard style
+        $perfRes = $this->actingAs($agentUser)->get('/my-profile?tab=performance');
+        $perfRes->assertOk();
+        $perfRes->assertSee("Today's Daily Booking Target");
+        $perfRes->assertSee('MTD Booking Quota');
 
         // Non-admin Chat Agent CANNOT access Admin Portal Access endpoints
         $this->actingAs($agentUser)

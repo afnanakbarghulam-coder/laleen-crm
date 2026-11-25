@@ -172,12 +172,64 @@ class StaffPortalFullUpgradeTest extends TestCase
             'is_completed' => false,
         ]);
 
-        $opsResp = $this->actingAs($opsUser)->get('/my-profile')->assertOk();
+        // Overview stays clean & hides Leaves for Remote Ops Lead
+        $opsOverview = $this->actingAs($opsUser)->get('/my-profile')->assertOk();
+        $opsOverview->assertSee('Monthly Salary');
+        $opsOverview->assertSee('?tab=performance', false);
+        $opsOverview->assertDontSee('?tab=leaves', false);
+
+        // Dedicated Performance tab displays Ops Tracker scorecards + pending items table
+        $opsResp = $this->actingAs($opsUser)->get('/my-profile?tab=performance')->assertOk();
         $opsResp->assertSee('Ops Tracker KPI');
+        $opsResp->assertSee('Pending Ops Tasks');
+        $opsResp->assertSee('Overdue / Priority Items');
+        $opsResp->assertSee('Completion Rate');
         $opsResp->assertSee('Audit Al Wakrah Towels Inventory');
         $opsResp->assertDontSee('?tab=leaves', false);
 
-        // B. Salon Manager (Old Airport) sees Branch Manager KPIs + ONLY Old Airport pending complaints
+        // B. Sales Coordinator sees 3 KPIs-module scorecards (MTD Team Bookings, Lead Conversion Rate, Overdue Leads)
+        $salesUser = User::factory()->create([
+            'name' => 'Laden Khan',
+            'email' => 'laden.perf@laleen.qa',
+            'role' => 'sales_coordinator',
+            'permissions' => User::defaultPermissionsForRole('sales_coordinator'),
+        ]);
+        $salesStaff = Staff::create([
+            'name' => 'Laden Khan',
+            'branch' => null,
+            'is_remote' => true,
+            'bookable' => false,
+            'user_id' => $salesUser->id,
+        ]);
+        StaffContract::create([
+            'staff_id' => $salesStaff->id,
+            'user_id' => $salesUser->id,
+            'template_key' => 'remote_chat_creative',
+            'role_title' => 'Sales Coordinator',
+            'branch' => 'remote',
+            'currency' => 'QAR',
+            'base_salary' => 4500.00,
+            'start_date' => '2026-01-01',
+            'status' => StaffContract::STATUS_ACTIVE,
+            'created_by' => $this->admin->id,
+        ]);
+        $salesOverview = $this->actingAs($salesUser)->get('/my-profile')->assertOk();
+        $salesOverview->assertSee('4,500 QAR');
+        $salesOverview->assertSee('mpSalaryToggleBtn');
+        $salesOverview->assertDontSee('?tab=leaves', false);
+        $this->actingAs($salesUser)->get('/my-profile?tab=leaves')->assertStatus(403);
+
+        $salesContracts = $this->actingAs($salesUser)->get('/my-profile?tab=contracts')->assertOk();
+        $salesContracts->assertSee('Monthly Base Salary');
+        $salesContracts->assertSee('4,500 QAR');
+
+        $salesPerf = $this->actingAs($salesUser)->get('/my-profile?tab=performance')->assertOk();
+        $salesPerf->assertSee('MTD Team Bookings');
+        $salesPerf->assertSee('Lead Conversion Rate');
+        $salesPerf->assertSee('Overdue Leads');
+        $salesPerf->assertSee('mp-luxe-kpi-card');
+
+        // C. Salon Manager (Old Airport) sees Branch Manager KPIs + ONLY Old Airport pending complaints on Performance tab
         $mgrUser = User::factory()->create([
             'name' => 'Ahana Salon Manager',
             'email' => 'ahana.sm@laleen.qa',
@@ -189,6 +241,7 @@ class StaffPortalFullUpgradeTest extends TestCase
             'branch' => 'old_airport',
             'is_remote' => false,
             'bookable' => false,
+            'base_salary' => 6200,
             'user_id' => $mgrUser->id,
         ]);
 
@@ -211,14 +264,23 @@ class StaffPortalFullUpgradeTest extends TestCase
             'what_happened' => 'Wakrah issue only.',
         ]);
 
-        $mgrResp = $this->actingAs($mgrUser)->get('/my-profile')->assertOk();
+        // Overview shows own salary (6,200 QAR) and NEVER leaks Laden's salary (4,500 QAR)
+        $mgrOverview = $this->actingAs($mgrUser)->get('/my-profile')->assertOk();
+        $mgrOverview->assertSee('6,200 QAR');
+        $mgrOverview->assertDontSee('4,500 QAR');
+        $mgrOverview->assertSee('?tab=leaves', false);
+
+        $mgrResp = $this->actingAs($mgrUser)->get('/my-profile?tab=performance')->assertOk();
         $mgrResp->assertSee('Branch Manager KPIs');
+        $mgrResp->assertSee('Chair Upsells');
+        $mgrResp->assertSee('Monday Staff Evaluations');
+        $mgrResp->assertSee('Branch Mystery Shopper');
         $mgrResp->assertSee('Pending Complaints for Action');
         $mgrResp->assertSee($oaComplaint->reference_number);
         $mgrResp->assertDontSee($wkComplaint->reference_number);
         $mgrResp->assertSee('?tab=leaves', false);
 
-        // C. Salon Staff sees Skills, Weekly Evaluations, Deductions, and STRICT PRIVACY My Complaints
+        // D. Salon Staff sees Skills & Deductions on Overview, and Weekly Evaluations + STRICT PRIVACY My Complaints on Performance
         //    (client phone, client name, and client email MUST NEVER appear in HTML!)
         $stylistUser = User::factory()->create([
             'name' => 'Sara Beautician',
@@ -272,21 +334,29 @@ class StaffPortalFullUpgradeTest extends TestCase
             'created_by' => $this->admin->id,
         ]);
 
-        $stylistResp = $this->actingAs($stylistUser)->get('/my-profile')->assertOk();
-        $stylistResp->assertSee('Assigned Service Skills');
-        $stylistResp->assertSee('Signature Blowdry');
-        $stylistResp->assertSee('My Complaints');
-        $stylistResp->assertSee($privacyComplaint->reference_number);
-        $stylistResp->assertSee('Coaching completed');
-        $stylistResp->assertSee('Weekly Evaluations');
-        $stylistResp->assertSee('Outstanding hospitality this week.');
-        $stylistResp->assertSee('Deductions &amp; Penalties', false);
-        $stylistResp->assertSee('Late opening penalty');
-        $stylistResp->assertSee('75.00');
+        $stylistOverview = $this->actingAs($stylistUser)->get('/my-profile')->assertOk();
+        $stylistOverview->assertSee('Not set'); // No salary configured yet
+        $stylistOverview->assertDontSee('4,500 QAR');
+        $stylistOverview->assertDontSee('6,200 QAR');
+        $stylistOverview->assertSee('Assigned Service Skills');
+        $stylistOverview->assertSee('Signature Blowdry');
+        $stylistOverview->assertSee('Recent Deductions &amp; Penalties', false);
+        $stylistOverview->assertSee('Late opening penalty');
+        $stylistOverview->assertSee('75.00');
+
+        $stylistPerf = $this->actingAs($stylistUser)->get('/my-profile?tab=performance')->assertOk();
+        $stylistPerf->assertSee('Weekly Evaluation Average');
+        $stylistPerf->assertSee('Evaluations Completed');
+        $stylistPerf->assertSee('Complaints Count');
+        $stylistPerf->assertSee('My Complaints');
+        $stylistPerf->assertSee($privacyComplaint->reference_number);
+        $stylistPerf->assertSee('Coaching completed');
+        $stylistPerf->assertSee('Weekly Evaluations');
+        $stylistPerf->assertSee('Outstanding hospitality this week.');
         // STRICT PRIVACY: client identity & contact details MUST NOT leak
-        $stylistResp->assertDontSee('Secret Client Fatima Al-Thani');
-        $stylistResp->assertDontSee('+97466778899');
-        $stylistResp->assertDontSee('secret.vip@example.com');
+        $stylistPerf->assertDontSee('Secret Client Fatima Al-Thani');
+        $stylistPerf->assertDontSee('+97466778899');
+        $stylistPerf->assertDontSee('secret.vip@example.com');
     }
 
     public function test_private_staff_documents_contracts_and_strict_cross_staff_403_policies(): void
