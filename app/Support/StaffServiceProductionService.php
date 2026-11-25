@@ -9,30 +9,27 @@ use App\Models\Customer;
 use App\Models\Sale;
 use App\Models\Staff;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 class StaffServiceProductionService
 {
     /**
-     * Compute Month-to-Date (Asia/Qatar) Service Production strictly for `$staff`:
-     * - Completed / paid appointments ONLY (`Appointment::paidOrCompleted()`, excluding
-     *   cancelled, no_show, soft-deleted, and uncompleted future bookings).
-     * - Attributes each service line to its exact assigned specialist (`staff_id`).
-     * - Standalone services: net paid line price after item & bill discounts.
-     * - Service + Freebies: anchor gets net paid price; freebie redemption = 0.00 QAR (still counted).
-     * - Combos & Custom Combos: prorates actual net paid combo total proportionally by catalog price
-     *   (equal split fallback if catalog prices sum to 0) with penny-exact conservation — zero double-counting.
+     * Compute Month-to-Date (Asia/Qatar) Service Production summary strictly for `$staff`.
+     * Uses the exact same single-source-of-truth line-item engine as `buildBreakdownForStaff()`
+     * so card totals and itemized statement sums ALWAYS reconcile to the exact 2 decimal places.
      *
      * @return array{
      *     month_label: string,
      *     total_services: int,
      *     standalone_count: int,
+     *     standalone_paid_count: int,
      *     combo_count: int,
      *     freebie_count: int,
+     *     combo_and_freebie_count: int,
      *     clients_served: int,
      *     total_revenue_qar: float,
      *     formatted_revenue: string,
+     *     formatted_revenue_exact: string,
      *     avg_per_service_qar: float,
      *     formatted_avg: string,
      *     services_subtitle: string,
@@ -41,6 +38,107 @@ class StaffServiceProductionService
      */
     public function buildForStaff(Staff $staff, ?Carbon $asOfQatar = null): array
     {
+        $computed = $this->computeForStaff($staff, $asOfQatar, false);
+
+        return $computed['summary'];
+    }
+
+    /**
+     * Build the full privacy-safe Month-to-Date Service Production Breakdown payload for the
+     * slide-over statement drawer (Summary + Itemized Log + By-Service Grouped Summary).
+     *
+     * STRICT PRIVACY:
+     * - NEVER queries or returns customer phone, email, address, or notes.
+     * - Only includes `client_first_name` when `$includeClientFirstName === true` (Admin / Salon Manager).
+     *   For `Salon Staff`, `client_first_name` is strictly null/omitted.
+     *
+     * @return array{
+     *     staff_name: string,
+     *     month_label: string,
+     *     timezone: string,
+     *     show_client_first_name: bool,
+     *     summary: array<string, mixed>,
+     *     items: list<array<string, mixed>>,
+     *     by_service: list<array<string, mixed>>
+     * }
+     */
+    public function buildBreakdownForStaff(
+        Staff $staff,
+        ?Carbon $asOfQatar = null,
+        bool $includeClientFirstName = false
+    ): array {
+        $computed = $this->computeForStaff($staff, $asOfQatar, $includeClientFirstName);
+        $items = $computed['items'];
+
+        // Build "By Service" grouped summary using exact integer cents so totals never drift by 0.01 QAR
+        $groups = [];
+        foreach ($items as $item) {
+            $rawName = trim((string) ($item['service_name'] ?? 'Service'));
+            $normKey = mb_strtolower($rawName !== '' ? $rawName : 'service');
+            if (!isset($groups[$normKey])) {
+                $groups[$normKey] = [
+                    'service_name' => $rawName !== '' ? $rawName : 'Service',
+                    'count' => 0,
+                    'total_cents' => 0,
+                ];
+            }
+            $groups[$normKey]['count']++;
+            $groups[$normKey]['total_cents'] += (int) $item['_credited_cents'];
+        }
+
+        usort($groups, static function (array $a, array $b): int {
+            if ($b['total_cents'] !== $a['total_cents']) {
+                return $b['total_cents'] <=> $a['total_cents'];
+            }
+            if ($b['count'] !== $a['count']) {
+                return $b['count'] <=> $a['count'];
+            }
+
+            return strcasecmp($a['service_name'], $b['service_name']);
+        });
+
+        $byService = array_map(static function (array $g): array {
+            $totalQar = round($g['total_cents'] / 100, 2);
+            $avgQar = $g['count'] > 0 ? round($totalQar / $g['count'], 2) : 0.0;
+
+            return [
+                'service_name' => $g['service_name'],
+                'count' => $g['count'],
+                'avg_price_qar' => $avgQar,
+                'formatted_avg_price' => number_format($avgQar, 2) . ' QAR',
+                'total_qar' => $totalQar,
+                'formatted_total' => number_format($totalQar, 2) . ' QAR',
+            ];
+        }, $groups);
+
+        // Strip internal sort/cent fields before returning public JSON items
+        $publicItems = array_map(static function (array $item): array {
+            unset($item['_sort_ts'], $item['_appt_id'], $item['_line_id'], $item['_credited_cents']);
+
+            return $item;
+        }, $items);
+
+        return [
+            'staff_name' => $staff->name,
+            'month_label' => $computed['summary']['month_label'],
+            'timezone' => 'Asia/Qatar',
+            'show_client_first_name' => $includeClientFirstName,
+            'summary' => $computed['summary'],
+            'items' => $publicItems,
+            'by_service' => $byService,
+        ];
+    }
+
+    /**
+     * Single-source-of-truth computation returning both exact summary metrics and itemized rows.
+     *
+     * @return array{summary: array<string, mixed>, items: list<array<string, mixed>>}
+     */
+    private function computeForStaff(
+        Staff $staff,
+        ?Carbon $asOfQatar = null,
+        bool $includeClientFirstName = false
+    ): array {
         $nowQatar = ($asOfQatar ? $asOfQatar->copy()->timezone('Asia/Qatar') : Carbon::now('Asia/Qatar'));
         $monthStart = $nowQatar->copy()->startOfMonth()->startOfDay();
         $monthEnd = $nowQatar->copy()->endOfDay();
@@ -49,7 +147,10 @@ class StaffServiceProductionService
         $monthLabel = $nowQatar->format('M Y');
 
         if (!Schema::hasTable('appointments')) {
-            return $this->emptyPayload($monthLabel);
+            return [
+                'summary' => $this->emptyPayload($monthLabel),
+                'items' => [],
+            ];
         }
 
         $query = Appointment::query()
@@ -75,34 +176,42 @@ class StaffServiceProductionService
             $query->whereNull('deleted_at');
         }
 
-        $appointments = $query
-            ->with([
-                'sale',
-                'combo.services:id,name,price',
-                'clientPackages.sale',
-                'clientPackages.combo.services:id,name,price',
-                'clientPackages.services.service:id,name,price',
-                'clientPackages.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
-                'appointmentServices.service:id,name,price',
-                'appointmentServices.clientPackage.sale',
-                'appointmentServices.clientPackage.combo.services:id,name,price',
-                'appointmentServices.clientPackage.services.service:id,name,price',
-                'appointmentServices.clientPackage.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
-                'appointmentServices.clientPackageService.clientPackage.sale',
-                'appointmentServices.clientPackageService.clientPackage.combo.services:id,name,price',
-                'appointmentServices.clientPackageService.clientPackage.services.service:id,name,price',
-                'appointmentServices.clientPackageService.clientPackage.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
-            ])
-            ->get();
+        $withRelations = [
+            'sale',
+            'combo.services:id,name,price',
+            'clientPackages.sale',
+            'clientPackages.combo.services:id,name,price',
+            'clientPackages.services.service:id,name,price',
+            'clientPackages.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
+            'appointmentServices.service:id,name,price',
+            'appointmentServices.clientPackage.sale',
+            'appointmentServices.clientPackage.combo.services:id,name,price',
+            'appointmentServices.clientPackage.services.service:id,name,price',
+            'appointmentServices.clientPackage.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
+            'appointmentServices.clientPackageService.clientPackage.sale',
+            'appointmentServices.clientPackageService.clientPackage.combo.services:id,name,price',
+            'appointmentServices.clientPackageService.clientPackage.services.service:id,name,price',
+            'appointmentServices.clientPackageService.clientPackage.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
+        ];
 
-        $standaloneCount = 0;
+        if ($includeClientFirstName) {
+            $withRelations[] = 'customer:id,name';
+        }
+
+        $appointments = $query->with($withRelations)->get();
+
+        $standalonePaidCount = 0;
         $comboCount = 0;
         $freebieCount = 0;
-        $totalRevenue = 0.0;
+        $totalCents = 0;
         $clientKeys = [];
+        $items = [];
 
         foreach ($appointments as $appointment) {
             $saleFactor = $this->saleNetFactor($appointment->sale);
+            [$dateLabel, $sortTs] = $this->formatAppointmentDateTime($appointment);
+            $bookingRef = '#' . (int) $appointment->id;
+            $clientFirstName = $includeClientFirstName ? $this->extractClientFirstName($appointment) : null;
 
             $activeLines = $appointment->appointmentServices
                 ->filter(function (AppointmentService $line) {
@@ -124,15 +233,48 @@ class StaffServiceProductionService
                     continue;
                 }
 
+                $legacyServiceName = trim((string) ($appointment->service_name ?: $appointment->combo_name ?: 'Salon Service'));
+
                 if ($appointment->is_freebie_redemption) {
-                    $standaloneCount++;
                     $freebieCount++;
+                    $items[] = $this->makeItemRow(
+                        dateLabel: $dateLabel,
+                        sortTs: $sortTs,
+                        apptId: (int) $appointment->id,
+                        lineId: 0,
+                        serviceName: $legacyServiceName,
+                        subline: 'Complimentary Freebie',
+                        type: 'freebie',
+                        bookingRef: $bookingRef,
+                        clientFirstName: $clientFirstName,
+                        creditedQar: 0.0,
+                        priceNote: 'Freebie'
+                    );
                 } else {
                     $lineNet = $appointment->sale
                         ? round(max(0.0, (float) $appointment->sale->services_total + (float) $appointment->sale->packages_total) * $saleFactor, 2)
                         : round(max(0.0, (float) $appointment->price), 2);
-                    $standaloneCount++;
-                    $totalRevenue += $lineNet;
+                    $catalogRef = max((float) ($appointment->original_price ?? 0.0), (float) ($appointment->price ?? 0.0));
+                    $subline = $catalogRef > $lineNet + 0.005
+                        ? ('Catalog ' . $this->formatQar($catalogRef) . ' · Discounted')
+                        : null;
+
+                    $standalonePaidCount++;
+                    $row = $this->makeItemRow(
+                        dateLabel: $dateLabel,
+                        sortTs: $sortTs,
+                        apptId: (int) $appointment->id,
+                        lineId: 0,
+                        serviceName: $legacyServiceName,
+                        subline: $subline,
+                        type: 'standalone',
+                        bookingRef: $bookingRef,
+                        clientFirstName: $clientFirstName,
+                        creditedQar: $lineNet,
+                        priceNote: null
+                    );
+                    $totalCents += $row['_credited_cents'];
+                    $items[] = $row;
                 }
 
                 $clientKeys[$this->clientIdentityKey($appointment)] = true;
@@ -172,9 +314,22 @@ class StaffServiceProductionService
             // 1. Freebie redemptions: +1 service performed, 0.00 QAR revenue
             foreach ($freebieLines as $line) {
                 if ($this->lineStaffId($line, $appointment) === (int) $staff->id) {
-                    $standaloneCount++;
                     $freebieCount++;
                     $touchedByStaff = true;
+                    $reason = trim((string) ($line->discount_reason ?? ''));
+                    $items[] = $this->makeItemRow(
+                        dateLabel: $dateLabel,
+                        sortTs: $sortTs,
+                        apptId: (int) $appointment->id,
+                        lineId: (int) $line->id,
+                        serviceName: $this->lineServiceName($line),
+                        subline: $reason !== '' ? $reason : 'Complimentary Freebie',
+                        type: 'freebie',
+                        bookingRef: $bookingRef,
+                        clientFirstName: $clientFirstName,
+                        creditedQar: 0.0,
+                        priceNote: 'Freebie'
+                    );
                 }
             }
 
@@ -185,9 +340,32 @@ class StaffServiceProductionService
                 $standaloneNetTotal += $lineNet;
 
                 if ($this->lineStaffId($line, $appointment) === (int) $staff->id) {
-                    $standaloneCount++;
-                    $totalRevenue += $lineNet;
+                    $standalonePaidCount++;
                     $touchedByStaff = true;
+
+                    $catalogRef = $this->catalogWeightForLine($line);
+                    $subline = null;
+                    if ($catalogRef > $lineNet + 0.005) {
+                        $subline = 'Catalog ' . $this->formatQar($catalogRef) . ' · Discounted';
+                    } elseif ($line->is_combo_extra) {
+                        $subline = 'Paid Combo Add-on';
+                    }
+
+                    $row = $this->makeItemRow(
+                        dateLabel: $dateLabel,
+                        sortTs: $sortTs,
+                        apptId: (int) $appointment->id,
+                        lineId: (int) $line->id,
+                        serviceName: $this->lineServiceName($line),
+                        subline: $subline,
+                        type: 'standalone',
+                        bookingRef: $bookingRef,
+                        clientFirstName: $clientFirstName,
+                        creditedQar: $lineNet,
+                        priceNote: null
+                    );
+                    $totalCents += $row['_credited_cents'];
+                    $items[] = $row;
                 }
             }
 
@@ -203,8 +381,25 @@ class StaffServiceProductionService
                 foreach ($apptPkgLines as $line) {
                     if ($this->lineStaffId($line, $appointment) === (int) $staff->id) {
                         $comboCount++;
-                        $totalRevenue += (float) ($sharesByLineId[$line->id] ?? 0.0);
                         $touchedByStaff = true;
+
+                        $shareQar = (float) ($sharesByLineId[$line->id] ?? 0.0);
+                        $comboLabel = trim((string) ($pkg->combo_name ?: $line->combo_name ?: $appointment->combo_name ?: 'Combo Package'));
+                        $row = $this->makeItemRow(
+                            dateLabel: $dateLabel,
+                            sortTs: $sortTs,
+                            apptId: (int) $appointment->id,
+                            lineId: (int) $line->id,
+                            serviceName: $this->lineServiceName($line),
+                            subline: 'Part of: ' . $comboLabel,
+                            type: 'combo',
+                            bookingRef: $bookingRef,
+                            clientFirstName: $clientFirstName,
+                            creditedQar: $shareQar,
+                            priceNote: 'Prorated'
+                        );
+                        $totalCents += $row['_credited_cents'];
+                        $items[] = $row;
                     }
                 }
             }
@@ -240,8 +435,25 @@ class StaffServiceProductionService
                     foreach ($groupLines as $idx => $line) {
                         if ($this->lineStaffId($line, $appointment) === (int) $staff->id) {
                             $comboCount++;
-                            $totalRevenue += (float) ($shares[$idx] ?? 0.0);
                             $touchedByStaff = true;
+
+                            $shareQar = (float) ($shares[$idx] ?? 0.0);
+                            $comboLabel = trim((string) ($line->combo_name ?: $appointment->combo_name ?: 'Combo Package'));
+                            $row = $this->makeItemRow(
+                                dateLabel: $dateLabel,
+                                sortTs: $sortTs,
+                                apptId: (int) $appointment->id,
+                                lineId: (int) $line->id,
+                                serviceName: $this->lineServiceName($line),
+                                subline: 'Part of: ' . $comboLabel,
+                                type: 'combo',
+                                bookingRef: $bookingRef,
+                                clientFirstName: $clientFirstName,
+                                creditedQar: $shareQar,
+                                priceNote: 'Prorated'
+                            );
+                            $totalCents += $row['_credited_cents'];
+                            $items[] = $row;
                         }
                     }
                 }
@@ -252,12 +464,28 @@ class StaffServiceProductionService
             }
         }
 
-        $totalServices = $standaloneCount + $comboCount;
+        // Sort itemized log newest first (date/time desc, appointment id desc, line id desc)
+        usort($items, static function (array $a, array $b): int {
+            if ($b['_sort_ts'] !== $a['_sort_ts']) {
+                return $b['_sort_ts'] <=> $a['_sort_ts'];
+            }
+            if ($b['_appt_id'] !== $a['_appt_id']) {
+                return $b['_appt_id'] <=> $a['_appt_id'];
+            }
+
+            return $b['_line_id'] <=> $a['_line_id'];
+        });
+
+        // Legacy `standalone_count` includes standalone + freebie so existing KPI subtitles remain consistent
+        $standaloneCount = $standalonePaidCount + $freebieCount;
+        $comboAndFreebieCount = $comboCount + $freebieCount;
+        $totalServices = $standalonePaidCount + $comboCount + $freebieCount;
         $clientsServed = count($clientKeys);
-        $totalRevenue = round($totalRevenue, 2);
+        $totalRevenue = round($totalCents / 100, 2);
         $avgPerService = $totalServices > 0 ? round($totalRevenue / $totalServices, 2) : 0.0;
 
         $formattedRevenue = $this->formatQar($totalRevenue);
+        $formattedRevenueExact = number_format($totalRevenue, 2) . ' QAR';
         $formattedAvg = $this->formatQar($avgPerService);
 
         $servicesSubtitle = sprintf(
@@ -273,18 +501,24 @@ class StaffServiceProductionService
             : 'Completed & paid only';
 
         return [
-            'month_label' => $monthLabel,
-            'total_services' => $totalServices,
-            'standalone_count' => $standaloneCount,
-            'combo_count' => $comboCount,
-            'freebie_count' => $freebieCount,
-            'clients_served' => $clientsServed,
-            'total_revenue_qar' => $totalRevenue,
-            'formatted_revenue' => $formattedRevenue,
-            'avg_per_service_qar' => $avgPerService,
-            'formatted_avg' => $formattedAvg,
-            'services_subtitle' => $servicesSubtitle,
-            'revenue_subtitle' => $revenueSubtitle,
+            'summary' => [
+                'month_label' => $monthLabel,
+                'total_services' => $totalServices,
+                'standalone_count' => $standaloneCount,
+                'standalone_paid_count' => $standalonePaidCount,
+                'combo_count' => $comboCount,
+                'freebie_count' => $freebieCount,
+                'combo_and_freebie_count' => $comboAndFreebieCount,
+                'clients_served' => $clientsServed,
+                'total_revenue_qar' => $totalRevenue,
+                'formatted_revenue' => $formattedRevenue,
+                'formatted_revenue_exact' => $formattedRevenueExact,
+                'avg_per_service_qar' => $avgPerService,
+                'formatted_avg' => $formattedAvg,
+                'services_subtitle' => $servicesSubtitle,
+                'revenue_subtitle' => $revenueSubtitle,
+            ],
+            'items' => $items,
         ];
     }
 
@@ -329,6 +563,119 @@ class StaffServiceProductionService
         }
 
         return $shares;
+    }
+
+    private function makeItemRow(
+        string $dateLabel,
+        int $sortTs,
+        int $apptId,
+        int $lineId,
+        string $serviceName,
+        ?string $subline,
+        string $type,
+        string $bookingRef,
+        ?string $clientFirstName,
+        float $creditedQar,
+        ?string $priceNote
+    ): array {
+        $cents = (int) round(max(0.0, $creditedQar) * 100);
+        $exactQar = round($cents / 100, 2);
+
+        $typeLabel = match ($type) {
+            'combo' => 'Combo',
+            'freebie' => 'Freebie',
+            default => 'Standalone',
+        };
+
+        return [
+            'date_label' => $dateLabel,
+            'service_name' => $serviceName,
+            'subline' => $subline,
+            'type' => $type,
+            'type_label' => $typeLabel,
+            'booking_ref' => $bookingRef,
+            'client_first_name' => $clientFirstName,
+            'credited_qar' => $exactQar,
+            'formatted_price' => number_format($exactQar, 2) . ' QAR',
+            'price_note' => $priceNote,
+            '_sort_ts' => $sortTs,
+            '_appt_id' => $apptId,
+            '_line_id' => $lineId,
+            '_credited_cents' => $cents,
+        ];
+    }
+
+    /**
+     * Format the appointment date & time cleanly in `Asia/Qatar` (e.g., `24 Nov · 2:30 PM`).
+     *
+     * @return array{0: string, 1: int}
+     */
+    private function formatAppointmentDateTime(Appointment $appointment): array
+    {
+        $hasTime = false;
+        $dt = null;
+
+        if (!empty($appointment->booking_date)) {
+            $dateStr = $appointment->booking_date instanceof Carbon
+                ? $appointment->booking_date->toDateString()
+                : trim((string) $appointment->booking_date);
+            $timeStr = trim((string) ($appointment->start_time ?? ''));
+
+            if ($timeStr !== '') {
+                $dt = Carbon::parse($dateStr . ' ' . $timeStr, 'Asia/Qatar');
+                $hasTime = true;
+            } elseif ($appointment->appointment_datetime) {
+                $dt = $appointment->appointment_datetime->copy()->timezone('Asia/Qatar');
+                $hasTime = true;
+            } else {
+                $dt = Carbon::parse($dateStr, 'Asia/Qatar')->startOfDay();
+            }
+        } elseif ($appointment->appointment_datetime) {
+            $dt = $appointment->appointment_datetime->copy()->timezone('Asia/Qatar');
+            $hasTime = true;
+        } elseif ($appointment->paid_at) {
+            $dt = $appointment->paid_at->copy()->timezone('Asia/Qatar');
+            $hasTime = true;
+        } else {
+            $dt = ($appointment->created_at ? $appointment->created_at->copy()->timezone('Asia/Qatar') : Carbon::now('Asia/Qatar'));
+            $hasTime = true;
+        }
+
+        $label = $hasTime
+            ? $dt->format('j M') . ' · ' . $dt->format('g:i A')
+            : $dt->format('j M');
+
+        return [$label, $dt->getTimestamp()];
+    }
+
+    private function extractClientFirstName(Appointment $appointment): ?string
+    {
+        $raw = trim((string) ($appointment->customer_name ?? ''));
+        if ($raw === '' && $appointment->relationLoaded('customer') && $appointment->customer) {
+            $raw = trim((string) ($appointment->customer->name ?? ''));
+        }
+        if ($raw === '') {
+            return null;
+        }
+
+        $parts = preg_split('/\s+/u', $raw);
+        $first = trim((string) ($parts[0] ?? ''));
+
+        return $first !== '' ? $first : null;
+    }
+
+    private function lineServiceName(AppointmentService $line): string
+    {
+        $name = trim((string) ($line->name ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+
+        if ($line->relationLoaded('service') && $line->service && filled($line->service->name)) {
+            return trim((string) $line->service->name);
+        }
+
+        return 'Salon Service';
     }
 
     /**
@@ -541,11 +888,14 @@ class StaffServiceProductionService
             'month_label' => $monthLabel,
             'total_services' => 0,
             'standalone_count' => 0,
+            'standalone_paid_count' => 0,
             'combo_count' => 0,
             'freebie_count' => 0,
+            'combo_and_freebie_count' => 0,
             'clients_served' => 0,
             'total_revenue_qar' => 0.0,
             'formatted_revenue' => '0 QAR',
+            'formatted_revenue_exact' => '0.00 QAR',
             'avg_per_service_qar' => 0.0,
             'formatted_avg' => '0 QAR',
             'services_subtitle' => '0 standalone · 0 combo · 0 clients served',

@@ -95,6 +95,8 @@ Route::middleware('role:admin')->group(function () {
 Route::middleware(['auth', 'active'])->group(function () {
     // ---- Laleen Staff Self-Service Portal (strictly scoped to auth()->user() — never accepts staff_id) ----
     Route::get('/my-profile', [StaffPortalController::class, 'index'])->name('portal.profile');
+    Route::get('/my-profile/production-breakdown', [StaffPortalController::class, 'productionBreakdown'])
+        ->name('portal.production-breakdown');
     Route::put('/my-profile/password', [StaffPortalController::class, 'updatePassword'])->name('portal.password.update');
     Route::get('/my-profile/contracts/{contract}/pdf', [StaffPortalController::class, 'downloadOwnContractPdf'])
         ->whereNumber('contract')
@@ -432,6 +434,9 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
         Route::get('/staff-portal-preview/{staff}', [StaffPortalController::class, 'adminPreview'])
             ->whereNumber('staff')
             ->name('portal.admin-preview');
+        Route::get('/staff-portal-preview/{staff}/production-breakdown', [StaffPortalController::class, 'adminPreviewProductionBreakdown'])
+            ->whereNumber('staff')
+            ->name('portal.admin-preview.production-breakdown');
     });
 
     // ---- KPIs & Operations ----

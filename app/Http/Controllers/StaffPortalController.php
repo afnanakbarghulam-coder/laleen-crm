@@ -131,6 +131,61 @@ class StaffPortalController extends Controller
     }
 
     /**
+     * Self-view JSON endpoint (`GET /my-profile/production-breakdown`):
+     * Strictly scoped to `auth()->user()->staff` (NEVER accepts `staff_id` / `user_id` parameters).
+     * Returns HTTP 403 for Remote or ineligible roles.
+     * STRICT PRIVACY: Client first name is NEVER included for `Salon Staff` (only `Salon Manager` / `Admin`),
+     * and customer phone/email/address are NEVER included for anyone.
+     */
+    public function productionBreakdown(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $roleSlug = strtolower(trim((string) $user->role));
+        $staff = $user->staff()->first();
+
+        $isEligibleRole = !User::isRemoteRole($roleSlug)
+            && ($user->isLeaveEligible() || $user->isSalonStaff() || in_array($roleSlug, ['salon_manager', 'manager'], true));
+
+        if (!$isEligibleRole || !$staff || $staff->isRemote()) {
+            abort(403, 'Service production breakdown is only available for branch-assigned Salon Managers and Salon Staff.');
+        }
+
+        $includeClientFirstName = $user->isAdmin() || in_array($roleSlug, ['salon_manager', 'manager'], true);
+
+        return response()->json(
+            $this->productionService->buildBreakdownForStaff(
+                staff: $staff,
+                asOfQatar: Carbon::now('Asia/Qatar'),
+                includeClientFirstName: $includeClientFirstName
+            )
+        );
+    }
+
+    /**
+     * Admin-only JSON endpoint (`GET /staff-portal-preview/{staff}/production-breakdown`):
+     * Strictly gated behind Admin authorization (`role:admin` + explicit `isAdmin()` check).
+     */
+    public function adminPreviewProductionBreakdown(Request $request, Staff $staff)
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Only administrators can inspect staff production breakdowns.');
+
+        $staff->loadMissing('user');
+        $linkedRole = strtolower(trim((string) ($staff->user?->role ?? '')));
+        if ($staff->isRemote() || ($linkedRole !== '' && User::isRemoteRole($linkedRole))) {
+            abort(403, 'Service production breakdown is only available for branch-assigned Salon Managers and Salon Staff.');
+        }
+
+        return response()->json(
+            $this->productionService->buildBreakdownForStaff(
+                staff: $staff,
+                asOfQatar: Carbon::now('Asia/Qatar'),
+                includeClientFirstName: true
+            )
+        );
+    }
+
+    /**
      * Policy-protected PDF download/preview of an employee's OWN StaffContract from `/my-profile?tab=contracts`.
      * ONLY Admin or the exact employee owning the contract may download it; all others get HTTP 403.
      */
@@ -319,6 +374,12 @@ class StaffPortalController extends Controller
             }
         }
 
+        $productionBreakdownUrl = $mtdProduction !== null
+            ? (($isAdminPreview && $staff)
+                ? route('portal.admin-preview.production-breakdown', $staff)
+                : route('portal.production-breakdown'))
+            : null;
+
         // ---- Documents Tab (Personal Self-Upload + Admin Inline Upload & Verification) ----
         /** @var User $actorUser */
         $actorUser = $request->user();
@@ -379,6 +440,7 @@ class StaffPortalController extends Controller
             'absenteesPayload' => $absenteesPayload,
             'performanceScorecard' => $performanceScorecard,
             'mtdProduction' => $mtdProduction,
+            'productionBreakdownUrl' => $productionBreakdownUrl,
             'branchPendingComplaints' => $branchPendingComplaints,
             'myComplaints' => $myComplaints,
             'weeklyEvaluations' => $weeklyEvaluations,

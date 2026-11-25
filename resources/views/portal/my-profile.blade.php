@@ -916,7 +916,10 @@
         <div class="d-flex flex-column gap-3">
             {{-- SALON STAFF: MTD Service Production right at the top of Performance --}}
             @if ($isSalonStaff && !empty($mtdProduction))
-                @include('portal.partials.mtd-production-cards', ['mtdProduction' => $mtdProduction])
+                @include('portal.partials.mtd-production-cards', [
+                    'mtdProduction' => $mtdProduction,
+                    'productionBreakdownUrl' => $productionBreakdownUrl ?? null,
+                ])
             @endif
 
             {{-- Shared Exact KPIs Module Scorecard Header + KPI Card Grid --}}
@@ -927,7 +930,10 @@
 
             {{-- SALON MANAGER: MTD Service Production below Executive KPIs and above Pending Complaints --}}
             @if (!$isSalonStaff && !empty($mtdProduction))
-                @include('portal.partials.mtd-production-cards', ['mtdProduction' => $mtdProduction])
+                @include('portal.partials.mtd-production-cards', [
+                    'mtdProduction' => $mtdProduction,
+                    'productionBreakdownUrl' => $productionBreakdownUrl ?? null,
+                ])
             @endif
 
             {{-- OPS LEAD: Pending Ops Tracker Items Table --}}
@@ -1822,6 +1828,15 @@
     </div>
 </div>
 @endif
+@endif
+
+{{-- Slide-Over MTD Service Production Breakdown Drawer (Self-View & Admin Preview for Salon Staff & Salon Managers) --}}
+@if ($activeTab === 'performance' && !empty($mtdProduction) && !empty($productionBreakdownUrl))
+    @include('portal.partials.mtd-production-drawer', [
+        'mtdProduction' => $mtdProduction,
+        'productionBreakdownUrl' => $productionBreakdownUrl,
+        'profile' => $profile,
+    ])
 @endif
 @endsection
 
