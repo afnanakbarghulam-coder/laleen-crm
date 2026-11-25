@@ -382,9 +382,31 @@
 
                     <h6 class="mt-4">Combo Packages</h6>
                     @foreach ($unpaidPackages as $pkg)
+                        @php
+                            $pkgOrigPrice = $pkg->original_combo_price !== null ? (float) $pkg->original_combo_price : (float) $pkg->price_paid;
+                            $pkgPriceChanged = abs((float) $pkg->price_paid - $pkgOrigPrice) > 0.009;
+                        @endphp
                         <div class="line-item">
-                            <span class="item-name">{{ $pkg->combo_name }} <span class="muted">(sold at booking, awaiting payment)</span></span>
-                            <span class="price-col">{{ number_format($pkg->price_paid, 2) }} QAR</span>
+                            <span class="item-name">
+                                {{ $pkg->combo_name }}
+                                @if (!empty($pkg->is_custom_combo))
+                                    <span style="display:inline-flex;align-items:center;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;color:#fbbf24;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.38);margin-left:4px;">
+                                        Custom
+                                    </span>
+                                @endif
+                                <span class="muted">(sold at booking, awaiting payment)</span>
+                                @if (!empty($pkg->is_custom_combo) && !empty($pkg->combo_override_reason))
+                                    <span class="discount-note" style="color:#e8c48e;">
+                                        <i class="bx bx-info-circle"></i> {{ $pkg->combo_override_reason }}
+                                    </span>
+                                @endif
+                            </span>
+                            <span class="price-col">
+                                @if ($pkgPriceChanged)
+                                    <span class="original-price">{{ number_format($pkgOrigPrice, 2) }} QAR</span>
+                                @endif
+                                {{ number_format($pkg->price_paid, 2) }} QAR
+                            </span>
                         </div>
                     @endforeach
                     <div id="packageRows"></div>

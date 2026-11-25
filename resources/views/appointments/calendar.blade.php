@@ -3375,7 +3375,7 @@
                         const canDragOrResize = CAN_EDIT_BOOKINGS && a.status !== 'completed' && a.status !== 'cancelled';
                         const sliceServiceLineId = (a.is_split_booking && a.appointment_service_id) ? Number(a.appointment_service_id) : 'null';
                         const comboBadgeLabel = a.combo_name
-                            ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
+                            ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${a.is_custom_combo ? ' · Custom' : ''}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
                             : '';
                         const otDelta = (a.is_overtime && Number(a.overtime_minutes) > 0 && window.LaleenSliceEngine)
                             ? window.LaleenSliceEngine.formatOvertimeDelta(a.overtime_minutes)
@@ -3537,7 +3537,7 @@
                             const displaySvcLabel = a.is_combo_tbd ? 'Services TBD in Salon' : (a.decide_in_salon ? 'Decide in Salon' : a.service_name);
                             const sliceServiceLineId = (a.is_split_booking && a.appointment_service_id) ? Number(a.appointment_service_id) : 'null';
                             const comboBadgeLabel = a.combo_name
-                                ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
+                                ? `${a.is_split_booking ? '🔗 ' : ''}${escapeHtml(a.combo_name)}${a.is_custom_combo ? ' · Custom' : ''}${(Number(a.slice_count) || 1) > 1 ? ` · ${(Number(a.slice_index) || 0) + 1}/${a.slice_count}` : ''}`
                                 : '';
                             const otDelta = (a.is_overtime && Number(a.overtime_minutes) > 0 && window.LaleenSliceEngine)
                                 ? window.LaleenSliceEngine.formatOvertimeDelta(a.overtime_minutes)
@@ -4655,6 +4655,22 @@
                 const poolById = new Map(pool.map(s => [Number(s.id), s]));
                 const totalSelected = draft.todayIds.length + draft.pendingIds.length + usedEarlier;
 
+                const isCustomCombo = Boolean(pkg.is_custom_combo);
+                const origComboPrice = Number(pkg.original_combo_price !== undefined && pkg.original_combo_price !== null ? pkg.original_combo_price : pkg.price_paid);
+                const paidComboPrice = Number(pkg.price_paid || 0);
+                const comboPriceDiffers = Math.abs(paidComboPrice - origComboPrice) > 0.009;
+                const customComboBadgeHtml = isCustomCombo
+                    ? `<span style="display:inline-flex;align-items:center;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;color:#fbbf24;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.38);white-space:nowrap;">Custom</span>`
+                    : '';
+                const overrideReasonHtml = (isCustomCombo && pkg.combo_override_reason)
+                    ? `<div style="font-size:11px;color:#e8c48e;margin-top:4px;padding:3px 8px;border-radius:6px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);"><i class="bx bx-info-circle"></i> ${escapeHtml(pkg.combo_override_reason)}</div>`
+                    : '';
+                const comboPriceHtml = `
+                    <span class="drawer-combo-price">
+                        ${comboPriceDiffers ? `<span class="strike" style="margin-right:4px;font-weight:500;color:#8a7d76;text-decoration:line-through;font-size:11.5px;">${origComboPrice.toFixed(2)}</span>` : ''}
+                        ${paidComboPrice.toFixed(2)} QAR
+                    </span>`;
+
                 if (totalSelected === 0) {
                     return `
                         <div class="drawer-combo-card ${canEditCombo ? 'is-clickable' : ''}"
@@ -4664,9 +4680,11 @@
                                 <div class="d-flex align-items-center gap-2 min-w-0">
                                     <span class="drawer-combo-eyebrow">COMBO</span>
                                     <span class="drawer-combo-title text-truncate">${escapeHtml(pkg.combo_name)}</span>
+                                    ${customComboBadgeHtml}
                                 </div>
-                                <span class="drawer-combo-price">${Number(pkg.price_paid).toFixed(2)} QAR</span>
+                                ${comboPriceHtml}
                             </div>
+                            ${overrideReasonHtml}
                             <div class="drawer-combo-trigger">
                                 <span class="drawer-combo-empty-hint">
                                     0 / ${qtyIncluded} Selected &middot; Decide in Salon${canEditCombo ? ' &mdash; Click to choose services' : ''}
@@ -4679,6 +4697,8 @@
                 const tl = computeDrawerComboTimeline(draft);
                 const todayRowsHtml = tl.slices.map((sl, idx) => {
                     const sid = Number(sl.service_id);
+                    const poolSvc = poolById.get(sid);
+                    const isExtraLine = Boolean(poolSvc && poolSvc.is_combo_extra);
                     const priorSlices = tl.slices.slice(0, idx);
                     const meta = window.LaleenSliceEngine
                         ? window.LaleenSliceEngine.buildSpecialistSelectMeta({
@@ -4720,7 +4740,7 @@
                                 <div class="laleen-slice-left">
                                     ${reorderBtns}
                                     <div class="laleen-slice-title-wrap">
-                                        <span class="laleen-slice-title">${escapeHtml(sl.name)}</span>
+                                        <span class="laleen-slice-title">${escapeHtml(sl.name)}${isExtraLine ? '<span style="display:inline-flex;align-items:center;padding:0 5px;border-radius:999px;font-size:9.5px;font-weight:700;color:#fcd34d;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.3);margin-left:5px;">Extra</span>' : ''}</span>
                                         <span class="laleen-slice-sub">
                                             <span class="laleen-time-pill">${escapeHtml(sl.timeBadge)}</span>
                                             ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
@@ -4744,19 +4764,21 @@
 
                 return `
                     <div class="drawer-combo-card" data-pkg-id="${pkg.client_package_id}">
-                        <div class="d-flex align-items-center justify-content-between gap-2">
+                        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
                             <div class="d-flex align-items-center gap-2 min-w-0">
                                 <span class="drawer-combo-eyebrow">COMBO</span>
                                 <span class="drawer-combo-title text-truncate">${escapeHtml(pkg.combo_name)}</span>
+                                ${customComboBadgeHtml}
                             </div>
                             <div class="d-flex align-items-center gap-2">
                                 ${canEditCombo ? `
                                     <button type="button" class="btn btn-link btn-sm p-0 drawer-combo-edit-cta text-decoration-none" data-open-combo-pkg="${pkg.client_package_id}">
                                         Edit (${totalSelected}/${qtyIncluded}) &rsaquo;
-                                    </button>` : ''}
-                                <span class="drawer-combo-price">${Number(pkg.price_paid).toFixed(2)} QAR</span>
+                                    </button>` : `<span style="font-size:11px;color:#b9a8a0;">(${totalSelected}/${qtyIncluded})</span>`}
+                                ${comboPriceHtml}
                             </div>
                         </div>
+                        ${overrideReasonHtml}
                         ${todayRowsHtml ? `<div class="laleen-slice-track">${todayRowsHtml}</div>` : ''}
                         ${pendingSummaryHtml}
                     </div>`;

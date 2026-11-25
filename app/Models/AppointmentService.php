@@ -11,6 +11,7 @@ class AppointmentService extends Model
         'service_id',
         'combo_id',
         'combo_name',
+        'is_combo_extra',
         'client_package_id',
         'freebie_package_id',
         'freebie_credit_id',
@@ -37,6 +38,7 @@ class AppointmentService extends Model
     protected $casts = [
         'sort_order' => 'integer',
         'is_parallel' => 'boolean',
+        'is_combo_extra' => 'boolean',
         'is_freebie_redemption' => 'boolean',
         'price' => 'float',
         'original_price' => 'float',

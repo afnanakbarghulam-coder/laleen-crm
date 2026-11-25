@@ -415,6 +415,12 @@ class AppointmentController extends Controller
             'packages.*.immediate_service_ids.*' => 'integer|exists:services,id',
             'packages.*.pending_service_ids' => 'nullable|array',
             'packages.*.pending_service_ids.*' => 'integer|exists:services,id',
+            'packages.*.extra_service_ids' => 'nullable|array',
+            'packages.*.extra_service_ids.*' => 'integer|exists:services,id',
+            'packages.*.custom_price' => 'nullable|numeric|min:0',
+            'packages.*.is_custom_combo' => 'nullable|boolean',
+            'packages.*.combo_override_reason' => 'nullable|string|max:150',
+            'packages.*.custom_quantity' => 'nullable|integer|min:1',
             'packages.*.service_staff' => 'nullable|array',
             'packages.*.service_sort_order' => 'nullable|array',
             'packages.*.service_parallel' => 'nullable|array',
@@ -1026,6 +1032,9 @@ class AppointmentController extends Controller
                     'service_name' => $appointment->service_name,
                     'combo_id' => $appointment->combo_id,
                     'combo_name' => $appointment->display_combo_name,
+                    'is_custom_combo' => (bool) $appointment->is_custom_combo,
+                    'original_combo_price' => $appointment->original_combo_price !== null ? (float) $appointment->original_combo_price : null,
+                    'combo_override_reason' => $appointment->combo_override_reason,
                     'freebie_package_id' => $appointment->freebie_package_id,
                     'is_freebie_redemption' => (bool) $appointment->is_freebie_redemption,
                     'is_combo_tbd' => $appointment->is_combo_tbd,
@@ -2574,6 +2583,7 @@ class AppointmentController extends Controller
                 'show_price_badge' => true,
                 'service_name' => $isTbd ? 'Services TBD in Salon' : ($isDecide ? 'Decide in Salon' : $appointment->service_name),
                 'combo_name' => $parentComboName,
+                'is_custom_combo' => (bool) $appointment->is_custom_combo,
                 'is_combo_tbd' => $isTbd,
                 'decide_in_salon' => $isDecide,
                 'is_overtime' => (bool) $appointment->is_overtime,
@@ -2598,6 +2608,8 @@ class AppointmentController extends Controller
             'show_price_badge' => ($idx === 0),
             'service_name' => $line->name,
             'combo_name' => $line->combo_name ?: $parentComboName,
+            'is_custom_combo' => (bool) $appointment->is_custom_combo,
+            'is_combo_extra' => (bool) $line->is_combo_extra,
             'is_freebie_redemption' => (bool) $line->is_freebie_redemption,
             'freebie_package_id' => $line->freebie_package_id,
             'is_combo_tbd' => false,
@@ -2784,6 +2796,8 @@ class AppointmentController extends Controller
                     'show_price_badge' => (bool) ($slice['show_price_badge'] ?? true),
                     'service_name' => $slice['service_name'],
                     'combo_name' => $slice['combo_name'] ?? $a->display_combo_name,
+                    'is_custom_combo' => (bool) ($slice['is_custom_combo'] ?? $a->is_custom_combo),
+                    'is_combo_extra' => (bool) ($slice['is_combo_extra'] ?? false),
                     'is_combo_tbd' => $slice['is_combo_tbd'] ?? $a->is_combo_tbd,
                     'decide_in_salon' => $slice['decide_in_salon'] ?? (bool) $a->decide_in_salon,
                     'is_overtime' => (bool) ($slice['is_overtime'] ?? $a->is_overtime),
@@ -2812,6 +2826,8 @@ class AppointmentController extends Controller
                         'service_name'  => $s->service_name,
                         'combo_id'      => $a->combo_id,
                         'combo_name'    => $s->combo_name,
+                        'is_custom_combo' => (bool) $s->is_custom_combo,
+                        'is_combo_extra'  => (bool) $s->is_combo_extra,
                         'is_combo_tbd'  => $s->is_combo_tbd,
                         'decide_in_salon' => (bool) $s->decide_in_salon,
                         'status'        => $a->status,
@@ -2910,6 +2926,8 @@ class AppointmentController extends Controller
                         'service_name'  => $slice['service_name'],
                         'combo_id'      => $a->combo_id,
                         'combo_name'    => $slice['combo_name'] ?? $a->display_combo_name,
+                        'is_custom_combo' => (bool) ($slice['is_custom_combo'] ?? $a->is_custom_combo),
+                        'is_combo_extra'  => (bool) ($slice['is_combo_extra'] ?? false),
                         'is_combo_tbd'  => $slice['is_combo_tbd'] ?? $a->is_combo_tbd,
                         'decide_in_salon' => (bool) ($slice['decide_in_salon'] ?? $a->decide_in_salon),
                         'status'        => $a->status,
@@ -3882,6 +3900,9 @@ class AppointmentController extends Controller
             'service_name' => $appointment->service_name,
             'combo_id' => $appointment->combo_id,
             'combo_name' => $appointment->display_combo_name,
+            'is_custom_combo' => (bool) $appointment->is_custom_combo,
+            'original_combo_price' => $appointment->original_combo_price !== null ? (float) $appointment->original_combo_price : null,
+            'combo_override_reason' => $appointment->combo_override_reason,
             'is_combo_tbd' => $appointment->is_combo_tbd,
             'decide_in_salon' => (bool) $appointment->decide_in_salon,
             'hold_duration' => $appointment->effective_hold_duration,
@@ -4159,6 +4180,12 @@ class AppointmentController extends Controller
             'packages.*.immediate_service_ids.*' => 'integer|exists:services,id',
             'packages.*.pending_service_ids' => 'nullable|array',
             'packages.*.pending_service_ids.*' => 'integer|exists:services,id',
+            'packages.*.extra_service_ids' => 'nullable|array',
+            'packages.*.extra_service_ids.*' => 'integer|exists:services,id',
+            'packages.*.custom_price' => 'nullable|numeric|min:0',
+            'packages.*.is_custom_combo' => 'nullable|boolean',
+            'packages.*.combo_override_reason' => 'nullable|string|max:150',
+            'packages.*.custom_quantity' => 'nullable|integer|min:1',
             'packages.*.service_staff' => 'nullable|array',
             'packages.*.service_sort_order' => 'nullable|array',
             'packages.*.service_parallel' => 'nullable|array',
@@ -4841,6 +4868,9 @@ class AppointmentController extends Controller
                 'service_name' => $appointment->service_name,
                 'combo_id' => $appointment->combo_id,
                 'combo_name' => $appointment->display_combo_name,
+                'is_custom_combo' => (bool) $appointment->is_custom_combo,
+                'original_combo_price' => $appointment->original_combo_price !== null ? (float) $appointment->original_combo_price : null,
+                'combo_override_reason' => $appointment->combo_override_reason,
                 'freebie_package_id' => $appointment->freebie_package_id,
                 'is_freebie_redemption' => (bool) $appointment->is_freebie_redemption,
                 'is_combo_tbd' => $appointment->is_combo_tbd,
@@ -5674,6 +5704,7 @@ class AppointmentController extends Controller
             'service_id' => $s->service_id,
             'combo_id' => $s->combo_id,
             'combo_name' => $resolvedComboName,
+            'is_combo_extra' => (bool) $s->is_combo_extra,
             'client_package_id' => $s->client_package_id,
             'status' => $s->is_pending ? 'pending' : ($s->status ?: 'scheduled'),
             'is_pending' => (bool) $s->is_pending,
@@ -6038,7 +6069,7 @@ class AppointmentController extends Controller
         ));
 
         if (array_diff($todayIds, $pool->keys()->all()) || array_diff($pendingIds, $pool->keys()->all())) {
-            return $vError("Selected services are not part of \"{$clientPackage->combo_name}\".");
+            return $vError("Selected service is not part of this combo's allowed service list.");
         }
 
         $apptLineIds = $appointment->appointmentServices()->pluck('id')->all();
@@ -6177,11 +6208,14 @@ class AppointmentController extends Controller
                 ->delete();
         }
 
+        $catalogSvcIds = ($syncPlan['combo']?->services ?? collect())->pluck('id')->map(fn ($id) => (int) $id)->all();
+
         foreach ($todayIds as $seqIdx => $sid) {
             $svc = $pool->get($sid);
             $cSlice = $computedBySvcId->get($sid);
             $assignedStaffId = $cSlice['staff_id'] ?? ($serviceStaff[$sid] ?? $appointment->staff_id);
             $sliceCursor = $cSlice ? $cSlice['start'] : $cursor;
+            $isExtra = !empty($catalogSvcIds) && !in_array((int) $sid, $catalogSvcIds, true);
 
             $activeLine = $this->addRedeemedServiceLine(
                 $appointment,
@@ -6192,7 +6226,8 @@ class AppointmentController extends Controller
                 $clientPackage->combo_id,
                 $clientPackage->id,
                 $sortOffset + ($cSlice ? (int) $cSlice['sort_order'] : $seqIdx),
-                $cSlice ? (bool) $cSlice['is_parallel'] : false
+                $cSlice ? (bool) $cSlice['is_parallel'] : false,
+                $isExtra
             );
 
             if (!$cSlice) {
@@ -6319,8 +6354,10 @@ class AppointmentController extends Controller
         $result = [];
 
         foreach ($packagesById->values() as $pkg) {
-            $pool = $pkg->combo?->services ?? collect();
+            $catalogPool = $pkg->combo?->services ?? collect();
+            $catalogPoolIds = $catalogPool->pluck('id')->map(fn ($id) => (int) $id)->all();
             $qtyIncluded = $pkg->effective_quantity_included;
+            $catalogQtyIncluded = (int) ($pkg->combo?->quantity_included ?: ($catalogPool->count() ?: $qtyIncluded));
             $isOriginating = ((int) $pkg->appointment_id === (int) $appointment->id);
 
             $pkgApptLines = $appointment->appointmentServices->filter(function (AppointmentService $l) use ($pkg) {
@@ -6347,6 +6384,29 @@ class AppointmentController extends Controller
             $todayLinesBySvc = $todayLinesOrdered->keyBy('service_id');
             $pendingLinesBySvc = $pkgApptLines->where('is_pending', true)->keyBy('service_id');
 
+            // Track extra services marked `is_combo_extra` (plus any legacy non-catalog lines on historical records)
+            $legacyOutsideIds = $pkgApptLines->pluck('service_id')
+                ->merge($pkg->services->pluck('service_id'))
+                ->filter()
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->diff($catalogPoolIds)
+                ->values()
+                ->all();
+            $flaggedExtraIds = $pkgApptLines
+                ->filter(fn (AppointmentService $l) => (bool) $l->is_combo_extra)
+                ->pluck('service_id')
+                ->filter()
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+            $extraServiceIds = array_values(array_unique(array_merge($flaggedExtraIds, $legacyOutsideIds)));
+            $extraServicesCollection = !empty($legacyOutsideIds)
+                ? Service::whereIn('id', $legacyOutsideIds)->get()
+                : collect();
+            $pool = $catalogPool->concat($extraServicesCollection)->unique('id')->values();
+
             $redeemedElsewhereIds = $pkg->services
                 ->where('status', 'redeemed')
                 ->filter(fn ($cps) => !in_array($cps->appointment_service_id, $apptLineIds, true))
@@ -6368,10 +6428,11 @@ class AppointmentController extends Controller
                 ? "0 / {$qtyIncluded} Chosen — Decide in Salon"
                 : "{$activeCount} Active · {$remainingPendingCount} Pending";
 
-            $poolRows = $pool->map(function (Service $svc) use ($todayLinesBySvc, $pendingLinesBySvc, $redeemedElsewhereIds, $pkgPendingCpsIds) {
+            $poolRows = $pool->map(function (Service $svc) use ($todayLinesBySvc, $pendingLinesBySvc, $redeemedElsewhereIds, $pkgPendingCpsIds, $catalogPoolIds) {
                 $sid = (int) $svc->id;
                 $todayLine = $todayLinesBySvc->get($sid);
                 $pendingLine = $pendingLinesBySvc->get($sid);
+                $isExtra = !in_array($sid, $catalogPoolIds, true) || (bool) ($todayLine?->is_combo_extra || $pendingLine?->is_combo_extra);
 
                 if ($todayLine) {
                     $state = 'today';
@@ -6392,6 +6453,7 @@ class AppointmentController extends Controller
                     'duration' => (int) ($todayLine?->duration ?: $svc->duration),
                     'catalog_price' => (float) $svc->price,
                     'state' => $state,
+                    'is_combo_extra' => $isExtra,
                     'staff_id' => $todayLine?->staff_id,
                     'staff_name' => $todayLine?->staff?->name,
                     'sort_order' => $todayLine ? (int) ($todayLine->sort_order ?? 0) : null,
@@ -6411,8 +6473,13 @@ class AppointmentController extends Controller
                 'client_package_id' => $pkg->id,
                 'combo_id' => $pkg->combo_id,
                 'combo_name' => $pkg->combo_name,
+                'is_custom_combo' => (bool) $pkg->is_custom_combo,
                 'price_paid' => (float) $pkg->price_paid,
+                'original_combo_price' => (float) ($pkg->original_combo_price ?? $pkg->combo?->price ?? $pkg->price_paid),
+                'combo_override_reason' => $pkg->combo_override_reason,
                 'quantity_included' => $qtyIncluded,
+                'catalog_quantity_included' => $catalogQtyIncluded,
+                'extra_service_ids' => $extraServiceIds,
                 'active_count' => $activeCount,
                 'pending_count' => $remainingPendingCount,
                 'remaining_count' => $remainingPendingCount,
@@ -6873,7 +6940,7 @@ class AppointmentController extends Controller
         $unpaidPackages = ClientPackage::where('appointment_id', $appointment->id)
             ->whereNull('sale_id')
             ->where('status', '!=', 'cancelled')
-            ->get(['id', 'combo_name', 'price_paid']);
+            ->get(['id', 'combo_name', 'price_paid', 'original_combo_price', 'is_custom_combo', 'combo_override_reason', 'quantity_included']);
         $unpaidPackagesTotal = (float) $unpaidPackages->sum('price_paid');
         $hasUnpickedOriginatingCombo = $this->hasUnpickedOriginatingCombo($appointment);
 
@@ -6916,6 +6983,12 @@ class AppointmentController extends Controller
             'packages.*.immediate_service_ids.*' => 'integer|exists:services,id',
             'packages.*.pending_service_ids' => 'nullable|array',
             'packages.*.pending_service_ids.*' => 'integer|exists:services,id',
+            'packages.*.extra_service_ids' => 'nullable|array',
+            'packages.*.extra_service_ids.*' => 'integer|exists:services,id',
+            'packages.*.custom_price' => 'nullable|numeric|min:0',
+            'packages.*.is_custom_combo' => 'nullable|boolean',
+            'packages.*.combo_override_reason' => 'nullable|string|max:150',
+            'packages.*.custom_quantity' => 'nullable|integer|min:1',
             'packages.*.service_staff' => 'nullable|array',
             // Previously-purchased pending balance being redeemed today -
             // each a "{client_package_id}:{service_id}" token, fully
@@ -7261,9 +7334,9 @@ class AppointmentController extends Controller
                     SaleItem::create([
                         'sale_id' => $sale->id,
                         'type' => 'package',
-                        'name' => $pkg->combo_name . ' (Package)',
+                        'name' => $pkg->combo_name . ($pkg->is_custom_combo ? ' (Custom Package)' : ' (Package)'),
                         'price' => $pkg->price_paid,
-                        'original_price' => $pkg->price_paid,
+                        'original_price' => $pkg->original_combo_price ?? $pkg->price_paid,
                         'quantity' => 1,
                         'total' => $pkg->price_paid,
                     ]);
@@ -7409,16 +7482,96 @@ class AppointmentController extends Controller
                 return [[], 'Selected combo package no longer exists.', null];
             }
 
-            $poolServices = $combo->services->keyBy('id');
-            $quantityIncluded = $combo->quantity_included ?? $poolServices->count();
+            $catalogPool = $combo->services->keyBy('id');
+            $catalogPoolIds = $catalogPool->keys()->map(fn ($id) => (int) $id)->all();
+            $catalogQty = (int) ($combo->quantity_included ?: $catalogPool->count());
+            $originalComboPrice = round((float) $combo->price, 2);
 
-            if (array_diff($rawImmediateIds, $poolServices->keys()->all()) || array_diff($rawPendingIds, $poolServices->keys()->all())) {
-                return [[], "Selected services are not part of the \"{$combo->name}\" package.", null];
+            $rawExtraIds = array_values(array_unique(array_filter(array_map('intval', (array) ($pkg['extra_service_ids'] ?? [])))));
+            $hasCustomPrice = array_key_exists('custom_price', $pkg) && $pkg['custom_price'] !== null && $pkg['custom_price'] !== '';
+            $rawCustomPrice = $hasCustomPrice ? $pkg['custom_price'] : null;
+            $isCustomFlag = filter_var($pkg['is_custom_combo'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $rawOverrideReason = isset($pkg['combo_override_reason']) ? trim((string) $pkg['combo_override_reason']) : '';
+            $hasCustomQty = array_key_exists('custom_quantity', $pkg) && $pkg['custom_quantity'] !== null && $pkg['custom_quantity'] !== '';
+            $rawCustomQty = $hasCustomQty ? (int) $pkg['custom_quantity'] : null;
+
+            if ($hasCustomPrice && (!is_numeric($rawCustomPrice) || (float) $rawCustomPrice < 0)) {
+                return [[], "\"{$combo->name}\": custom price must be a valid number greater than or equal to 0.", [
+                    'reason' => 'validation',
+                    'field' => 'packages',
+                    'message' => "\"{$combo->name}\": custom price must be a valid number greater than or equal to 0.",
+                ]];
             }
 
-            if (count($rawImmediateIds) + count($rawPendingIds) > $quantityIncluded) {
-                return [[], "\"{$combo->name}\" only includes {$quantityIncluded} service(s) across Today and Pending.", null];
+            if (mb_strlen($rawOverrideReason) > 150) {
+                return [[], "\"{$combo->name}\": exception note must be 150 characters or fewer.", [
+                    'reason' => 'validation',
+                    'field' => 'packages',
+                    'message' => "\"{$combo->name}\": exception note must be 150 characters or fewer.",
+                ]];
             }
+
+            $overrideReason = $rawOverrideReason !== '' ? $rawOverrideReason : null;
+            $agreedPrice = $hasCustomPrice ? round((float) $rawCustomPrice, 2) : $originalComboPrice;
+            $priceChanged = abs($agreedPrice - $originalComboPrice) > 0.009;
+            $allowCustomization = $isCustomFlag || !empty($rawExtraIds) || $hasCustomPrice || $hasCustomQty;
+
+            $nonCatalogImmediate = array_values(array_diff($rawImmediateIds, $catalogPoolIds));
+            $nonCatalogPending = array_values(array_diff($rawPendingIds, $catalogPoolIds));
+            $nonCatalogExtra = array_values(array_diff($rawExtraIds, $catalogPoolIds));
+
+            if (!empty($nonCatalogImmediate) || !empty($nonCatalogPending) || !empty($nonCatalogExtra)) {
+                $invalidPoolMsg = "Selected service is not part of this combo's allowed service list.";
+
+                return [[], $invalidPoolMsg, [
+                    'reason' => 'validation',
+                    'field' => 'packages',
+                    'message' => $invalidPoolMsg,
+                ]];
+            }
+
+            $poolServices = $catalogPool->map(fn ($s) => $s);
+
+            $totalSelected = count($rawImmediateIds) + count($rawPendingIds);
+            if (!$allowCustomization && $totalSelected > $catalogQty) {
+                return [[], "\"{$combo->name}\" only includes {$catalogQty} service(s) across Today and Pending.", null];
+            }
+
+            if ($allowCustomization) {
+                if ($rawCustomQty !== null && $rawCustomQty > 0) {
+                    $quantityIncluded = max($rawCustomQty, $totalSelected);
+                } elseif ($totalSelected > $catalogQty) {
+                    $quantityIncluded = $totalSelected;
+                } elseif ($isCustomFlag && $totalSelected > 0) {
+                    $quantityIncluded = $totalSelected;
+                } else {
+                    $quantityIncluded = $catalogQty;
+                }
+            } else {
+                $quantityIncluded = $catalogQty;
+            }
+
+            $allSelectedOrdered = array_values(array_merge($rawImmediateIds, $rawPendingIds));
+            $selectedExtraIds = [];
+            if ($totalSelected > $catalogQty) {
+                $overflowNeeded = $totalSelected - $catalogQty;
+                $selectedExtraIds = array_values(array_intersect($rawExtraIds, $allSelectedOrdered));
+                if (count($selectedExtraIds) < $overflowNeeded) {
+                    foreach (array_reverse($allSelectedOrdered) as $candId) {
+                        if (!in_array($candId, $selectedExtraIds, true)) {
+                            $selectedExtraIds[] = $candId;
+                            if (count($selectedExtraIds) >= $overflowNeeded) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            $isCustomCombo = $priceChanged
+                || !empty($selectedExtraIds)
+                || ($totalSelected > $catalogQty)
+                || ($quantityIncluded !== $catalogQty)
+                || ($isCustomFlag && $totalSelected > 0 && $totalSelected !== $catalogQty);
 
             $serviceStaff = [];
             $serviceSortOrder = [];
@@ -7471,11 +7624,16 @@ class AppointmentController extends Controller
                 'combo' => $combo,
                 'immediate_ids' => $rawImmediateIds,
                 'pending_ids' => $rawPendingIds,
+                'extra_service_ids' => $selectedExtraIds,
                 'service_staff' => $serviceStaff,
                 'service_sort_order' => $serviceSortOrder,
                 'service_parallel' => $serviceParallel,
                 'pool' => $poolServices,
                 'quantity_included' => $quantityIncluded,
+                'original_combo_price' => $originalComboPrice,
+                'agreed_price' => $agreedPrice,
+                'is_custom_combo' => $isCustomCombo,
+                'combo_override_reason' => $isCustomCombo ? $overrideReason : null,
             ];
         }
 
@@ -7525,7 +7683,11 @@ class AppointmentController extends Controller
             }
 
             $combo = Combo::with('services')->find($package->combo_id);
-            if (!$combo || !$combo->services->contains('id', $service->id)) {
+            $isPendingExtraService = $package->services()
+                ->where('service_id', $service->id)
+                ->where('status', 'pending')
+                ->exists();
+            if (!$combo || (!$combo->services->contains('id', $service->id) && !$isPendingExtraService)) {
                 return [[], "\"{$service->name}\" is not part of {$package->combo_name}.", null];
             }
 
@@ -7592,13 +7754,15 @@ class AppointmentController extends Controller
         ?int $comboId = null,
         ?int $clientPackageId = null,
         int $sortOrder = 0,
-        bool $isParallel = false
+        bool $isParallel = false,
+        bool $isComboExtra = false
     ): AppointmentService {
         $line = AppointmentService::create([
             'appointment_id' => $appointment->id,
             'service_id' => $service->id,
             'combo_id' => $comboId,
             'combo_name' => $comboName,
+            'is_combo_extra' => $isComboExtra,
             'client_package_id' => $clientPackageId,
             'staff_id' => $staffId ?? $appointment->staff_id,
             'sort_order' => $sortOrder,
@@ -7638,12 +7802,21 @@ class AppointmentController extends Controller
                 $validityDays = 7;
             }
 
+            $extraIds = array_map('intval', $plan['extra_service_ids'] ?? []);
+            $agreedPrice = array_key_exists('agreed_price', $plan) ? (float) $plan['agreed_price'] : (float) $combo->price;
+            $originalPrice = array_key_exists('original_combo_price', $plan) ? (float) $plan['original_combo_price'] : (float) $combo->price;
+            $isCustomCombo = (bool) ($plan['is_custom_combo'] ?? false);
+            $overrideReason = $plan['combo_override_reason'] ?? null;
+
             $clientPackage = ClientPackage::create([
                 'customer_id' => $customer->id,
                 'combo_id' => $combo->id,
                 'appointment_id' => $appointment->id,
                 'combo_name' => $combo->name,
-                'price_paid' => $combo->price,
+                'is_custom_combo' => $isCustomCombo,
+                'price_paid' => $agreedPrice,
+                'original_combo_price' => $originalPrice,
+                'combo_override_reason' => $overrideReason,
                 'quantity_included' => $plan['quantity_included'],
                 'validity_days' => $validityDays,
                 'purchased_at' => null,
@@ -7656,6 +7829,7 @@ class AppointmentController extends Controller
                 $sliceMeta = $scheduleByPlanAndSvc[$planIdx][$sid] ?? null;
                 $assignedStaffId = $sliceMeta['staff_id'] ?? ($plan['service_staff'][$sid] ?? null);
                 $sliceCursor = $sliceMeta ? $sliceMeta['start'] : $cursor;
+                $isExtra = in_array((int) $sid, $extraIds, true);
 
                 $appointmentService = $this->addRedeemedServiceLine(
                     $appointment,
@@ -7666,7 +7840,8 @@ class AppointmentController extends Controller
                     $combo->id,
                     $clientPackage->id,
                     $sliceMeta ? (int) $sliceMeta['sort_order'] : $seqIdx,
-                    $sliceMeta ? (bool) $sliceMeta['is_parallel'] : false
+                    $sliceMeta ? (bool) $sliceMeta['is_parallel'] : false,
+                    $isExtra
                 );
 
                 if (!$sliceMeta) {
@@ -7688,12 +7863,14 @@ class AppointmentController extends Controller
                 if (!$service) {
                     continue;
                 }
+                $isExtra = in_array((int) $sid, $extraIds, true);
 
                 $pendingApptService = AppointmentService::create([
                     'appointment_id' => $appointment->id,
                     'service_id' => $service->id,
                     'combo_id' => $combo->id,
                     'combo_name' => $combo->name,
+                    'is_combo_extra' => $isExtra,
                     'client_package_id' => $clientPackage->id,
                     'staff_id' => null,
                     'sort_order' => 100 + $pIdx,

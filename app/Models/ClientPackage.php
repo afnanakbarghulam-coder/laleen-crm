@@ -12,7 +12,10 @@ class ClientPackage extends Model
         'sale_id',
         'appointment_id',
         'combo_name',
+        'is_custom_combo',
         'price_paid',
+        'original_combo_price',
+        'combo_override_reason',
         'quantity_included',
         'validity_days',
         'purchased_at',
@@ -23,7 +26,9 @@ class ClientPackage extends Model
     protected $casts = [
         'purchased_at' => 'datetime',
         'expires_at' => 'datetime',
+        'is_custom_combo' => 'boolean',
         'price_paid' => 'float',
+        'original_combo_price' => 'float',
         'validity_days' => 'integer',
     ];
 

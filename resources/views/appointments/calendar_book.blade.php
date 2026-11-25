@@ -424,6 +424,182 @@
         letter-spacing: 0.01em;
     }
 
+    .fb-combo-custom-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 7px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        color: #fbbf24;
+        background: rgba(245, 158, 11, 0.14);
+        border: 1px solid rgba(245, 158, 11, 0.38);
+        white-space: nowrap;
+    }
+
+    .fb-combo-extra-tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 0 5px;
+        border-radius: 999px;
+        font-size: 9.5px;
+        font-weight: 700;
+        color: #fcd34d;
+        background: rgba(245, 158, 11, 0.14);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        margin-left: 4px;
+    }
+
+    .fb-combo-slot-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1px 6px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #e5b8a8;
+        background: rgba(217, 143, 131, 0.14);
+        border: 1px solid rgba(217, 143, 131, 0.28);
+        margin-right: 4px;
+        flex-shrink: 0;
+    }
+
+    .fb-combo-custom-price-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        border: 1px dashed rgba(245, 158, 11, 0.45);
+        background: transparent;
+        color: #e8c48e;
+        font-size: 10.5px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 999px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.14s ease;
+    }
+
+    .fb-combo-custom-price-btn:hover,
+    .fb-combo-custom-price-btn.is-active {
+        border-style: solid;
+        border-color: rgba(245, 158, 11, 0.65);
+        background: rgba(245, 158, 11, 0.14);
+        color: #fde68a;
+    }
+
+    .fb-combo-price-editor {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding-top: 7px;
+        margin-top: 5px;
+        border-top: 1px dashed rgba(245, 158, 11, 0.28);
+        flex-wrap: nowrap;
+    }
+
+    .fb-combo-price-editor .fb-combo-price-input {
+        width: 72px;
+        flex-shrink: 0;
+        background: rgba(17, 13, 11, 0.55);
+        border: 1px solid rgba(245, 158, 11, 0.4);
+        border-radius: 6px;
+        color: #fde68a;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: right;
+        padding: 2px 6px;
+    }
+
+    .fb-combo-price-editor .fb-combo-price-input:focus {
+        outline: none;
+        border-color: #fbbf24;
+    }
+
+    .fb-combo-price-editor .fb-combo-reason-input {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid rgba(217, 143, 131, 0.3);
+        color: #e6d9d5;
+        font-size: 11.5px;
+        padding: 2px 4px;
+    }
+
+    .fb-combo-price-editor .fb-combo-reason-input:focus {
+        outline: none;
+        border-bottom-color: #fbbf24;
+    }
+
+    .fb-combo-price-editor .fb-combo-reason-input::placeholder {
+        color: #8a7d76;
+    }
+
+    .fb-combo-extra-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-top: 7px;
+        margin-top: 4px;
+        border-top: 1px dashed rgba(217, 143, 131, 0.2);
+    }
+
+    .fb-combo-add-extra-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px dashed rgba(217, 143, 131, 0.42);
+        background: transparent;
+        color: #e5b8a8;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 999px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.14s ease;
+    }
+
+    .fb-combo-add-extra-btn:hover {
+        border-color: #d98f83;
+        background: rgba(217, 143, 131, 0.12);
+        color: #f8ece8;
+    }
+
+    .fb-combo-extra-select {
+        flex: 1;
+        min-width: 0;
+        font-size: 11.5px;
+        background-color: #1c1614 !important;
+        color: #f3e6e2 !important;
+        border-color: rgba(217, 143, 131, 0.38) !important;
+        padding: 3px 26px 3px 8px;
+    }
+
+    .fb-combo-all-selected-hint {
+        font-size: 11px;
+        color: #8a7d76;
+        font-style: italic;
+    }
+
+    .fb-combo-svc-remove-btn {
+        border: none;
+        background: transparent;
+        color: #a98f87;
+        font-size: 14px;
+        line-height: 1;
+        padding: 0 3px;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .fb-combo-svc-remove-btn:hover {
+        color: #f87171;
+    }
+
     .fb-svc-row .remove-btn {
         border: none;
         background: transparent;
@@ -1804,9 +1980,8 @@
             });
 
             selectedCombos.forEach(row => {
-                const poolById = new Map((row.combo.services || []).map(cs => [Number(cs.id), cs]));
                 (row.immediateIds || []).forEach((sid, idx) => {
-                    const cs = poolById.get(Number(sid));
+                    const cs = fbResolveComboServiceObj(row, sid);
                     if (!cs) return;
                     rawItems.push({
                         uid: `combo:${row.id}:${sid}`,
@@ -2279,13 +2454,45 @@
                         serviceParallel[Number(s.id)] = Boolean(s.is_parallel);
                     });
 
+                    const extraServicesById = {};
+                    const hydratedExtraIds = new Set(
+                        (Array.isArray(pkg.extra_service_ids) ? pkg.extra_service_ids : []).map(id => Number(id))
+                    );
+                    poolArr.forEach(s => {
+                        if (s.is_combo_extra) hydratedExtraIds.add(Number(s.id));
+                        extraServicesById[Number(s.id)] = {
+                            id: Number(s.id),
+                            name: s.name,
+                            duration: Number(s.duration || 30),
+                            price: Number(s.catalog_price || 0)
+                        };
+                    });
+
+                    const catalogPriceRef = Number(
+                        pkg.original_combo_price !== undefined && pkg.original_combo_price !== null
+                            ? pkg.original_combo_price
+                            : catalogCombo.price
+                    ) || 0;
+                    const paidPriceVal = Number(pkg.price_paid !== undefined ? pkg.price_paid : catalogPriceRef) || 0;
+                    const hasOverriddenPrice = Math.abs(paidPriceVal - catalogPriceRef) > 0.009;
+                    const catalogQtyRef = Math.max(1, Number(pkg.catalog_quantity_included || catalogCombo.quantity_included || 1));
+                    const totalHydrated = immediateIds.length + pendingIds.length;
+                    const isCustomRow = Boolean(pkg.is_custom_combo) || hasOverriddenPrice || hydratedExtraIds.size > 0 || (totalHydrated > 0 && totalHydrated !== catalogQtyRef);
+
                     selectedCombos.push({
                         id: ++comboRowSeq,
                         combo: catalogCombo,
                         immediateIds,
                         pendingIds,
                         serviceStaff,
-                        serviceParallel
+                        serviceParallel,
+                        extraServicesById,
+                        extraServiceIds: [...hydratedExtraIds],
+                        customPrice: hasOverriddenPrice ? paidPriceVal : null,
+                        customPriceOpen: hasOverriddenPrice || Boolean(pkg.combo_override_reason),
+                        overrideReason: pkg.combo_override_reason || '',
+                        customServicesModified: isCustomRow && totalHydrated !== catalogQtyRef,
+                        addingExtraOpen: false
                     });
                 } else {
                     poolArr.filter(s => s.state === 'today').forEach(s => {
@@ -3666,6 +3873,7 @@
 
             const comboHidden = document.getElementById('fbComboHiddenInputs');
             comboHidden.innerHTML = selectedCombos.map(row => {
+                const cState = fbComboPricingState(row);
                 const staffInputs = Object.entries(row.serviceStaff || {})
                     .filter(([, staffId]) => staffId)
                     .map(([sid, staffId]) => `<input type="hidden" name="packages[${row.id}][service_staff][${sid}]" value="${staffId}">`)
@@ -3679,10 +3887,25 @@
                         <input type="hidden" name="packages[${row.id}][service_parallel][${sid}]" value="${isPar}">
                     `;
                 }).join('');
+                const extraInputs = (cState.extraIds || [])
+                    .map(eid => `<input type="hidden" name="packages[${row.id}][extra_service_ids][]" value="${eid}">`)
+                    .join('');
+                const customPriceInput = (cState.priceDiffers || row.customPrice !== null && row.customPrice !== undefined && row.customPrice !== '')
+                    ? `<input type="hidden" name="packages[${row.id}][custom_price]" value="${cState.agreedPrice.toFixed(2)}">`
+                    : '';
+                const customQtyInput = (cState.isCustom && cState.totalSelected > 0)
+                    ? `<input type="hidden" name="packages[${row.id}][custom_quantity]" value="${cState.effectiveQty}">`
+                    : '';
+                const safeReason = String(row.overrideReason || '').replace(/"/g, '&quot;');
                 return `
                 <input type="hidden" name="packages[${row.id}][combo_id]" value="${row.combo.id}">
+                <input type="hidden" name="packages[${row.id}][is_custom_combo]" value="${cState.isCustom ? '1' : '0'}">
+                ${customPriceInput}
+                ${customQtyInput}
+                <input type="hidden" name="packages[${row.id}][combo_override_reason]" value="${safeReason}">
                 ${row.immediateIds.map(id => `<input type="hidden" name="packages[${row.id}][immediate_service_ids][]" value="${id}">`).join('')}
                 ${(row.pendingIds || []).map(id => `<input type="hidden" name="packages[${row.id}][pending_service_ids][]" value="${id}">`).join('')}
+                ${extraInputs}
                 ${staffInputs}
                 ${sortAndParallelInputs}
             `;
@@ -3768,7 +3991,7 @@
                 }
             }
 
-            const comboPackagesPrice = selectedCombos.reduce((sum, r) => sum + (Number(r.combo.price) || 0), 0);
+            const comboPackagesPrice = selectedCombos.reduce((sum, r) => sum + fbComboPricingState(r).agreedPrice, 0);
             const freebiePackagesNet = selectedFreebiePackages.reduce((sum, fp) => sum + (Number(fp.price !== undefined ? fp.price : fp.pkg.price) || 0), 0);
             const freebiePackagesOrig = selectedFreebiePackages.reduce((sum, fp) => sum + (Number(fp.original_price !== undefined ? fp.original_price : fp.pkg.price) || 0), 0);
             const standaloneNet = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
@@ -3812,22 +4035,180 @@
                 .replace(/"/g, '&quot;');
         }
 
+        function fbResolveComboServiceObj(row, sid) {
+            const targetId = Number(sid);
+            const fromCombo = (row?.combo?.services || []).find(cs => Number(cs.id) === targetId);
+            if (fromCombo) return fromCombo;
+            const fromCatalog = ALL_SERVICES.find(s => Number(s.id) === targetId);
+            if (fromCatalog) return fromCatalog;
+            if (row?.extraServicesById && row.extraServicesById[targetId]) {
+                return row.extraServicesById[targetId];
+            }
+            return null;
+        }
+
+        function fbComboCatalogIds(row) {
+            return new Set((row?.combo?.services || []).map(cs => Number(cs.id)));
+        }
+
+        function fbComboPricingState(row) {
+            const combo = row.combo || {};
+            const catalogPrice = fbRound2(Number(combo.price) || 0);
+            const hasCustomPrice = row.customPrice !== null && row.customPrice !== undefined && row.customPrice !== '';
+            const agreedPrice = hasCustomPrice ? fbRound2(Math.max(0, Number(row.customPrice) || 0)) : catalogPrice;
+            const catalogQty = Math.max(1, Number(combo.quantity_included) || (combo.services || []).length || 1);
+            const immediateIds = Array.isArray(row.immediateIds) ? row.immediateIds.map(Number) : [];
+            const pendingIds = Array.isArray(row.pendingIds) ? row.pendingIds.map(Number) : [];
+            const selectedOrdered = [...new Set([...immediateIds, ...pendingIds])];
+            const selectedSet = new Set(selectedOrdered);
+            const totalSelected = selectedOrdered.length;
+
+            // Extra services are strictly eligible combo pool services added beyond `catalogQty`.
+            let extraIds = [];
+            if (totalSelected > catalogQty) {
+                const overflowNeeded = totalSelected - catalogQty;
+                const explicit = (Array.isArray(row.extraServiceIds) ? row.extraServiceIds : [])
+                    .map(Number)
+                    .filter(id => selectedSet.has(id));
+                extraIds = [...new Set(explicit)];
+                if (extraIds.length < overflowNeeded) {
+                    for (let i = selectedOrdered.length - 1; i >= 0 && extraIds.length < overflowNeeded; i--) {
+                        const cand = selectedOrdered[i];
+                        if (!extraIds.includes(cand)) extraIds.push(cand);
+                    }
+                }
+            }
+
+            const priceDiffers = Math.abs(agreedPrice - catalogPrice) > 0.009;
+            const servicesDiffer = extraIds.length > 0
+                || totalSelected > catalogQty
+                || (Boolean(row.customServicesModified) && totalSelected > 0 && totalSelected !== catalogQty);
+            const isCustom = priceDiffers || servicesDiffer;
+            const effectiveQty = (servicesDiffer && totalSelected > 0)
+                ? totalSelected
+                : Math.max(catalogQty, totalSelected);
+
+            return {
+                catalogPrice,
+                agreedPrice,
+                catalogQty,
+                totalSelected,
+                extraIds,
+                priceDiffers,
+                servicesDiffer,
+                isCustom,
+                effectiveQty
+            };
+        }
+
         function fbComboImmediateDuration(row) {
-            return (row.combo.services || [])
-                .filter(s => (row.immediateIds || []).includes(s.id))
+            return (row.immediateIds || [])
+                .map(sid => fbResolveComboServiceObj(row, sid))
+                .filter(Boolean)
                 .reduce((sum, s) => sum + (Number(s.duration) || 0), 0);
+        }
+
+        function fbSyncComboCardPricingDom(cardEl, row, source) {
+            if (!cardEl || !row) return;
+            const st = fbComboPricingState(row);
+            const badgeEl = cardEl.querySelector('.fb-combo-custom-badge');
+            if (badgeEl) badgeEl.classList.toggle('d-none', !st.isCustom);
+
+            const strikeEl = cardEl.querySelector('.fb-combo-orig-strike');
+            if (strikeEl) {
+                strikeEl.textContent = st.catalogPrice.toFixed(2);
+                strikeEl.classList.toggle('d-none', !st.priceDiffers);
+            }
+
+            const priceLabelEl = cardEl.querySelector('.fb-combo-price-lock');
+            if (priceLabelEl) {
+                priceLabelEl.textContent = `${st.agreedPrice.toFixed(2)} QAR`;
+            }
+
+            const toggleBtn = cardEl.querySelector('.fb-combo-custom-price-btn');
+            if (toggleBtn) {
+                toggleBtn.classList.toggle('is-active', Boolean(row.customPriceOpen || st.priceDiffers));
+            }
+
+            const editorEl = cardEl.querySelector('.fb-combo-price-editor');
+            if (editorEl) {
+                editorEl.classList.toggle('d-none', !Boolean(row.customPriceOpen));
+            }
+
+            const priceInput = cardEl.querySelector('.fb-combo-price-input');
+            if (priceInput && source !== 'price') {
+                priceInput.value = st.agreedPrice.toFixed(2);
+            }
+
+            const resetBtn = cardEl.querySelector('.fb-combo-price-reset-btn');
+            if (resetBtn) {
+                resetBtn.classList.toggle('d-none', !st.priceDiffers && !String(row.overrideReason || '').trim());
+            }
+        }
+
+        function fbComboPriceEditorHtml(row, st) {
+            const safeReason = fbEscHtml(row.overrideReason || '');
+            const showReset = st.priceDiffers || Boolean(String(row.overrideReason || '').trim());
+            return `
+                <div class="fb-combo-price-editor ${row.customPriceOpen ? '' : 'd-none'}" data-row="${row.id}" onclick="event.stopPropagation()">
+                    <span style="font-size:10.5px; font-weight:700; color:#e8c48e; white-space:nowrap;">QAR</span>
+                    <input type="number" step="0.01" min="0" inputmode="decimal"
+                        class="fb-combo-price-input" data-row="${row.id}"
+                        value="${st.agreedPrice.toFixed(2)}" aria-label="Custom combo price">
+                    <span style="font-size:10.5px; color:#8a7d76; white-space:nowrap;">Catalog ${st.catalogPrice.toFixed(0)}</span>
+                    <input type="text" maxlength="150"
+                        class="fb-combo-reason-input" data-row="${row.id}"
+                        placeholder="e.g., Added 5th luxury service" value="${safeReason}" aria-label="Exception note">
+                    <button type="button" class="fb-disc-clear-btn fb-combo-price-reset-btn ${showReset ? '' : 'd-none'}" data-row="${row.id}" title="Reset to catalog price">&times;</button>
+                </div>
+            `;
+        }
+
+        function fbComboExtraBarHtml(row) {
+            const alreadyUsed = new Set([...(row.immediateIds || []), ...(row.pendingIds || [])].map(Number));
+            const eligiblePool = Array.isArray(row?.combo?.services) ? row.combo.services : [];
+            const availableExtras = eligiblePool.filter(s => !alreadyUsed.has(Number(s.id)));
+
+            if (!availableExtras.length) {
+                return `
+                    <div class="fb-combo-extra-bar" onclick="event.stopPropagation()">
+                        <span class="fb-combo-all-selected-hint">All services in this combo are already selected</span>
+                    </div>
+                `;
+            }
+
+            if (row.addingExtraOpen) {
+                return `
+                    <div class="fb-combo-extra-bar" onclick="event.stopPropagation()">
+                        <select class="form-select form-select-sm fb-combo-extra-select" data-row="${row.id}" aria-label="Select extra service to add to combo">
+                            <option value="">Choose service to add to combo…</option>
+                            ${availableExtras.map(s => `<option value="${s.id}">${fbEscHtml(s.name)} (${Number(s.duration) || 30} min)</option>`).join('')}
+                        </select>
+                        <button type="button" class="fb-disc-clear-btn fb-combo-cancel-extra-btn" data-row="${row.id}" title="Close">&times;</button>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="fb-combo-extra-bar" onclick="event.stopPropagation()">
+                    <button type="button" class="fb-combo-add-extra-btn" data-row="${row.id}">
+                        <i class="bx bx-plus"></i> Add Extra Service
+                    </button>
+                </div>
+            `;
         }
 
         function fbComboCardHtml(row) {
             const combo = row.combo;
             const immediateIds = row.immediateIds || [];
             const pendingIds = row.pendingIds || [];
-            const pickedCount = immediateIds.length + pendingIds.length;
-            const qty = Number(combo.quantity_included) || 0;
+            const st = fbComboPricingState(row);
+            const pickedCount = st.totalSelected;
+            const qty = st.effectiveQty;
+            const catalogSet = fbComboCatalogIds(row);
             const branch = fbNormalizeBranch(document.getElementById('bookBranch').value) || fbResolveActiveCalendarBranch();
             const daySnap = fbCurrentDaySnapshot();
             const { timeline, byUid } = fbComputeUnifiedTimeline();
-            const poolById = new Map((combo.services || []).map(cs => [Number(cs.id), cs]));
 
             const swapComboHtml = ALL_COMBOS.length > 1 ? `
                 <div class="fb-combo-swap-row" onclick="event.stopPropagation()">
@@ -3837,6 +4218,15 @@
                     </select>
                 </div>` : '';
 
+            const headerPriceControls = `
+                <span class="fb-orig-strike fb-combo-orig-strike ${st.priceDiffers ? '' : 'd-none'}">${st.catalogPrice.toFixed(2)}</span>
+                <span class="fb-combo-price-lock">${st.agreedPrice.toFixed(2)} QAR</span>
+                <button type="button" class="fb-combo-custom-price-btn ${row.customPriceOpen || st.priceDiffers ? 'is-active' : ''}" data-row="${row.id}" onclick="event.stopPropagation()">
+                    Custom Price
+                </button>
+                <button type="button" class="remove-btn fb-combo-remove-btn" data-row="${row.id}" title="Remove combo"><i class="bx bx-x"></i></button>
+            `;
+
             if (pickedCount === 0) {
                 return `
                     <div class="fb-svc-row fb-combo-card" data-row-id="${row.id}" role="button" tabindex="0" aria-label="Configure ${fbEscHtml(combo.name)}">
@@ -3844,23 +4234,28 @@
                             <div class="d-flex align-items-center gap-2 flex-wrap min-w-0">
                                 <span class="fb-combo-header-pill">Combo</span>
                                 <span class="name">${fbEscHtml(combo.name)}</span>
+                                <span class="fb-combo-custom-badge ${st.isCustom ? '' : 'd-none'}">Custom</span>
                             </div>
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="fb-combo-price-lock">${Number(combo.price).toFixed(2)} QAR</span>
-                                <button type="button" class="remove-btn fb-combo-remove-btn" data-row="${row.id}" title="Remove combo"><i class="bx bx-x"></i></button>
+                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                ${headerPriceControls}
                             </div>
                         </div>
+                        ${fbComboPriceEditorHtml(row, st)}
                         ${swapComboHtml}
                         <div class="fb-combo-trigger-row">
                             <span>0 / ${qty} Selected &middot; Decide in Salon &mdash; Click to choose services</span>
                             <span class="fb-combo-edit-cta">&rsaquo;</span>
                         </div>
+                        ${fbComboExtraBarHtml(row)}
                     </div>`;
             }
 
+            const totalSlots = immediateIds.length;
+            const extraIdSet = new Set((st.extraIds || []).map(Number));
             const todayRowsHtml = immediateIds.map((sid, idx) => {
-                const cs = poolById.get(Number(sid));
+                const cs = fbResolveComboServiceObj(row, sid);
                 if (!cs) return '';
+                const isExtraSvc = extraIdSet.has(Number(sid));
                 const sl = byUid.get(`combo:${row.id}:${sid}`);
                 const slicePos = sl ? timeline.slices.indexOf(sl) : 0;
                 const priorSlices = slicePos > 0 ? timeline.slices.slice(0, slicePos) : [];
@@ -3898,7 +4293,9 @@
                             <div class="laleen-slice-left">
                                 ${reorderBtns}
                                 <div class="laleen-slice-title-wrap">
-                                    <span class="laleen-slice-title">${fbEscHtml(cs.name)}</span>
+                                    <span class="laleen-slice-title">
+                                        <span class="fb-combo-slot-num">${idx + 1}/${totalSlots}</span>${fbEscHtml(cs.name)}${isExtraSvc ? '<span class="fb-combo-extra-tag">Extra</span>' : ''}
+                                    </span>
                                     <span class="laleen-slice-sub">
                                         <span class="laleen-time-pill">${fbEscHtml(sl ? sl.timeBadge : `${cs.duration}m`)}</span>
                                         ${meta.unmappedFallback ? '<span class="laleen-unmapped-hint">Unmapped skill</span>' : ''}
@@ -3911,13 +4308,14 @@
                                     data-row="${row.id}" data-svc="${sid}">
                                     ${meta.html}
                                 </select>
+                                <button type="button" class="fb-combo-svc-remove-btn" data-row="${row.id}" data-svc="${sid}" title="Remove service from this combo booking">&times;</button>
                             </div>
                         </div>
                         ${otAlertHtml}
                     </div>`;
             }).join('');
 
-            const pendingNames = pendingIds.map(id => poolById.get(Number(id))?.name).filter(Boolean);
+            const pendingNames = pendingIds.map(id => fbResolveComboServiceObj(row, id)?.name).filter(Boolean);
             const pendingHtml = pendingNames.length > 0
                 ? `<div class="laleen-pending-summary" onclick="event.stopPropagation()"><span>Pending next visit: ${fbEscHtml(pendingNames.join(', '))} (0 min today)</span></div>`
                 : '';
@@ -3928,18 +4326,20 @@
                         <div class="d-flex align-items-center gap-2 flex-wrap min-w-0">
                             <span class="fb-combo-header-pill">Combo</span>
                             <span class="name">${fbEscHtml(combo.name)}</span>
+                            <span class="fb-combo-custom-badge ${st.isCustom ? '' : 'd-none'}">Custom</span>
                         </div>
-                        <div class="d-flex align-items-center gap-2">
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0 flex-wrap justify-content-end">
                             <button type="button" class="btn btn-link btn-sm p-0 fb-combo-edit-cta text-decoration-none fb-combo-open-cfg-btn" data-row="${row.id}">
                                 Edit (${pickedCount}/${qty}) &rsaquo;
                             </button>
-                            <span class="fb-combo-price-lock">${Number(combo.price).toFixed(2)} QAR</span>
-                            <button type="button" class="remove-btn fb-combo-remove-btn" data-row="${row.id}" title="Remove combo"><i class="bx bx-x"></i></button>
+                            ${headerPriceControls}
                         </div>
                     </div>
+                    ${fbComboPriceEditorHtml(row, st)}
                     ${swapComboHtml}
                     ${todayRowsHtml ? `<div class="laleen-slice-track">${todayRowsHtml}</div>` : ''}
                     ${pendingHtml}
+                    ${fbComboExtraBarHtml(row)}
                 </div>`;
         }
 
@@ -3957,6 +4357,13 @@
             row.pendingIds = [];
             row.serviceStaff = {};
             row.serviceParallel = {};
+            row.extraServicesById = {};
+            row.extraServiceIds = [];
+            row.customPrice = null;
+            row.customPriceOpen = false;
+            row.overrideReason = '';
+            row.customServicesModified = false;
+            row.addingExtraOpen = false;
 
             fbClearBookingError();
             fbAutoAssignUnpickedTodaySlices();
@@ -3985,6 +4392,142 @@
                 });
             });
 
+            container.querySelectorAll('.fb-combo-custom-price-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const row = selectedCombos.find(r => Number(r.id) === Number(btn.dataset.row));
+                    if (!row) return;
+                    const cardEl = btn.closest('.fb-combo-card');
+                    row.customPriceOpen = !row.customPriceOpen;
+                    fbSyncComboCardPricingDom(cardEl, row, 'toggle');
+                    if (row.customPriceOpen) {
+                        const input = cardEl?.querySelector('.fb-combo-price-input');
+                        if (input) {
+                            input.focus();
+                            input.select();
+                        }
+                    }
+                });
+            });
+
+            container.querySelectorAll('.fb-combo-price-input').forEach(input => {
+                input.addEventListener('click', e => e.stopPropagation());
+                input.addEventListener('input', () => {
+                    const row = selectedCombos.find(r => Number(r.id) === Number(input.dataset.row));
+                    if (!row) return;
+                    const cardEl = input.closest('.fb-combo-card');
+                    const parsed = parseFloat(input.value);
+                    row.customPrice = (isNaN(parsed) || parsed < 0) ? 0 : fbRound2(parsed);
+                    row.customPriceOpen = true;
+                    fbSyncComboCardPricingDom(cardEl, row, 'price');
+                    fbSyncHiddenAndTotals();
+                });
+                input.addEventListener('blur', () => {
+                    const row = selectedCombos.find(r => Number(r.id) === Number(input.dataset.row));
+                    if (!row) return;
+                    input.value = fbComboPricingState(row).agreedPrice.toFixed(2);
+                });
+                input.addEventListener('focus', () => input.select());
+            });
+
+            container.querySelectorAll('.fb-combo-reason-input').forEach(input => {
+                input.addEventListener('click', e => e.stopPropagation());
+                input.addEventListener('input', () => {
+                    const row = selectedCombos.find(r => Number(r.id) === Number(input.dataset.row));
+                    if (!row) return;
+                    const cardEl = input.closest('.fb-combo-card');
+                    row.overrideReason = input.value;
+                    fbSyncComboCardPricingDom(cardEl, row, 'reason');
+                    fbSyncHiddenAndTotals();
+                });
+            });
+
+            container.querySelectorAll('.fb-combo-price-reset-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const row = selectedCombos.find(r => Number(r.id) === Number(btn.dataset.row));
+                    if (!row) return;
+                    const cardEl = btn.closest('.fb-combo-card');
+                    row.customPrice = null;
+                    row.overrideReason = '';
+                    row.customPriceOpen = false;
+                    const reasonEl = cardEl?.querySelector('.fb-combo-reason-input');
+                    if (reasonEl) reasonEl.value = '';
+                    fbSyncComboCardPricingDom(cardEl, row, 'reset');
+                    fbSyncHiddenAndTotals();
+                });
+            });
+
+            container.querySelectorAll('.fb-combo-add-extra-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const row = selectedCombos.find(r => Number(r.id) === Number(btn.dataset.row));
+                    if (!row) return;
+                    row.addingExtraOpen = true;
+                    fbRenderCombos(true);
+                    container.querySelector(`.fb-combo-extra-select[data-row="${row.id}"]`)?.focus();
+                });
+            });
+
+            container.querySelectorAll('.fb-combo-cancel-extra-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const row = selectedCombos.find(r => Number(r.id) === Number(btn.dataset.row));
+                    if (!row) return;
+                    row.addingExtraOpen = false;
+                    fbRenderCombos(true);
+                });
+            });
+
+            container.querySelectorAll('.fb-combo-extra-select').forEach(sel => {
+                sel.addEventListener('click', e => e.stopPropagation());
+                sel.addEventListener('change', (e) => {
+                    e.stopPropagation();
+                    const row = selectedCombos.find(r => Number(r.id) === Number(sel.dataset.row));
+                    const pickedId = Number(sel.value);
+                    if (!row || !pickedId) return;
+                    const eligiblePool = Array.isArray(row?.combo?.services) ? row.combo.services : [];
+                    const poolSvc = eligiblePool.find(s => Number(s.id) === pickedId);
+                    if (!poolSvc) return;
+                    if (!row.immediateIds.map(Number).includes(pickedId)) {
+                        row.immediateIds.push(pickedId);
+                        row.pendingIds = (row.pendingIds || []).filter(id => Number(id) !== pickedId);
+                        const catalogQty = Math.max(1, Number(row.combo?.quantity_included) || eligiblePool.length || 1);
+                        const newTotal = row.immediateIds.length + (row.pendingIds || []).length;
+                        row.extraServiceIds = Array.isArray(row.extraServiceIds) ? row.extraServiceIds.map(Number) : [];
+                        if (newTotal > catalogQty && !row.extraServiceIds.includes(pickedId)) {
+                            row.extraServiceIds.push(pickedId);
+                        }
+                        row.customServicesModified = (newTotal !== catalogQty);
+                    }
+                    row.addingExtraOpen = false;
+                    fbAutoAssignUnpickedTodaySlices();
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                });
+            });
+
+            container.querySelectorAll('.fb-combo-svc-remove-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const row = selectedCombos.find(r => Number(r.id) === Number(btn.dataset.row));
+                    const sid = Number(btn.dataset.svc);
+                    if (!row || !sid) return;
+                    row.immediateIds = (row.immediateIds || []).filter(id => Number(id) !== sid);
+                    row.extraServiceIds = (Array.isArray(row.extraServiceIds) ? row.extraServiceIds : []).filter(id => Number(id) !== sid);
+                    if (row.serviceStaff) delete row.serviceStaff[sid];
+                    if (row.serviceParallel) delete row.serviceParallel[sid];
+                    const catalogQty = Math.max(1, Number(row.combo?.quantity_included) || (row.combo?.services || []).length || 1);
+                    const newTotal = row.immediateIds.length + (row.pendingIds || []).length;
+                    if (newTotal <= catalogQty) {
+                        row.extraServiceIds = [];
+                    }
+                    row.customServicesModified = (newTotal !== catalogQty);
+                    fbRenderAllListsWithoutRecursion();
+                    loadAvailableStaff();
+                });
+            });
+
             container.querySelectorAll('.fb-combo-open-cfg-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -3994,12 +4537,12 @@
 
             container.querySelectorAll('.fb-combo-card[role="button"]').forEach(card => {
                 card.addEventListener('click', (e) => {
-                    if (e.target.closest('.fb-combo-remove-btn')) return;
+                    if (e.target.closest('.fb-combo-remove-btn, .fb-combo-custom-price-btn, .fb-combo-price-editor, .fb-combo-extra-bar')) return;
                     fbOpenComboConfigForRow(Number(card.dataset.rowId));
                 });
                 card.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
-                        if (e.target.closest('.fb-combo-remove-btn')) return;
+                        if (e.target.closest('.fb-combo-remove-btn, .fb-combo-custom-price-btn, .fb-combo-price-editor, .fb-combo-extra-bar')) return;
                         e.preventDefault();
                         fbOpenComboConfigForRow(Number(card.dataset.rowId));
                     }
@@ -4059,7 +4602,7 @@
             const baseTime = fbCurrentBaseTimeHHMM();
             const poolById = new Map((draft.combo.services || []).map(cs => [Number(cs.id), cs]));
             const items = (draft.immediateIds || []).map((sid, idx) => {
-                const cs = poolById.get(Number(sid));
+                const cs = poolById.get(Number(sid)) || fbResolveComboServiceObj(draft, sid);
                 return {
                     service_id: Number(sid),
                     name: cs ? cs.name : 'Service',
@@ -4090,6 +4633,8 @@
                 serviceStaff: {},
                 serviceParallel: {},
                 serviceStaffOptions: {},
+                extraServicesById: {},
+                customPrice: null,
             };
             const searchInput = document.getElementById('fbComboServiceSearch');
             if (searchInput) searchInput.value = '';
@@ -4100,15 +4645,18 @@
         function fbOpenComboConfigForRow(rowId) {
             const existing = selectedCombos.find(r => Number(r.id) === Number(rowId));
             if (!existing) return;
+            const extraSet = new Set((fbComboPricingState(existing).extraIds || []).map(Number));
             fbActiveComboDraft = {
                 isNew: false,
                 rowId: existing.id,
                 combo: existing.combo,
-                immediateIds: [...(existing.immediateIds || [])],
-                pendingIds: [...(existing.pendingIds || [])],
+                immediateIds: (existing.immediateIds || []).filter(id => !extraSet.has(Number(id))),
+                pendingIds: (existing.pendingIds || []).filter(id => !extraSet.has(Number(id))),
                 serviceStaff: Object.assign({}, existing.serviceStaff || {}),
                 serviceParallel: Object.assign({}, existing.serviceParallel || {}),
                 serviceStaffOptions: Object.assign({}, existing.serviceStaffOptions || {}),
+                extraServicesById: Object.assign({}, existing.extraServicesById || {}),
+                customPrice: existing.customPrice !== null && existing.customPrice !== undefined ? existing.customPrice : null,
             };
             const searchInput = document.getElementById('fbComboServiceSearch');
             if (searchInput) searchInput.value = '';
@@ -4136,14 +4684,44 @@
                     serviceStaff: Object.assign({}, draft.serviceStaff),
                     serviceParallel: Object.assign({}, draft.serviceParallel || {}),
                     serviceStaffOptions: Object.assign({}, draft.serviceStaffOptions),
+                    extraServicesById: {},
+                    extraServiceIds: [],
+                    customPrice: null,
+                    customPriceOpen: false,
+                    overrideReason: '',
+                    customServicesModified: false,
+                    addingExtraOpen: false,
                 });
             } else {
                 const target = selectedCombos.find(r => Number(r.id) === Number(draft.rowId));
                 if (target) {
-                    target.immediateIds = [...draft.immediateIds];
-                    target.pendingIds = [...draft.pendingIds];
-                    target.serviceStaff = Object.assign({}, draft.serviceStaff);
-                    target.serviceParallel = Object.assign({}, draft.serviceParallel || {});
+                    const prevExtraIds = forceDecideInSalon
+                        ? []
+                        : (fbComboPricingState(target).extraIds || []).map(Number);
+                    const prevExtraSet = new Set(prevExtraIds);
+                    const keptExtraImmediate = forceDecideInSalon
+                        ? []
+                        : (target.immediateIds || []).filter(id => prevExtraSet.has(Number(id)));
+                    const mergedImmediate = [...draft.immediateIds];
+                    keptExtraImmediate.forEach(eid => {
+                        if (!mergedImmediate.map(Number).includes(Number(eid))) mergedImmediate.push(Number(eid));
+                    });
+                    const keptExtraPending = forceDecideInSalon
+                        ? []
+                        : (target.pendingIds || []).filter(id => prevExtraSet.has(Number(id)));
+                    const mergedPending = [...draft.pendingIds];
+                    keptExtraPending.forEach(eid => {
+                        if (!mergedPending.map(Number).includes(Number(eid)) && !mergedImmediate.map(Number).includes(Number(eid))) {
+                            mergedPending.push(Number(eid));
+                        }
+                    });
+                    target.immediateIds = mergedImmediate;
+                    target.pendingIds = mergedPending;
+                    target.extraServiceIds = forceDecideInSalon
+                        ? []
+                        : prevExtraIds.filter(eid => mergedImmediate.map(Number).includes(eid) || mergedPending.map(Number).includes(eid));
+                    target.serviceStaff = Object.assign({}, target.serviceStaff || {}, draft.serviceStaff);
+                    target.serviceParallel = Object.assign({}, target.serviceParallel || {}, draft.serviceParallel || {});
                     target.serviceStaffOptions = Object.assign({}, draft.serviceStaffOptions);
                 }
             }
@@ -4193,7 +4771,11 @@
             }
             const priceLabelEl = document.getElementById('fbComboFooterPriceLabel');
             if (priceLabelEl) {
-                priceLabelEl.textContent = `${Number(combo.price).toFixed(2)} QAR locked`;
+                const effectiveDisplayPrice = (draft.customPrice !== null && draft.customPrice !== undefined && draft.customPrice !== '' && !Number.isNaN(Number(draft.customPrice)))
+                    ? Number(draft.customPrice)
+                    : Number(combo.price);
+                const isCustomP = draft.customPrice !== null && draft.customPrice !== undefined && draft.customPrice !== '' && Math.abs(effectiveDisplayPrice - Number(combo.price)) > 0.009;
+                priceLabelEl.textContent = `${effectiveDisplayPrice.toFixed(2)} QAR ${isCustomP ? 'custom' : 'locked'}`;
             }
 
             const query = (document.getElementById('fbComboServiceSearch')?.value || '').trim().toLowerCase();

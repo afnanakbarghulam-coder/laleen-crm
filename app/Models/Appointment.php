@@ -37,6 +37,9 @@ class Appointment extends Model
         'service_name',
         'combo_id',
         'combo_name',
+        'is_custom_combo',
+        'original_combo_price',
+        'combo_override_reason',
         'freebie_package_id',
         'is_freebie_redemption',
         'decide_in_salon',
@@ -67,6 +70,8 @@ class Appointment extends Model
         'overtime_minutes' => 'integer',
         'freebie_package_id' => 'integer',
         'is_freebie_redemption' => 'boolean',
+        'is_custom_combo' => 'boolean',
+        'original_combo_price' => 'float',
         'original_price' => 'float',
         'discount_amount' => 'float',
     ];
@@ -491,11 +496,20 @@ class Appointment extends Model
             $this->combo_id = $attachedPackages->first()?->combo_id
                 ?? $allServices->whereNotNull('combo_id')->first()?->combo_id
                 ?? $this->combo_id;
+            $firstCustomPkg = $attachedPackages->first(fn (ClientPackage $p) => (bool) $p->is_custom_combo);
+            $this->is_custom_combo = $firstCustomPkg !== null;
+            $this->original_combo_price = $firstCustomPkg
+                ? ($firstCustomPkg->original_combo_price !== null ? (float) $firstCustomPkg->original_combo_price : null)
+                : ($attachedPackages->first()?->original_combo_price !== null ? (float) $attachedPackages->first()->original_combo_price : null);
+            $this->combo_override_reason = $firstCustomPkg?->combo_override_reason;
         } elseif ($attachedPackages->isEmpty() && $allServices->whereNotNull('combo_name')->isEmpty()) {
             // Clear stale combo badge if all combo links were removed
             if ($allServices->isNotEmpty()) {
                 $this->combo_id = null;
                 $this->combo_name = null;
+                $this->is_custom_combo = false;
+                $this->original_combo_price = null;
+                $this->combo_override_reason = null;
             }
         }
 
