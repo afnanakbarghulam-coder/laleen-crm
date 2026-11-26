@@ -567,6 +567,27 @@
             border-color: #DDA29E !important;
             box-shadow: 0 0 0 2px rgba(221, 162, 158, 0.22) !important;
         }
+        .svc-offers-tab-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 19px;
+            height: 19px;
+            padding: 0 6px;
+            margin-left: 6px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+            background: rgba(52, 211, 153, 0.16);
+            color: #6ee7b7;
+            transition: background 0.14s ease, color 0.14s ease;
+        }
+        .svc-top-tab.active .svc-offers-tab-badge {
+            background: rgba(27, 19, 21, 0.22);
+            color: #1b1315;
+        }
     </style>
     @php
         $initialCatalogTab = in_array(request('tab'), ['services', 'combos', 'freebies', 'offers'], true) ? request('tab') : 'services';
@@ -600,9 +621,9 @@
         <button type="button" class="svc-top-tab {{ $initialCatalogTab === 'combos' ? 'active' : '' }}" data-tab="combos">Combos</button>
         <button type="button" class="svc-top-tab {{ $initialCatalogTab === 'freebies' ? 'active' : '' }}" data-tab="freebies">Service + Freebies</button>
         <button type="button" class="svc-top-tab {{ $initialCatalogTab === 'offers' ? 'active' : '' }}" data-tab="offers">
-            Offers
+            <span>Offers</span>
             @if ($activeOffersBadgeCount > 0)
-                <span class="badge rounded-pill ms-1" style="background:rgba(52,211,153,0.2); color:#6ee7b7; font-size:10.5px;">{{ $activeOffersBadgeCount }}</span>
+                <span class="svc-offers-tab-badge">{{ $activeOffersBadgeCount }}</span>
             @endif
         </button>
     </div>

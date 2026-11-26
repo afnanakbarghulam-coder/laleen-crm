@@ -84,22 +84,46 @@
         color: #1b1315;
     }
 
-    /* High-Signal Scannable Offer Card */
+    /* Minimalistic 3-Layer Luxury Offer Cards Grid */
+    .mo-cards-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    @media (min-width: 768px) {
+        .mo-cards-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .mo-cards-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    .mo-card-col {
+        min-width: 0;
+        display: flex;
+    }
+
     .mo-card {
-        background: linear-gradient(180deg, rgba(34, 22, 26, 0.96) 0%, rgba(22, 15, 18, 0.99) 100%);
-        border: 1px solid rgba(217, 143, 131, 0.22);
+        width: 100%;
+        background: linear-gradient(180deg, rgba(32, 22, 25, 0.94) 0%, rgba(22, 15, 18, 0.98) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.10);
         border-radius: 16px;
         padding: 20px;
-        height: 100%;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        gap: 14px;
-        transition: border-color 0.16s ease;
+        cursor: pointer;
+        transition: border-color 0.16s ease, box-shadow 0.16s ease;
     }
 
     .mo-card:hover {
-        border-color: rgba(217, 143, 131, 0.38);
+        border-color: rgba(221, 162, 158, 0.40);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
     }
 
     .mo-badge {
@@ -115,35 +139,55 @@
     }
 
     .mo-title {
-        font-size: 17px;
+        font-size: 16.5px;
         font-weight: 700;
         color: #f8efe6;
         margin: 0;
         line-height: 1.3;
+        letter-spacing: -0.01em;
     }
 
-    .mo-pricing-strip {
-        padding: 12px 14px;
-        border-radius: 12px;
-        background: rgba(17, 11, 13, 0.72);
-        border: 1px solid rgba(229, 184, 168, 0.12);
+    .mo-meta-line {
         display: flex;
-        flex-direction: column;
-        gap: 6px;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 6px;
+        font-size: 12px;
+        color: #9e8780;
+        line-height: 1.35;
     }
+
+    .mo-status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+
+    .mo-status-dot.is-emerald { background: #34d399; }
+    .mo-status-dot.is-amber { background: #fbbf24; }
+    .mo-status-dot.is-muted { background: #8f7a73; }
 
     .mo-price {
-        font-size: 23px;
+        font-size: 20px;
         font-weight: 800;
         color: #f3d9a4;
         line-height: 1.1;
         letter-spacing: -0.02em;
+        white-space: nowrap;
     }
 
-    .mo-orig-price {
-        font-size: 13px;
-        color: #9e8780;
-        text-decoration: line-through;
+    .mo-scarcity-line {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: #e6b86a;
+        margin-top: 5px;
+        max-width: 100%;
     }
 
     .mo-clamp-2 {
@@ -153,57 +197,156 @@
         overflow: hidden;
     }
 
+    .mo-dream-line {
+        color: #cbb8b0;
+        font-size: 13px;
+        line-height: 1.5;
+        margin-top: 14px;
+    }
+
+    .mo-services-strip {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 10px;
+    }
+
     .mo-chip {
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        padding: 3px 9px;
-        border-radius: 8px;
-        font-size: 11.5px;
+        padding: 2.5px 8px;
+        border-radius: 6px;
+        font-size: 11px;
         font-weight: 600;
         background: rgba(255, 255, 255, 0.045);
-        color: #e6d6d0;
+        color: #c8b6ae;
+        max-width: 100%;
     }
 
     .mo-chip.is-free {
-        background: rgba(52, 211, 153, 0.12);
+        background: rgba(52, 211, 153, 0.10);
         color: #6ee7b7;
     }
 
-    .mo-readiness-row {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 6px;
-        padding-top: 10px;
-        border-top: 1px solid rgba(255, 255, 255, 0.055);
-    }
-
-    .mo-ready-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 2.5px 9px;
-        border-radius: 999px;
-        font-size: 11px;
-        font-weight: 600;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+    .mo-chip.is-more {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.09);
         color: #9e8780;
     }
 
-    .mo-ready-pill.is-done {
-        background: rgba(52, 211, 153, 0.11);
-        border-color: rgba(52, 211, 153, 0.28);
+    .mo-card-footer {
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        padding-top: 14px;
+        margin-top: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .mo-ghost-copy-btn {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        color: #d6c3bc;
+        border-radius: 8px;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        cursor: pointer;
+        transition: all 0.14s ease;
+        line-height: 1.25;
+        white-space: nowrap;
+    }
+
+    .mo-ghost-copy-btn:hover {
+        background: rgba(52, 211, 153, 0.10);
+        border-color: rgba(52, 211, 153, 0.30);
         color: #6ee7b7;
     }
 
-    .mo-ready-pill.is-warn {
-        background: rgba(245, 158, 11, 0.11);
-        border-color: rgba(245, 158, 11, 0.28);
+    .mo-ghost-copy-btn.is-copied {
+        background: rgba(52, 211, 153, 0.14);
+        border-color: rgba(52, 211, 153, 0.38);
+        color: #6ee7b7;
+    }
+
+    .mo-playbook-link {
+        background: transparent;
+        border: none;
+        padding: 4px 2px;
+        color: #d98f83;
+        font-size: 12.5px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: color 0.14s ease;
+    }
+
+    .mo-playbook-link:hover {
+        color: #f3d9a4;
+    }
+
+    .mo-card:hover .mo-playbook-link {
+        color: #f3d9a4;
+    }
+
+    .mo-icon-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .mo-icon-actions form {
+        display: inline-flex;
+        margin: 0;
+        padding: 0;
+    }
+
+    .mo-icon-btn {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        background: rgba(255, 255, 255, 0.03);
+        color: #b8a29a;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+        transition: all 0.14s ease;
+    }
+
+    .mo-icon-btn.is-edit:hover {
+        background: rgba(245, 158, 11, 0.14);
+        border-color: rgba(245, 158, 11, 0.42);
         color: #fbbf24;
     }
 
+    .mo-icon-btn.is-archive:hover {
+        background: rgba(255, 255, 255, 0.10);
+        border-color: rgba(255, 255, 255, 0.24);
+        color: #f8efe6;
+    }
+
+    .mo-icon-btn.is-delete:hover {
+        background: rgba(251, 113, 133, 0.14);
+        border-color: rgba(251, 113, 133, 0.42);
+        color: #fda4af;
+    }
+
+    /* Drawer Buttons & Tab Readiness Indicators */
     .mo-playbook-btn {
         background: linear-gradient(135deg, #d98f83, #c48479);
         border: none;
@@ -240,6 +383,41 @@
     .mo-copy-btn:hover {
         background: rgba(52, 211, 153, 0.22);
         color: #a7f3d0;
+    }
+
+    .mo-drawer-tab-meta {
+        display: inline-flex;
+        align-items: center;
+        font-size: 10.5px;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 999px;
+        margin-left: 5px;
+        background: rgba(255, 255, 255, 0.08);
+        color: inherit;
+    }
+
+    .mo-drawer-tab.active .mo-drawer-tab-meta {
+        background: rgba(27, 19, 21, 0.20);
+        color: #1b1315;
+    }
+
+    .mo-drawer-tab-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-left: 6px;
+        background: rgba(255, 255, 255, 0.22);
+        vertical-align: middle;
+    }
+
+    .mo-drawer-tab-dot.is-ready {
+        background: #34d399;
+    }
+
+    .mo-drawer-tab.active .mo-drawer-tab-dot.is-ready {
+        background: #1b1315;
     }
 
     /* Form Controls */
@@ -422,12 +600,17 @@
         line-height: 1.55;
     }
 
-    /* Searchable Multi-Service Catalog Picker */
+    /* Collapsible Searchable Multi-Service Catalog Picker */
     .mo-svc-picker {
         background: #130d0f;
         border: 1px solid rgba(217, 143, 131, 0.26);
         border-radius: 12px;
         overflow: hidden;
+        transition: border-color 0.14s ease;
+    }
+
+    .mo-svc-picker.is-open {
+        border-color: rgba(217, 143, 131, 0.52);
     }
 
     .mo-svc-selected-strip {
@@ -473,9 +656,13 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 7px 12px;
+        padding: 8px 12px;
         background: #100a0c;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        cursor: text;
+    }
+
+    .mo-svc-picker.is-open .mo-svc-search-bar {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     }
 
     .mo-svc-search-input {
@@ -514,9 +701,69 @@
         color: #ffffff;
     }
 
+    .mo-svc-toggle-btn {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        color: #cbb8b0;
+        width: 24px;
+        height: 24px;
+        border-radius: 7px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: all 0.14s ease;
+    }
+
+    .mo-svc-toggle-btn:hover {
+        background: rgba(217, 143, 131, 0.16);
+        border-color: rgba(217, 143, 131, 0.36);
+        color: #f8efe6;
+    }
+
+    .mo-svc-picker.is-open .mo-svc-toggle-btn i {
+        transform: rotate(180deg);
+    }
+
+    .mo-svc-toggle-btn i {
+        transition: transform 0.14s ease;
+    }
+
     .mo-svc-list {
-        max-height: 192px;
+        max-height: 224px;
         overflow-y: auto;
+    }
+
+    .mo-svc-dropdown-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 12px;
+        background: #171012;
+        border-top: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .mo-svc-done-btn {
+        background: rgba(217, 143, 131, 0.20);
+        border: 1px solid rgba(217, 143, 131, 0.45);
+        color: #f8efe6;
+        border-radius: 999px;
+        padding: 4px 14px;
+        font-size: 12px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        cursor: pointer;
+        transition: all 0.14s ease;
+    }
+
+    .mo-svc-done-btn:hover {
+        background: rgba(217, 143, 131, 0.34);
+        border-color: rgba(217, 143, 131, 0.68);
+        color: #ffffff;
     }
 
     .mo-svc-row {
@@ -551,13 +798,48 @@
         flex-shrink: 0;
     }
 
-    /* T&Cs Information Callout Bar + Quick-Insert Chips */
+    /* Minimizable T&Cs Information Callout Bar + Quick-Insert Chips */
     .mo-tcs-callout {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(221, 162, 158, 0.25);
         border-radius: 10px;
-        padding: 12px 14px;
+        padding: 11px 14px;
         margin-bottom: 10px;
+        transition: padding 0.14s ease, border-color 0.14s ease;
+    }
+
+    .mo-tcs-callout.is-minimized {
+        padding: 8px 12px;
+        border-color: rgba(221, 162, 158, 0.18);
+    }
+
+    .mo-tcs-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .mo-tcs-toggle-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #d9a79f;
+        background: rgba(221, 162, 158, 0.08);
+        border: 1px solid rgba(221, 162, 158, 0.22);
+        border-radius: 999px;
+        padding: 2px 9px;
+        flex-shrink: 0;
+        transition: all 0.14s ease;
+    }
+
+    .mo-tcs-header:hover .mo-tcs-toggle-pill {
+        background: rgba(221, 162, 158, 0.18);
+        color: #f8efe6;
     }
 
     .mo-tcs-chip {
@@ -745,25 +1027,19 @@
 
 {{-- FILTER & STATUS TOOLBAR --}}
 <div class="mo-toolbar" id="monthlyOffersBoard">
-    <div class="d-flex align-items-center flex-wrap gap-2">
-        <span class="mo-badge" style="background:rgba(212,163,115,0.14); border:1px solid rgba(212,163,115,0.34); color:#f3d9a4; font-size:12px; padding:5px 12px;">
-            <i class="bx bx-sparkles"></i> Master Offer Playbook &mdash; {{ $todayQatar->format('M Y') }}
-        </span>
-
-        <div class="mo-pill-group" role="group" aria-label="Filter offers by status">
-            <button type="button" class="mo-filter-btn active" data-mo-status="active">
-                Active Now ({{ $offerStatusCounts['active'] }})
-            </button>
-            <button type="button" class="mo-filter-btn" data-mo-status="upcoming">
-                Upcoming ({{ $offerStatusCounts['upcoming'] }})
-            </button>
-            <button type="button" class="mo-filter-btn" data-mo-status="expired">
-                Expired ({{ $offerStatusCounts['expired'] }})
-            </button>
-            <button type="button" class="mo-filter-btn" data-mo-status="all">
-                All ({{ $offerStatusCounts['all'] }})
-            </button>
-        </div>
+    <div class="mo-pill-group" role="group" aria-label="Filter offers by status">
+        <button type="button" class="mo-filter-btn active" data-mo-status="active">
+            Active ({{ $offerStatusCounts['active'] }})
+        </button>
+        <button type="button" class="mo-filter-btn" data-mo-status="upcoming">
+            Upcoming ({{ $offerStatusCounts['upcoming'] }})
+        </button>
+        <button type="button" class="mo-filter-btn" data-mo-status="expired">
+            Expired ({{ $offerStatusCounts['expired'] }})
+        </button>
+        <button type="button" class="mo-filter-btn" data-mo-status="all">
+            All ({{ $offerStatusCounts['all'] }})
+        </button>
     </div>
 
     <div class="d-flex align-items-center flex-wrap gap-2">
@@ -782,21 +1058,35 @@
     </div>
 </div>
 
-{{-- RESPONSIVE 2-COLUMN HIGH-SIGNAL OFFER CARDS --}}
-<div class="row g-3" id="moCardsGrid">
+{{-- MINIMALISTIC 3-LAYER LUXURY OFFER CARDS GRID --}}
+<div class="mo-cards-grid" id="moCardsGrid">
     @foreach ($offersCollection as $offer)
         @php
             $st = $offer->liveStatus($todayQatar);
-            $stTone = $offerToneMap[$st['tone']] ?? $offerToneMap['muted'];
-            $typeTone = $offerTypeStyles[$offer->offer_type] ?? $offerTypeStyles['standalone'];
             $effPrice = $offer->effectivePrice();
             $includedList = $offer->includedServicesList();
-            $filledPillars = $offer->filledPillarsCount();
-            $hasWa = $offer->hasWhatsappScript();
-            $hasVid = $offer->hasVideoScript();
+            $visibleInclusions = array_slice($includedList, 0, 3);
+            $extraInclusionsCount = max(0, count($includedList) - 3);
+            $shortType = match ($offer->offer_type) {
+                'combo' => 'Combo',
+                'service_freebie' => 'Freebie',
+                default => 'Promo',
+            };
+            $statusWord = match ($st['key']) {
+                'active' => 'Active',
+                'upcoming' => 'Upcoming',
+                'expired' => 'Expired',
+                default => 'Archived',
+            };
+            $dateShortCue = match ($st['key']) {
+                'active' => $offer->valid_until ? ('Ends ' . $offer->valid_until->format('d M')) : null,
+                'upcoming' => $offer->valid_from ? ('Starts ' . $offer->valid_from->format('d M')) : null,
+                'expired' => $offer->valid_until ? ('Ended ' . $offer->valid_until->format('d M')) : null,
+                default => $offer->valid_until ? ('Ends ' . $offer->valid_until->format('d M')) : null,
+            };
             $playbookPayload = $offer->toPlaybookPayload($todayQatar);
             $searchHaystack = strtolower(
-                $offer->title . ' ' . $offer->typeBadgeLabel() . ' ' . $offer->branchScopeLabel() . ' '
+                $offer->title . ' ' . $offer->typeBadgeLabel() . ' ' . $shortType . ' ' . $offer->branchScopeLabel() . ' '
                 . implode(' ', array_column($includedList, 'name')) . ' '
                 . $offer->terms_and_conditions . ' '
                 . ($offer->dream_outcome ?? '') . ' '
@@ -806,138 +1096,109 @@
                 . ($offer->capacity_scarcity ?? '')
             );
         @endphp
-        <div class="col-12 col-lg-6 mo-card-col"
+        <div class="mo-card-col"
              data-mo-card-status="{{ $st['key'] }}"
              data-mo-card-branch="{{ $offer->branch_scope }}"
              data-mo-card-search="{{ $searchHaystack }}"
              style="{{ $st['key'] !== 'active' ? 'display:none;' : '' }}">
-            <div class="mo-card">
-                <div class="d-flex flex-column gap-3">
-                    {{-- Header: Badges + Title + Validity --}}
-                    <div>
-                        <div class="d-flex align-items-center flex-wrap gap-1 mb-2">
-                            <span class="mo-badge" style="background:{{ $typeTone['bg'] }}; border:1px solid {{ $typeTone['border'] }}; color:{{ $typeTone['color'] }};">
-                                {{ $offer->typeBadgeLabel() }}
-                            </span>
-                            <span class="mo-badge" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#d6c3bc;">
-                                <i class="bx bx-map-pin"></i> {{ $offer->branchScopeLabel() }}
-                            </span>
-                            <span class="mo-badge mo-num" style="background:{{ $stTone['bg'] }}; border:1px solid {{ $stTone['border'] }}; color:{{ $stTone['color'] }};">
-                                {{ $st['label'] }}
-                            </span>
-                        </div>
-                        <h5 class="mo-title">{{ $offer->title }}</h5>
-                        <div class="small mo-num mt-1" style="color:#9e8780;">
-                            Valid {{ $offer->valid_from?->format('d M Y') }} &ndash; {{ $offer->valid_until?->format('d M Y') }}
-                        </div>
-                    </div>
-
-                    {{-- Pricing Strip + Transparent Pricing + Scarcity Pill --}}
-                    <div class="mo-pricing-strip">
-                        <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-2">
-                            <div class="d-flex align-items-baseline gap-2 mo-num">
-                                <span class="mo-price">{{ number_format($effPrice, 0) }} <span style="font-size:13px; font-weight:700;">QAR</span></span>
+            <article class="mo-card js-mo-card-open" data-offer-id="{{ $offer->id }}" tabindex="0" role="button" aria-label="Open Playbook for {{ $offer->title }}">
+                <div>
+                    {{-- LAYER 1: CLEAN HEADER (Title + Quiet Meta Line | Price + Optional Scarcity) --}}
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                        <div class="min-w-0 flex-grow-1">
+                            <h5 class="mo-title">{{ $offer->title }}</h5>
+                            <div class="mo-meta-line mo-num">
+                                <span class="d-inline-flex align-items-center gap-1" style="color:{{ $st['tone'] === 'emerald' ? '#6ee7b7' : ($st['tone'] === 'amber' ? '#fbbf24' : '#9e8780') }}; font-weight:600;">
+                                    <span class="mo-status-dot is-{{ $st['tone'] }}"></span>
+                                    <span>{{ $statusWord }}</span>
+                                </span>
+                                <span>&middot;</span>
+                                <span>{{ $offer->branchScopeLabel() }}</span>
+                                @if ($dateShortCue)
+                                    <span>&middot;</span>
+                                    <span>{{ $dateShortCue }}</span>
+                                @endif
+                                <span>&middot;</span>
+                                <span>{{ $shortType }}</span>
                             </div>
                             @if (filled($offer->capacity_scarcity))
-                                <span class="mo-badge" style="background:rgba(245,158,11,0.14); border:1px solid rgba(245,158,11,0.34); color:#fbbf24; white-space:normal; text-align:left;">
-                                    <i class="bx bx-time-five"></i>
-                                    <span>{{ \Illuminate\Support\Str::limit(trim((string) $offer->capacity_scarcity), 58) }}</span>
-                                </span>
+                                <div class="mo-scarcity-line text-truncate" title="{{ trim((string) $offer->capacity_scarcity) }}">
+                                    <i class="bx bx-time-five flex-shrink-0"></i>
+                                    <span class="text-truncate">{{ \Illuminate\Support\Str::limit(trim((string) $offer->capacity_scarcity), 48) }}</span>
+                                </div>
                             @endif
                         </div>
-                        @if (filled($offer->transparent_pricing))
-                            <div class="small mo-clamp-2" style="color:#cbb8b0; line-height:1.45;">
-                                {{ $offer->transparent_pricing }}
-                            </div>
-                        @endif
+
+                        <div class="text-end flex-shrink-0 mo-num">
+                            <div class="mo-price">{{ number_format($effPrice, 0) }} <span style="font-size:12px; font-weight:700;">QAR</span></div>
+                        </div>
                     </div>
 
-                    {{-- Body Preview: Dream Outcome + Included Chips + Guarantee --}}
-                    <div class="d-flex flex-column gap-2">
-                        @if (filled($offer->dream_outcome))
-                            <div class="small mo-clamp-2" style="color:#f2e6e1; font-size:13px; line-height:1.5;">
-                                <span style="color:#d98f83; font-weight:700;">Dream Outcome:</span>
-                                {{ $offer->dream_outcome }}
-                            </div>
-                        @endif
+                    {{-- LAYER 2: MINIMAL BODY (Quiet Dream Outcome + Compact Service Chips) --}}
+                    @if (filled($offer->dream_outcome))
+                        <div class="mo-dream-line mo-clamp-2">{{ $offer->dream_outcome }}</div>
+                    @endif
 
-                        @if (!empty($includedList))
-                            <div class="d-flex flex-wrap gap-1">
-                                @foreach ($includedList as $inc)
-                                    <span class="mo-chip {{ $inc['is_free'] ? 'is-free' : '' }}">
-                                        <i class="bx {{ $inc['is_free'] ? 'bx-gift' : 'bx-check' }}"></i>
-                                        <span>{{ $inc['name'] }}</span>
-                                        @if ($inc['is_free'])
-                                            <span style="font-size:10px; font-weight:800; letter-spacing:0.03em;">FREE</span>
-                                        @endif
-                                    </span>
-                                @endforeach
-                            </div>
-                        @endif
-
-                        @if (filled($offer->conditional_guarantee))
-                            <div class="small mo-clamp-2 d-flex align-items-start gap-1" style="color:#a8e5cd; font-size:12px; line-height:1.45;">
-                                <i class="bx bx-shield-quarter mt-1 flex-shrink-0"></i>
-                                <span><strong>Guarantee:</strong> {{ $offer->conditional_guarantee }}</span>
-                            </div>
-                        @endif
-                    </div>
-
-                    {{-- Readiness Pills --}}
-                    <div class="mo-readiness-row">
-                        <span class="mo-ready-pill mo-num {{ $filledPillars === 7 ? 'is-done' : 'is-warn' }}">
-                            <i class="bx {{ $filledPillars === 7 ? 'bx-check-circle' : 'bx-layer' }}"></i>
-                            <span>{{ $filledPillars }}/7 Pillars</span>
-                        </span>
-                        <span class="mo-ready-pill {{ $hasWa ? 'is-done' : '' }}">
-                            <i class="bx {{ $hasWa ? 'bx-check' : 'bx-time' }}"></i>
-                            <span>WhatsApp Script</span>
-                        </span>
-                        <span class="mo-ready-pill {{ $hasVid ? 'is-done' : '' }}">
-                            <i class="bx {{ $hasVid ? 'bx-check' : 'bx-time' }}"></i>
-                            <span>Video Script</span>
-                        </span>
-                    </div>
+                    @if (!empty($visibleInclusions))
+                        <div class="mo-services-strip">
+                            @foreach ($visibleInclusions as $inc)
+                                <span class="mo-chip {{ $inc['is_free'] ? 'is-free' : '' }}">
+                                    <span class="text-truncate">{{ $inc['name'] }}</span>
+                                    @if ($inc['is_free'])
+                                        <span style="font-size:9.5px; font-weight:800; letter-spacing:0.03em;">FREE</span>
+                                    @endif
+                                </span>
+                            @endforeach
+                            @if ($extraInclusionsCount > 0)
+                                <span class="mo-chip is-more mo-num">+{{ $extraInclusionsCount }} more</span>
+                            @endif
+                        </div>
+                    @endif
                 </div>
 
-                {{-- Footer Actions --}}
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 pt-3" style="border-top:1px solid rgba(255,255,255,0.06);">
-                    <div class="d-flex align-items-center flex-wrap gap-2">
+                {{-- LAYER 3: SLEEK ALIGNED FOOTER --}}
+                <div class="mo-card-footer">
+                    <div class="d-flex align-items-center gap-3 min-w-0">
                         <button type="button"
-                            class="mo-playbook-btn js-mo-open-playbook"
-                            data-offer-id="{{ $offer->id }}">
-                            <i class="bx bx-book-open"></i>
-                            <span>Open Playbook</span>
+                            class="mo-ghost-copy-btn js-mo-copy"
+                            data-copy-text="{{ $offer->whatsappCopyText() }}">
+                            <i class="bx bxl-whatsapp fs-6"></i>
+                            <span class="js-mo-copy-label">Copy WhatsApp</span>
                         </button>
                         <button type="button"
-                            class="mo-copy-btn js-mo-copy"
-                            data-copy-label="WhatsApp script"
-                            data-copy-text="{{ $offer->whatsappCopyText() }}">
-                            <i class="bx bxl-whatsapp fs-5"></i>
-                            <span>Copy WhatsApp Script</span>
+                            class="mo-playbook-link js-mo-open-playbook"
+                            data-offer-id="{{ $offer->id }}">
+                            <span>Playbook &rarr;</span>
                         </button>
                     </div>
 
                     @if ($canEditOffers)
-                        <div class="d-flex align-items-center gap-1">
+                        <div class="mo-icon-actions js-mo-stop-prop">
                             <button type="button"
-                                class="btn btn-sm btn-outline-warning py-1 px-2 js-mo-edit-btn"
+                                class="mo-icon-btn is-edit js-mo-edit-btn"
                                 data-offer-id="{{ $offer->id }}"
-                                title="Edit Offer">
+                                title="Edit Offer"
+                                aria-label="Edit {{ $offer->title }}">
                                 <i class="bi bi-pencil-square"></i>
                             </button>
-                            <form method="POST" action="{{ route('offers.toggle', $offer) }}" class="d-inline">
+                            <form method="POST" action="{{ route('offers.toggle', $offer) }}">
                                 @csrf
                                 @method('PATCH')
-                                <button type="submit" class="btn btn-sm btn-outline-secondary py-1 px-2" title="{{ $offer->is_active ? 'Archive' : 'Activate' }}">
+                                <button type="submit"
+                                    class="mo-icon-btn is-archive"
+                                    title="{{ $offer->is_active ? 'Archive Offer' : 'Activate Offer' }}"
+                                    aria-label="{{ $offer->is_active ? 'Archive' : 'Activate' }} {{ $offer->title }}">
                                     <i class="bx {{ $offer->is_active ? 'bx-archive-in' : 'bx-revision' }}"></i>
                                 </button>
                             </form>
-                            <form method="POST" action="{{ route('offers.destroy', $offer) }}" class="d-inline"
+                            <form method="POST" action="{{ route('offers.destroy', $offer) }}"
                                   onsubmit="return confirm('Delete monthly offer {{ addslashes($offer->title) }}?')">
                                 @csrf
                                 @method('DELETE')
-                                <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2" title="Delete Offer">
+                                <button type="submit"
+                                    class="mo-icon-btn is-delete"
+                                    title="Delete Offer"
+                                    aria-label="Delete {{ $offer->title }}">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </form>
@@ -947,7 +1208,7 @@
 
                 {{-- Embedded JSON Playbook payload (powers both Drawer & Edit Modal cleanly) --}}
                 <script type="application/json" id="moOfferData-{{ $offer->id }}">@json($playbookPayload)</script>
-            </div>
+            </article>
         </div>
     @endforeach
 </div>
@@ -983,10 +1244,19 @@
     </div>
 
     <div class="mo-drawer-tabs" role="tablist" aria-label="Offer Playbook Sections">
-        <button type="button" class="mo-drawer-tab active" data-drawer-tab="pillars">7-Pillar Architecture</button>
+        <button type="button" class="mo-drawer-tab active" data-drawer-tab="pillars">
+            <span>7-Pillar Architecture</span>
+            <span id="moDrawerTabPillarsCount" class="mo-drawer-tab-meta mo-num">7/7</span>
+        </button>
         <button type="button" class="mo-drawer-tab" data-drawer-tab="terms">Terms &amp; Conditions</button>
-        <button type="button" class="mo-drawer-tab" data-drawer-tab="whatsapp">WhatsApp Scripts</button>
-        <button type="button" class="mo-drawer-tab" data-drawer-tab="video">Video Shooting Script</button>
+        <button type="button" class="mo-drawer-tab" data-drawer-tab="whatsapp">
+            <span>WhatsApp Scripts</span>
+            <span id="moDrawerTabWaDot" class="mo-drawer-tab-dot" title="Custom WhatsApp script readiness"></span>
+        </button>
+        <button type="button" class="mo-drawer-tab" data-drawer-tab="video">
+            <span>Video Shooting Script</span>
+            <span id="moDrawerTabVideoDot" class="mo-drawer-tab-dot" title="Video shooting script readiness"></span>
+        </button>
     </div>
 
     <div class="mo-drawer-body">
@@ -1152,13 +1422,13 @@
                                 </select>
                             </div>
 
-                            {{-- Searchable Single / Multi-Service Catalog Picker --}}
+                            {{-- Collapsible Searchable Single / Multi-Service Catalog Picker --}}
                             <div class="col-12 d-none" id="moServicePickerWrap">
                                 <div class="d-flex align-items-baseline justify-content-between gap-2 mb-1">
                                     <label class="form-label small text-muted mb-0" for="moSvcSearchInput">Select Service(s) from Catalog</label>
                                     <span class="small" style="font-size:11px; color:#8f7a73;">Pick one or multiple services &middot; names sync live</span>
                                 </div>
-                                <div class="mo-svc-picker">
+                                <div class="mo-svc-picker" id="moSvcPickerBox">
                                     <div id="moSvcSelectedStrip" class="mo-svc-selected-strip d-none">
                                         <div class="d-flex align-items-center justify-content-between gap-2">
                                             <span id="moSvcSelectedCount" class="small mo-num fw-semibold" style="font-size:11.5px; color:#f3d9a4;">0 services selected</span>
@@ -1167,43 +1437,53 @@
                                         <div id="moSvcSelectedPills" class="d-flex flex-wrap gap-1"></div>
                                     </div>
 
-                                    <div class="mo-svc-search-bar">
+                                    <div class="mo-svc-search-bar" id="moSvcTriggerBar">
                                         <i class="bx bx-search" style="color:#9e8780; font-size:15px;"></i>
-                                        <input type="text" id="moSvcSearchInput" class="mo-svc-search-input" placeholder="Search services by name or category..." autocomplete="off">
+                                        <input type="text" id="moSvcSearchInput" class="mo-svc-search-input" placeholder="Search or select services..." autocomplete="off">
                                         <button type="button" id="moSvcSearchClear" class="mo-svc-search-clear d-none" aria-label="Clear service search">&times;</button>
+                                        <button type="button" id="moSvcToggleBtn" class="mo-svc-toggle-btn" aria-expanded="false" aria-controls="moSvcDropdownPanel" aria-label="Toggle services list">
+                                            <i class="bx bx-chevron-down"></i>
+                                        </button>
                                     </div>
 
-                                    <div id="moSvcList" class="mo-svc-list">
-                                        @forelse ($catalogServicesList as $svc)
-                                            @php
-                                                $catName = $svc->category?->name ?? 'Uncategorized';
-                                                $isChecked = in_array((int) $svc->id, $oldServiceIds, true);
-                                            @endphp
-                                            <label class="mo-svc-row {{ $isChecked ? 'is-selected' : '' }}"
-                                                   data-svc-row="1"
-                                                   data-svc-id="{{ $svc->id }}"
-                                                   data-svc-name="{{ $svc->name }}"
-                                                   data-svc-search="{{ strtolower($svc->name . ' ' . $catName) }}">
-                                                <span class="d-flex align-items-center gap-2 min-w-0">
-                                                    <input type="checkbox"
-                                                           name="service_ids[]"
-                                                           value="{{ $svc->id }}"
-                                                           class="mo-svc-checkbox js-mo-svc-check"
-                                                           data-svc-name="{{ $svc->name }}"
-                                                           {{ $isChecked ? 'checked' : '' }}>
-                                                    <span class="min-w-0">
-                                                        <span class="d-block fw-semibold text-truncate" style="font-size:12.5px; color:#f8efe6;">{{ $svc->name }}</span>
-                                                        <span class="d-block" style="font-size:11px; color:#9e8780;">{{ $catName }}@if ($svc->duration) &middot; {{ $svc->duration }} min @endif</span>
+                                    <div id="moSvcDropdownPanel" class="d-none">
+                                        <div id="moSvcList" class="mo-svc-list">
+                                            @forelse ($catalogServicesList as $svc)
+                                                @php
+                                                    $catName = $svc->category?->name ?? 'Uncategorized';
+                                                    $isChecked = in_array((int) $svc->id, $oldServiceIds, true);
+                                                @endphp
+                                                <label class="mo-svc-row {{ $isChecked ? 'is-selected' : '' }}"
+                                                       data-svc-row="1"
+                                                       data-svc-id="{{ $svc->id }}"
+                                                       data-svc-name="{{ $svc->name }}"
+                                                       data-svc-search="{{ strtolower($svc->name . ' ' . $catName) }}">
+                                                    <span class="d-flex align-items-center gap-2 min-w-0">
+                                                        <input type="checkbox"
+                                                               name="service_ids[]"
+                                                               value="{{ $svc->id }}"
+                                                               class="mo-svc-checkbox js-mo-svc-check"
+                                                               data-svc-name="{{ $svc->name }}"
+                                                               {{ $isChecked ? 'checked' : '' }}>
+                                                        <span class="min-w-0">
+                                                            <span class="d-block fw-semibold text-truncate" style="font-size:12.5px; color:#f8efe6;">{{ $svc->name }}</span>
+                                                            <span class="d-block" style="font-size:11px; color:#9e8780;">{{ $catName }}@if ($svc->duration) &middot; {{ $svc->duration }} min @endif</span>
+                                                        </span>
                                                     </span>
-                                                </span>
-                                                <span class="small mo-num fw-semibold flex-shrink-0" style="font-size:12px; color:#e5b8a8;">
-                                                    {{ number_format((float) $svc->price, 0) }} QAR
-                                                </span>
-                                            </label>
-                                        @empty
-                                            <div class="text-center py-3 small" style="color:#8f7a73;">No services available in the catalog yet.</div>
-                                        @endforelse
-                                        <div id="moSvcEmptySearch" class="text-center py-3 small d-none" style="color:#8f7a73;">No services match your search.</div>
+                                                    <span class="small mo-num fw-semibold flex-shrink-0" style="font-size:12px; color:#e5b8a8;">
+                                                        {{ number_format((float) $svc->price, 0) }} QAR
+                                                    </span>
+                                                </label>
+                                            @empty
+                                                <div class="text-center py-3 small" style="color:#8f7a73;">No services available in the catalog yet.</div>
+                                            @endforelse
+                                            <div id="moSvcEmptySearch" class="text-center py-3 small d-none" style="color:#8f7a73;">No services match your search.</div>
+                                        </div>
+
+                                        <div class="mo-svc-dropdown-footer">
+                                            <span id="moSvcFooterHint" class="small mo-num" style="font-size:11.5px; color:#9e8780;">Select one or more services</span>
+                                            <button type="button" id="moSvcDoneBtn" class="mo-svc-done-btn">Done</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1234,19 +1514,27 @@
 
                             <div class="col-12">
                                 <div class="mo-tcs-callout" id="moTcsInfoBar">
-                                    <div class="d-flex align-items-center gap-2 mb-2" style="color:#f3d9a4; font-size:12px; font-weight:700;">
-                                        <i class="bx bx-info-circle fs-6"></i>
-                                        <span>Make sure to specify (if applicable):</span>
+                                    <div class="mo-tcs-header" id="moTcsHeaderToggle" role="button" tabindex="0" aria-expanded="true" aria-controls="moTcsBody">
+                                        <div class="d-flex align-items-center gap-2 min-w-0" style="color:#f3d9a4; font-size:12px; font-weight:700;">
+                                            <i class="bx bx-info-circle fs-6 flex-shrink-0"></i>
+                                            <span id="moTcsTitleExpanded">Make sure to specify (if applicable):</span>
+                                            <span id="moTcsTitleMinimized" class="d-none text-truncate" style="font-weight:600; color:#e5d2c9;">
+                                                Make sure to specify: <span style="font-weight:400; color:#b8a29a;">Free services, color shades &amp; freebie timeframe</span>
+                                            </span>
+                                        </div>
+                                        <span class="mo-tcs-toggle-pill" id="moTcsToggleLabel">Minimize &#9652;</span>
                                     </div>
-                                    <ul class="mb-2 ps-3" style="font-size:11.5px; color:#cbb8b0; line-height:1.5;">
-                                        <li><strong style="color:#f2e6e1;">Free Services List:</strong> Exact complimentary services included in the offer.</li>
-                                        <li><strong style="color:#f2e6e1;">Global Hair Color Shades:</strong> Which shades are included or excluded (e.g., standard single-process global shades vs. fashion tones / bleach / highlights).</li>
-                                        <li><strong style="color:#f2e6e1;">Pending Free Services Timeframe:</strong> How many days the client has to claim any pending/unused free services (e.g., same visit only, or valid within 14/30 days).</li>
-                                    </ul>
-                                    <div class="d-flex flex-wrap gap-1 pt-1">
-                                        <button type="button" class="mo-tcs-chip js-mo-tcs-chip" data-tcs-line="Complimentary services included: [list exact free services]">+ Free Services</button>
-                                        <button type="button" class="mo-tcs-chip js-mo-tcs-chip" data-tcs-line="Global hair color shades: [specify included/excluded shades]">+ Color Shades</button>
-                                        <button type="button" class="mo-tcs-chip js-mo-tcs-chip" data-tcs-line="Pending free services must be redeemed within [X days / same visit]">+ Freebie Timeframe</button>
+                                    <div id="moTcsBody" class="mt-2">
+                                        <ul class="mb-2 ps-3" style="font-size:11.5px; color:#cbb8b0; line-height:1.5;">
+                                            <li><strong style="color:#f2e6e1;">Free Services List:</strong> Exact complimentary services included in the offer.</li>
+                                            <li><strong style="color:#f2e6e1;">Global Hair Color Shades:</strong> Which shades are included or excluded (e.g., standard single-process global shades vs. fashion tones / bleach / highlights).</li>
+                                            <li><strong style="color:#f2e6e1;">Pending Free Services Timeframe:</strong> How many days the client has to claim any pending/unused free services (e.g., same visit only, or valid within 14/30 days).</li>
+                                        </ul>
+                                        <div class="d-flex flex-wrap gap-1 pt-1">
+                                            <button type="button" class="mo-tcs-chip js-mo-tcs-chip" data-tcs-line="Complimentary services included: [list exact free services]">+ Free Services</button>
+                                            <button type="button" class="mo-tcs-chip js-mo-tcs-chip" data-tcs-line="Global hair color shades: [specify included/excluded shades]">+ Color Shades</button>
+                                            <button type="button" class="mo-tcs-chip js-mo-tcs-chip" data-tcs-line="Pending free services must be redeemed within [X days / same visit]">+ Freebie Timeframe</button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1431,11 +1719,29 @@
         branchSelect?.addEventListener('change', applyOfferFilters);
         searchInput?.addEventListener('input', applyOfferFilters);
 
-        // Quick Copy buttons on Offer Cards
+        // Quick Copy buttons on Offer Cards (stops propagation so card Playbook does not open)
         document.querySelectorAll('.js-mo-copy').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 copyTextWithFeedback(btn.dataset.copyText || '', 'WhatsApp script copied to clipboard.');
+                const labelEl = btn.querySelector('.js-mo-copy-label');
+                if (labelEl) {
+                    const orig = labelEl.dataset.origLabel || labelEl.textContent;
+                    labelEl.dataset.origLabel = orig;
+                    labelEl.textContent = 'Copied \u2713';
+                    btn.classList.add('is-copied');
+                    clearTimeout(btn._copyResetTimer);
+                    btn._copyResetTimer = setTimeout(() => {
+                        labelEl.textContent = orig;
+                        btn.classList.remove('is-copied');
+                    }, 1800);
+                }
             });
+        });
+
+        // Prevent footer Edit/Archive/Delete wrappers from triggering full-card Playbook open
+        document.querySelectorAll('.js-mo-stop-prop').forEach(el => {
+            el.addEventListener('click', (e) => e.stopPropagation());
         });
 
         // ---------------- 4-TAB EXECUTIVE OFFER PLAYBOOK DRAWER ----------------
@@ -1504,6 +1810,22 @@
             document.getElementById('moDrawerTitle').textContent = offer.title || 'Offer Playbook';
             document.getElementById('moDrawerMeta').textContent = `Valid ${offer.valid_range_label || ''}`;
             document.getElementById('moDrawerPrice').textContent = `${Number(offer.effective_price_qar || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} QAR`;
+
+            // Update Playbook Drawer tab readiness indicators
+            const tabPillarsCount = document.getElementById('moDrawerTabPillarsCount');
+            if (tabPillarsCount) {
+                tabPillarsCount.textContent = `${offer.filled_pillars_count ?? 0}/7`;
+            }
+            const tabWaDot = document.getElementById('moDrawerTabWaDot');
+            if (tabWaDot) {
+                tabWaDot.classList.toggle('is-ready', Boolean(offer.has_whatsapp_script));
+                tabWaDot.title = offer.has_whatsapp_script ? 'Custom WhatsApp script ready' : 'Using auto-formatted pitch';
+            }
+            const tabVideoDot = document.getElementById('moDrawerTabVideoDot');
+            if (tabVideoDot) {
+                tabVideoDot.classList.toggle('is-ready', Boolean(offer.has_video_script));
+                tabVideoDot.title = offer.has_video_script ? 'Video shooting script ready' : 'No video shooting script yet';
+            }
 
             // Tab 1: 7-Pillar Architecture
             const pillarsListEl = document.getElementById('moDrawerPillarsList');
@@ -1596,8 +1918,25 @@
             document.body.style.overflow = 'hidden';
         }
 
+        // Full card click + Playbook -> link both open the 4-tab Offer Playbook drawer
+        document.querySelectorAll('.js-mo-card-open').forEach(cardEl => {
+            cardEl.addEventListener('click', (e) => {
+                if (e.target.closest('button, a, form, input, select')) return;
+                const payload = getOfferPayloadById(cardEl.dataset.offerId);
+                if (payload) openPlaybookDrawer(payload, 'pillars');
+            });
+            cardEl.addEventListener('keydown', (e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && e.target === cardEl) {
+                    e.preventDefault();
+                    const payload = getOfferPayloadById(cardEl.dataset.offerId);
+                    if (payload) openPlaybookDrawer(payload, 'pillars');
+                }
+            });
+        });
+
         document.querySelectorAll('.js-mo-open-playbook').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 const payload = getOfferPayloadById(btn.dataset.offerId);
                 if (payload) openPlaybookDrawer(payload, 'pillars');
             });
@@ -1632,6 +1971,12 @@
         const priceReqStar = document.getElementById('moPriceReqStar');
         const comboSelect = document.getElementById('moComboId');
         const freebieSelect = document.getElementById('moFreebieId');
+        const svcPickerBox = document.getElementById('moSvcPickerBox');
+        const svcTriggerBar = document.getElementById('moSvcTriggerBar');
+        const svcToggleBtn = document.getElementById('moSvcToggleBtn');
+        const svcDropdownPanel = document.getElementById('moSvcDropdownPanel');
+        const svcDoneBtn = document.getElementById('moSvcDoneBtn');
+        const svcFooterHint = document.getElementById('moSvcFooterHint');
         const svcSearchInput = document.getElementById('moSvcSearchInput');
         const svcSearchClear = document.getElementById('moSvcSearchClear');
         const svcRows = Array.from(document.querySelectorAll('[data-svc-row="1"]'));
@@ -1641,13 +1986,42 @@
         const svcSelectedPills = document.getElementById('moSvcSelectedPills');
         const svcClearAllBtn = document.getElementById('moSvcClearAllBtn');
         const svcEmptySearch = document.getElementById('moSvcEmptySearch');
+        const tcsInfoBar = document.getElementById('moTcsInfoBar');
+        const tcsHeaderToggle = document.getElementById('moTcsHeaderToggle');
+        const tcsBody = document.getElementById('moTcsBody');
+        const tcsTitleExpanded = document.getElementById('moTcsTitleExpanded');
+        const tcsTitleMinimized = document.getElementById('moTcsTitleMinimized');
+        const tcsToggleLabel = document.getElementById('moTcsToggleLabel');
         const termsTextarea = document.getElementById('moTerms');
         const stepTabs = Array.from(document.querySelectorAll('[data-mo-step]'));
         const stepPanes = Array.from(document.querySelectorAll('[data-mo-step-pane]'));
         const prevBtn = document.getElementById('moPrevStepBtn');
         const nextBtn = document.getElementById('moNextStepBtn');
         const clientValBanner = document.getElementById('moClientValidationBanner');
+        const TCS_MINIMIZED_STORAGE_KEY = 'laleen_mo_tcs_callout_minimized';
         let currentModalStep = 1;
+
+        function isServiceDropdownOpen() {
+            return Boolean(svcDropdownPanel && !svcDropdownPanel.classList.contains('d-none'));
+        }
+
+        function openServiceDropdown() {
+            if (!svcDropdownPanel || !svcPickerBox) return;
+            svcDropdownPanel.classList.remove('d-none');
+            svcPickerBox.classList.add('is-open');
+            svcToggleBtn?.setAttribute('aria-expanded', 'true');
+        }
+
+        function closeServiceDropdown(clearQuery = false) {
+            if (!svcDropdownPanel || !svcPickerBox) return;
+            svcDropdownPanel.classList.add('d-none');
+            svcPickerBox.classList.remove('is-open');
+            svcToggleBtn?.setAttribute('aria-expanded', 'false');
+            if (clearQuery && svcSearchInput) {
+                svcSearchInput.value = '';
+                filterCatalogServices();
+            }
+        }
 
         function renderSelectedServicesStrip() {
             const selected = svcCheckboxes.filter(cb => cb.checked);
@@ -1655,6 +2029,15 @@
                 const cb = row.querySelector('.js-mo-svc-check');
                 row.classList.toggle('is-selected', Boolean(cb && cb.checked));
             });
+
+            if (svcDoneBtn) {
+                svcDoneBtn.textContent = selected.length > 0 ? `Done (${selected.length})` : 'Done';
+            }
+            if (svcFooterHint) {
+                svcFooterHint.textContent = selected.length > 0
+                    ? `${selected.length} ${selected.length === 1 ? 'service' : 'services'} selected`
+                    : 'Select one or more services';
+            }
 
             if (!svcSelectedStrip || !svcSelectedPills || !svcSelectedCount) return;
 
@@ -1697,17 +2080,91 @@
             svcCheckboxes.forEach(cb => {
                 cb.checked = idSet.has(String(cb.value));
             });
-            if (svcSearchInput) {
-                svcSearchInput.value = '';
-                filterCatalogServices();
-            }
+            closeServiceDropdown(true);
             renderSelectedServicesStrip();
         }
+
+        svcTriggerBar?.addEventListener('click', (e) => {
+            if (e.target.closest('#moSvcToggleBtn') || e.target.closest('#moSvcSearchClear')) {
+                return;
+            }
+            openServiceDropdown();
+            svcSearchInput?.focus();
+        });
+
+        svcToggleBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (isServiceDropdownOpen()) {
+                closeServiceDropdown(false);
+            } else {
+                openServiceDropdown();
+                svcSearchInput?.focus();
+            }
+        });
+
+        svcSearchInput?.addEventListener('focus', openServiceDropdown);
+        svcSearchInput?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+            }
+        });
+        svcSearchInput?.addEventListener('input', () => {
+            openServiceDropdown();
+            filterCatalogServices();
+        });
+
+        svcSearchClear?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!svcSearchInput) return;
+            svcSearchInput.value = '';
+            filterCatalogServices();
+            svcSearchInput.focus();
+        });
+
+        svcDoneBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeServiceDropdown(false);
+        });
+
+        // Close dropdown when clicking anywhere outside the picker inside the modal
+        modalEl?.addEventListener('click', (e) => {
+            if (isServiceDropdownOpen() && svcPickerBox && !svcPickerBox.contains(e.target)) {
+                closeServiceDropdown(false);
+            }
+        });
+
+        // Capture Escape at window level BEFORE Bootstrap modal dismisses so Escape closes ONLY the service dropdown
+        let lastSvcEscClosedAt = 0;
+        window.addEventListener('keydown', (e) => {
+            const isEsc = e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27;
+            if (isEsc && isServiceDropdownOpen()) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                lastSvcEscClosedAt = Date.now();
+                closeServiceDropdown(false);
+                svcToggleBtn?.focus();
+            }
+        }, true);
+
+        // Belt-and-suspenders guard so Bootstrap never dismisses the modal on the same Escape press
+        modalEl?.addEventListener('hide.bs.modal', (e) => {
+            if (Date.now() - lastSvcEscClosedAt < 200) {
+                e.preventDefault();
+            }
+        });
+
+        modalEl?.addEventListener('hidden.bs.modal', () => {
+            closeServiceDropdown(true);
+        });
 
         svcCheckboxes.forEach(cb => cb.addEventListener('change', renderSelectedServicesStrip));
         svcSelectedPills?.addEventListener('click', (e) => {
             const removeBtn = e.target.closest('[data-remove-svc-id]');
             if (!removeBtn) return;
+            e.stopPropagation();
             const targetId = String(removeBtn.dataset.removeSvcId);
             const cb = svcCheckboxes.find(el => String(el.value) === targetId);
             if (cb) {
@@ -1715,17 +2172,50 @@
                 renderSelectedServicesStrip();
             }
         });
-        svcClearAllBtn?.addEventListener('click', () => {
+        svcClearAllBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
             svcCheckboxes.forEach(cb => { cb.checked = false; });
             renderSelectedServicesStrip();
         });
-        svcSearchInput?.addEventListener('input', filterCatalogServices);
-        svcSearchClear?.addEventListener('click', () => {
-            if (!svcSearchInput) return;
-            svcSearchInput.value = '';
-            filterCatalogServices();
-            svcSearchInput.focus();
+
+        // Minimizable T&Cs Information Callout Bar (remembers preference in localStorage)
+        function applyTcsCalloutState(minimized, persist = false) {
+            if (!tcsInfoBar || !tcsBody) return;
+            tcsInfoBar.classList.toggle('is-minimized', minimized);
+            tcsBody.classList.toggle('d-none', minimized);
+            tcsTitleExpanded?.classList.toggle('d-none', minimized);
+            tcsTitleMinimized?.classList.toggle('d-none', !minimized);
+            tcsHeaderToggle?.setAttribute('aria-expanded', minimized ? 'false' : 'true');
+            if (tcsToggleLabel) {
+                tcsToggleLabel.innerHTML = minimized ? 'Show &#9662;' : 'Minimize &#9652;';
+            }
+            if (persist) {
+                try {
+                    localStorage.setItem(TCS_MINIMIZED_STORAGE_KEY, minimized ? '1' : '0');
+                } catch (err) {}
+            }
+        }
+
+        function initTcsCalloutPreference() {
+            let savedMinimized = false;
+            try {
+                savedMinimized = localStorage.getItem(TCS_MINIMIZED_STORAGE_KEY) === '1';
+            } catch (err) {}
+            applyTcsCalloutState(savedMinimized, false);
+        }
+
+        tcsHeaderToggle?.addEventListener('click', () => {
+            const currentlyMinimized = tcsInfoBar?.classList.contains('is-minimized');
+            applyTcsCalloutState(!currentlyMinimized, true);
         });
+        tcsHeaderToggle?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                const currentlyMinimized = tcsInfoBar?.classList.contains('is-minimized');
+                applyTcsCalloutState(!currentlyMinimized, true);
+            }
+        });
+        initTcsCalloutPreference();
 
         // 1-Click T&Cs Quick-Insert Starter Chips
         document.querySelectorAll('.js-mo-tcs-chip').forEach(chip => {
@@ -1778,6 +2268,7 @@
             servicePickerWrap?.classList.toggle('d-none', t !== 'standalone');
             priceReqStar?.classList.toggle('d-none', t !== 'standalone');
             svcCheckboxes.forEach(cb => { cb.disabled = t !== 'standalone'; });
+            closeServiceDropdown(true);
             if (promoPriceInput) {
                 promoPriceInput.placeholder = t === 'standalone' ? 'e.g. 299' : 'Auto-synced';
             }

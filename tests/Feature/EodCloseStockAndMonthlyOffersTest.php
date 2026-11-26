@@ -944,9 +944,12 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
             ->assertSee('275')
             ->assertSee('Signature Blowdry')
             ->assertSee('Valid Sunday to Wednesday only')
-            ->assertSee('Open Playbook')
-            ->assertSee('Copy WhatsApp Script')
-            ->assertSee('7/7 Pillars');
+            ->assertSee('Copy WhatsApp')
+            ->assertSee('Playbook')
+            ->assertSee('7-Pillar Architecture')
+            ->assertDontSee('Master Offer Playbook &mdash;', false)
+            ->assertDontSee('Dream Outcome:')
+            ->assertDontSee('<strong>Guarantee:</strong>', false);
 
         // Toggle archive & delete
         $this->actingAs($this->admin)->patch(route('offers.toggle', $activeOffer))->assertRedirect();
@@ -1048,12 +1051,12 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('services.index', ['tab' => 'offers']))
             ->assertOk()
-            ->assertSee('Master Offer Playbook')
             ->assertSee('7-Pillar Architecture')
             ->assertSee('Video Shooting Script')
             ->assertSee('WhatsApp Scripts')
             ->assertSee('Silk Glass Hair Master Playbook')
-            ->assertSee('7/7 Pillars')
+            ->assertSee('Copy WhatsApp')
+            ->assertSee('Playbook')
             ->assertSee('Comment SILK or tap WhatsApp', false)
             ->assertSee('Zero hidden surcharges', false);
     }
@@ -1122,9 +1125,9 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
                 ->assertOk()
                 ->assertSee('Laleen Signature Monthly Glow')
                 ->assertSee('Cannot be combined with other offers')
-                ->assertSee('7/7 Pillars')
-                ->assertSee('Open Playbook')
-                ->assertSee('Copy WhatsApp Script')
+                ->assertSee('7-Pillar Architecture')
+                ->assertSee('Copy WhatsApp')
+                ->assertSee('Playbook')
                 ->assertSee('Reply GLOW to lock your 299 QAR slot', false)
                 ->assertSee('Reveal 7-day guarantee badge', false);
         }
