@@ -763,12 +763,21 @@
                                 @php
                                     $stOverall = (float) ($st['overall_score_pct'] ?? 0);
                                     $stPassing = (int) ($st['passing_kpis_count'] ?? 0);
-                                    $stTotal = (int) ($st['total_kpis_count'] ?? 2);
+                                    $stTotal = (int) ($st['total_kpis_count'] ?? 1);
                                     $stEvalAvg = $st['eval_avg'] ?? null;
-                                    $stEvalCnt = (int) ($st['eval_count'] ?? 0);
                                     $stCmpCnt = (int) ($st['complaints_count'] ?? 0);
                                     $stBranch = (string) ($st['branch'] ?? 'old_airport');
                                     $stBranchLabel = (string) ($st['branch_label'] ?? 'Old Airport');
+                                    $stPunct = $st['punctuality'] ?? [];
+                                    $stHasCheckIns = !empty($stPunct['has_check_ins']) && ($stPunct['punctuality_pct'] ?? null) !== null;
+                                    $stPunctPct = $stHasCheckIns ? (float) $stPunct['punctuality_pct'] : null;
+                                    $stPunctPass = !empty($stPunct['is_passing']);
+                                    $stProd = $st['production'] ?? [];
+                                    $stServicesDone = (int) ($stProd['total_services'] ?? 0);
+                                    $stProdValue = round((float) ($stProd['total_revenue_qar'] ?? 0.0), 2);
+                                    $stProdValueFormatted = $stProdValue === floor($stProdValue)
+                                        ? number_format($stProdValue, 0)
+                                        : number_format($stProdValue, 2);
                                 @endphp
                                 <article class="luxe-kpi-card luxe-staff-master-card"
                                          data-select-owner="{{ $st['owner_key'] }}"
@@ -796,8 +805,12 @@
 
                                     <div class="luxe-card-delta">
                                         <span class="{{ ($stEvalAvg !== null && $stEvalAvg >= 4.0) ? 'hl-emerald' : 'hl-champagne' }}">
-                                            {{ $stEvalAvg !== null ? (number_format((float) $stEvalAvg, 2) . '/5.0 Eval Avg') : 'No Evals Yet' }}
-                                        </span> ({{ $stEvalCnt }} {{ $stEvalCnt === 1 ? 'eval' : 'evals' }}) &bull;
+                                            {{ $stEvalAvg !== null ? (number_format((float) $stEvalAvg, 2) . '/5.0 Eval') : 'No Evals' }}
+                                        </span> &bull;
+                                        <span class="{{ !$stHasCheckIns ? 'hl-champagne' : ($stPunctPass ? 'hl-emerald' : 'hl-ruby') }}">
+                                            {{ $stHasCheckIns ? (number_format($stPunctPct, 0) . '% On Time') : 'No Check-ins' }}
+                                        </span> &bull;
+                                        <span class="hl-rose">{{ number_format($stServicesDone) }} {{ $stServicesDone === 1 ? 'Svc' : 'Svcs' }} ({{ $stProdValueFormatted }} QAR)</span> &bull;
                                         <span class="{{ $stCmpCnt === 0 ? 'hl-emerald' : 'hl-ruby' }}">
                                             {{ $stCmpCnt }} {{ $stCmpCnt === 1 ? 'Complaint' : 'Complaints' }}
                                         </span>
@@ -1693,6 +1706,7 @@
             letter-spacing: -0.025em;
             line-height: 1.08;
             margin-bottom: 8px;
+            font-variant-numeric: tabular-nums;
         }
 
         .luxe-unit {

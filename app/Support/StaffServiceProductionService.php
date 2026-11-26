@@ -9,6 +9,7 @@ use App\Models\Customer;
 use App\Models\Sale;
 use App\Models\Staff;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 class StaffServiceProductionService
@@ -41,6 +42,132 @@ class StaffServiceProductionService
         $computed = $this->computeForStaff($staff, $asOfQatar, false);
 
         return $computed['summary'];
+    }
+
+    /**
+     * Compute Service Production summary strictly for `$staff` across an explicit Asia/Qatar date window.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildSummaryForRange(Staff $staff, Carbon $periodStart, Carbon $periodEnd): array
+    {
+        $computed = $this->computeForStaff(
+            staff: $staff,
+            asOfQatar: $periodEnd,
+            includeClientFirstName: false,
+            rangeStartOverride: $periodStart
+        );
+
+        return $computed['summary'];
+    }
+
+    /**
+     * Batch-compute Service Production summaries for multiple staff members across [$periodStart, $periodEnd]
+     * using ONE shared appointment query and the exact single-source-of-truth per-line engine.
+     *
+     * @param  Collection<int, Staff>  $staffList
+     * @return array<int, array<string, mixed>> keyed by staff_id
+     */
+    public function buildSummariesForStaffBatch(Collection $staffList, Carbon $periodStart, Carbon $periodEnd): array
+    {
+        if ($staffList->isEmpty()) {
+            return [];
+        }
+
+        $startQatar = $periodStart->copy()->timezone('Asia/Qatar')->startOfDay();
+        $endQatar = $periodEnd->copy()->timezone('Asia/Qatar')->endOfDay();
+        $monthLabel = $endQatar->format('M Y');
+
+        if (!Schema::hasTable('appointments')) {
+            $out = [];
+            foreach ($staffList as $s) {
+                $out[(int) $s->id] = $this->emptyPayload($monthLabel);
+            }
+
+            return $out;
+        }
+
+        $staffIds = $staffList->pluck('id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+        $startStr = $startQatar->toDateString();
+        $endStr = $endQatar->toDateString();
+
+        $query = Appointment::query()
+            ->paidOrCompleted()
+            ->where(function ($q) use ($staffIds) {
+                $q->whereIn('staff_id', $staffIds)
+                    ->orWhereHas('appointmentServices', fn ($sq) => $sq->whereIn('staff_id', $staffIds));
+            })
+            ->where(function ($q) use ($startStr, $endStr, $startQatar, $endQatar) {
+                $q->whereBetween('booking_date', [$startStr, $endStr])
+                    ->orWhere(function ($q2) use ($startQatar, $endQatar) {
+                        $q2->whereNull('booking_date')
+                            ->whereBetween('appointment_datetime', [$startQatar, $endQatar]);
+                    })
+                    ->orWhere(function ($q3) use ($startQatar, $endQatar) {
+                        $q3->whereNull('booking_date')
+                            ->whereNull('appointment_datetime')
+                            ->whereBetween('paid_at', [$startQatar, $endQatar]);
+                    });
+            });
+
+        if (Schema::hasColumn('appointments', 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+
+        $allAppointments = $query->with($this->productionWithRelations(false))->get();
+
+        $out = [];
+        foreach ($staffList as $staffMember) {
+            $sid = (int) $staffMember->id;
+            $staffAppointments = $allAppointments->filter(function (Appointment $appt) use ($sid): bool {
+                if ((int) $appt->staff_id === $sid) {
+                    return true;
+                }
+
+                return $appt->appointmentServices->contains(fn (AppointmentService $line) => (int) $line->staff_id === $sid);
+            })->values();
+
+            $computed = $this->computeForStaff(
+                staff: $staffMember,
+                asOfQatar: $endQatar,
+                includeClientFirstName: false,
+                rangeStartOverride: $startQatar,
+                prefetchedAppointments: $staffAppointments
+            );
+            $out[$sid] = $computed['summary'];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function productionWithRelations(bool $includeClientFirstName): array
+    {
+        $withRelations = [
+            'sale',
+            'combo.services:id,name,price',
+            'clientPackages.sale',
+            'clientPackages.combo.services:id,name,price',
+            'clientPackages.services.service:id,name,price',
+            'clientPackages.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
+            'appointmentServices.service:id,name,price',
+            'appointmentServices.clientPackage.sale',
+            'appointmentServices.clientPackage.combo.services:id,name,price',
+            'appointmentServices.clientPackage.services.service:id,name,price',
+            'appointmentServices.clientPackage.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
+            'appointmentServices.clientPackageService.clientPackage.sale',
+            'appointmentServices.clientPackageService.clientPackage.combo.services:id,name,price',
+            'appointmentServices.clientPackageService.clientPackage.services.service:id,name,price',
+            'appointmentServices.clientPackageService.clientPackage.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
+        ];
+
+        if ($includeClientFirstName) {
+            $withRelations[] = 'customer:id,name';
+        }
+
+        return $withRelations;
     }
 
     /**
@@ -137,10 +264,14 @@ class StaffServiceProductionService
     private function computeForStaff(
         Staff $staff,
         ?Carbon $asOfQatar = null,
-        bool $includeClientFirstName = false
+        bool $includeClientFirstName = false,
+        ?Carbon $rangeStartOverride = null,
+        ?Collection $prefetchedAppointments = null
     ): array {
         $nowQatar = ($asOfQatar ? $asOfQatar->copy()->timezone('Asia/Qatar') : Carbon::now('Asia/Qatar'));
-        $monthStart = $nowQatar->copy()->startOfMonth()->startOfDay();
+        $monthStart = $rangeStartOverride
+            ? $rangeStartOverride->copy()->timezone('Asia/Qatar')->startOfDay()
+            : $nowQatar->copy()->startOfMonth()->startOfDay();
         $monthEnd = $nowQatar->copy()->endOfDay();
         $monthStartStr = $monthStart->toDateString();
         $todayStr = $nowQatar->toDateString();
@@ -153,58 +284,41 @@ class StaffServiceProductionService
             ];
         }
 
-        $query = Appointment::query()
-            ->paidOrCompleted()
-            ->where(function ($q) use ($staff) {
-                $q->where('staff_id', $staff->id)
-                    ->orWhereHas('appointmentServices', fn ($sq) => $sq->where('staff_id', $staff->id));
-            })
-            ->where(function ($q) use ($monthStartStr, $todayStr, $monthStart, $monthEnd) {
-                $q->whereBetween('booking_date', [$monthStartStr, $todayStr])
-                    ->orWhere(function ($q2) use ($monthStart, $monthEnd) {
-                        $q2->whereNull('booking_date')
-                            ->whereBetween('appointment_datetime', [$monthStart, $monthEnd]);
-                    })
-                    ->orWhere(function ($q3) use ($monthStart, $monthEnd) {
-                        $q3->whereNull('booking_date')
-                            ->whereNull('appointment_datetime')
-                            ->whereBetween('paid_at', [$monthStart, $monthEnd]);
-                    });
-            });
+        if ($prefetchedAppointments !== null) {
+            $appointments = $prefetchedAppointments;
+        } else {
+            $query = Appointment::query()
+                ->paidOrCompleted()
+                ->where(function ($q) use ($staff) {
+                    $q->where('staff_id', $staff->id)
+                        ->orWhereHas('appointmentServices', fn ($sq) => $sq->where('staff_id', $staff->id));
+                })
+                ->where(function ($q) use ($monthStartStr, $todayStr, $monthStart, $monthEnd) {
+                    $q->whereBetween('booking_date', [$monthStartStr, $todayStr])
+                        ->orWhere(function ($q2) use ($monthStart, $monthEnd) {
+                            $q2->whereNull('booking_date')
+                                ->whereBetween('appointment_datetime', [$monthStart, $monthEnd]);
+                        })
+                        ->orWhere(function ($q3) use ($monthStart, $monthEnd) {
+                            $q3->whereNull('booking_date')
+                                ->whereNull('appointment_datetime')
+                                ->whereBetween('paid_at', [$monthStart, $monthEnd]);
+                        });
+                });
 
-        if (Schema::hasColumn('appointments', 'deleted_at')) {
-            $query->whereNull('deleted_at');
+            if (Schema::hasColumn('appointments', 'deleted_at')) {
+                $query->whereNull('deleted_at');
+            }
+
+            $appointments = $query->with($this->productionWithRelations($includeClientFirstName))->get();
         }
-
-        $withRelations = [
-            'sale',
-            'combo.services:id,name,price',
-            'clientPackages.sale',
-            'clientPackages.combo.services:id,name,price',
-            'clientPackages.services.service:id,name,price',
-            'clientPackages.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
-            'appointmentServices.service:id,name,price',
-            'appointmentServices.clientPackage.sale',
-            'appointmentServices.clientPackage.combo.services:id,name,price',
-            'appointmentServices.clientPackage.services.service:id,name,price',
-            'appointmentServices.clientPackage.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
-            'appointmentServices.clientPackageService.clientPackage.sale',
-            'appointmentServices.clientPackageService.clientPackage.combo.services:id,name,price',
-            'appointmentServices.clientPackageService.clientPackage.services.service:id,name,price',
-            'appointmentServices.clientPackageService.clientPackage.services.appointmentService:id,appointment_id,service_id,staff_id,price,original_price,is_pending,status',
-        ];
-
-        if ($includeClientFirstName) {
-            $withRelations[] = 'customer:id,name';
-        }
-
-        $appointments = $query->with($withRelations)->get();
 
         $standalonePaidCount = 0;
         $comboCount = 0;
         $freebieCount = 0;
         $totalCents = 0;
         $clientKeys = [];
+        $visitedAppointmentIds = [];
         $items = [];
 
         foreach ($appointments as $appointment) {
@@ -278,6 +392,7 @@ class StaffServiceProductionService
                 }
 
                 $clientKeys[$this->clientIdentityKey($appointment)] = true;
+                $visitedAppointmentIds[(int) $appointment->id] = true;
                 continue;
             }
 
@@ -461,6 +576,7 @@ class StaffServiceProductionService
 
             if ($touchedByStaff) {
                 $clientKeys[$this->clientIdentityKey($appointment)] = true;
+                $visitedAppointmentIds[(int) $appointment->id] = true;
             }
         }
 
@@ -510,6 +626,7 @@ class StaffServiceProductionService
                 'freebie_count' => $freebieCount,
                 'combo_and_freebie_count' => $comboAndFreebieCount,
                 'clients_served' => $clientsServed,
+                'completed_visits_count' => count($visitedAppointmentIds),
                 'total_revenue_qar' => $totalRevenue,
                 'formatted_revenue' => $formattedRevenue,
                 'formatted_revenue_exact' => $formattedRevenueExact,
@@ -893,6 +1010,7 @@ class StaffServiceProductionService
             'freebie_count' => 0,
             'combo_and_freebie_count' => 0,
             'clients_served' => 0,
+            'completed_visits_count' => 0,
             'total_revenue_qar' => 0.0,
             'formatted_revenue' => '0 QAR',
             'formatted_revenue_exact' => '0.00 QAR',

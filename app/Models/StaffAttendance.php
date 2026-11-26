@@ -5,10 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class StaffAttendance extends Model
 {
     use HasFactory;
+
+    public const PUNCTUALITY_TARGET_PCT = 90.0;
 
     public const STATUS_PRESENT = 'present';
     public const STATUS_ABSENT = 'absent';
@@ -129,6 +133,88 @@ class StaffAttendance extends Model
         }
 
         return Staff::formatClockRange((string) $this->scheduled_start_time, (string) $this->scheduled_end_time);
+    }
+
+    /**
+     * Resolve late minutes using the exact Staff Management check-in rule (`Asia/Qatar`):
+     * `checked_in_at <= scheduled_start_time` => 0 min (On Time);
+     * `checked_in_at > scheduled_start_time` => `max(1, floor(diffSeconds / 60))` min late.
+     */
+    public static function resolveLateMinutes(self $record): int
+    {
+        if ($record->late_minutes !== null && (int) $record->late_minutes > 0) {
+            return (int) $record->late_minutes;
+        }
+
+        if ($record->checked_in_at && filled($record->scheduled_start_time) && $record->attendance_date) {
+            $dateStr = $record->attendance_date->toDateString();
+            $scheduledStart = Carbon::parse($dateStr . ' ' . trim((string) $record->scheduled_start_time), 'Asia/Qatar');
+            $checkedIn = $record->checked_in_at->copy()->timezone('Asia/Qatar');
+
+            if ($checkedIn->gt($scheduledStart)) {
+                $diffSeconds = (int) $scheduledStart->diffInSeconds($checkedIn, false);
+
+                return max(1, (int) floor($diffSeconds / 60));
+            }
+        }
+
+        return max(0, (int) ($record->late_minutes ?? 0));
+    }
+
+    /**
+     * Single-source-of-truth check-in punctuality summary matching Staff Management attendance logs.
+     * Counts attended check-in rows (`present` / `late`) and ignores `absent` / `off` rows.
+     *
+     * @param  Collection<int, self>  $records
+     * @return array{
+     *     check_ins_count: int,
+     *     on_time_count: int,
+     *     late_count: int,
+     *     total_late_minutes: int,
+     *     avg_late_minutes: int,
+     *     punctuality_pct: ?float,
+     *     has_check_ins: bool,
+     *     is_passing: bool,
+     *     target_pct: float
+     * }
+     */
+    public static function summarizePunctuality(Collection $records): array
+    {
+        $onTimeCount = 0;
+        $lateCount = 0;
+        $totalLateMinutes = 0;
+
+        foreach ($records as $record) {
+            $status = strtolower(trim((string) ($record->status ?? '')));
+            if (!in_array($status, [self::STATUS_PRESENT, self::STATUS_LATE], true)) {
+                continue;
+            }
+
+            $lateMinutes = self::resolveLateMinutes($record);
+            if ($status === self::STATUS_LATE || $lateMinutes > 0) {
+                $lateCount++;
+                $totalLateMinutes += $lateMinutes;
+            } else {
+                $onTimeCount++;
+            }
+        }
+
+        $checkInsCount = $onTimeCount + $lateCount;
+        $hasCheckIns = $checkInsCount > 0;
+        $punctualityPct = $hasCheckIns ? round(($onTimeCount / $checkInsCount) * 100, 1) : null;
+        $avgLateMinutes = $lateCount > 0 ? (int) round($totalLateMinutes / $lateCount) : 0;
+
+        return [
+            'check_ins_count' => $checkInsCount,
+            'on_time_count' => $onTimeCount,
+            'late_count' => $lateCount,
+            'total_late_minutes' => $totalLateMinutes,
+            'avg_late_minutes' => $avgLateMinutes,
+            'punctuality_pct' => $punctualityPct,
+            'has_check_ins' => $hasCheckIns,
+            'is_passing' => $hasCheckIns && $punctualityPct >= self::PUNCTUALITY_TARGET_PCT,
+            'target_pct' => self::PUNCTUALITY_TARGET_PCT,
+        ];
     }
 
     /**

@@ -356,8 +356,12 @@ class StaffPortalFullUpgradeTest extends TestCase
 
         $stylistPerf = $this->actingAs($stylistUser)->get('/my-profile?tab=performance')->assertOk();
         $stylistPerf->assertSee('Weekly Evaluation Average');
-        $stylistPerf->assertSee('Evaluations Completed');
+        $stylistPerf->assertDontSee('Evaluations Completed');
+        $stylistPerf->assertDontSee('Weekly branch evaluations');
         $stylistPerf->assertSee('Complaints Count');
+        $stylistPerf->assertSee('Check-in Time Punctuality');
+        $stylistPerf->assertSee('MTD Service Production: Services Done');
+        $stylistPerf->assertSee('Service Production: Value of Services');
         $stylistPerf->assertSee('My Complaints');
         $stylistPerf->assertSee($privacyComplaint->reference_number);
         $stylistPerf->assertSee('Coaching completed');

@@ -14,6 +14,7 @@ use App\Models\OpsActionItem;
 use App\Models\SocialContentPlan;
 use App\Models\SocialLateReplyLog;
 use App\Models\Staff;
+use App\Models\StaffAttendance;
 use App\Models\StaffComplaint;
 use App\Models\StockItem;
 use App\Models\StockMovement;
@@ -163,7 +164,8 @@ class StaffKpiScorecardService
 
         $salonStaffRows = $this->buildSalonStaffSections(
             periodStart: $window['period_start'],
-            periodEnd: $window['period_end']
+            periodEnd: $window['period_end'],
+            daysElapsed: $window['days_elapsed']
         );
 
         $legalTeamRows = $this->buildLegalTeamSections(
@@ -229,7 +231,10 @@ class StaffKpiScorecardService
                 periodLabel: $ctx['period_range_label'],
                 weeklyEvaluations: $staffRow['weekly_evaluations'] ?? [],
                 myComplaints: $staffRow['complaints'] ?? [],
-                ownerKey: $ownerKey
+                ownerKey: $ownerKey,
+                punctuality: $staffRow['punctuality'] ?? null,
+                production: $staffRow['production'] ?? null,
+                daysElapsed: (int) ($staffRow['days_elapsed'] ?? $ctx['days_elapsed'] ?? 1)
             );
             $vm['staff_id'] = (int) $staffRow['staff_id'];
             $vm['branch'] = (string) $staffRow['branch'];
@@ -507,12 +512,36 @@ class StaffKpiScorecardService
         }
 
         if ($key === 'salon_staff') {
+            $punctuality = null;
+            $production = null;
+
+            if ($staff) {
+                $attRecords = Schema::hasTable('staff_attendances')
+                    ? StaffAttendance::query()
+                        ->where('staff_id', $staff->id)
+                        ->whereDate('attendance_date', '>=', $window['period_start']->toDateString())
+                        ->whereDate('attendance_date', '<=', $window['period_end']->toDateString())
+                        ->get(['id', 'staff_id', 'attendance_date', 'status', 'scheduled_start_time', 'checked_in_at', 'late_minutes'])
+                    : collect();
+
+                $punctuality = StaffAttendance::summarizePunctuality($attRecords);
+                $production = $this->productionService()->buildSummaryForRange(
+                    $staff,
+                    $window['period_start'],
+                    $window['period_end']
+                );
+            }
+
             return $this->presentSalonStaff(
                 displayName: $displayName,
                 roleLabel: $roleLabel,
                 periodLabel: $ctx['period_range_label'],
                 weeklyEvaluations: $weeklyEvaluations ?? [],
-                myComplaints: $myComplaints ?? []
+                myComplaints: $myComplaints ?? [],
+                ownerKey: 'salon_staff',
+                punctuality: $punctuality,
+                production: $production,
+                daysElapsed: (int) $window['days_elapsed']
             );
         }
 
@@ -1742,13 +1771,71 @@ class StaffKpiScorecardService
         ];
     }
 
+    private function productionService(): StaffServiceProductionService
+    {
+        return app(StaffServiceProductionService::class);
+    }
+
     /**
-     * Batch-build lightweight MTD scorecards for all active branch beauticians (`Salon Staff`)
-     * using O(1) batch queries so `/kpis` can display & inspect them cleanly under the Salon Staff section.
+     * Compute Salon Staff overall score using ONLY active scored KPIs:
+     * - Weekly Evaluation Average (when evalCount > 0)
+     * - Complaints Count (always scored: 0 complaints = 100%, else max(0, 100 - complaints * 25))
+     * - Check-in Time Punctuality (when check_ins_count > 0)
+     * Never divides by zero and never penalizes with 0% for unscored evals, 0 check-ins,
+     * or informational Service Production cards.
+     *
+     * @param  array<string, mixed>  $punctuality
+     * @return array{overall_pct: float, passing: int, total_scored: int}
+     */
+    private function computeSalonStaffOverallScore(
+        ?float $evalAvg,
+        float $evalAvgPct,
+        bool $evalPass,
+        int $complaintsCount,
+        bool $complaintsClean,
+        array $punctuality
+    ): array {
+        $scoredComponents = [];
+        $passing = 0;
+
+        if ($evalAvg !== null) {
+            $scoredComponents[] = $evalAvgPct;
+            if ($evalPass) {
+                $passing++;
+            }
+        }
+
+        $complaintsScore = $complaintsClean ? 100.0 : max(0.0, 100.0 - ($complaintsCount * 25.0));
+        $scoredComponents[] = $complaintsScore;
+        if ($complaintsClean) {
+            $passing++;
+        }
+
+        if (!empty($punctuality['has_check_ins']) && ($punctuality['punctuality_pct'] ?? null) !== null) {
+            $scoredComponents[] = (float) $punctuality['punctuality_pct'];
+            if (!empty($punctuality['is_passing'])) {
+                $passing++;
+            }
+        }
+
+        $totalScored = max(1, count($scoredComponents));
+        $overallPct = round(array_sum($scoredComponents) / $totalScored, 1);
+
+        return [
+            'overall_pct' => $overallPct,
+            'passing' => $passing,
+            'total_scored' => $totalScored,
+        ];
+    }
+
+    /**
+     * Batch-build MTD scorecards for all active branch beauticians (`Salon Staff`)
+     * using O(1) batch queries (evaluations, complaints, attendance punctuality, and service production)
+     * so `/kpis` can display & inspect them cleanly under the Salon Staff section.
      *
      * @return list<array<string, mixed>>
      */
-    private function buildSalonStaffSections(Carbon $periodStart, Carbon $periodEnd): array
+    private function buildSalonStaffSections(Carbon $periodStart, Carbon $periodEnd, int $daysElapsed = 1): array
     {
         if (!Schema::hasTable('staff')) {
             return [];
@@ -1803,6 +1890,22 @@ class StaffKpiScorecardService
             }
         }
 
+        $attendanceByStaff = Schema::hasTable('staff_attendances')
+            ? StaffAttendance::query()
+                ->whereIn('staff_id', $staffIds)
+                ->whereDate('attendance_date', '>=', $periodStart->toDateString())
+                ->whereDate('attendance_date', '<=', $periodEnd->toDateString())
+                ->get(['id', 'staff_id', 'attendance_date', 'status', 'scheduled_start_time', 'checked_in_at', 'late_minutes'])
+                ->groupBy('staff_id')
+            : collect();
+
+        $productionByStaff = $this->productionService()->buildSummariesForStaffBatch(
+            $beauticians,
+            $periodStart,
+            $periodEnd
+        );
+
+        $safeDaysElapsed = max(1, $daysElapsed);
         $rows = [];
         foreach ($beauticians as $s) {
             $branchKey = strtolower(trim((string) $s->branch)) === 'wakrah' ? 'wakrah' : 'old_airport';
@@ -1819,6 +1922,15 @@ class StaffKpiScorecardService
                 ->all();
 
             $complaints = $complaintsByStaff[(int) $s->id] ?? [];
+            $punctuality = StaffAttendance::summarizePunctuality($attendanceByStaff->get($s->id, collect()));
+            $production = $productionByStaff[(int) $s->id] ?? [
+                'total_services' => 0,
+                'completed_visits_count' => 0,
+                'total_revenue_qar' => 0.0,
+                'avg_per_service_qar' => 0.0,
+                'formatted_revenue' => '0 QAR',
+                'formatted_avg' => '0 QAR',
+            ];
 
             $evalCount = count($evals);
             $evalAvg = $evalCount > 0 ? round(collect($evals)->avg('score'), 2) : null;
@@ -1826,8 +1938,15 @@ class StaffKpiScorecardService
             $evalPass = $evalAvg !== null && $evalAvg >= 4.0;
             $complaintsCount = count($complaints);
             $complaintsClean = $complaintsCount === 0;
-            $passing = ($evalPass ? 1 : 0) + ($complaintsClean ? 1 : 0);
-            $overallPct = round(($evalAvgPct + ($complaintsClean ? 100.0 : max(0.0, 100.0 - ($complaintsCount * 25.0)))) / 2, 1);
+
+            $scoreSummary = $this->computeSalonStaffOverallScore(
+                evalAvg: $evalAvg,
+                evalAvgPct: $evalAvgPct,
+                evalPass: $evalPass,
+                complaintsCount: $complaintsCount,
+                complaintsClean: $complaintsClean,
+                punctuality: $punctuality
+            );
 
             $rows[] = [
                 'owner_key' => 'staff_' . $s->id,
@@ -1841,9 +1960,12 @@ class StaffKpiScorecardService
                 'eval_pass' => $evalPass,
                 'complaints_count' => $complaintsCount,
                 'complaints_clean' => $complaintsClean,
-                'passing_kpis_count' => $passing,
-                'total_kpis_count' => 2,
-                'overall_score_pct' => $overallPct,
+                'punctuality' => $punctuality,
+                'production' => $production,
+                'days_elapsed' => $safeDaysElapsed,
+                'passing_kpis_count' => $scoreSummary['passing'],
+                'total_kpis_count' => $scoreSummary['total_scored'],
+                'overall_score_pct' => $scoreSummary['overall_pct'],
                 'weekly_evaluations' => $evals,
                 'complaints' => $complaints,
             ];
@@ -2924,6 +3046,8 @@ class StaffKpiScorecardService
     /**
      * @param  list<array<string, mixed>>  $weeklyEvaluations
      * @param  list<array<string, mixed>>  $myComplaints
+     * @param  array<string, mixed>|null  $punctuality
+     * @param  array<string, mixed>|null  $production
      */
     private function presentSalonStaff(
         string $displayName,
@@ -2931,7 +3055,10 @@ class StaffKpiScorecardService
         string $periodLabel,
         array $weeklyEvaluations,
         array $myComplaints,
-        string $ownerKey = 'salon_staff'
+        string $ownerKey = 'salon_staff',
+        ?array $punctuality = null,
+        ?array $production = null,
+        int $daysElapsed = 1
     ): array {
         $evalCount = count($weeklyEvaluations);
         $evalAvg = $evalCount > 0
@@ -2939,30 +3066,82 @@ class StaffKpiScorecardService
             : null;
         $evalAvgPct = $evalAvg !== null ? min(100.0, round(($evalAvg / 5.0) * 100, 1)) : 0.0;
         $evalPass = $evalAvg !== null && $evalAvg >= 4.0;
-        $latestEvalDate = $evalCount > 0 ? $weeklyEvaluations[0]['date_label'] : null;
 
         $complaintsCount = count($myComplaints);
         $unresolvedCount = collect($myComplaints)->where('status', 'Under Review')->count();
         $complaintsClean = $complaintsCount === 0;
 
-        $passing = ($evalPass ? 1 : 0) + ($complaintsClean ? 1 : 0);
-        $total = 2;
-        $overallPct = round((($evalAvgPct) + ($complaintsClean ? 100.0 : max(0.0, 100.0 - ($complaintsCount * 25.0)))) / 2, 1);
+        $punctualityData = $punctuality ?? StaffAttendance::summarizePunctuality(collect());
+        $checkInsCount = (int) ($punctualityData['check_ins_count'] ?? 0);
+        $onTimeCount = (int) ($punctualityData['on_time_count'] ?? 0);
+        $lateCount = (int) ($punctualityData['late_count'] ?? 0);
+        $avgLateMinutes = (int) ($punctualityData['avg_late_minutes'] ?? 0);
+        $hasCheckIns = !empty($punctualityData['has_check_ins']) && ($punctualityData['punctuality_pct'] ?? null) !== null;
+        $punctualityPct = $hasCheckIns ? (float) $punctualityData['punctuality_pct'] : null;
+        $punctualityPass = $hasCheckIns && !empty($punctualityData['is_passing']);
+        $checkInWord = Str::plural('check-in', $checkInsCount);
+
+        $productionData = $production ?? [
+            'total_services' => 0,
+            'completed_visits_count' => 0,
+            'total_revenue_qar' => 0.0,
+            'avg_per_service_qar' => 0.0,
+        ];
+        $totalServices = (int) ($productionData['total_services'] ?? 0);
+        $completedVisits = (int) ($productionData['completed_visits_count'] ?? 0);
+        $totalRevenueQar = round((float) ($productionData['total_revenue_qar'] ?? 0.0), 2);
+        $avgPerServiceQar = $totalServices > 0 ? round($totalRevenueQar / $totalServices, 2) : 0.0;
+        $safeDaysElapsed = max(1, $daysElapsed);
+        $avgServicesPerDay = number_format($totalServices / $safeDaysElapsed, 1);
+
+        $servicesWord = Str::plural('service', $totalServices);
+        $visitsWord = Str::plural('completed visit', $completedVisits);
+        $heroRevenue = $totalRevenueQar === floor($totalRevenueQar)
+            ? number_format($totalRevenueQar, 0)
+            : number_format($totalRevenueQar, 2);
+        $formattedAvgPerService = ($avgPerServiceQar === floor($avgPerServiceQar)
+            ? number_format($avgPerServiceQar, 0)
+            : number_format($avgPerServiceQar, 2)) . ' QAR';
+
+        $scoreSummary = $this->computeSalonStaffOverallScore(
+            evalAvg: $evalAvg,
+            evalAvgPct: $evalAvgPct,
+            evalPass: $evalPass,
+            complaintsCount: $complaintsCount,
+            complaintsClean: $complaintsClean,
+            punctuality: $punctualityData
+        );
+        $passing = $scoreSummary['passing'];
+        $total = $scoreSummary['total_scored'];
+        $overallPct = $scoreSummary['overall_pct'];
+
+        $punctualityOrb = !$hasCheckIns
+            ? 'orb-champagne'
+            : ($punctualityPass ? 'orb-emerald' : ($punctualityPct >= 75.0 ? 'orb-champagne' : 'orb-ruby'));
+        $punctualityTagClass = !$hasCheckIns
+            ? 'tag-muted'
+            : ($punctualityPass ? 'tag-pass' : 'tag-champagne');
+        $punctualityHlClass = !$hasCheckIns
+            ? 'hl-champagne'
+            : ($punctualityPass ? 'hl-emerald' : ($punctualityPct >= 75.0 ? 'hl-champagne' : 'hl-ruby'));
+        $punctualityBarClass = !$hasCheckIns
+            ? 'fill-champagne'
+            : ($punctualityPass ? 'fill-emerald' : ($punctualityPct >= 75.0 ? 'fill-champagne' : 'fill-ruby'));
 
         return [
             'owner_key' => $ownerKey,
             'initials' => $this->initialsFor($displayName),
             'name' => $displayName,
             'display_name' => $displayName,
-            'role_subtitle' => "{$roleLabel} — Service Quality & Evaluations",
+            'role_subtitle' => "{$roleLabel} — Quality, Punctuality & Production",
             'period_label' => $periodLabel,
             'overall_pct' => $overallPct,
             'passing_count' => $passing,
             'total_kpis' => $total,
-            'overall_badge' => $evalCount > 0
+            'overall_badge' => ($evalCount > 0 || $hasCheckIns)
                 ? (number_format($overallPct, 1) . "% Overall ({$passing}/{$total} Passing)")
                 : ($complaintsClean ? 'Clean Service Record' : "{$complaintsCount} Service " . Str::plural('Review', $complaintsCount)),
-            'orb_class' => self::healthOrbClass($evalCount > 0 ? $overallPct : ($complaintsClean ? 100.0 : 40.0)),
+            'orb_class' => self::healthOrbClass($overallPct),
             'tag_class' => $passing === $total ? 'tag-pass' : 'tag-rose',
             'columns' => 3,
             'action_label' => null,
@@ -2989,25 +3168,6 @@ class StaffKpiScorecardService
                 ],
                 [
                     'owner_key' => $ownerKey,
-                    'icon' => 'check-circle',
-                    'orb_class' => $evalCount > 0 ? 'orb-emerald' : 'orb-rose',
-                    'tag_label' => 'REVIEWS',
-                    'tag_class' => 'tag-muted',
-                    'tag_url' => null,
-                    'label' => 'Evaluations Completed',
-                    'hero_main' => (string) $evalCount,
-                    'hero_unit' => null,
-                    'delta_segments' => [
-                        ['text' => $latestEvalDate ? "Latest: {$latestEvalDate}" : '0 recorded', 'class' => $evalCount > 0 ? 'hl-emerald' : 'hl-rose'],
-                        ['text' => ' • Weekly branch evaluations'],
-                    ],
-                    'bar_pct' => $evalCount > 0 ? min(100.0, round(($evalCount / 4) * 100, 1)) : 0.0,
-                    'bar_class' => $evalCount > 0 ? 'fill-emerald' : 'fill-rose-gold',
-                    'scale_left' => '0',
-                    'scale_right' => '4 / Month',
-                ],
-                [
-                    'owner_key' => $ownerKey,
                     'icon' => 'shield-check',
                     'orb_class' => $complaintsClean ? 'orb-emerald' : 'orb-ruby',
                     'tag_label' => $complaintsClean ? 'CLEAN RECORD' : 'REVIEW',
@@ -3024,6 +3184,73 @@ class StaffKpiScorecardService
                     'bar_class' => $complaintsClean ? 'fill-emerald' : 'fill-ruby',
                     'scale_left' => 'Target: 0',
                     'scale_right' => $complaintsClean ? '100% Clean' : 'Logged',
+                ],
+                [
+                    'owner_key' => $ownerKey,
+                    'icon' => 'clock',
+                    'orb_class' => $punctualityOrb,
+                    'tag_label' => 'PUNCTUALITY',
+                    'tag_class' => $punctualityTagClass,
+                    'tag_url' => null,
+                    'label' => 'Check-in Time Punctuality',
+                    'hero_main' => $hasCheckIns ? (number_format($punctualityPct, 1) . '%') : '—',
+                    'hero_unit' => null,
+                    'delta_segments' => $hasCheckIns
+                        ? [
+                            ['text' => "{$onTimeCount} on time · {$lateCount} late", 'class' => $punctualityHlClass],
+                            ['text' => " out of {$checkInsCount} {$checkInWord}" . ($lateCount > 0 && $avgLateMinutes > 0 ? " • Avg {$avgLateMinutes} min late" : '')],
+                        ]
+                        : [
+                            ['text' => 'No check-ins recorded', 'class' => 'hl-champagne'],
+                            ['text' => ' • Target: ≥ 90% on time'],
+                        ],
+                    'bar_pct' => $hasCheckIns ? max(4.0, min(100.0, $punctualityPct)) : 0.0,
+                    'bar_class' => $punctualityBarClass,
+                    'scale_left' => '0%',
+                    'scale_right' => '100%',
+                ],
+                [
+                    'owner_key' => $ownerKey,
+                    'icon' => 'scissors',
+                    'orb_class' => 'orb-champagne',
+                    'tag_label' => 'PRODUCTION',
+                    'tag_class' => 'tag-muted',
+                    'tag_url' => null,
+                    'label' => 'MTD Service Production: Services Done',
+                    'hero_main' => number_format($totalServices),
+                    'hero_unit' => $servicesWord,
+                    'delta_segments' => $totalServices > 0
+                        ? [
+                            ['text' => "Across {$completedVisits} {$visitsWord}", 'class' => 'hl-champagne'],
+                            ['text' => " · {$avgServicesPerDay}/day avg"],
+                        ]
+                        : [
+                            ['text' => '0 completed visits', 'class' => 'hl-champagne'],
+                            ['text' => ' · 0.0/day avg'],
+                        ],
+                    'bar_pct' => $totalServices > 0 ? 100.0 : 0.0,
+                    'bar_class' => 'fill-champagne',
+                    'scale_left' => 'Informational',
+                    'scale_right' => 'Completed & paid',
+                ],
+                [
+                    'owner_key' => $ownerKey,
+                    'icon' => 'dollar',
+                    'orb_class' => 'orb-rose',
+                    'tag_label' => 'VALUE',
+                    'tag_class' => 'tag-muted',
+                    'tag_url' => null,
+                    'label' => 'Service Production: Value of Services',
+                    'hero_main' => $heroRevenue,
+                    'hero_unit' => 'QAR',
+                    'delta_segments' => [
+                        ['text' => "Avg {$formattedAvgPerService} / service", 'class' => 'hl-rose'],
+                        ['text' => " · {$totalServices} {$servicesWord} done"],
+                    ],
+                    'bar_pct' => $totalRevenueQar > 0 ? 100.0 : 0.0,
+                    'bar_class' => 'fill-rose-gold',
+                    'scale_left' => 'Informational',
+                    'scale_right' => 'Completed & paid',
                 ],
             ],
         ];
