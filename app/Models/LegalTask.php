@@ -29,6 +29,7 @@ class LegalTask extends Model
         'description',
         'deadline',
         'status',
+        'completed_at',
         'remarks',
         'why_pending',
         'person_responsible',
@@ -41,6 +42,7 @@ class LegalTask extends Model
         return [
             'serial_number' => 'integer',
             'deadline' => 'date',
+            'completed_at' => 'datetime',
         ];
     }
 
@@ -63,6 +65,14 @@ class LegalTask extends Model
                 $task->nature_of_work = $title;
             } elseif ($title === '' && $work !== '') {
                 $task->title = $work;
+            }
+
+            if ($task->status === self::STATUS_COMPLETED) {
+                if ($task->completed_at === null) {
+                    $task->completed_at = now();
+                }
+            } elseif ($task->completed_at !== null) {
+                $task->completed_at = null;
             }
         });
     }

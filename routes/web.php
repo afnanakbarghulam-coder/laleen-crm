@@ -754,10 +754,12 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
     });
 
     // ---- Legal Tasks & Legal Documents Vault ----
-    Route::middleware('module:legal_tasks')
-        ->get('/legal-documents/{legalDocument}/download', [LegalTaskController::class, 'downloadDocument'])
-        ->whereNumber('legalDocument')
-        ->name('legal-documents.download');
+    Route::middleware('module:legal_tasks')->group(function () {
+        Route::get('/legal-tasks', [LegalTaskController::class, 'index']);
+        Route::get('/legal-documents/{legalDocument}/download', [LegalTaskController::class, 'downloadDocument'])
+            ->whereNumber('legalDocument')
+            ->name('legal-documents.download');
+    });
 
     Route::prefix('legal')->name('legal.')->group(function () {
         Route::middleware('module:legal_tasks')->group(function () {

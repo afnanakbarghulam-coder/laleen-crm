@@ -27,6 +27,8 @@ class KpiHubController extends Controller
 
     public const BRANCH_STAFF_EVAL_COMPLIANCE_TARGET_PCT = StaffKpiScorecardService::BRANCH_STAFF_EVAL_COMPLIANCE_TARGET_PCT;
     public const BRANCH_MYSTERY_SHOPPER_TARGET_PCT = StaffKpiScorecardService::BRANCH_MYSTERY_SHOPPER_TARGET_PCT;
+    public const BRANCH_STOCK_HEALTH_TARGET_PCT = StaffKpiScorecardService::BRANCH_STOCK_HEALTH_TARGET_PCT;
+    public const LEGAL_COMPLETION_TARGET_PCT = StaffKpiScorecardService::LEGAL_COMPLETION_TARGET_PCT;
 
     public function __construct(
         private readonly StaffKpiScorecardService $scorecardService

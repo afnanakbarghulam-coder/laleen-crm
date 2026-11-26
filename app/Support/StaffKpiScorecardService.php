@@ -9,11 +9,16 @@ use App\Models\KpiChatEvaluation;
 use App\Models\KpiMonthlyAd;
 use App\Models\KpiStaffEvaluation;
 use App\Models\Lead;
+use App\Models\LegalTask;
 use App\Models\OpsActionItem;
 use App\Models\SocialContentPlan;
 use App\Models\SocialLateReplyLog;
 use App\Models\Staff;
 use App\Models\StaffComplaint;
+use App\Models\StockItem;
+use App\Models\StockMovement;
+use App\Models\StockWeek;
+use App\Models\StockWeekEntry;
 use App\Models\User;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Carbon;
@@ -46,11 +51,14 @@ class StaffKpiScorecardService
 
     public const BRANCH_STAFF_EVAL_COMPLIANCE_TARGET_PCT = 100.0;
     public const BRANCH_MYSTERY_SHOPPER_TARGET_PCT = 85.0;
+    public const BRANCH_STOCK_HEALTH_TARGET_PCT = 85.0;
 
     public const ARBAB_COMPLETION_TARGET_PCT = 85.0;
     public const ARBAB_SLA_TARGET_PCT = 85.0;
 
     public const SUNDUS_WEEKLY_BRANCH_EVAL_TARGET = 3;
+
+    public const LEGAL_COMPLETION_TARGET_PCT = 85.0;
 
     /**
      * Build the full Executive KPI Scorecard payload used by `/kpis`.
@@ -99,8 +107,11 @@ class StaffKpiScorecardService
             }
         }
 
+        $oaManagerName = $this->resolveBranchManagerDisplayName('old_airport', 'Ahana');
+        $wkManagerName = $this->resolveBranchManagerDisplayName('wakrah', 'Rhea');
+
         $ahanaData = $this->buildBranchManagerScorecard(
-            owner: 'Ahana',
+            owner: $oaManagerName,
             role: 'Old Airport Branch Manager',
             branch: 'old_airport',
             periodStart: $window['period_start'],
@@ -109,7 +120,7 @@ class StaffKpiScorecardService
         );
 
         $rheaData = $this->buildBranchManagerScorecard(
-            owner: 'Rhea',
+            owner: $wkManagerName,
             role: 'Wakrah Branch Manager',
             branch: 'wakrah',
             periodStart: $window['period_start'],
@@ -155,6 +166,12 @@ class StaffKpiScorecardService
             periodEnd: $window['period_end']
         );
 
+        $legalTeamRows = $this->buildLegalTeamSections(
+            monthStart: $monthStart,
+            monthEnd: $monthEnd,
+            referenceDate: $window['reference_date']
+        );
+
         return [
             'month' => $selectedMonth,
             'is_current_month' => $isCurrentMonth,
@@ -175,6 +192,7 @@ class StaffKpiScorecardService
             'zoya' => $zoyaData,
             'arbab' => $arbabData,
             'salon_staff_list' => $salonStaffRows,
+            'legal_team_list' => $legalTeamRows,
         ];
     }
 
@@ -220,6 +238,16 @@ class StaffKpiScorecardService
             $models[$ownerKey] = $vm;
         }
 
+        foreach (($scorecard['legal_team_list'] ?? []) as $legalRow) {
+            $ownerKey = (string) ($legalRow['owner_key'] ?? '');
+            if ($ownerKey === '') {
+                continue;
+            }
+            $vm = $this->presentLegalTeamMember($legalRow, $ctx, $viewer);
+            $vm['team_group'] = 'legal';
+            $models[$ownerKey] = $vm;
+        }
+
         return $models;
     }
 
@@ -230,6 +258,10 @@ class StaffKpiScorecardService
     public function resolveScorecardKey(User $user, ?Staff $staff = null): ?string
     {
         $roleSlug = strtolower(trim((string) $user->role));
+        if ($roleSlug === 'legal_team') {
+            return 'legal_team';
+        }
+
         $candidates = array_filter([
             strtolower(trim((string) ($staff?->name ?? ''))),
             strtolower(trim((string) ($user->name ?? ''))),
@@ -260,6 +292,7 @@ class StaffKpiScorecardService
             'salon_manager', 'manager' => $this->resolveBranchManagerKey($user, $staff),
             'agent' => 'chat_agent',
             'salon_staff' => 'salon_staff',
+            'legal_team' => 'legal_team',
             default => null,
         };
     }
@@ -386,7 +419,7 @@ class StaffKpiScorecardService
                 : ($key === 'rhea' ? 'wakrah' : 'old_airport');
             $branchLabel = $branch === 'wakrah' ? 'Al Wakrah' : 'Old Airport';
             $ownerKey = $branch === 'wakrah' ? 'rhea' : 'ahana';
-            $ownerName = $branch === 'wakrah' ? 'Rhea' : 'Ahana';
+            $ownerName = $this->resolveBranchManagerDisplayName($branch, $branch === 'wakrah' ? 'Rhea' : 'Ahana');
 
             $data = $this->buildBranchManagerScorecard(
                 owner: $ownerName,
@@ -448,6 +481,26 @@ class StaffKpiScorecardService
             $vm = $this->presentArbab($data, $ctx, $effectiveViewer, $displayName);
             $vm['display_name'] = $displayName;
             $vm['role_subtitle'] = "{$roleLabel} — {$data['total_kpis_count']} Operational KPIs";
+            $vm['raw'] = $data;
+
+            return $vm;
+        }
+
+        if ($key === 'legal_team') {
+            $allLegalUsers = $this->activeLegalTeamUsers();
+            $allLegalTasks = Schema::hasTable('legal_tasks')
+                ? LegalTask::query()->orderBy('id')->get()
+                : collect();
+            $data = $this->buildLegalTeamScorecardForUser(
+                user: $targetUser,
+                allLegalUsers: $allLegalUsers,
+                allLegalTasks: $allLegalTasks,
+                monthStart: $monthStart,
+                monthEnd: $monthEnd,
+                referenceDate: $window['reference_date']
+            );
+            $vm = $this->presentLegalTeamMember($data, $ctx, $effectiveViewer, $displayName);
+            $vm['display_name'] = $displayName;
             $vm['raw'] = $data;
 
             return $vm;
@@ -1262,10 +1315,24 @@ class StaffKpiScorecardService
 
         $mysteryShopperPassing = ($auditsCountMtd > 0 && $mysteryShopperAvgPct >= self::BRANCH_MYSTERY_SHOPPER_TARGET_PCT);
 
-        $passingCount = ($evalCompliancePassing ? 1 : 0) + ($mysteryShopperPassing ? 1 : 0);
-        $totalKpis = 2;
+        // KPI 3: Branch-Scoped Stock Management Health & MTD Activity
+        $stock = $this->computeBranchStockMetrics($branch, $periodStart, $periodEnd);
+        $hasStockData = (bool) $stock['has_stock_data'];
+        $stockHealthPct = $stock['stock_health_pct'];
+        $stockPassing = (bool) $stock['stock_passing'];
+
+        if ($hasStockData && $stockHealthPct !== null) {
+            $passingCount = ($evalCompliancePassing ? 1 : 0)
+                + ($mysteryShopperPassing ? 1 : 0)
+                + ($stockPassing ? 1 : 0);
+            $totalKpis = 3;
+            $overallPct = round(($evalCompliancePct + $mysteryShopperAttainmentPct + (float) $stockHealthPct) / 3, 1);
+        } else {
+            $passingCount = ($evalCompliancePassing ? 1 : 0) + ($mysteryShopperPassing ? 1 : 0);
+            $totalKpis = 2;
+            $overallPct = round(($evalCompliancePct + $mysteryShopperAttainmentPct) / 2, 1);
+        }
         $failingCount = $totalKpis - $passingCount;
-        $overallPct = round(($evalCompliancePct + $mysteryShopperAttainmentPct) / 2, 1);
 
         return [
             'owner' => $owner,
@@ -1282,12 +1349,183 @@ class StaffKpiScorecardService
             'mystery_shopper_target_pct' => self::BRANCH_MYSTERY_SHOPPER_TARGET_PCT,
             'mystery_shopper_attainment_pct' => $mysteryShopperAttainmentPct,
             'mystery_shopper_passing' => $mysteryShopperPassing,
+            'stock_branch' => $stock['stock_branch'],
+            'stock_has_data' => $hasStockData,
+            'stock_tracked_items_count' => $stock['tracked_items_count'],
+            'stock_healthy_count' => $stock['healthy_count'],
+            'stock_low_count' => $stock['low_stock_count'],
+            'stock_out_of_stock_count' => $stock['out_of_stock_count'],
+            'stock_health_pct' => $stockHealthPct,
+            'stock_target_pct' => self::BRANCH_STOCK_HEALTH_TARGET_PCT,
+            'stock_passing' => $stockPassing,
+            'stock_movements_mtd' => $stock['movements_mtd'],
+            'stock_audits_submitted_mtd' => $stock['audits_submitted_mtd'],
+            'stock_audits_total_mtd' => $stock['audits_total_mtd'],
+            'stock_updates_mtd' => $stock['updates_mtd'],
             'overall_score_pct' => $overallPct,
             'passing_kpis_count' => $passingCount,
             'total_kpis_count' => $totalKpis,
             'below_floor_count' => $failingCount,
             'is_passing_all' => $failingCount === 0,
         ];
+    }
+
+    /**
+     * Compute real database-backed branch stock health & MTD stock activity strictly
+     * isolated to one branch (`old_airport` or `al_wakrah`).
+     *
+     * @return array<string, mixed>
+     */
+    private function computeBranchStockMetrics(string $branch, Carbon $periodStart, Carbon $periodEnd): array
+    {
+        $stockBranch = StockWeek::normalizeBranch($branch) ?? 'old_airport';
+
+        $empty = [
+            'stock_branch' => $stockBranch,
+            'has_stock_data' => false,
+            'tracked_items_count' => 0,
+            'healthy_count' => 0,
+            'low_stock_count' => 0,
+            'out_of_stock_count' => 0,
+            'stock_health_pct' => null,
+            'stock_passing' => false,
+            'movements_mtd' => 0,
+            'audits_submitted_mtd' => 0,
+            'audits_total_mtd' => 0,
+            'updates_mtd' => 0,
+        ];
+
+        if (
+            !Schema::hasTable('stock_items')
+            || !Schema::hasTable('stock_weeks')
+            || !Schema::hasTable('stock_week_entries')
+        ) {
+            return $empty;
+        }
+
+        $latestWeek = StockWeek::query()
+            ->with('entries')
+            ->where('branch', $stockBranch)
+            ->whereDate('week_start_date', '<=', $periodEnd->toDateString())
+            ->orderByDesc('week_start_date')
+            ->orderByDesc('id')
+            ->first();
+
+        $entriesByItemId = $latestWeek
+            ? $latestWeek->entries->keyBy('stock_item_id')
+            : collect();
+
+        $activeItems = StockItem::query()
+            ->where('is_active', true)
+            ->get(['id', 'name', 'par_level_old_airport', 'par_level_al_wakrah', 'is_active']);
+
+        $healthyCount = 0;
+        $lowStockCount = 0;
+        $outOfStockCount = 0;
+
+        foreach ($activeItems as $item) {
+            /** @var StockWeekEntry|null $entry */
+            $entry = $entriesByItemId->get($item->id);
+            $par = $item->parForBranch($stockBranch);
+
+            // Strict branch scoping: count only items tracked in this branch's weekly sheet or configured with a par level for this branch
+            if (!$entry && $par <= 0.0) {
+                continue;
+            }
+
+            $qty = $entry ? $entry->currentEffectiveQty() : 0.0;
+            if ($qty <= 0.0001) {
+                $outOfStockCount++;
+            } elseif ($par > 0.0 && $qty < $par) {
+                $lowStockCount++;
+            } else {
+                $healthyCount++;
+            }
+        }
+
+        $trackedCount = $healthyCount + $lowStockCount + $outOfStockCount;
+        $hasStockData = $trackedCount > 0;
+        $stockHealthPct = $hasStockData ? round(($healthyCount / $trackedCount) * 100, 1) : null;
+        $stockPassing = $hasStockData && $stockHealthPct >= self::BRANCH_STOCK_HEALTH_TARGET_PCT;
+
+        // MTD stock activity strictly scoped to $stockBranch within [$periodStart, $periodEnd]
+        $movementsMtd = Schema::hasTable('stock_movements')
+            ? StockMovement::query()
+                ->where('branch', $stockBranch)
+                ->whereBetween('created_at', [$periodStart, $periodEnd])
+                ->count()
+            : 0;
+
+        $monthWeeks = StockWeek::query()
+            ->where('branch', $stockBranch)
+            ->whereDate('week_start_date', '<=', $periodEnd->toDateString())
+            ->whereDate('week_end_date', '>=', $periodStart->toDateString())
+            ->get(['id', 'status']);
+
+        $auditsTotalMtd = $monthWeeks->count();
+        $auditsSubmittedMtd = $monthWeeks
+            ->whereIn('status', [StockWeek::STATUS_SUBMITTED, StockWeek::STATUS_APPROVED])
+            ->count();
+
+        $updatesMtd = $movementsMtd + $auditsSubmittedMtd;
+        if ($updatesMtd === 0 && $monthWeeks->isNotEmpty()) {
+            $updatesMtd = StockWeekEntry::query()
+                ->whereIn('stock_week_id', $monthWeeks->pluck('id'))
+                ->whereNotNull('closing_qty')
+                ->whereBetween('updated_at', [$periodStart, $periodEnd])
+                ->count();
+        }
+
+        return [
+            'stock_branch' => $stockBranch,
+            'has_stock_data' => $hasStockData,
+            'tracked_items_count' => $trackedCount,
+            'healthy_count' => $healthyCount,
+            'low_stock_count' => $lowStockCount,
+            'out_of_stock_count' => $outOfStockCount,
+            'stock_health_pct' => $stockHealthPct,
+            'stock_passing' => $stockPassing,
+            'movements_mtd' => $movementsMtd,
+            'audits_submitted_mtd' => $auditsSubmittedMtd,
+            'audits_total_mtd' => $auditsTotalMtd,
+            'updates_mtd' => $updatesMtd,
+        ];
+    }
+
+    /**
+     * Resolve active branch manager display name dynamically from active users by role + branch,
+     * falling back cleanly to the canonical branch manager name when no user record exists yet.
+     */
+    private function resolveBranchManagerDisplayName(string $branch, string $fallback): string
+    {
+        if (!Schema::hasTable('users')) {
+            return $fallback;
+        }
+
+        $candidates = User::query()
+            ->with('staff:id,user_id,name,branch,is_remote')
+            ->where('is_active', true)
+            ->whereIn('role', ['salon_manager', 'manager'])
+            ->orderByRaw("CASE WHEN role = 'salon_manager' THEN 0 ELSE 1 END asc")
+            ->orderBy('id')
+            ->get(['id', 'name', 'email', 'role', 'is_active']);
+
+        foreach ($candidates as $candidate) {
+            if ($candidate->managedSalonBranch() === $branch) {
+                $fullName = trim((string) ($candidate->staff?->name ?: $candidate->name));
+                if ($fullName === '') {
+                    continue;
+                }
+                $firstWord = explode(' ', $fullName)[0] ?? $fullName;
+                if (strcasecmp($firstWord, $fallback) === 0) {
+                    return $fallback;
+                }
+
+                return $fullName;
+            }
+        }
+
+        return $fallback;
     }
 
     /**
@@ -1612,6 +1850,219 @@ class StaffKpiScorecardService
         }
 
         return $rows;
+    }
+
+    /**
+     * Fetch all active users holding the Legal Team role (`legal_team`), dynamically discovered
+     * so Shaukat Ansari and any future Legal Team member appear automatically without hardcoded IDs.
+     *
+     * @return Collection<int, User>
+     */
+    private function activeLegalTeamUsers(): Collection
+    {
+        if (!Schema::hasTable('users')) {
+            return collect();
+        }
+
+        return User::query()
+            ->whereRaw("LOWER(TRIM(COALESCE(role, ''))) = 'legal_team'")
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->orderBy('id')
+            ->get(['id', 'name', 'email', 'role', 'is_active']);
+    }
+
+    /**
+     * Build live Legal Tasks KPI sections for every active Legal Team member.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildLegalTeamSections(Carbon $monthStart, Carbon $monthEnd, Carbon $referenceDate): array
+    {
+        $legalUsers = $this->activeLegalTeamUsers();
+        if ($legalUsers->isEmpty()) {
+            return [];
+        }
+
+        $allLegalTasks = Schema::hasTable('legal_tasks')
+            ? LegalTask::query()->orderBy('id')->get()
+            : collect();
+
+        $rows = [];
+        foreach ($legalUsers as $user) {
+            $rows[] = $this->buildLegalTeamScorecardForUser(
+                user: $user,
+                allLegalUsers: $legalUsers,
+                allLegalTasks: $allLegalTasks,
+                monthStart: $monthStart,
+                monthEnd: $monthEnd,
+                referenceDate: $referenceDate
+            );
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Compute live Legal Tasks KPIs for a single Legal Team member in Asia/Qatar time.
+     *
+     * @param  Collection<int, User>  $allLegalUsers
+     * @param  Collection<int, LegalTask>  $allLegalTasks
+     * @return array<string, mixed>
+     */
+    private function buildLegalTeamScorecardForUser(
+        User $user,
+        Collection $allLegalUsers,
+        Collection $allLegalTasks,
+        Carbon $monthStart,
+        Carbon $monthEnd,
+        Carbon $referenceDate
+    ): array {
+        $monthStartQatar = $monthStart->copy()->timezone('Asia/Qatar')->startOfDay();
+        $monthEndQatar = $monthEnd->copy()->timezone('Asia/Qatar')->endOfDay();
+        $monthStartStr = $monthStartQatar->toDateString();
+        $monthEndStr = $monthEndQatar->toDateString();
+        $asOfDateStr = $referenceDate->copy()->timezone('Asia/Qatar')->toDateString();
+
+        // Scope tasks: team-wide when 1 legal user exists; when multiple legal users exist,
+        // respect explicit `person_responsible` matching while keeping unassigned/shared tasks visible.
+        $scopedTasks = $allLegalTasks->filter(function (LegalTask $task) use ($user, $allLegalUsers): bool {
+            if ($allLegalUsers->count() <= 1) {
+                return true;
+            }
+
+            $responsible = strtolower(trim((string) ($task->person_responsible ?? '')));
+            if ($responsible === '') {
+                return true;
+            }
+
+            if ($this->personResponsibleMatchesUser($responsible, $user)) {
+                return true;
+            }
+
+            // If explicitly assigned to a different active legal team member, exclude from this member
+            foreach ($allLegalUsers as $other) {
+                if ((int) $other->id !== (int) $user->id && $this->personResponsibleMatchesUser($responsible, $other)) {
+                    return false;
+                }
+            }
+
+            return true;
+        })->values();
+
+        $dueInMonthTasks = $scopedTasks->filter(function (LegalTask $task) use ($monthStartStr, $monthEndStr): bool {
+            if (!$task->deadline) {
+                return false;
+            }
+            $dueStr = $task->deadline->toDateString();
+
+            return $dueStr >= $monthStartStr && $dueStr <= $monthEndStr;
+        });
+
+        $completedInMonthTasks = $scopedTasks->filter(function (LegalTask $task) use ($monthStartQatar, $monthEndQatar): bool {
+            if ($task->status !== LegalTask::STATUS_COMPLETED) {
+                return false;
+            }
+            $completedRaw = $task->completed_at ?? $task->updated_at;
+            if (!$completedRaw) {
+                return false;
+            }
+            $completedQatar = Carbon::parse($completedRaw)->timezone('Asia/Qatar');
+
+            return $completedQatar->betweenIncluded($monthStartQatar, $monthEndQatar);
+        });
+
+        $periodPool = $dueInMonthTasks->concat($completedInMonthTasks)->unique('id')->values();
+        $periodTotalCount = $periodPool->count();
+        $periodCompletedTasks = $periodPool->where('status', LegalTask::STATUS_COMPLETED)->values();
+        $periodCompletedCount = $periodCompletedTasks->count();
+
+        $completedOnTimeCount = 0;
+        $completedLateCount = 0;
+        foreach ($periodCompletedTasks as $task) {
+            if (!$task->deadline) {
+                $completedOnTimeCount++;
+                continue;
+            }
+            $dueEndQatar = Carbon::parse($task->deadline->toDateString(), 'Asia/Qatar')->endOfDay();
+            $completedRaw = $task->completed_at ?? $task->updated_at;
+            $completedQatar = $completedRaw ? Carbon::parse($completedRaw)->timezone('Asia/Qatar') : $dueEndQatar;
+
+            if ($completedQatar->lte($dueEndQatar)) {
+                $completedOnTimeCount++;
+            } else {
+                $completedLateCount++;
+            }
+        }
+
+        $completionIsNeutral = ($periodTotalCount === 0);
+        $completionPct = $completionIsNeutral
+            ? 100.0
+            : round(($periodCompletedCount / $periodTotalCount) * 100, 1);
+        $completionPassing = $completionIsNeutral || ($completionPct >= self::LEGAL_COMPLETION_TARGET_PCT);
+
+        // KPI 2: Overdue & Active Legal Compliance
+        $overdueCount = $scopedTasks->filter(function (LegalTask $task) use ($asOfDateStr): bool {
+            if ($task->status === LegalTask::STATUS_COMPLETED || !$task->deadline) {
+                return false;
+            }
+
+            return $task->deadline->toDateString() < $asOfDateStr;
+        })->count();
+
+        $openCount = $scopedTasks->whereIn('status', [LegalTask::STATUS_PENDING, LegalTask::STATUS_HOLD])->count();
+        $inProgressCount = $scopedTasks->where('status', LegalTask::STATUS_UNDER_PROCESS)->count();
+        $completedMtdCount = $completedInMonthTasks->count();
+
+        $compliancePct = $overdueCount === 0
+            ? 100.0
+            : max(0.0, round(100.0 - ($overdueCount * 25.0), 1));
+        $compliancePassing = ($overdueCount === 0);
+
+        $passingCount = ($completionPassing ? 1 : 0) + ($compliancePassing ? 1 : 0);
+        $totalKpis = 2;
+        $overallPct = $completionIsNeutral
+            ? $compliancePct
+            : round(($completionPct + $compliancePct) / 2, 1);
+
+        $displayName = trim((string) $user->name) ?: 'Legal Team';
+
+        return [
+            'owner_key' => 'legal_' . $user->id,
+            'user_id' => (int) $user->id,
+            'name' => $displayName,
+            'initials' => $this->initialsFor($displayName),
+            'role' => 'Legal Team',
+            'period_total_count' => $periodTotalCount,
+            'period_completed_count' => $periodCompletedCount,
+            'completed_on_time_count' => $completedOnTimeCount,
+            'completed_late_count' => $completedLateCount,
+            'completion_is_neutral' => $completionIsNeutral,
+            'completion_pct' => $completionPct,
+            'completion_passing' => $completionPassing,
+            'overdue_count' => $overdueCount,
+            'open_count' => $openCount,
+            'in_progress_count' => $inProgressCount,
+            'completed_mtd_count' => $completedMtdCount,
+            'compliance_pct' => $compliancePct,
+            'compliance_passing' => $compliancePassing,
+            'overall_score_pct' => $overallPct,
+            'passing_kpis_count' => $passingCount,
+            'total_kpis_count' => $totalKpis,
+            'below_floor_count' => $totalKpis - $passingCount,
+            'is_passing_all' => $passingCount === $totalKpis,
+        ];
+    }
+
+    private function personResponsibleMatchesUser(string $responsibleLower, User $user): bool
+    {
+        $fullName = strtolower(trim((string) $user->name));
+        if ($fullName !== '' && str_contains($responsibleLower, $fullName)) {
+            return true;
+        }
+        $firstName = explode(' ', $fullName)[0] ?? '';
+
+        return $firstName !== '' && strlen($firstName) >= 3 && preg_match('/\b' . preg_quote($firstName, '/') . '\b/i', $responsibleLower) === 1;
     }
 
     // =========================================================================
@@ -2033,6 +2484,17 @@ class StaffKpiScorecardService
         $mysteryAttain = (float) ($mgr['mystery_shopper_attainment_pct'] ?? 0);
         $mysteryPass = !empty($mgr['mystery_shopper_passing']);
 
+        $stockBranch = (string) ($mgr['stock_branch'] ?? (StockWeek::normalizeBranch($branch) ?? 'old_airport'));
+        $stockHasData = !empty($mgr['stock_has_data']);
+        $stockTracked = (int) ($mgr['stock_tracked_items_count'] ?? 0);
+        $stockHealthy = (int) ($mgr['stock_healthy_count'] ?? 0);
+        $stockLow = (int) ($mgr['stock_low_count'] ?? 0);
+        $stockOut = (int) ($mgr['stock_out_of_stock_count'] ?? 0);
+        $stockHealthPct = isset($mgr['stock_health_pct']) ? (float) $mgr['stock_health_pct'] : null;
+        $stockPass = !empty($mgr['stock_passing']);
+        $stockUpdatesMtd = (int) ($mgr['stock_updates_mtd'] ?? 0);
+        $stockAuditsSubmitted = (int) ($mgr['stock_audits_submitted_mtd'] ?? 0);
+
         $overallPct = (float) ($mgr['overall_score_pct'] ?? 0);
         $passing = (int) ($mgr['passing_kpis_count'] ?? 0);
         $total = (int) ($mgr['total_kpis_count'] ?? 2);
@@ -2045,6 +2507,44 @@ class StaffKpiScorecardService
             'branch' => $branch,
             'month' => $ctx['month'],
         ]);
+        $stockUrl = $this->safeUrl($viewer, 'stock', 'stock.index', [
+            'branch' => $stockBranch,
+        ]);
+
+        $stockDeltaText = "{$stockLow} low · {$stockOut} out of stock";
+        $stockActivitySuffix = " • {$stockUpdatesMtd} " . Str::plural('update', $stockUpdatesMtd) . ' MTD'
+            . ($stockAuditsSubmitted > 0
+                ? " ({$stockAuditsSubmitted} " . Str::plural('audit', $stockAuditsSubmitted) . ')'
+                : '');
+
+        $stockCard = [
+            'owner_key' => $ownerKey,
+            'icon' => 'box',
+            'orb_class' => !$stockHasData ? 'orb-champagne' : ($stockPass ? 'orb-emerald' : ($stockOut > 0 ? 'orb-ruby' : 'orb-amber')),
+            'tag_label' => 'STOCK',
+            'tag_class' => !$stockHasData ? 'tag-champagne' : ($stockPass ? 'tag-pass' : $tagClassKey),
+            'tag_url' => $stockUrl,
+            'tag_title' => "Open {$branchLabel} Branch Stock",
+            'label' => 'Branch Stock Health',
+            'subnote' => $stockHasData
+                ? "{$stockHealthy}/{$stockTracked} active items above par • {$branchLabel}"
+                : "No branch stock items configured yet • {$branchLabel}",
+            'hero_main' => $stockHasData && $stockHealthPct !== null ? (number_format($stockHealthPct, 1) . '%') : 'N/A',
+            'hero_unit' => null,
+            'delta_segments' => $stockHasData
+                ? [
+                    ['text' => $stockDeltaText, 'class' => ($stockLow === 0 && $stockOut === 0) ? 'hl-emerald' : ($stockOut > 0 ? 'hl-ruby' : 'hl-champagne')],
+                    ['text' => $stockActivitySuffix],
+                ]
+                : [
+                    ['text' => $stockDeltaText],
+                    ['text' => $stockActivitySuffix],
+                ],
+            'bar_pct' => $stockHasData && $stockHealthPct !== null ? min(100.0, max(4.0, $stockHealthPct)) : 0.0,
+            'bar_class' => !$stockHasData ? 'fill-champagne' : ($stockPass ? 'fill-emerald' : ($stockOut > 0 ? 'fill-ruby' : 'fill-champagne')),
+            'scale_left' => $stockHasData ? '0%' : 'N/A',
+            'scale_right' => '85% Target',
+        ];
 
         return [
             'owner_key' => $ownerKey,
@@ -2059,7 +2559,7 @@ class StaffKpiScorecardService
             'overall_badge' => number_format($overallPct, 1) . "% Overall ({$passing}/{$total} Passing)",
             'orb_class' => self::healthOrbClass($overallPct),
             'tag_class' => $passing === $total ? 'tag-pass' : $tagClassKey,
-            'columns' => 2,
+            'columns' => 3,
             'action_label' => $evalUrl ? 'Open Staff Evaluations' : null,
             'action_url' => $evalUrl,
             'cards' => [
@@ -2104,6 +2604,7 @@ class StaffKpiScorecardService
                     'scale_left' => '0%',
                     'scale_right' => '85% Target',
                 ],
+                $stockCard,
             ],
         ];
     }
@@ -2523,6 +3024,107 @@ class StaffKpiScorecardService
                     'bar_class' => $complaintsClean ? 'fill-emerald' : 'fill-ruby',
                     'scale_left' => 'Target: 0',
                     'scale_right' => $complaintsClean ? '100% Clean' : 'Logged',
+                ],
+            ],
+        ];
+    }
+
+    private function presentLegalTeamMember(
+        array $legal,
+        array $ctx,
+        ?User $viewer,
+        ?string $displayNameOverride = null
+    ): array {
+        $ownerKey = (string) ($legal['owner_key'] ?? 'legal_team');
+        $displayName = $displayNameOverride ?: (string) ($legal['name'] ?? 'Legal Team');
+        $periodTotal = (int) ($legal['period_total_count'] ?? 0);
+        $periodCompleted = (int) ($legal['period_completed_count'] ?? 0);
+        $onTime = (int) ($legal['completed_on_time_count'] ?? 0);
+        $late = (int) ($legal['completed_late_count'] ?? 0);
+        $isNeutral = !empty($legal['completion_is_neutral']);
+        $completionPct = (float) ($legal['completion_pct'] ?? 100.0);
+        $completionPass = !empty($legal['completion_passing']);
+
+        $overdue = (int) ($legal['overdue_count'] ?? 0);
+        $openCount = (int) ($legal['open_count'] ?? 0);
+        $inProgressCount = (int) ($legal['in_progress_count'] ?? 0);
+        $completedMtdCount = (int) ($legal['completed_mtd_count'] ?? 0);
+        $compliancePct = (float) ($legal['compliance_pct'] ?? 100.0);
+        $compliancePass = !empty($legal['compliance_passing']);
+
+        $overallPct = (float) ($legal['overall_score_pct'] ?? 100.0);
+        $passing = (int) ($legal['passing_kpis_count'] ?? 0);
+        $total = (int) ($legal['total_kpis_count'] ?? 2);
+
+        $legalUrl = $this->safeUrl($viewer, 'legal_tasks', 'legal.tasks.index');
+
+        return [
+            'owner_key' => $ownerKey,
+            'initials' => $this->initialsFor($displayName),
+            'name' => $displayName,
+            'display_name' => $displayName,
+            'role_subtitle' => "Legal Team — {$total} Compliance KPIs",
+            'period_label' => $ctx['period_range_label'],
+            'overall_pct' => $overallPct,
+            'passing_count' => $passing,
+            'total_kpis' => $total,
+            'overall_badge' => number_format($overallPct, 1) . "% Overall ({$passing}/{$total} Passing)",
+            'orb_class' => self::healthOrbClass($overallPct),
+            'tag_class' => $passing === $total ? 'tag-pass' : 'tag-champagne',
+            'columns' => 2,
+            'action_label' => $legalUrl ? 'Open Legal Tasks' : null,
+            'action_url' => $legalUrl,
+            'cards' => [
+                [
+                    'owner_key' => $ownerKey,
+                    'icon' => 'tasks',
+                    'orb_class' => $isNeutral ? 'orb-champagne' : ($completionPass ? 'orb-emerald' : 'orb-amber'),
+                    'tag_label' => 'LEGAL TASKS',
+                    'tag_class' => $completionPass ? 'tag-pass' : 'tag-champagne',
+                    'tag_url' => $legalUrl,
+                    'tag_title' => 'Open Legal Tasks',
+                    'label' => 'MTD Legal Task Completion',
+                    'subnote' => $isNeutral
+                        ? 'No tasks due in ' . $ctx['month_label']
+                        : number_format($completionPct, 1) . '% attainment • ' . $ctx['month_label'],
+                    'hero_main' => (string) $periodCompleted,
+                    'hero_unit' => "/ {$periodTotal}",
+                    'delta_segments' => $isNeutral
+                        ? [
+                            ['text' => 'No tasks due', 'class' => 'hl-emerald'],
+                            ['text' => ' • 0 completed on time · 0 completed late'],
+                        ]
+                        : [
+                            ['text' => "{$onTime} completed on time", 'class' => 'hl-emerald'],
+                            ['text' => ' · '],
+                            ['text' => "{$late} completed late", 'class' => $late > 0 ? 'hl-ruby' : 'hl-emerald'],
+                        ],
+                    'bar_pct' => $isNeutral ? 100.0 : min(100.0, max(4.0, $completionPct)),
+                    'bar_class' => $completionPass ? 'fill-emerald' : 'fill-champagne',
+                    'scale_left' => '0%',
+                    'scale_right' => $isNeutral ? 'No tasks due' : '100%',
+                ],
+                [
+                    'owner_key' => $ownerKey,
+                    'icon' => 'scale',
+                    'orb_class' => $compliancePass ? 'orb-emerald' : ($compliancePct >= 50.0 ? 'orb-amber' : 'orb-ruby'),
+                    'tag_label' => 'LEGAL TASKS',
+                    'tag_class' => $compliancePass ? 'tag-pass' : 'tag-ruby',
+                    'tag_url' => $legalUrl,
+                    'tag_title' => 'Open Legal Tasks',
+                    'label' => 'Overdue & Active Legal Compliance',
+                    'hero_main' => (string) $overdue,
+                    'hero_unit' => 'Overdue',
+                    'delta_segments' => [
+                        $compliancePass
+                            ? ['text' => '100% — On Track', 'class' => 'hl-emerald']
+                            : ['text' => number_format($compliancePct, 0) . '% Compliance', 'class' => $compliancePct >= 50.0 ? 'hl-champagne' : 'hl-ruby'],
+                        ['text' => " • {$openCount} Open · {$inProgressCount} In Progress · {$completedMtdCount} Completed MTD"],
+                    ],
+                    'bar_pct' => $compliancePass ? 100.0 : max(6.0, $compliancePct),
+                    'bar_class' => $compliancePass ? 'fill-emerald' : ($compliancePct >= 50.0 ? 'fill-champagne' : 'fill-ruby'),
+                    'scale_left' => '0%',
+                    'scale_right' => '0 Overdue Target',
                 ],
             ],
         ];

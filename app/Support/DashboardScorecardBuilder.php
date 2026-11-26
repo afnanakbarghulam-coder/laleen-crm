@@ -8,6 +8,7 @@ use App\Models\BranchEvaluation;
 use App\Models\KpiChatEvaluation;
 use App\Models\KpiStaffEvaluation;
 use App\Models\Lead;
+use App\Models\LegalTask;
 use App\Models\OpsActionItem;
 use App\Models\SocialContentPlan;
 use App\Models\SocialLateReplyLog;
@@ -57,6 +58,9 @@ class DashboardScorecardBuilder
 
         $sanaMetrics = $this->computeSanaMetrics($periodDays, $isCurrentPeriod);
 
+        $oaManagerName = $this->resolveBranchManagerName('old_airport', 'Ahana');
+        $wkManagerName = $this->resolveBranchManagerName('wakrah', 'Rhea');
+
         $cards = [
             $this->buildAyanCard($periodDays, $daysInMonth, $sanaMetrics),
             $this->buildSanaCard($sanaMetrics),
@@ -65,7 +69,7 @@ class DashboardScorecardBuilder
             $this->buildLadenCard($periodDays, $referenceDate),
             $this->buildBranchManagerCard(
                 'ahana',
-                'Ahana',
+                $oaManagerName,
                 'Old Airport',
                 'old_airport',
                 $periodDays,
@@ -74,7 +78,7 @@ class DashboardScorecardBuilder
             ),
             $this->buildBranchManagerCard(
                 'rhea',
-                'Rhea',
+                $wkManagerName,
                 'Al Wakrah',
                 'wakrah',
                 $periodDays,
@@ -83,6 +87,10 @@ class DashboardScorecardBuilder
             ),
             $this->buildArbabCard(),
         ];
+
+        foreach ($this->buildLegalTeamCards($referenceDate) as $legalCard) {
+            $cards[] = $legalCard;
+        }
 
         usort($cards, function (array $a, array $b): int {
             if ($a['is_self'] !== $b['is_self']) {
@@ -786,5 +794,135 @@ class DashboardScorecardBuilder
             $this->resolveOpsUrl(),
             $kpis
         );
+    }
+
+    private function resolveBranchManagerName(string $branch, string $fallback): string
+    {
+        if (!Schema::hasTable('users')) {
+            return $fallback;
+        }
+
+        $candidates = User::query()
+            ->with('staff:id,user_id,name,branch,is_remote')
+            ->where('is_active', true)
+            ->whereIn('role', ['salon_manager', 'manager'])
+            ->orderByRaw("CASE WHEN role = 'salon_manager' THEN 0 ELSE 1 END asc")
+            ->orderBy('id')
+            ->get(['id', 'name', 'email', 'role', 'is_active']);
+
+        foreach ($candidates as $candidate) {
+            if ($candidate->managedSalonBranch() === $branch) {
+                $fullName = trim((string) ($candidate->staff?->name ?: $candidate->name));
+                if ($fullName === '') {
+                    continue;
+                }
+                $firstWord = explode(' ', $fullName)[0] ?? $fullName;
+                if (strcasecmp($firstWord, $fallback) === 0) {
+                    return $fallback;
+                }
+
+                return $fullName;
+            }
+        }
+
+        return $fallback;
+    }
+
+    /**
+     * Dynamically append 3-KPI Split Scorecards for active Legal Team members (e.g., Shaukat Ansari).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildLegalTeamCards(Carbon $referenceDate): array
+    {
+        if (!Schema::hasTable('users') || !Schema::hasTable('legal_tasks')) {
+            return [];
+        }
+
+        $legalUsers = User::query()
+            ->whereRaw("LOWER(TRIM(COALESCE(role, ''))) = 'legal_team'")
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->orderBy('id')
+            ->get(['id', 'name', 'email', 'role', 'is_active']);
+
+        if ($legalUsers->isEmpty()) {
+            return [];
+        }
+
+        $allTasks = LegalTask::query()->orderBy('id')->get();
+        $monthStartQatar = $this->from->copy()->timezone('Asia/Qatar')->startOfDay();
+        $monthEndQatar = $this->to->copy()->timezone('Asia/Qatar')->endOfDay();
+        $fromStr = $monthStartQatar->toDateString();
+        $toStr = $monthEndQatar->toDateString();
+        $asOfStr = $referenceDate->copy()->timezone('Asia/Qatar')->toDateString();
+
+        $legalUrl = (!$this->viewer || $this->viewer->isAdmin() || $this->viewer->canView('legal_tasks'))
+            ? route('legal.tasks.index')
+            : '#';
+
+        $cards = [];
+        foreach ($legalUsers as $legalUser) {
+            $dueInRange = $allTasks->filter(fn (LegalTask $t) => $t->deadline && $t->deadline->toDateString() >= $fromStr && $t->deadline->toDateString() <= $toStr);
+            $completedInRange = $allTasks->filter(function (LegalTask $t) use ($monthStartQatar, $monthEndQatar): bool {
+                if ($t->status !== LegalTask::STATUS_COMPLETED) {
+                    return false;
+                }
+                $raw = $t->completed_at ?? $t->updated_at;
+
+                return $raw !== null && Carbon::parse($raw)->timezone('Asia/Qatar')->betweenIncluded($monthStartQatar, $monthEndQatar);
+            });
+
+            $pool = $dueInRange->concat($completedInRange)->unique('id')->values();
+            $totalCount = $pool->count();
+            $completedPool = $pool->where('status', LegalTask::STATUS_COMPLETED)->values();
+            $completedCount = $completedPool->count();
+            $completionPct = $totalCount > 0 ? round(($completedCount / $totalCount) * 100, 1) : 100.0;
+
+            $onTimeCount = $completedPool->filter(function (LegalTask $t): bool {
+                if (!$t->deadline) {
+                    return true;
+                }
+                $dueEnd = Carbon::parse($t->deadline->toDateString(), 'Asia/Qatar')->endOfDay();
+                $raw = $t->completed_at ?? $t->updated_at;
+
+                return !$raw || Carbon::parse($raw)->timezone('Asia/Qatar')->lte($dueEnd);
+            })->count();
+            $onTimePct = $completedCount > 0 ? round(($onTimeCount / $completedCount) * 100, 1) : 100.0;
+
+            $overdueCount = $allTasks->filter(
+                fn (LegalTask $t) => $t->status !== LegalTask::STATUS_COMPLETED && $t->deadline && $t->deadline->toDateString() < $asOfStr
+            )->count();
+            $overduePct = $overdueCount === 0 ? 100.0 : max(0.0, round(100.0 - ($overdueCount * 25.0), 1));
+
+            $kpis = [
+                $this->makeKpiBar(
+                    'MTD Completion',
+                    $totalCount > 0 ? ($completedCount . ' / ' . $totalCount) : '0 / 0',
+                    $completionPct,
+                    true
+                ),
+                $this->makeKpiBar(
+                    'On-Time SLA',
+                    ((int) round($onTimePct)) . '%',
+                    $onTimePct
+                ),
+                $this->makeKpiBar(
+                    'Overdue Tasks',
+                    $overdueCount . ' Overdue',
+                    $overduePct
+                ),
+            ];
+
+            $cards[] = $this->finalizeCard(
+                'legal_' . $legalUser->id,
+                trim((string) $legalUser->name) ?: 'Legal Team',
+                'Legal Team',
+                $legalUrl,
+                $kpis
+            );
+        }
+
+        return $cards;
     }
 }

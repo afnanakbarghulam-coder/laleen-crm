@@ -13,6 +13,7 @@
         $zoya = $scorecard['zoya'] ?? [];
         $arbab = $scorecard['arbab'] ?? [];
         $salonStaffList = collect($scorecard['salon_staff_list'] ?? []);
+        $legalTeamList = collect($scorecard['legal_team_list'] ?? []);
         $scorecardViewModels = $scorecardViewModels
             ?? app(\App\Support\StaffKpiScorecardService::class)->buildAllExecutiveViewModels($scorecard, auth()->user());
         $daysElapsedVal = (int) ($daysElapsed ?? ($scorecard['days_elapsed'] ?? max(1, now('Asia/Qatar')->day)));
@@ -103,7 +104,9 @@
         $sanaPassingCount = (int) ($sana['passing_kpis_count'] ?? 0);
         $sanaTotalKpis = (int) ($sana['total_kpis_count'] ?? 2);
 
-        // Ahana metrics (Old Airport Branch Manager)
+        // Old Airport Branch Manager metrics (dynamically resolved — e.g. Ahana)
+        $ahanaName = (string) ($ahana['owner'] ?? 'Ahana');
+        $ahanaInitials = (string) ($scorecardViewModels['ahana']['initials'] ?? 'AH');
         $ahanaExpectedEvals = (int) ($ahana['expected_evaluations_mtd'] ?? 0);
         $ahanaCompletedEvals = (int) ($ahana['completed_evaluations_mtd'] ?? 0);
         $ahanaMondaysElapsed = (int) ($ahana['mondays_elapsed_count'] ?? ($scorecard['mondays_elapsed_count'] ?? 0));
@@ -115,11 +118,18 @@
         $ahanaMysteryAttainmentPct = (float) ($ahana['mystery_shopper_attainment_pct'] ?? 0);
         $ahanaMysteryPass = !empty($ahana['mystery_shopper_passing']);
 
+        $ahanaStockHasData = !empty($ahana['stock_has_data']);
+        $ahanaStockHealthPct = isset($ahana['stock_health_pct']) ? (float) $ahana['stock_health_pct'] : null;
+        $ahanaStockPass = !empty($ahana['stock_passing']);
+        $ahanaStockOut = (int) ($ahana['stock_out_of_stock_count'] ?? 0);
+
         $ahanaOverallPct = (float) ($ahana['overall_score_pct'] ?? 0);
         $ahanaPassingCount = (int) ($ahana['passing_kpis_count'] ?? 0);
         $ahanaTotalKpis = (int) ($ahana['total_kpis_count'] ?? 2);
 
-        // Rhea metrics (Wakrah Branch Manager)
+        // Wakrah Branch Manager metrics (dynamically resolved — e.g. Rhea)
+        $rheaName = (string) ($rhea['owner'] ?? 'Rhea');
+        $rheaInitials = (string) ($scorecardViewModels['rhea']['initials'] ?? 'RH');
         $rheaExpectedEvals = (int) ($rhea['expected_evaluations_mtd'] ?? 0);
         $rheaCompletedEvals = (int) ($rhea['completed_evaluations_mtd'] ?? 0);
         $rheaMondaysElapsed = (int) ($rhea['mondays_elapsed_count'] ?? ($scorecard['mondays_elapsed_count'] ?? 0));
@@ -130,6 +140,11 @@
         $rheaMysteryAvgPct = (float) ($rhea['mystery_shopper_avg_pct'] ?? 0);
         $rheaMysteryAttainmentPct = (float) ($rhea['mystery_shopper_attainment_pct'] ?? 0);
         $rheaMysteryPass = !empty($rhea['mystery_shopper_passing']);
+
+        $rheaStockHasData = !empty($rhea['stock_has_data']);
+        $rheaStockHealthPct = isset($rhea['stock_health_pct']) ? (float) $rhea['stock_health_pct'] : null;
+        $rheaStockPass = !empty($rhea['stock_passing']);
+        $rheaStockOut = (int) ($rhea['stock_out_of_stock_count'] ?? 0);
 
         $rheaOverallPct = (float) ($rhea['overall_score_pct'] ?? 0);
         $rheaPassingCount = (int) ($rhea['passing_kpis_count'] ?? 0);
@@ -198,6 +213,9 @@
         $salonStaffAvgPct = $salonStaffList->isNotEmpty()
             ? round((float) $salonStaffList->avg('overall_score_pct'), 1)
             : 0.0;
+        $legalTeamAvgPct = $legalTeamList->isNotEmpty()
+            ? round((float) $legalTeamList->avg('overall_score_pct'), 1)
+            : 0.0;
         $oaSalonStaff = $salonStaffList->filter(fn ($st) => in_array($st['branch'] ?? '', ['old_airport', 'both'], true))->values();
         $wkSalonStaff = $salonStaffList->filter(fn ($st) => ($st['branch'] ?? '') === 'wakrah')->values();
 
@@ -264,14 +282,18 @@
                         <span class="pill-dot pill-dot-sana"></span>
                         Salon Staff
                     </button>
+                    <button type="button" class="luxe-owner-pill" data-team-filter="legal">
+                        <span class="pill-dot pill-dot-legal"></span>
+                        Legal Team
+                    </button>
 
                     <div class="luxe-staff-select-wrap">
                         <select id="staffScorecardDropdown" class="luxe-staff-select" aria-label="Select Staff Scorecard">
                             <option value="all">Select Staff Scorecard (All Overview)</option>
                             <optgroup label="Admin &amp; Managers">
                                 <option value="sundus">Sundus &mdash; Admin Audits ({{ number_format($sundusOverallPct, 0) }}%)</option>
-                                <option value="ahana">Ahana &mdash; Old Airport Manager ({{ number_format($ahanaOverallPct, 0) }}%)</option>
-                                <option value="rhea">Rhea &mdash; Wakrah Manager ({{ number_format($rheaOverallPct, 0) }}%)</option>
+                                <option value="ahana">{{ $ahanaName }} &mdash; Old Airport Manager ({{ number_format($ahanaOverallPct, 0) }}%)</option>
+                                <option value="rhea">{{ $rheaName }} &mdash; Wakrah Manager ({{ number_format($rheaOverallPct, 0) }}%)</option>
                             </optgroup>
                             <optgroup label="Remote Team">
                                 <option value="laden">Laden &mdash; Customer Service &amp; Sales ({{ number_format($ladenOverallPct, 0) }}%)</option>
@@ -281,6 +303,13 @@
                                 <option value="areeba">Areeba &mdash; Chat Agent ({{ number_format($areebaOverallPct, 0) }}%)</option>
                                 <option value="zoya">Zoya &mdash; Chat Agent ({{ number_format($zoyaOverallPct, 0) }}%)</option>
                             </optgroup>
+                            @if ($legalTeamList->isNotEmpty())
+                                <optgroup label="Legal Team">
+                                    @foreach ($legalTeamList as $lt)
+                                        <option value="{{ $lt['owner_key'] }}">{{ $lt['name'] }} &mdash; Legal Team ({{ number_format((float) $lt['overall_score_pct'], 0) }}%)</option>
+                                    @endforeach
+                                </optgroup>
+                            @endif
                             @if ($oaSalonStaff->isNotEmpty())
                                 <optgroup label="Old Airport Staff">
                                     @foreach ($oaSalonStaff as $st)
@@ -381,11 +410,11 @@
                         </div>
                     </article>
 
-                    {{-- AHANA (OLD AIRPORT BRANCH MANAGER) --}}
-                    <article class="luxe-kpi-card luxe-staff-master-card" data-select-owner="ahana" role="button" tabindex="0" title="Click to inspect Ahana's 2 KPIs">
+                    {{-- OLD AIRPORT BRANCH MANAGER --}}
+                    <article class="luxe-kpi-card luxe-staff-master-card" data-select-owner="ahana" role="button" tabindex="0" title="Click to inspect {{ $ahanaName }}'s KPIs">
                         <div class="luxe-card-top">
                             <div class="luxe-icon-orb {{ $healthOrbClass($ahanaOverallPct) }} luxe-avatar-initials">
-                                AH
+                                {{ $ahanaInitials }}
                             </div>
                             <span class="luxe-owner-tag {{ $ahanaPassingCount === $ahanaTotalKpis ? 'tag-pass' : 'tag-ahana' }}">
                                 {{ $ahanaPassingCount }} / {{ $ahanaTotalKpis }} KPIs PASSING &nearr;
@@ -393,7 +422,7 @@
                         </div>
 
                         <div>
-                            <h3 class="luxe-staff-name">Ahana</h3>
+                            <h3 class="luxe-staff-name">{{ $ahanaName }}</h3>
                             <div class="luxe-staff-role">Old Airport Branch Manager</div>
                         </div>
 
@@ -403,7 +432,12 @@
 
                         <div class="luxe-card-delta">
                             <span class="{{ $ahanaEvalPass ? 'hl-emerald' : 'hl-rose' }}">{{ $ahanaCompletedEvals }}/{{ $ahanaExpectedEvals }} Staff Evals</span> &bull;
-                            <span class="{{ $ahanaMysteryPass ? 'hl-emerald' : 'hl-champagne' }}">{{ number_format($ahanaMysteryAvgPct, 1) }}% Branch Audit ({{ $ahanaAuditsCount }} {{ $ahanaAuditsCount === 1 ? 'visit' : 'visits' }})</span>
+                            <span class="{{ $ahanaMysteryPass ? 'hl-emerald' : 'hl-champagne' }}">{{ number_format($ahanaMysteryAvgPct, 1) }}% Branch Audit ({{ $ahanaAuditsCount }} {{ $ahanaAuditsCount === 1 ? 'visit' : 'visits' }})</span> &bull;
+                            @if ($ahanaStockHasData && $ahanaStockHealthPct !== null)
+                                <span class="{{ $ahanaStockPass ? 'hl-emerald' : ($ahanaStockOut > 0 ? 'hl-ruby' : 'hl-champagne') }}">{{ number_format($ahanaStockHealthPct, 1) }}% Stock</span>
+                            @else
+                                <span>Stock N/A</span>
+                            @endif
                         </div>
 
                         <div class="luxe-card-viz viz-bar">
@@ -418,11 +452,11 @@
                         </div>
                     </article>
 
-                    {{-- RHEA (WAKRAH BRANCH MANAGER) --}}
-                    <article class="luxe-kpi-card luxe-staff-master-card" data-select-owner="rhea" role="button" tabindex="0" title="Click to inspect Rhea's 2 KPIs">
+                    {{-- WAKRAH BRANCH MANAGER --}}
+                    <article class="luxe-kpi-card luxe-staff-master-card" data-select-owner="rhea" role="button" tabindex="0" title="Click to inspect {{ $rheaName }}'s KPIs">
                         <div class="luxe-card-top">
                             <div class="luxe-icon-orb {{ $healthOrbClass($rheaOverallPct) }} luxe-avatar-initials">
-                                RH
+                                {{ $rheaInitials }}
                             </div>
                             <span class="luxe-owner-tag {{ $rheaPassingCount === $rheaTotalKpis ? 'tag-pass' : 'tag-rhea' }}">
                                 {{ $rheaPassingCount }} / {{ $rheaTotalKpis }} KPIs PASSING &nearr;
@@ -430,7 +464,7 @@
                         </div>
 
                         <div>
-                            <h3 class="luxe-staff-name">Rhea</h3>
+                            <h3 class="luxe-staff-name">{{ $rheaName }}</h3>
                             <div class="luxe-staff-role">Wakrah Branch Manager</div>
                         </div>
 
@@ -440,7 +474,12 @@
 
                         <div class="luxe-card-delta">
                             <span class="{{ $rheaEvalPass ? 'hl-emerald' : 'hl-rose' }}">{{ $rheaCompletedEvals }}/{{ $rheaExpectedEvals }} Staff Evals</span> &bull;
-                            <span class="{{ $rheaMysteryPass ? 'hl-emerald' : 'hl-champagne' }}">{{ number_format($rheaMysteryAvgPct, 1) }}% Branch Audit ({{ $rheaAuditsCount }} {{ $rheaAuditsCount === 1 ? 'visit' : 'visits' }})</span>
+                            <span class="{{ $rheaMysteryPass ? 'hl-emerald' : 'hl-champagne' }}">{{ number_format($rheaMysteryAvgPct, 1) }}% Branch Audit ({{ $rheaAuditsCount }} {{ $rheaAuditsCount === 1 ? 'visit' : 'visits' }})</span> &bull;
+                            @if ($rheaStockHasData && $rheaStockHealthPct !== null)
+                                <span class="{{ $rheaStockPass ? 'hl-emerald' : ($rheaStockOut > 0 ? 'hl-ruby' : 'hl-champagne') }}">{{ number_format($rheaStockHealthPct, 1) }}% Stock</span>
+                            @else
+                                <span>Stock N/A</span>
+                            @endif
                         </div>
 
                         <div class="luxe-card-viz viz-bar">
@@ -780,6 +819,84 @@
                     @endif
                 </div>
             </section>
+
+            {{-- SECTION 4: LEGAL TEAM (DYNAMICALLY RESOLVED BY `legal_team` ROLE) --}}
+            <section class="luxe-team-section" data-team-section="legal">
+                <div class="luxe-section-head">
+                    <div class="luxe-section-head-left">
+                        <h2 class="luxe-section-title">Legal Team</h2>
+                        <span class="luxe-section-pill">{{ $legalTeamList->count() }} {{ $legalTeamList->count() === 1 ? 'member' : 'members' }}</span>
+                        @if ($legalTeamList->isNotEmpty())
+                            <span class="luxe-section-pill is-avg">{{ number_format($legalTeamAvgPct, 1) }}% Team Avg</span>
+                        @endif
+                    </div>
+                </div>
+
+                @if ($legalTeamList->isEmpty())
+                    <div class="luxe-empty-team-note">No active Legal Team members assigned yet.</div>
+                @else
+                    <div class="luxe-staff-overview-grid">
+                        @foreach ($legalTeamList as $lt)
+                            @php
+                                $ltOverall = (float) ($lt['overall_score_pct'] ?? 0);
+                                $ltPassing = (int) ($lt['passing_kpis_count'] ?? 0);
+                                $ltTotal = (int) ($lt['total_kpis_count'] ?? 2);
+                                $ltPeriodCompleted = (int) ($lt['period_completed_count'] ?? 0);
+                                $ltPeriodTotal = (int) ($lt['period_total_count'] ?? 0);
+                                $ltNeutral = !empty($lt['completion_is_neutral']);
+                                $ltCompPass = !empty($lt['completion_passing']);
+                                $ltOverdue = (int) ($lt['overdue_count'] ?? 0);
+                                $ltOpen = (int) ($lt['open_count'] ?? 0);
+                                $ltInProg = (int) ($lt['in_progress_count'] ?? 0);
+                            @endphp
+                            <article class="luxe-kpi-card luxe-staff-master-card"
+                                     data-select-owner="{{ $lt['owner_key'] }}"
+                                     role="button"
+                                     tabindex="0"
+                                     title="Click to inspect {{ $lt['name'] }}'s Legal KPIs">
+                                <div class="luxe-card-top">
+                                    <div class="luxe-icon-orb {{ $healthOrbClass($ltOverall) }} luxe-avatar-initials">
+                                        {{ $lt['initials'] }}
+                                    </div>
+                                    <span class="luxe-owner-tag {{ $ltPassing === $ltTotal ? 'tag-pass' : 'tag-champagne' }}">
+                                        {{ $ltPassing }} / {{ $ltTotal }} KPIs PASSING &nearr;
+                                    </span>
+                                </div>
+
+                                <div>
+                                    <h3 class="luxe-staff-name">{{ $lt['name'] }}</h3>
+                                    <div class="luxe-staff-role">Legal Team</div>
+                                </div>
+
+                                <div class="luxe-card-hero">
+                                    {{ number_format($ltOverall, 1) }}%
+                                </div>
+
+                                <div class="luxe-card-delta">
+                                    <span class="{{ $ltCompPass ? 'hl-emerald' : 'hl-champagne' }}">
+                                        {{ $ltNeutral ? 'No tasks due' : ($ltPeriodCompleted . '/' . $ltPeriodTotal . ' Completed MTD') }}
+                                    </span> &bull;
+                                    <span class="{{ $ltOverdue === 0 ? 'hl-emerald' : 'hl-ruby' }}">
+                                        {{ $ltOverdue }} Overdue
+                                    </span> &bull;
+                                    <span>{{ $ltOpen }} Open &middot; {{ $ltInProg }} In Progress</span>
+                                </div>
+
+                                <div class="luxe-card-viz viz-bar">
+                                    <div class="luxe-bar-track">
+                                        <div class="luxe-bar-fill {{ $healthBarClass($ltOverall) }}" style="width: {{ min(100, max(4, $ltOverall)) }}%"></div>
+                                    </div>
+                                    <div class="luxe-bar-scale">
+                                        <span>0%</span>
+                                        <span class="luxe-click-hint">Click to inspect individual KPIs &rarr;</span>
+                                        <span>100%</span>
+                                    </div>
+                                </div>
+                            </article>
+                        @endforeach
+                    </div>
+                @endif
+            </section>
         </div>
 
         {{-- =====================================================================
@@ -1096,6 +1213,7 @@
         .pill-dot-sana { background: var(--lx-emerald); }
         .pill-dot-ahana { background: var(--lx-rose-gold); }
         .pill-dot-rhea { background: var(--lx-champagne); }
+        .pill-dot-legal { background: #f3d9a4; }
 
         .luxe-exec-topbar-right {
             display: flex;
