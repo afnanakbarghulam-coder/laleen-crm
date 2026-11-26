@@ -84,11 +84,12 @@
         color: #1b1315;
     }
 
-    /* Minimalistic 3-Layer Luxury Offer Cards Grid */
+    /* Ultra-Minimalistic 3-Tier Luxury Offer Cards Grid */
     .mo-cards-grid {
         display: grid;
         grid-template-columns: 1fr;
         gap: 20px;
+        align-items: stretch;
     }
 
     @media (min-width: 768px) {
@@ -110,10 +111,12 @@
 
     .mo-card {
         width: 100%;
-        background: linear-gradient(180deg, rgba(32, 22, 25, 0.94) 0%, rgba(22, 15, 18, 0.98) 100%);
-        border: 1px solid rgba(255, 255, 255, 0.10);
+        height: 100%;
+        position: relative;
+        background: rgba(24, 18, 19, 0.84);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 16px;
-        padding: 20px;
+        padding: 24px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
@@ -123,7 +126,7 @@
 
     .mo-card:hover {
         border-color: rgba(221, 162, 158, 0.40);
-        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
     }
 
     .mo-badge {
@@ -139,11 +142,11 @@
     }
 
     .mo-title {
-        font-size: 16.5px;
-        font-weight: 700;
-        color: #f8efe6;
+        font-size: 17.5px;
+        font-weight: 500;
+        color: #ffffff;
         margin: 0;
-        line-height: 1.3;
+        line-height: 1.35;
         letter-spacing: -0.01em;
     }
 
@@ -151,10 +154,10 @@
         display: flex;
         align-items: center;
         flex-wrap: wrap;
-        gap: 5px;
+        gap: 6px;
         margin-top: 6px;
         font-size: 12px;
-        color: #9e8780;
+        color: rgba(255, 255, 255, 0.50);
         line-height: 1.35;
     }
 
@@ -168,26 +171,30 @@
 
     .mo-status-dot.is-emerald { background: #34d399; }
     .mo-status-dot.is-amber { background: #fbbf24; }
-    .mo-status-dot.is-muted { background: #8f7a73; }
+    .mo-status-dot.is-muted { background: rgba(255, 255, 255, 0.36); }
 
     .mo-price {
         font-size: 20px;
-        font-weight: 800;
-        color: #f3d9a4;
-        line-height: 1.1;
+        font-weight: 600;
+        color: #ffffff;
+        line-height: 1.15;
         letter-spacing: -0.02em;
         white-space: nowrap;
+        flex-shrink: 0;
     }
 
-    .mo-scarcity-line {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 11.5px;
-        font-weight: 600;
-        color: #e6b86a;
-        margin-top: 5px;
-        max-width: 100%;
+    .mo-price-unit {
+        font-size: 12px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.50);
+        margin-left: 2px;
+    }
+
+    .mo-clamp-1 {
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
     }
 
     .mo-clamp-2 {
@@ -197,91 +204,55 @@
         overflow: hidden;
     }
 
-    .mo-dream-line {
-        color: #cbb8b0;
-        font-size: 13px;
-        line-height: 1.5;
-        margin-top: 14px;
-    }
-
-    .mo-services-strip {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 5px;
-        margin-top: 10px;
-    }
-
-    .mo-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 2.5px 8px;
-        border-radius: 6px;
-        font-size: 11px;
-        font-weight: 600;
-        background: rgba(255, 255, 255, 0.045);
-        color: #c8b6ae;
-        max-width: 100%;
-    }
-
-    .mo-chip.is-free {
-        background: rgba(52, 211, 153, 0.10);
-        color: #6ee7b7;
-    }
-
-    .mo-chip.is-more {
-        background: transparent;
-        border: 1px solid rgba(255, 255, 255, 0.09);
-        color: #9e8780;
+    .mo-summary-line {
+        margin-top: 16px;
+        font-size: 13.5px;
+        color: rgba(255, 255, 255, 0.60);
+        line-height: 1.45;
+        min-height: 20px;
     }
 
     .mo-card-footer {
+        margin-top: 24px;
+        padding-top: 16px;
         border-top: 1px solid rgba(255, 255, 255, 0.06);
-        padding-top: 14px;
-        margin-top: 16px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 10px;
+        gap: 12px;
     }
 
     .mo-ghost-copy-btn {
         background: transparent;
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        color: #d6c3bc;
-        border-radius: 8px;
-        padding: 5px 10px;
+        border: none;
+        padding: 2px 0;
+        color: rgba(255, 255, 255, 0.65);
         font-size: 12px;
-        font-weight: 600;
+        font-weight: 500;
         display: inline-flex;
         align-items: center;
-        gap: 5px;
+        gap: 6px;
         cursor: pointer;
-        transition: all 0.14s ease;
+        transition: color 0.14s ease;
         line-height: 1.25;
         white-space: nowrap;
     }
 
     .mo-ghost-copy-btn:hover {
-        background: rgba(52, 211, 153, 0.10);
-        border-color: rgba(52, 211, 153, 0.30);
-        color: #6ee7b7;
+        color: #ffffff;
     }
 
     .mo-ghost-copy-btn.is-copied {
-        background: rgba(52, 211, 153, 0.14);
-        border-color: rgba(52, 211, 153, 0.38);
         color: #6ee7b7;
     }
 
     .mo-playbook-link {
         background: transparent;
         border: none;
-        padding: 4px 2px;
-        color: #d98f83;
-        font-size: 12.5px;
-        font-weight: 600;
+        padding: 2px 0;
+        color: rgba(221, 162, 158, 0.80);
+        font-size: 12px;
+        font-weight: 500;
         display: inline-flex;
         align-items: center;
         gap: 3px;
@@ -290,60 +261,99 @@
         transition: color 0.14s ease;
     }
 
-    .mo-playbook-link:hover {
-        color: #f3d9a4;
-    }
-
+    .mo-playbook-link:hover,
     .mo-card:hover .mo-playbook-link {
-        color: #f3d9a4;
+        color: #DDA29E;
     }
 
-    .mo-icon-actions {
-        display: flex;
+    /* 3-Dot Overflow Menu (Admin / services editors only) */
+    .mo-card-menu {
+        position: relative;
+        display: inline-flex;
         align-items: center;
-        gap: 6px;
         flex-shrink: 0;
     }
 
-    .mo-icon-actions form {
-        display: inline-flex;
-        margin: 0;
+    .mo-menu-trigger {
+        width: 28px;
+        height: 28px;
         padding: 0;
-    }
-
-    .mo-icon-btn {
-        width: 32px;
-        height: 32px;
-        padding: 0;
+        border: none;
         border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        background: rgba(255, 255, 255, 0.03);
-        color: #b8a29a;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.45);
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 14px;
+        font-size: 17px;
         line-height: 1;
         cursor: pointer;
-        transition: all 0.14s ease;
+        transition: color 0.14s ease, background 0.14s ease;
     }
 
-    .mo-icon-btn.is-edit:hover {
-        background: rgba(245, 158, 11, 0.14);
-        border-color: rgba(245, 158, 11, 0.42);
-        color: #fbbf24;
+    .mo-menu-trigger:hover,
+    .mo-card-menu.is-open .mo-menu-trigger {
+        color: #ffffff;
+        background: rgba(255, 255, 255, 0.06);
     }
 
-    .mo-icon-btn.is-archive:hover {
-        background: rgba(255, 255, 255, 0.10);
-        border-color: rgba(255, 255, 255, 0.24);
-        color: #f8efe6;
+    .mo-menu-popover {
+        position: absolute;
+        bottom: calc(100% + 6px);
+        right: 0;
+        min-width: 172px;
+        background: #1c1416;
+        border: 1px solid rgba(221, 162, 158, 0.24);
+        border-radius: 12px;
+        padding: 5px;
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.76);
+        z-index: 45;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
     }
 
-    .mo-icon-btn.is-delete:hover {
-        background: rgba(251, 113, 133, 0.14);
-        border-color: rgba(251, 113, 133, 0.42);
+    .mo-menu-popover form {
+        margin: 0;
+        padding: 0;
+        display: flex;
+    }
+
+    .mo-menu-item {
+        width: 100%;
+        background: transparent;
+        border: none;
+        border-radius: 8px;
+        padding: 7px 10px;
+        color: #e6d6d0;
+        font-size: 12.5px;
+        font-weight: 500;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: background 0.12s ease, color 0.12s ease;
+    }
+
+    .mo-menu-item:hover {
+        background: rgba(255, 255, 255, 0.07);
+        color: #ffffff;
+    }
+
+    .mo-menu-item.is-danger {
         color: #fda4af;
+    }
+
+    .mo-menu-item.is-danger:hover {
+        background: rgba(251, 113, 133, 0.14);
+        color: #fecdd3;
+    }
+
+    .mo-menu-divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.06);
+        margin: 3px 6px;
     }
 
     /* Drawer Buttons & Tab Readiness Indicators */
@@ -1058,20 +1068,25 @@
     </div>
 </div>
 
-{{-- MINIMALISTIC 3-LAYER LUXURY OFFER CARDS GRID --}}
+{{-- ULTRA-MINIMALISTIC 3-TIER LUXURY OFFER CARDS GRID --}}
 <div class="mo-cards-grid" id="moCardsGrid">
     @foreach ($offersCollection as $offer)
         @php
             $st = $offer->liveStatus($todayQatar);
             $effPrice = $offer->effectivePrice();
             $includedList = $offer->includedServicesList();
-            $visibleInclusions = array_slice($includedList, 0, 3);
-            $extraInclusionsCount = max(0, count($includedList) - 3);
-            $shortType = match ($offer->offer_type) {
-                'combo' => 'Combo',
-                'service_freebie' => 'Freebie',
-                default => 'Promo',
-            };
+            $serviceNamesOnly = array_values(array_filter(array_map(
+                fn ($inc) => ($inc['meta'] ?? null) === 'Combo Pool' ? null : trim((string) ($inc['name'] ?? '')),
+                $includedList
+            )));
+            $summaryLine = '';
+            if (!empty($serviceNamesOnly)) {
+                $shownNames = array_slice($serviceNamesOnly, 0, 3);
+                $extraCount = max(0, count($serviceNamesOnly) - 3);
+                $summaryLine = implode(' · ', $shownNames) . ($extraCount > 0 ? " (+{$extraCount} more)" : '');
+            } elseif (filled($offer->dream_outcome)) {
+                $summaryLine = trim((string) $offer->dream_outcome);
+            }
             $statusWord = match ($st['key']) {
                 'active' => 'Active',
                 'upcoming' => 'Upcoming',
@@ -1086,7 +1101,7 @@
             };
             $playbookPayload = $offer->toPlaybookPayload($todayQatar);
             $searchHaystack = strtolower(
-                $offer->title . ' ' . $offer->typeBadgeLabel() . ' ' . $shortType . ' ' . $offer->branchScopeLabel() . ' '
+                $offer->title . ' ' . $offer->typeBadgeLabel() . ' ' . $offer->branchScopeLabel() . ' '
                 . implode(' ', array_column($includedList, 'name')) . ' '
                 . $offer->terms_and_conditions . ' '
                 . ($offer->dream_outcome ?? '') . ' '
@@ -1103,107 +1118,89 @@
              style="{{ $st['key'] !== 'active' ? 'display:none;' : '' }}">
             <article class="mo-card js-mo-card-open" data-offer-id="{{ $offer->id }}" tabindex="0" role="button" aria-label="Open Playbook for {{ $offer->title }}">
                 <div>
-                    {{-- LAYER 1: CLEAN HEADER (Title + Quiet Meta Line | Price + Optional Scarcity) --}}
+                    {{-- TIER 1: HEADER (Title + Price + 1 Quiet Meta Line) --}}
                     <div class="d-flex align-items-start justify-content-between gap-3">
-                        <div class="min-w-0 flex-grow-1">
-                            <h5 class="mo-title">{{ $offer->title }}</h5>
-                            <div class="mo-meta-line mo-num">
-                                <span class="d-inline-flex align-items-center gap-1" style="color:{{ $st['tone'] === 'emerald' ? '#6ee7b7' : ($st['tone'] === 'amber' ? '#fbbf24' : '#9e8780') }}; font-weight:600;">
-                                    <span class="mo-status-dot is-{{ $st['tone'] }}"></span>
-                                    <span>{{ $statusWord }}</span>
-                                </span>
-                                <span>&middot;</span>
-                                <span>{{ $offer->branchScopeLabel() }}</span>
-                                @if ($dateShortCue)
-                                    <span>&middot;</span>
-                                    <span>{{ $dateShortCue }}</span>
-                                @endif
-                                <span>&middot;</span>
-                                <span>{{ $shortType }}</span>
-                            </div>
-                            @if (filled($offer->capacity_scarcity))
-                                <div class="mo-scarcity-line text-truncate" title="{{ trim((string) $offer->capacity_scarcity) }}">
-                                    <i class="bx bx-time-five flex-shrink-0"></i>
-                                    <span class="text-truncate">{{ \Illuminate\Support\Str::limit(trim((string) $offer->capacity_scarcity), 48) }}</span>
-                                </div>
-                            @endif
-                        </div>
-
-                        <div class="text-end flex-shrink-0 mo-num">
-                            <div class="mo-price">{{ number_format($effPrice, 0) }} <span style="font-size:12px; font-weight:700;">QAR</span></div>
+                        <h5 class="mo-title mo-clamp-2 min-w-0 flex-grow-1">{{ $offer->title }}</h5>
+                        <div class="mo-price mo-num">
+                            {{ number_format($effPrice, 0) }}<span class="mo-price-unit">QAR</span>
                         </div>
                     </div>
 
-                    {{-- LAYER 2: MINIMAL BODY (Quiet Dream Outcome + Compact Service Chips) --}}
-                    @if (filled($offer->dream_outcome))
-                        <div class="mo-dream-line mo-clamp-2">{{ $offer->dream_outcome }}</div>
-                    @endif
+                    <div class="mo-meta-line mo-num">
+                        <span class="d-inline-flex align-items-center gap-1">
+                            <span class="mo-status-dot is-{{ $st['tone'] }}"></span>
+                            <span>{{ $statusWord }}</span>
+                        </span>
+                        <span>&middot;</span>
+                        <span>{{ $offer->branchScopeLabel() }}</span>
+                        @if ($dateShortCue)
+                            <span>&middot;</span>
+                            <span>{{ $dateShortCue }}</span>
+                        @endif
+                    </div>
 
-                    @if (!empty($visibleInclusions))
-                        <div class="mo-services-strip">
-                            @foreach ($visibleInclusions as $inc)
-                                <span class="mo-chip {{ $inc['is_free'] ? 'is-free' : '' }}">
-                                    <span class="text-truncate">{{ $inc['name'] }}</span>
-                                    @if ($inc['is_free'])
-                                        <span style="font-size:9.5px; font-weight:800; letter-spacing:0.03em;">FREE</span>
-                                    @endif
-                                </span>
-                            @endforeach
-                            @if ($extraInclusionsCount > 0)
-                                <span class="mo-chip is-more mo-num">+{{ $extraInclusionsCount }} more</span>
-                            @endif
-                        </div>
+                    {{-- TIER 2: SINGLE QUIET CONTENT LINE (Plain-Text Service Summary or 1-Line Dream Outcome) --}}
+                    @if ($summaryLine !== '')
+                        <div class="mo-summary-line mo-clamp-1" title="{{ $summaryLine }}">{{ $summaryLine }}</div>
                     @endif
                 </div>
 
-                {{-- LAYER 3: SLEEK ALIGNED FOOTER --}}
+                {{-- TIER 3: MINIMAL UNCROWDED FOOTER --}}
                 <div class="mo-card-footer">
-                    <div class="d-flex align-items-center gap-3 min-w-0">
-                        <button type="button"
-                            class="mo-ghost-copy-btn js-mo-copy"
-                            data-copy-text="{{ $offer->whatsappCopyText() }}">
-                            <i class="bx bxl-whatsapp fs-6"></i>
-                            <span class="js-mo-copy-label">Copy WhatsApp</span>
-                        </button>
+                    <button type="button"
+                        class="mo-ghost-copy-btn js-mo-copy"
+                        data-copy-text="{{ $offer->whatsappCopyText() }}">
+                        <i class="bx bxl-whatsapp fs-6"></i>
+                        <span class="js-mo-copy-label">Copy WhatsApp</span>
+                    </button>
+
+                    <div class="d-flex align-items-center gap-3 flex-shrink-0">
                         <button type="button"
                             class="mo-playbook-link js-mo-open-playbook"
                             data-offer-id="{{ $offer->id }}">
                             <span>Playbook &rarr;</span>
                         </button>
-                    </div>
 
-                    @if ($canEditOffers)
-                        <div class="mo-icon-actions js-mo-stop-prop">
-                            <button type="button"
-                                class="mo-icon-btn is-edit js-mo-edit-btn"
-                                data-offer-id="{{ $offer->id }}"
-                                title="Edit Offer"
-                                aria-label="Edit {{ $offer->title }}">
-                                <i class="bi bi-pencil-square"></i>
-                            </button>
-                            <form method="POST" action="{{ route('offers.toggle', $offer) }}">
-                                @csrf
-                                @method('PATCH')
-                                <button type="submit"
-                                    class="mo-icon-btn is-archive"
-                                    title="{{ $offer->is_active ? 'Archive Offer' : 'Activate Offer' }}"
-                                    aria-label="{{ $offer->is_active ? 'Archive' : 'Activate' }} {{ $offer->title }}">
-                                    <i class="bx {{ $offer->is_active ? 'bx-archive-in' : 'bx-revision' }}"></i>
+                        @if ($canEditOffers)
+                            <div class="mo-card-menu js-mo-card-menu js-mo-stop-prop">
+                                <button type="button"
+                                    class="mo-menu-trigger js-mo-menu-trigger"
+                                    aria-haspopup="menu"
+                                    aria-expanded="false"
+                                    aria-label="Offer actions for {{ $offer->title }}"
+                                    title="More actions">
+                                    <i class="bx bx-dots-horizontal-rounded"></i>
                                 </button>
-                            </form>
-                            <form method="POST" action="{{ route('offers.destroy', $offer) }}"
-                                  onsubmit="return confirm('Delete monthly offer {{ addslashes($offer->title) }}?')">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit"
-                                    class="mo-icon-btn is-delete"
-                                    title="Delete Offer"
-                                    aria-label="Delete {{ $offer->title }}">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </form>
-                        </div>
-                    @endif
+                                <div class="mo-menu-popover js-mo-menu-popover d-none" role="menu">
+                                    <button type="button"
+                                        class="mo-menu-item js-mo-edit-btn"
+                                        role="menuitem"
+                                        data-offer-id="{{ $offer->id }}">
+                                        <i class="bi bi-pencil-square"></i>
+                                        <span>Edit Offer</span>
+                                    </button>
+                                    <form method="POST" action="{{ route('offers.toggle', $offer) }}">
+                                        @csrf
+                                        @method('PATCH')
+                                        <button type="submit" class="mo-menu-item" role="menuitem">
+                                            <i class="bx {{ $offer->is_active ? 'bx-archive-in' : 'bx-revision' }}"></i>
+                                            <span>{{ $offer->is_active ? 'Archive / Unpublish' : 'Activate Offer' }}</span>
+                                        </button>
+                                    </form>
+                                    <div class="mo-menu-divider"></div>
+                                    <form method="POST" action="{{ route('offers.destroy', $offer) }}"
+                                          onsubmit="return confirm('Delete monthly offer {{ addslashes($offer->title) }}?')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="mo-menu-item is-danger" role="menuitem">
+                                            <i class="bi bi-trash"></i>
+                                            <span>Delete</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        @endif
+                    </div>
                 </div>
 
                 {{-- Embedded JSON Playbook payload (powers both Drawer & Edit Modal cleanly) --}}
@@ -1739,6 +1736,44 @@
             });
         });
 
+        // 3-Dot Overflow Action Popover Menu (Admin / services editors)
+        function closeAllCardMenus() {
+            document.querySelectorAll('.js-mo-card-menu.is-open').forEach(menu => {
+                menu.classList.remove('is-open');
+                menu.querySelector('.js-mo-menu-popover')?.classList.add('d-none');
+                menu.querySelector('.js-mo-menu-trigger')?.setAttribute('aria-expanded', 'false');
+            });
+        }
+
+        document.querySelectorAll('.js-mo-menu-trigger').forEach(trigger => {
+            trigger.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const menu = trigger.closest('.js-mo-card-menu');
+                const popover = menu?.querySelector('.js-mo-menu-popover');
+                if (!menu || !popover) return;
+                const willOpen = popover.classList.contains('d-none');
+                closeAllCardMenus();
+                if (willOpen) {
+                    menu.classList.add('is-open');
+                    popover.classList.remove('d-none');
+                    trigger.setAttribute('aria-expanded', 'true');
+                }
+            });
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.js-mo-card-menu')) {
+                closeAllCardMenus();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && document.querySelector('.js-mo-card-menu.is-open')) {
+                closeAllCardMenus();
+            }
+        });
+
         // Prevent footer Edit/Archive/Delete wrappers from triggering full-card Playbook open
         document.querySelectorAll('.js-mo-stop-prop').forEach(el => {
             el.addEventListener('click', (e) => e.stopPropagation());
@@ -1921,13 +1956,15 @@
         // Full card click + Playbook -> link both open the 4-tab Offer Playbook drawer
         document.querySelectorAll('.js-mo-card-open').forEach(cardEl => {
             cardEl.addEventListener('click', (e) => {
-                if (e.target.closest('button, a, form, input, select')) return;
+                if (e.target.closest('button, a, form, input, select, .js-mo-card-menu')) return;
+                closeAllCardMenus();
                 const payload = getOfferPayloadById(cardEl.dataset.offerId);
                 if (payload) openPlaybookDrawer(payload, 'pillars');
             });
             cardEl.addEventListener('keydown', (e) => {
                 if ((e.key === 'Enter' || e.key === ' ') && e.target === cardEl) {
                     e.preventDefault();
+                    closeAllCardMenus();
                     const payload = getOfferPayloadById(cardEl.dataset.offerId);
                     if (payload) openPlaybookDrawer(payload, 'pillars');
                 }
@@ -1937,6 +1974,7 @@
         document.querySelectorAll('.js-mo-open-playbook').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
+                closeAllCardMenus();
                 const payload = getOfferPayloadById(btn.dataset.offerId);
                 if (payload) openPlaybookDrawer(payload, 'pillars');
             });
@@ -2399,7 +2437,9 @@
         document.getElementById('addOfferStandaloneBtn')?.addEventListener('click', window.openMonthlyOfferCreateModal);
 
         document.querySelectorAll('.js-mo-edit-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeAllCardMenus();
                 const offer = getOfferPayloadById(btn.dataset.offerId);
                 if (offer) openMonthlyOfferEditModal(offer, 1);
             });
