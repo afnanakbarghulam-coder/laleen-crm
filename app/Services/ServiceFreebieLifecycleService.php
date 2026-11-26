@@ -424,10 +424,19 @@ class ServiceFreebieLifecycleService
         }
 
         $firstPkg = $anchorPlans[0]['package'];
-        $appointment->update([
-            'freebie_package_id' => $firstPkg->id,
-            'is_freebie_redemption' => false,
-        ]);
+        if (!$appointment->freebie_package_id) {
+            $appointment->update([
+                'freebie_package_id' => $firstPkg->id,
+                'is_freebie_redemption' => false,
+            ]);
+        }
+
+        // Assign unique, strictly increasing slot_number across ALL Service + Freebies packages
+        // on the same anchor_appointment_id (starting after any existing rows on edits/additions)
+        // so stacking 2+ packages never collides on client_freebie_credits_anchor_slot_uniq.
+        $nextCreditSlot = (int) ClientFreebieCredit::where('anchor_appointment_id', $appointment->id)
+            ->lockForUpdate()
+            ->max('slot_number');
 
         foreach ($anchorPlans as $pIdx => $plan) {
             /** @var ServiceFreebiePackage $pkg */
@@ -482,12 +491,13 @@ class ServiceFreebieLifecycleService
             $expiresAt = ClientFreebieCredit::computeExpiresAt($appointmentDateString, $pkg->effective_validity_days);
 
             foreach ($plan['slots'] as $slot) {
-                $slotNum = (int) $slot['slot_number'];
+                $planSlotNum = (int) $slot['slot_number'];
+                $creditSlotNum = ++$nextCreditSlot;
 
                 if ($slot['mode'] === 'same_day' && $slot['service'] instanceof Service) {
                     /** @var Service $miniSvc */
                     $miniSvc = $slot['service'];
-                    $slotMeta = $slotScheduleByPlanAndSlot[$pIdx][$slotNum] ?? null;
+                    $slotMeta = $slotScheduleByPlanAndSlot[$pIdx][$planSlotNum] ?? null;
 
                     $freebieSlice = AppointmentService::create([
                         'appointment_id' => $appointment->id,
@@ -495,7 +505,7 @@ class ServiceFreebieLifecycleService
                         'freebie_package_id' => $pkg->id,
                         'is_freebie_redemption' => true,
                         'staff_id' => $slotMeta['staff_id'] ?? $slot['staff_id'] ?? $appointment->staff_id,
-                        'sort_order' => $slotMeta['sort_order'] ?? $slotNum,
+                        'sort_order' => $slotMeta['sort_order'] ?? $creditSlotNum,
                         'is_parallel' => (bool) ($slotMeta['is_parallel'] ?? false),
                         'name' => $miniSvc->name,
                         'price' => 0,
@@ -513,7 +523,7 @@ class ServiceFreebieLifecycleService
                         'customer_id' => $customer->id,
                         'package_id' => $pkg->id,
                         'anchor_appointment_id' => $appointment->id,
-                        'slot_number' => $slotNum,
+                        'slot_number' => $creditSlotNum,
                         'status' => ClientFreebieCredit::STATUS_SCHEDULED,
                         'redeemed_service_id' => $miniSvc->id,
                         'redemption_appointment_id' => $appointment->id,
@@ -529,7 +539,7 @@ class ServiceFreebieLifecycleService
                         'customer_id' => $customer->id,
                         'package_id' => $pkg->id,
                         'anchor_appointment_id' => $appointment->id,
-                        'slot_number' => $slotNum,
+                        'slot_number' => $creditSlotNum,
                         'status' => ClientFreebieCredit::STATUS_LOCKED_UNTIL_PAID,
                         'redeemed_service_id' => null,
                         'redemption_appointment_id' => null,

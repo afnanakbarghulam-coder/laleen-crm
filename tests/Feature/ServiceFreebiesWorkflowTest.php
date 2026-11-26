@@ -579,4 +579,252 @@ class ServiceFreebiesWorkflowTest extends TestCase
             ->assertSee('Precision Brow Shaping')
             ->assertSee('45.00 QAR');
     }
+
+    public function test_stacking_multiple_service_plus_freebies_packages_assigns_sequential_slots_and_handles_edit_checkout_redemption_and_cancel(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-20 10:00:00', 'Asia/Qatar'));
+        $f = $this->createFreebiesCatalogFixture();
+
+        $pkg1 = ServiceFreebiePackage::create([
+            'name' => 'Hair Color + 2 Free Mini Services',
+            'anchor_service_id' => $f['anchorService']->id,
+            'price' => 299.00,
+            'free_choices_count' => 2,
+            'validity_days' => 7,
+            'is_active' => true,
+        ]);
+        $pkg1->eligibleServices()->sync([$f['eligibleServices'][0]->id, $f['eligibleServices'][1]->id]);
+
+        $pkg2 = ServiceFreebiePackage::create([
+            'name' => 'Keratin + 2 Free Express Nail/Spa Services',
+            'anchor_service_id' => $f['nonEligibleService']->id,
+            'price' => 499.00,
+            'free_choices_count' => 2,
+            'validity_days' => 14,
+            'is_active' => true,
+        ]);
+        $pkg2->eligibleServices()->sync([$f['eligibleServices'][2]->id, $f['eligibleServices'][3]->id]);
+
+        // 1. Create appointment with TWO stacked Service + Freebies packages (all 4 slots Save for Later)
+        $createResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
+            'customer_name' => $f['customer']->name,
+            'phone' => $f['customer']->phone,
+            'appointment_datetime' => '2026-11-20T12:00',
+            'booking_date' => '2026-11-20',
+            'branch' => 'old_airport',
+            'freebie_packages' => [
+                [
+                    'package_id' => $pkg1->id,
+                    'anchor_staff_id' => $f['seniorColorist']->id,
+                    'slots' => [
+                        ['mode' => 'save_for_later'],
+                        ['mode' => 'save_for_later'],
+                    ],
+                ],
+                [
+                    'package_id' => $pkg2->id,
+                    'anchor_staff_id' => $f['seniorColorist']->id,
+                    'slots' => [
+                        ['mode' => 'save_for_later'],
+                        ['mode' => 'save_for_later'],
+                    ],
+                ],
+            ],
+        ]);
+
+        $createResp->assertStatus(201)->assertJsonPath('success', true);
+        $apptId = (int) $createResp->json('appointment.id');
+
+        $credits = ClientFreebieCredit::where('anchor_appointment_id', $apptId)
+            ->orderBy('slot_number')
+            ->get();
+
+        $this->assertCount(4, $credits);
+        $this->assertSame([1, 2, 3, 4], $credits->pluck('slot_number')->all());
+        $this->assertSame([$pkg1->id, $pkg1->id, $pkg2->id, $pkg2->id], $credits->pluck('package_id')->all());
+        $this->assertSame(
+            ['locked_until_paid', 'locked_until_paid', 'locked_until_paid', 'locked_until_paid'],
+            $credits->pluck('status')->all()
+        );
+
+        // 2. Edit/update stacked appointment to mix same-day + save-for-later across BOTH packages (no slot collision)
+        $updateResp = $this->actingAs($this->admin)->putJson(route('appointments.fullUpdate', $apptId), [
+            'booking_agent_id' => 'salon_staff',
+            'customer_name' => $f['customer']->name,
+            'phone' => $f['customer']->phone,
+            'appointment_datetime' => '2026-11-20T12:00',
+            'booking_date' => '2026-11-20',
+            'branch' => 'old_airport',
+            'freebie_packages' => [
+                [
+                    'package_id' => $pkg1->id,
+                    'anchor_staff_id' => $f['seniorColorist']->id,
+                    'slots' => [
+                        [
+                            'mode' => 'same_day',
+                            'service_id' => $f['eligibleServices'][0]->id,
+                            'staff_id' => $f['juniorBeautician']->id,
+                        ],
+                        ['mode' => 'save_for_later'],
+                    ],
+                ],
+                [
+                    'package_id' => $pkg2->id,
+                    'anchor_staff_id' => $f['seniorColorist']->id,
+                    'slots' => [
+                        ['mode' => 'save_for_later'],
+                        ['mode' => 'save_for_later'],
+                    ],
+                ],
+            ],
+        ]);
+        $updateResp->assertOk()->assertJsonPath('success', true);
+
+        $updatedCredits = ClientFreebieCredit::where('anchor_appointment_id', $apptId)
+            ->orderBy('slot_number')
+            ->get();
+        $this->assertCount(4, $updatedCredits);
+        $this->assertSame([1, 2, 3, 4], $updatedCredits->pluck('slot_number')->all());
+        $this->assertSame('scheduled', $updatedCredits[0]->status);
+        $this->assertSame($pkg1->id, (int) $updatedCredits[0]->package_id);
+        $this->assertSame('locked_until_paid', $updatedCredits[1]->status);
+        $this->assertSame($pkg1->id, (int) $updatedCredits[1]->package_id);
+        $this->assertSame('locked_until_paid', $updatedCredits[2]->status);
+        $this->assertSame($pkg2->id, (int) $updatedCredits[2]->package_id);
+        $this->assertSame('locked_until_paid', $updatedCredits[3]->status);
+        $this->assertSame($pkg2->id, (int) $updatedCredits[3]->package_id);
+
+        // 3. Checkout unlocks pending credits for BOTH packages with each package's own validity window
+        Carbon::setTestNow(Carbon::parse('2026-11-20 15:30:00', 'Asia/Qatar'));
+        $this->actingAs($this->admin)->post(route('appointments.revenue.storePayment', $apptId), [
+            'payments' => ['cash' => 798.00],
+        ])->assertRedirect(route('appointments.revenue.index'));
+
+        $paidCredits = ClientFreebieCredit::where('anchor_appointment_id', $apptId)
+            ->orderBy('slot_number')
+            ->get();
+        $this->assertSame('redeemed', $paidCredits[0]->status);
+        $this->assertSame('available', $paidCredits[1]->status);
+        $this->assertSame('2026-11-27 23:59:59', $paidCredits[1]->expires_at->copy()->timezone('Asia/Qatar')->format('Y-m-d H:i:s'));
+        $this->assertSame('available', $paidCredits[2]->status);
+        $this->assertSame('2026-12-04 23:59:59', $paidCredits[2]->expires_at->copy()->timezone('Asia/Qatar')->format('Y-m-d H:i:s'));
+        $this->assertSame('available', $paidCredits[3]->status);
+
+        // 4. Redeem one slot from Package 1 and one slot from Package 2 on a follow-up visit without cross-package mixup
+        $redeemResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
+            'customer_name' => $f['customer']->name,
+            'phone' => $f['customer']->phone,
+            'appointment_datetime' => '2026-11-23T12:00',
+            'booking_date' => '2026-11-23',
+            'branch' => 'old_airport',
+            'staff_id' => $f['juniorBeautician']->id,
+            'redeem_freebies' => [
+                ['credit_id' => $paidCredits[1]->id, 'service_id' => $f['eligibleServices'][1]->id, 'staff_id' => $f['juniorBeautician']->id],
+                ['credit_id' => $paidCredits[2]->id, 'service_id' => $f['eligibleServices'][2]->id, 'staff_id' => $f['juniorBeautician']->id],
+            ],
+        ]);
+        $redeemResp->assertStatus(201)->assertJsonPath('success', true);
+        $this->assertSame('scheduled', $paidCredits[1]->fresh()->status);
+        $this->assertSame('scheduled', $paidCredits[2]->fresh()->status);
+        $this->assertSame('available', $paidCredits[3]->fresh()->status);
+
+        // 5. Stacking the SAME package twice + cancelling voids ALL 4 slots cleanly
+        $dupCreate = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
+            'customer_name' => $f['customer']->name,
+            'phone' => $f['customer']->phone,
+            'appointment_datetime' => '2026-11-24T12:00',
+            'booking_date' => '2026-11-24',
+            'branch' => 'old_airport',
+            'freebie_packages' => [
+                [
+                    'package_id' => $pkg1->id,
+                    'anchor_staff_id' => $f['seniorColorist']->id,
+                    'slots' => [
+                        ['mode' => 'save_for_later'],
+                        ['mode' => 'save_for_later'],
+                    ],
+                ],
+                [
+                    'package_id' => $pkg1->id,
+                    'anchor_staff_id' => $f['seniorColorist']->id,
+                    'slots' => [
+                        ['mode' => 'save_for_later'],
+                        ['mode' => 'save_for_later'],
+                    ],
+                ],
+            ],
+        ]);
+        $dupCreate->assertStatus(201)->assertJsonPath('success', true);
+        $dupApptId = (int) $dupCreate->json('appointment.id');
+
+        $dupCredits = ClientFreebieCredit::where('anchor_appointment_id', $dupApptId)->orderBy('slot_number')->get();
+        $this->assertSame([1, 2, 3, 4], $dupCredits->pluck('slot_number')->all());
+
+        $this->actingAs($this->admin)->patchJson(route('appointments.updateStatus', $dupApptId), [
+            'status' => 'cancelled',
+        ])->assertOk();
+
+        $voidedCredits = ClientFreebieCredit::where('anchor_appointment_id', $dupApptId)->get();
+        $this->assertCount(4, $voidedCredits);
+        foreach ($voidedCredits as $vc) {
+            $this->assertSame('voided', $vc->status);
+        }
+    }
+
+    public function test_four_byte_unicode_customer_name_books_appointment_and_searches_valid_json(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-20 10:00:00', 'Asia/Qatar'));
+        $f = $this->createFreebiesCatalogFixture();
+
+        // 1. Book appointment with 4-byte fancy Unicode & emoji customer name ("𝑨mna 🌸")
+        $bookResp = $this->actingAs($this->admin)->postJson(route('appointments.store'), [
+            'booking_agent_id' => 'salon_staff',
+            'customer_name' => '𝑨mna 🌸',
+            'phone' => '+97455123456',
+            'appointment_datetime' => '2026-11-20T14:00',
+            'booking_date' => '2026-11-20',
+            'branch' => 'old_airport',
+            'staff_id' => $f['seniorColorist']->id,
+            'service_name' => [$f['anchorService']->name],
+        ]);
+        $bookResp->assertStatus(201)->assertJsonPath('success', true);
+
+        $this->assertDatabaseHas('customers', [
+            'name' => '𝑨mna 🌸',
+            'phone' => '+97455123456',
+        ]);
+        $this->assertDatabaseHas('appointments', [
+            'customer_name' => '𝑨mna 🌸',
+        ]);
+
+        // Also seed Arabic and emoji-leading customers to guard all multibyte initials
+        Customer::create(['name' => 'آمنة السبيعي', 'phone' => '+97455123457', 'branch' => 'old_airport']);
+        Customer::create(['name' => '🌸💅 Sara', 'phone' => '+97455123458', 'branch' => 'old_airport']);
+
+        // 2. Customer search returns valid 200 JSON with clean multibyte initials (never Malformed UTF-8 500)
+        $searchFancy = $this->actingAs($this->admin)->getJson(route('customers.search', ['q' => 'mna']));
+        $searchFancy->assertOk()
+            ->assertJsonFragment([
+                'name' => '𝑨mna 🌸',
+                'phone' => '+97455123456',
+                'initials' => '𝑨',
+            ]);
+
+        $searchEmoji = $this->actingAs($this->admin)->getJson(route('customers.search', ['q' => 'Sara']));
+        $searchEmoji->assertOk()
+            ->assertJsonFragment([
+                'name' => '🌸💅 Sara',
+                'initials' => '🌸',
+            ]);
+
+        $searchArabic = $this->actingAs($this->admin)->getJson(route('customers.search', ['q' => 'آمنة']));
+        $searchArabic->assertOk()
+            ->assertJsonFragment([
+                'name' => 'آمنة السبيعي',
+                'initials' => 'آ',
+            ]);
+    }
 }

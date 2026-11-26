@@ -1298,12 +1298,20 @@ class CustomerController extends Controller
 
         $customers = $query->orderBy('name')->limit(15)->get(['id', 'name', 'phone']);
 
-        return response()->json($customers->map(fn($c) => [
-            'id' => $c->id,
-            'name' => $c->name ?: 'Unnamed',
-            'phone' => $c->phone,
-            'initials' => $c->name ? strtoupper(substr($c->name, 0, 1)) : '?',
-        ]));
+        return response()->json($customers->map(function ($c) {
+            $rawName = trim(mb_scrub((string) ($c->name ?? ''), 'UTF-8'));
+            $cleanPhone = $c->phone !== null ? mb_scrub((string) $c->phone, 'UTF-8') : null;
+            $initials = $rawName !== ''
+                ? mb_strtoupper(mb_substr($rawName, 0, 1, 'UTF-8'), 'UTF-8')
+                : '?';
+
+            return [
+                'id' => $c->id,
+                'name' => $rawName !== '' ? $rawName : 'Unnamed',
+                'phone' => $cleanPhone,
+                'initials' => $initials,
+            ];
+        }), 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
     }
 
     /**

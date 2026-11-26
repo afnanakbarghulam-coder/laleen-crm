@@ -3983,7 +3983,9 @@ class AppointmentController extends Controller
             ->where('anchor_appointment_id', $appointment->id)
             ->orderBy('slot_number')
             ->get()
-            ->groupBy('package_id');
+            ->groupBy('package_id')
+            ->map(fn ($col) => $col->sortBy('slot_number')->values()->all())
+            ->all();
 
         $freebiePackagesPayload = [];
         foreach ($anchorLines as $anchorLine) {
@@ -3993,18 +3995,23 @@ class AppointmentController extends Controller
                 continue;
             }
 
-            $credits = ($anchorCreditsByPkg->get($pkgId) ?? collect())->sortBy('slot_number')->values();
-            $slots = [];
-            $slotCount = max($pkg->effective_choices_count, $credits->count());
+            // Consume this anchor line's sequential slice of credits for $pkgId so
+            // stacking 2+ packages (different or identical) never mixes or truncates slots.
+            $choicesCount = max(1, (int) $pkg->effective_choices_count);
+            $pkgQueue = $anchorCreditsByPkg[$pkgId] ?? [];
+            $lineCredits = array_splice($pkgQueue, 0, $choicesCount);
+            $anchorCreditsByPkg[$pkgId] = $pkgQueue;
 
-            for ($slotNum = 1; $slotNum <= $slotCount; $slotNum++) {
-                $credit = $credits->firstWhere('slot_number', $slotNum);
+            $slots = [];
+            for ($idx = 0; $idx < $choicesCount; $idx++) {
+                $credit = $lineCredits[$idx] ?? null;
                 $sameDayLine = ($credit && (int) $credit->redemption_appointment_id === (int) $appointment->id && $credit->redemption_appointment_service_id)
                     ? $linesById->get((int) $credit->redemption_appointment_service_id)
                     : null;
 
                 $slots[] = [
-                    'slot_number' => $slotNum,
+                    'slot_number' => $idx + 1,
+                    'credit_slot_number' => $credit ? (int) $credit->slot_number : ($idx + 1),
                     'mode' => $sameDayLine ? 'same_day' : 'save_for_later',
                     'service_id' => $sameDayLine ? (int) $sameDayLine->service_id : null,
                     'staff_id' => $sameDayLine?->staff_id ? (int) $sameDayLine->staff_id : null,
