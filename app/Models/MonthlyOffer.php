@@ -16,6 +16,18 @@ class MonthlyOffer extends Model
     public const TYPE_SERVICE_FREEBIE = 'service_freebie';
     public const TYPE_STANDALONE = 'standalone';
 
+    public const CATEGORY_HAIR = 'hair';
+    public const CATEGORY_MAKEUP = 'makeup';
+    public const CATEGORY_SKIN = 'skin';
+    public const CATEGORY_COMBO = 'combo';
+
+    public const CATEGORIES = [
+        self::CATEGORY_HAIR => 'Hair',
+        self::CATEGORY_MAKEUP => 'Makeup',
+        self::CATEGORY_SKIN => 'Skin',
+        self::CATEGORY_COMBO => 'Combo',
+    ];
+
     public const OFFER_TYPES = [
         self::TYPE_COMBO => 'Linked Combo',
         self::TYPE_SERVICE_FREEBIE => 'Linked Service + Freebies',
@@ -103,6 +115,7 @@ class MonthlyOffer extends Model
     protected $fillable = [
         'title',
         'offer_type',
+        'category',
         'combo_id',
         'service_freebie_id',
         'promo_price_qar',
@@ -162,6 +175,11 @@ class MonthlyOffer extends Model
         }
 
         return self::TYPE_BADGES[$this->offer_type] ?? 'Monthly Promo';
+    }
+
+    public function categoryLabel(): ?string
+    {
+        return self::CATEGORIES[$this->category] ?? null;
     }
 
     public function branchScopeLabel(): string
@@ -409,11 +427,25 @@ class MonthlyOffer extends Model
     public function toPlaybookPayload(?Carbon $todayQatar = null): array
     {
         $status = $this->liveStatus($todayQatar);
+        $statusWord = match ($status['key']) {
+            'active' => 'Active',
+            'upcoming' => 'Upcoming',
+            'expired' => 'Expired',
+            default => 'Archived',
+        };
+        $dateShortCue = match ($status['key']) {
+            'active' => $this->valid_until ? ('Ends ' . $this->valid_until->format('d M')) : null,
+            'upcoming' => $this->valid_from ? ('Starts ' . $this->valid_from->format('d M')) : null,
+            'expired' => $this->valid_until ? ('Ended ' . $this->valid_until->format('d M')) : null,
+            default => $this->valid_until ? ('Ends ' . $this->valid_until->format('d M')) : null,
+        };
 
         return [
             'id' => $this->id,
             'title' => $this->title,
             'offer_type' => $this->offer_type,
+            'category' => $this->category,
+            'category_label' => $this->categoryLabel(),
             'type_label' => $this->typeBadgeLabel(),
             'combo_id' => $this->combo_id,
             'service_freebie_id' => $this->service_freebie_id,
@@ -426,6 +458,8 @@ class MonthlyOffer extends Model
             'valid_until' => $this->valid_until?->toDateString(),
             'valid_range_label' => ($this->valid_from?->format('d M Y') ?? '') . ' – ' . ($this->valid_until?->format('d M Y') ?? ''),
             'status' => $status,
+            'status_word' => $statusWord,
+            'date_short_cue' => $dateShortCue,
             'is_active' => (bool) $this->is_active,
             'included_services' => $this->includedServicesList(),
             'terms_and_conditions' => $this->terms_and_conditions,

@@ -878,6 +878,7 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
         $this->actingAs($this->admin)
             ->postJson(route('offers.store'), array_merge([
                 'title' => 'Missing TCs Promo',
+                'category' => 'hair',
                 'offer_type' => 'standalone',
                 'promo_price_qar' => 199,
                 'branch_scope' => 'all',
@@ -891,6 +892,7 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
         // 2. Create Active Combo Offer, Upcoming Service+Freebie Offer, and Expired Standalone Offer
         $this->actingAs($this->admin)->post(route('offers.store'), array_merge([
             'title' => 'Monthly Glow Combo Promo',
+            'category' => 'combo',
             'offer_type' => 'combo',
             'combo_id' => $combo->id,
             'branch_scope' => 'all',
@@ -903,6 +905,7 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
 
         $this->actingAs($this->admin)->post(route('offers.store'), array_merge([
             'title' => 'Next Week Freebie Special',
+            'category' => 'hair',
             'offer_type' => 'service_freebie',
             'service_freebie_id' => $freebie->id,
             'branch_scope' => 'old_airport',
@@ -914,6 +917,7 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
 
         $this->actingAs($this->admin)->post(route('offers.store'), array_merge([
             'title' => 'Last Month Flash Deal',
+            'category' => 'skin',
             'offer_type' => 'standalone',
             'promo_price_qar' => 99,
             'branch_scope' => 'al_wakrah',
@@ -965,6 +969,7 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
         $today = Carbon::now('Asia/Qatar');
         $basePayload = array_merge([
             'title' => 'Silk Glass Hair Master Playbook',
+            'category' => 'hair',
             'offer_type' => 'standalone',
             'promo_price_qar' => 349,
             'branch_scope' => 'all',
@@ -1148,6 +1153,7 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
             }
             $this->actingAs($nonEditor)->post(route('offers.store'), array_merge([
                 'title' => 'Unauthorized Promo',
+                'category' => 'hair',
                 'offer_type' => 'standalone',
                 'promo_price_qar' => 100,
                 'branch_scope' => 'all',
@@ -1158,6 +1164,7 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
 
             $this->actingAs($nonEditor)->put(route('offers.update', $offer), array_merge([
                 'title' => 'Unauthorized Edit',
+                'category' => 'makeup',
                 'offer_type' => 'standalone',
                 'promo_price_qar' => 100,
                 'branch_scope' => 'all',
@@ -1167,6 +1174,7 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
             ], $this->sampleOfferPillars()))->assertForbidden();
 
             $this->actingAs($nonEditor)->patch(route('offers.toggle', $offer))->assertForbidden();
+            $this->actingAs($nonEditor)->patchJson(route('offers.move-category', $offer), ['category' => 'makeup'])->assertForbidden();
             $this->actingAs($nonEditor)->delete(route('offers.destroy', $offer))->assertForbidden();
         }
 
@@ -1192,6 +1200,7 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
         $today = Carbon::now('Asia/Qatar');
 
         $basePayload = array_merge([
+            'category' => 'hair',
             'offer_type' => 'standalone',
             'promo_price_qar' => 299,
             'branch_scope' => 'all',
@@ -1337,5 +1346,127 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
         $this->assertDatabaseMissing('monthly_offer_service', [
             'monthly_offer_id' => $multiOffer->id,
         ]);
+    }
+
+    public function test_monthly_offers_categories_validation_quick_move_endpoint_rbac_and_ui(): void
+    {
+        $today = Carbon::now('Asia/Qatar');
+
+        $basePayload = array_merge([
+            'title' => 'Soft Glam Engagement Makeup',
+            'offer_type' => 'standalone',
+            'promo_price_qar' => 450,
+            'branch_scope' => 'all',
+            'valid_from' => $today->copy()->subDay()->toDateString(),
+            'valid_until' => $today->copy()->addDays(15)->toDateString(),
+            'terms_and_conditions' => 'Advance booking required',
+            'is_active' => '1',
+        ], $this->sampleOfferPillars());
+
+        // 1. Missing or invalid category on create returns 422
+        $this->actingAs($this->admin)
+            ->postJson(route('offers.store'), $basePayload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['category']);
+
+        $this->actingAs($this->admin)
+            ->postJson(route('offers.store'), array_merge($basePayload, ['category' => 'nails']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['category']);
+
+        // 2. Creating with valid category ('makeup') persists cleanly & populates Playbook payload
+        $this->actingAs($this->admin)
+            ->post(route('offers.store'), array_merge($basePayload, ['category' => 'makeup']))
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $offer = MonthlyOffer::where('title', 'Soft Glam Engagement Makeup')->firstOrFail();
+        $this->assertSame('makeup', $offer->category);
+        $this->assertSame('Makeup', $offer->categoryLabel());
+
+        $payload = $offer->toPlaybookPayload($today);
+        $this->assertSame('makeup', $payload['category']);
+        $this->assertSame('Makeup', $payload['category_label']);
+
+        // 3. Updating with invalid category returns 422; updating with valid category ('skin') persists
+        $this->actingAs($this->admin)
+            ->putJson(route('offers.update', $offer), array_merge($basePayload, ['category' => 'invalid_cat']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['category']);
+
+        $this->actingAs($this->admin)
+            ->put(route('offers.update', $offer), array_merge($basePayload, [
+                'title' => 'Radiance Hydra Facial Glow',
+                'category' => 'skin',
+            ]))
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $offer->refresh();
+        $this->assertSame('skin', $offer->category);
+        $this->assertSame('Skin', $offer->categoryLabel());
+
+        // 4. Admin 1-click quick-move PATCH /monthly-offers/{id}/category returns 200 JSON and updates DB
+        $this->actingAs($this->admin)
+            ->patchJson(route('offers.move-category', $offer), ['category' => 'hair'])
+            ->assertOk()
+            ->assertJson([
+                'ok' => true,
+                'id' => $offer->id,
+                'category' => 'hair',
+                'category_label' => 'Hair',
+            ]);
+
+        $this->assertSame('hair', $offer->fresh()->category);
+
+        // Invalid category on quick-move returns 422
+        $this->actingAs($this->admin)
+            ->patchJson(route('offers.move-category', $offer), ['category' => 'unknown'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['category']);
+
+        // 5. RBAC: Chat Agent, Salon Manager (read-only services), and Legal Team receive 403 on PATCH /category
+        $chatAgent = User::factory()->create([
+            'name' => 'Areeba Chat Agent',
+            'role' => 'agent',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('agent'),
+        ]);
+        $legalUser = User::factory()->create([
+            'name' => 'Legal Counsel',
+            'role' => 'legal_team',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('legal_team'),
+        ]);
+
+        foreach ([$chatAgent, $this->oldAirportManager, $this->opsLead, $legalUser] as $blockedUser) {
+            $this->actingAs($blockedUser)
+                ->patchJson(route('offers.move-category', $offer), ['category' => 'combo'])
+                ->assertForbidden();
+        }
+        $this->assertSame('hair', $offer->fresh()->category);
+
+        // 6. Operational roles can view and filter by category (without Move To edit controls); Admin sees Move To menu + Category picker
+        $this->actingAs($chatAgent)
+            ->get(route('offers.index'))
+            ->assertOk()
+            ->assertSee('id="moCategoryFilterStrip"', false)
+            ->assertSee('data-mo-cat="hair"', false)
+            ->assertSee('data-mo-cat="makeup"', false)
+            ->assertSee('data-mo-cat="skin"', false)
+            ->assertSee('data-mo-cat="combo"', false)
+            ->assertSee('Radiance Hydra Facial Glow')
+            ->assertDontSee('data-move-url=', false)
+            ->assertDontSee('<div class="mo-menu-section-label">Move to</div>', false);
+
+        $this->actingAs($legalUser)
+            ->get(route('offers.index'))
+            ->assertForbidden();
+
+        $this->actingAs($this->admin)
+            ->get(route('services.index', ['tab' => 'offers']))
+            ->assertOk()
+            ->assertSee('id="moCategory"', false)
+            ->assertSee('<div class="mo-menu-section-label">Move to</div>', false)
+            ->assertSee('data-move-url=', false)
+            ->assertSee('data-mo-section="hair"', false);
     }
 }

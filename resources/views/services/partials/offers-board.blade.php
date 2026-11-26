@@ -9,11 +9,24 @@
     $oldServiceIds = array_values(array_unique(array_map('intval', (array) old('service_ids', []))));
     $pillarDefs = \App\Models\MonthlyOffer::PILLAR_DEFINITIONS;
 
+    $offerCategories = \App\Models\MonthlyOffer::CATEGORIES;
+    $categorySectionDefs = array_merge($offerCategories, ['uncategorized' => 'Uncategorized']);
+    $resolveOfferCatKey = static fn ($offer): string => array_key_exists((string) ($offer->category ?? ''), $offerCategories)
+        ? (string) $offer->category
+        : 'uncategorized';
+
     $offerStatusCounts = ['active' => 0, 'upcoming' => 0, 'expired' => 0, 'all' => $offersCollection->count()];
+    $offerCategoryActiveCounts = array_fill_keys(array_keys($categorySectionDefs), 0);
+    $offersByCategory = array_fill_keys(array_keys($categorySectionDefs), []);
     foreach ($offersCollection as $o) {
         $st = $o->liveStatus($todayQatar)['key'];
         if (isset($offerStatusCounts[$st])) {
             $offerStatusCounts[$st]++;
+        }
+        $catKey = $resolveOfferCatKey($o);
+        $offersByCategory[$catKey][] = $o;
+        if ($st === 'active') {
+            $offerCategoryActiveCounts[$catKey]++;
         }
     }
 
@@ -28,7 +41,7 @@
         'standalone' => ['bg' => 'rgba(217, 143, 131, 0.15)', 'border' => 'rgba(217, 143, 131, 0.34)', 'color' => '#e79a91'],
     ];
 
-    $offerFieldNamesTab1 = ['title', 'offer_type', 'combo_id', 'service_freebie_id', 'service_ids', 'promo_price_qar', 'branch_scope', 'valid_from', 'valid_until', 'terms_and_conditions', 'staff_notes'];
+    $offerFieldNamesTab1 = ['title', 'category', 'offer_type', 'combo_id', 'service_freebie_id', 'service_ids', 'promo_price_qar', 'branch_scope', 'valid_from', 'valid_until', 'terms_and_conditions', 'staff_notes'];
     $offerFieldNamesTab2 = array_column($pillarDefs, 'key');
     $offerFieldNamesTab3 = ['whatsapp_script', 'video_shooting_script'];
     $hasOfferTab1Err = $errors->hasAny($offerFieldNamesTab1);
@@ -82,6 +95,83 @@
         background: linear-gradient(135deg, #d98f83, #c48479);
         border-color: transparent;
         color: #1b1315;
+    }
+
+    /* Quiet Category Filter Strip & Minimalistic Section Headings */
+    .mo-cat-strip {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: -4px 0 22px;
+    }
+
+    .mo-cat-pill {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(24, 18, 19, 0.52);
+        color: rgba(255, 255, 255, 0.56);
+        border-radius: 999px;
+        padding: 5px 12px;
+        font-size: 12px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        transition: all 0.14s ease;
+    }
+
+    .mo-cat-pill:hover {
+        color: #ffffff;
+        border-color: rgba(221, 162, 158, 0.34);
+    }
+
+    .mo-cat-pill.active {
+        background: rgba(221, 162, 158, 0.16);
+        border-color: rgba(221, 162, 158, 0.44);
+        color: #f8efe6;
+        font-weight: 600;
+    }
+
+    .mo-cat-pill-count {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.40);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .mo-cat-pill.active .mo-cat-pill-count {
+        color: #DDA29E;
+    }
+
+    .mo-sections-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+    }
+
+    .mo-cat-section-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .mo-cat-section-title {
+        font-size: 11.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: rgba(255, 255, 255, 0.45);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+    }
+
+    .mo-cat-section-rule {
+        flex: 1 1 auto;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.06);
     }
 
     /* Ultra-Minimalistic 3-Tier Luxury Offer Cards Grid */
@@ -354,6 +444,36 @@
         height: 1px;
         background: rgba(255, 255, 255, 0.06);
         margin: 3px 6px;
+    }
+
+    .mo-menu-section-label {
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: rgba(255, 255, 255, 0.38);
+        padding: 4px 10px 2px;
+    }
+
+    .mo-menu-move-item {
+        justify-content: space-between;
+        padding: 5.5px 10px;
+        font-size: 12px;
+    }
+
+    .mo-menu-move-item.is-current,
+    .mo-menu-move-item:disabled {
+        color: #DDA29E;
+        background: rgba(221, 162, 158, 0.08);
+        cursor: default;
+        opacity: 1;
+    }
+
+    .mo-move-check {
+        color: #DDA29E;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
     }
 
     /* Drawer Buttons & Tab Readiness Indicators */
@@ -1068,145 +1188,204 @@
     </div>
 </div>
 
-{{-- ULTRA-MINIMALISTIC 3-TIER LUXURY OFFER CARDS GRID --}}
-<div class="mo-cards-grid" id="moCardsGrid">
-    @foreach ($offersCollection as $offer)
+{{-- QUIET CATEGORY FILTER STRIP --}}
+<div class="mo-cat-strip" id="moCategoryFilterStrip" role="tablist" aria-label="Filter offers by category">
+    <button type="button" class="mo-cat-pill active" data-mo-cat="all" role="tab" aria-selected="true">
+        <span>All</span>
+        <span class="mo-cat-pill-count js-mo-cat-count" data-cat-count="all">{{ $offerStatusCounts['active'] }}</span>
+    </button>
+    @foreach ($offerCategories as $catKey => $catLabel)
+        <button type="button" class="mo-cat-pill" data-mo-cat="{{ $catKey }}" role="tab" aria-selected="false">
+            <span>{{ $catLabel }}</span>
+            <span class="mo-cat-pill-count js-mo-cat-count" data-cat-count="{{ $catKey }}">{{ $offerCategoryActiveCounts[$catKey] }}</span>
+        </button>
+    @endforeach
+    <button type="button"
+            class="mo-cat-pill {{ $offerCategoryActiveCounts['uncategorized'] > 0 ? '' : 'd-none' }}"
+            data-mo-cat="uncategorized"
+            role="tab"
+            aria-selected="false">
+        <span>Uncategorized</span>
+        <span class="mo-cat-pill-count js-mo-cat-count" data-cat-count="uncategorized">{{ $offerCategoryActiveCounts['uncategorized'] }}</span>
+    </button>
+</div>
+
+{{-- MINIMALISTIC CATEGORY-GROUPED OFFER SECTIONS --}}
+<div class="mo-sections-wrap" id="moSectionsWrap">
+    @foreach ($categorySectionDefs as $sectionCatKey => $sectionCatLabel)
         @php
-            $st = $offer->liveStatus($todayQatar);
-            $effPrice = $offer->effectivePrice();
-            $includedList = $offer->includedServicesList();
-            $serviceNamesOnly = array_values(array_filter(array_map(
-                fn ($inc) => ($inc['meta'] ?? null) === 'Combo Pool' ? null : trim((string) ($inc['name'] ?? '')),
-                $includedList
-            )));
-            $summaryLine = '';
-            if (!empty($serviceNamesOnly)) {
-                $shownNames = array_slice($serviceNamesOnly, 0, 3);
-                $extraCount = max(0, count($serviceNamesOnly) - 3);
-                $summaryLine = implode(' · ', $shownNames) . ($extraCount > 0 ? " (+{$extraCount} more)" : '');
-            } elseif (filled($offer->dream_outcome)) {
-                $summaryLine = trim((string) $offer->dream_outcome);
-            }
-            $statusWord = match ($st['key']) {
-                'active' => 'Active',
-                'upcoming' => 'Upcoming',
-                'expired' => 'Expired',
-                default => 'Archived',
-            };
-            $dateShortCue = match ($st['key']) {
-                'active' => $offer->valid_until ? ('Ends ' . $offer->valid_until->format('d M')) : null,
-                'upcoming' => $offer->valid_from ? ('Starts ' . $offer->valid_from->format('d M')) : null,
-                'expired' => $offer->valid_until ? ('Ended ' . $offer->valid_until->format('d M')) : null,
-                default => $offer->valid_until ? ('Ends ' . $offer->valid_until->format('d M')) : null,
-            };
-            $playbookPayload = $offer->toPlaybookPayload($todayQatar);
-            $searchHaystack = strtolower(
-                $offer->title . ' ' . $offer->typeBadgeLabel() . ' ' . $offer->branchScopeLabel() . ' '
-                . implode(' ', array_column($includedList, 'name')) . ' '
-                . $offer->terms_and_conditions . ' '
-                . ($offer->dream_outcome ?? '') . ' '
-                . ($offer->problem_solved ?? '') . ' '
-                . ($offer->conditional_guarantee ?? '') . ' '
-                . ($offer->transparent_pricing ?? '') . ' '
-                . ($offer->capacity_scarcity ?? '')
-            );
+            $sectionOffers = $offersByCategory[$sectionCatKey] ?? [];
+            $sectionActiveCount = $offerCategoryActiveCounts[$sectionCatKey] ?? 0;
         @endphp
-        <div class="mo-card-col"
-             data-mo-card-status="{{ $st['key'] }}"
-             data-mo-card-branch="{{ $offer->branch_scope }}"
-             data-mo-card-search="{{ $searchHaystack }}"
-             style="{{ $st['key'] !== 'active' ? 'display:none;' : '' }}">
-            <article class="mo-card js-mo-card-open" data-offer-id="{{ $offer->id }}" tabindex="0" role="button" aria-label="Open Playbook for {{ $offer->title }}">
-                <div>
-                    {{-- TIER 1: HEADER (Title + Price + 1 Quiet Meta Line) --}}
-                    <div class="d-flex align-items-start justify-content-between gap-3">
-                        <h5 class="mo-title mo-clamp-2 min-w-0 flex-grow-1">{{ $offer->title }}</h5>
-                        <div class="mo-price mo-num">
-                            {{ number_format($effPrice, 0) }}<span class="mo-price-unit">QAR</span>
-                        </div>
-                    </div>
+        <section class="mo-cat-section {{ $sectionActiveCount > 0 ? '' : 'd-none' }}" data-mo-section="{{ $sectionCatKey }}">
+            <div class="mo-cat-section-head">
+                <span class="mo-cat-section-title">
+                    <span>{{ strtoupper($sectionCatLabel) }}</span>
+                    <span>&middot;</span>
+                    <span class="mo-num js-mo-section-count">{{ $sectionActiveCount }}</span>
+                </span>
+                <span class="mo-cat-section-rule" aria-hidden="true"></span>
+            </div>
+            <div class="mo-cards-grid" data-mo-section-grid="{{ $sectionCatKey }}">
+                @foreach ($sectionOffers as $offer)
+                    @php
+                        $st = $offer->liveStatus($todayQatar);
+                        $effPrice = $offer->effectivePrice();
+                        $includedList = $offer->includedServicesList();
+                        $serviceNamesOnly = array_values(array_filter(array_map(
+                            fn ($inc) => ($inc['meta'] ?? null) === 'Combo Pool' ? null : trim((string) ($inc['name'] ?? '')),
+                            $includedList
+                        )));
+                        $summaryLine = '';
+                        if (!empty($serviceNamesOnly)) {
+                            $shownNames = array_slice($serviceNamesOnly, 0, 3);
+                            $extraCount = max(0, count($serviceNamesOnly) - 3);
+                            $summaryLine = implode(' · ', $shownNames) . ($extraCount > 0 ? " (+{$extraCount} more)" : '');
+                        } elseif (filled($offer->dream_outcome)) {
+                            $summaryLine = trim((string) $offer->dream_outcome);
+                        }
+                        $statusWord = match ($st['key']) {
+                            'active' => 'Active',
+                            'upcoming' => 'Upcoming',
+                            'expired' => 'Expired',
+                            default => 'Archived',
+                        };
+                        $dateShortCue = match ($st['key']) {
+                            'active' => $offer->valid_until ? ('Ends ' . $offer->valid_until->format('d M')) : null,
+                            'upcoming' => $offer->valid_from ? ('Starts ' . $offer->valid_from->format('d M')) : null,
+                            'expired' => $offer->valid_until ? ('Ended ' . $offer->valid_until->format('d M')) : null,
+                            default => $offer->valid_until ? ('Ends ' . $offer->valid_until->format('d M')) : null,
+                        };
+                        $playbookPayload = $offer->toPlaybookPayload($todayQatar);
+                        $searchHaystack = strtolower(
+                            $offer->title . ' ' . ($offer->categoryLabel() ?? 'uncategorized') . ' ' . $offer->typeBadgeLabel() . ' ' . $offer->branchScopeLabel() . ' '
+                            . implode(' ', array_column($includedList, 'name')) . ' '
+                            . $offer->terms_and_conditions . ' '
+                            . ($offer->dream_outcome ?? '') . ' '
+                            . ($offer->problem_solved ?? '') . ' '
+                            . ($offer->conditional_guarantee ?? '') . ' '
+                            . ($offer->transparent_pricing ?? '') . ' '
+                            . ($offer->capacity_scarcity ?? '')
+                        );
+                    @endphp
+                    <div class="mo-card-col"
+                         data-mo-card-id="{{ $offer->id }}"
+                         data-mo-card-status="{{ $st['key'] }}"
+                         data-mo-card-branch="{{ $offer->branch_scope }}"
+                         data-mo-card-category="{{ $sectionCatKey }}"
+                         data-mo-card-search="{{ $searchHaystack }}"
+                         style="{{ $st['key'] !== 'active' ? 'display:none;' : '' }}">
+                        <article class="mo-card js-mo-card-open" data-offer-id="{{ $offer->id }}" tabindex="0" role="button" aria-label="Open Playbook for {{ $offer->title }}">
+                            <div>
+                                {{-- TIER 1: HEADER (Title + Price + 1 Quiet Meta Line) --}}
+                                <div class="d-flex align-items-start justify-content-between gap-3">
+                                    <h5 class="mo-title mo-clamp-2 min-w-0 flex-grow-1">{{ $offer->title }}</h5>
+                                    <div class="mo-price mo-num">
+                                        {{ number_format($effPrice, 0) }}<span class="mo-price-unit">QAR</span>
+                                    </div>
+                                </div>
 
-                    <div class="mo-meta-line mo-num">
-                        <span class="d-inline-flex align-items-center gap-1">
-                            <span class="mo-status-dot is-{{ $st['tone'] }}"></span>
-                            <span>{{ $statusWord }}</span>
-                        </span>
-                        <span>&middot;</span>
-                        <span>{{ $offer->branchScopeLabel() }}</span>
-                        @if ($dateShortCue)
-                            <span>&middot;</span>
-                            <span>{{ $dateShortCue }}</span>
-                        @endif
-                    </div>
+                                <div class="mo-meta-line mo-num">
+                                    <span class="d-inline-flex align-items-center gap-1">
+                                        <span class="mo-status-dot is-{{ $st['tone'] }}"></span>
+                                        <span>{{ $statusWord }}</span>
+                                    </span>
+                                    <span>&middot;</span>
+                                    <span>{{ $offer->branchScopeLabel() }}</span>
+                                    @if ($dateShortCue)
+                                        <span>&middot;</span>
+                                        <span>{{ $dateShortCue }}</span>
+                                    @endif
+                                </div>
 
-                    {{-- TIER 2: SINGLE QUIET CONTENT LINE (Plain-Text Service Summary or 1-Line Dream Outcome) --}}
-                    @if ($summaryLine !== '')
-                        <div class="mo-summary-line mo-clamp-1" title="{{ $summaryLine }}">{{ $summaryLine }}</div>
-                    @endif
-                </div>
+                                {{-- TIER 2: SINGLE QUIET CONTENT LINE (Plain-Text Service Summary or 1-Line Dream Outcome) --}}
+                                @if ($summaryLine !== '')
+                                    <div class="mo-summary-line mo-clamp-1" title="{{ $summaryLine }}">{{ $summaryLine }}</div>
+                                @endif
+                            </div>
 
-                {{-- TIER 3: MINIMAL UNCROWDED FOOTER --}}
-                <div class="mo-card-footer">
-                    <button type="button"
-                        class="mo-ghost-copy-btn js-mo-copy"
-                        data-copy-text="{{ $offer->whatsappCopyText() }}">
-                        <i class="bx bxl-whatsapp fs-6"></i>
-                        <span class="js-mo-copy-label">Copy WhatsApp</span>
-                    </button>
-
-                    <div class="d-flex align-items-center gap-3 flex-shrink-0">
-                        <button type="button"
-                            class="mo-playbook-link js-mo-open-playbook"
-                            data-offer-id="{{ $offer->id }}">
-                            <span>Playbook &rarr;</span>
-                        </button>
-
-                        @if ($canEditOffers)
-                            <div class="mo-card-menu js-mo-card-menu js-mo-stop-prop">
+                            {{-- TIER 3: MINIMAL UNCROWDED FOOTER --}}
+                            <div class="mo-card-footer">
                                 <button type="button"
-                                    class="mo-menu-trigger js-mo-menu-trigger"
-                                    aria-haspopup="menu"
-                                    aria-expanded="false"
-                                    aria-label="Offer actions for {{ $offer->title }}"
-                                    title="More actions">
-                                    <i class="bx bx-dots-horizontal-rounded"></i>
+                                    class="mo-ghost-copy-btn js-mo-copy"
+                                    data-copy-text="{{ $offer->whatsappCopyText() }}">
+                                    <i class="bx bxl-whatsapp fs-6"></i>
+                                    <span class="js-mo-copy-label">Copy WhatsApp</span>
                                 </button>
-                                <div class="mo-menu-popover js-mo-menu-popover d-none" role="menu">
+
+                                <div class="d-flex align-items-center gap-3 flex-shrink-0">
                                     <button type="button"
-                                        class="mo-menu-item js-mo-edit-btn"
-                                        role="menuitem"
+                                        class="mo-playbook-link js-mo-open-playbook"
                                         data-offer-id="{{ $offer->id }}">
-                                        <i class="bi bi-pencil-square"></i>
-                                        <span>Edit Offer</span>
+                                        <span>Playbook &rarr;</span>
                                     </button>
-                                    <form method="POST" action="{{ route('offers.toggle', $offer) }}">
-                                        @csrf
-                                        @method('PATCH')
-                                        <button type="submit" class="mo-menu-item" role="menuitem">
-                                            <i class="bx {{ $offer->is_active ? 'bx-archive-in' : 'bx-revision' }}"></i>
-                                            <span>{{ $offer->is_active ? 'Archive / Unpublish' : 'Activate Offer' }}</span>
-                                        </button>
-                                    </form>
-                                    <div class="mo-menu-divider"></div>
-                                    <form method="POST" action="{{ route('offers.destroy', $offer) }}"
-                                          onsubmit="return confirm('Delete monthly offer {{ addslashes($offer->title) }}?')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="mo-menu-item is-danger" role="menuitem">
-                                            <i class="bi bi-trash"></i>
-                                            <span>Delete</span>
-                                        </button>
-                                    </form>
+
+                                    @if ($canEditOffers)
+                                        <div class="mo-card-menu js-mo-card-menu js-mo-stop-prop">
+                                            <button type="button"
+                                                class="mo-menu-trigger js-mo-menu-trigger"
+                                                aria-haspopup="menu"
+                                                aria-expanded="false"
+                                                aria-label="Offer actions for {{ $offer->title }}"
+                                                title="More actions">
+                                                <i class="bx bx-dots-horizontal-rounded"></i>
+                                            </button>
+                                            <div class="mo-menu-popover js-mo-menu-popover d-none" role="menu">
+                                                <button type="button"
+                                                    class="mo-menu-item js-mo-edit-btn"
+                                                    role="menuitem"
+                                                    data-offer-id="{{ $offer->id }}">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                    <span>Edit Offer</span>
+                                                </button>
+                                                <div class="mo-menu-divider"></div>
+                                                <div class="mo-menu-section-label">Move to</div>
+                                                @foreach ($offerCategories as $moveCatKey => $moveCatLabel)
+                                                    @php $isCurrentCat = ($sectionCatKey === $moveCatKey); @endphp
+                                                    <button type="button"
+                                                        class="mo-menu-item mo-menu-move-item js-mo-move-cat {{ $isCurrentCat ? 'is-current' : '' }}"
+                                                        role="menuitem"
+                                                        data-offer-id="{{ $offer->id }}"
+                                                        data-move-url="{{ route('offers.move-category', $offer) }}"
+                                                        data-target-category="{{ $moveCatKey }}"
+                                                        data-target-label="{{ $moveCatLabel }}"
+                                                        {{ $isCurrentCat ? 'disabled aria-current=true' : '' }}>
+                                                        <span>{{ $moveCatLabel }}</span>
+                                                        <span class="mo-move-check {{ $isCurrentCat ? '' : 'd-none' }}" aria-hidden="true">&#10003;</span>
+                                                    </button>
+                                                @endforeach
+                                                <div class="mo-menu-divider"></div>
+                                                <form method="POST" action="{{ route('offers.toggle', $offer) }}">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit" class="mo-menu-item" role="menuitem">
+                                                        <i class="bx {{ $offer->is_active ? 'bx-archive-in' : 'bx-revision' }}"></i>
+                                                        <span>{{ $offer->is_active ? 'Archive / Unpublish' : 'Activate Offer' }}</span>
+                                                    </button>
+                                                </form>
+                                                <div class="mo-menu-divider"></div>
+                                                <form method="POST" action="{{ route('offers.destroy', $offer) }}"
+                                                      onsubmit="return confirm('Delete monthly offer {{ addslashes($offer->title) }}?')">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="mo-menu-item is-danger" role="menuitem">
+                                                        <i class="bi bi-trash"></i>
+                                                        <span>Delete</span>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
-                        @endif
-                    </div>
-                </div>
 
-                {{-- Embedded JSON Playbook payload (powers both Drawer & Edit Modal cleanly) --}}
-                <script type="application/json" id="moOfferData-{{ $offer->id }}">@json($playbookPayload)</script>
-            </article>
-        </div>
+                            {{-- Embedded JSON Playbook payload (powers both Drawer & Edit Modal cleanly) --}}
+                            <script type="application/json" id="moOfferData-{{ $offer->id }}">@json($playbookPayload)</script>
+                        </article>
+                    </div>
+                @endforeach
+            </div>
+        </section>
     @endforeach
 </div>
 
@@ -1382,9 +1561,18 @@
                     {{-- TAB 1: BASICS, PRICE & T&CS --}}
                     <div class="mo-step-pane" data-mo-step-pane="1">
                         <div class="row g-3">
-                            <div class="col-md-6">
+                            <div class="col-12">
                                 <label class="form-label small text-muted" for="moTitle">Offer Title <span style="color:#fda4af;">*</span></label>
                                 <input type="text" name="title" id="moTitle" class="form-control mo-input" data-mo-required="1" data-mo-label="Offer Title" maxlength="255" placeholder="e.g. November Glass-Hair Botox Experience" value="{{ old('title') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small text-muted" for="moCategory">Category <span style="color:#fda4af;">*</span></label>
+                                <select name="category" id="moCategory" class="form-select mo-select" data-mo-required="1" data-mo-label="Category">
+                                    <option value="">Choose a category...</option>
+                                    @foreach ($offerCategories as $catKey => $catLabel)
+                                        <option value="{{ $catKey }}" {{ old('category') === $catKey ? 'selected' : '' }}>{{ $catLabel }}</option>
+                                    @endforeach
+                                </select>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small text-muted" for="moOfferType">Offer Type <span style="color:#fda4af;">*</span></label>
@@ -1674,31 +1862,104 @@
             }
         }
 
-        // ---------------- FILTERING (Status + Branch + Search) ----------------
+        // ---------------- FILTERING (Status + Category + Branch + Search) ----------------
         let activeStatus = 'active';
+        let activeCategory = 'all';
         const statusBtns = document.querySelectorAll('[data-mo-status]');
+        const catBtns = Array.from(document.querySelectorAll('[data-mo-cat]'));
+        const catSections = Array.from(document.querySelectorAll('[data-mo-section]'));
         const branchSelect = document.getElementById('moBranchFilter');
         const searchInput = document.getElementById('moSearchInput');
         const cards = Array.from(document.querySelectorAll('.mo-card-col'));
         const emptyState = document.getElementById('moEmptyState');
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
+            || document.querySelector('#monthlyOfferForm input[name="_token"]')?.value
+            || '{{ csrf_token() }}';
+
+        function setActiveCategory(catKey) {
+            activeCategory = catKey || 'all';
+            catBtns.forEach(btn => {
+                const isSelected = btn.dataset.moCat === activeCategory;
+                btn.classList.toggle('active', isSelected);
+                btn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+            });
+        }
 
         function applyOfferFilters() {
             const br = branchSelect ? branchSelect.value : 'all';
             const q = searchInput ? searchInput.value.trim().toLowerCase() : '';
-            let visibleCount = 0;
+            const baseCountsByCat = { all: 0, hair: 0, makeup: 0, skin: 0, combo: 0, uncategorized: 0 };
 
+            // Pass 1: evaluate status + branch + search to compute live category strip counts
+            const baseMatchMap = new Map();
             cards.forEach(card => {
                 const cStatus = card.dataset.moCardStatus;
                 const cBranch = card.dataset.moCardBranch;
+                const cCat = card.dataset.moCardCategory || 'uncategorized';
                 const cSearch = card.dataset.moCardSearch || '';
 
-                const matchStatus = activeStatus === 'all' || cStatus === activeStatus;
-                const matchBranch = br === 'all' || cBranch === 'all' || cBranch === br;
-                const matchSearch = !q || cSearch.includes(q);
+                const matchBase = (activeStatus === 'all' || cStatus === activeStatus)
+                    && (br === 'all' || cBranch === 'all' || cBranch === br)
+                    && (!q || cSearch.includes(q));
 
-                const show = matchStatus && matchBranch && matchSearch;
+                baseMatchMap.set(card, matchBase);
+                if (matchBase) {
+                    baseCountsByCat.all++;
+                    if (Object.prototype.hasOwnProperty.call(baseCountsByCat, cCat)) {
+                        baseCountsByCat[cCat]++;
+                    } else {
+                        baseCountsByCat.uncategorized++;
+                    }
+                }
+            });
+
+            // Hide Uncategorized pill whenever 0 uncategorized offers match; fall back cleanly to All if it was selected
+            const uncatBtn = catBtns.find(b => b.dataset.moCat === 'uncategorized');
+            if (uncatBtn) {
+                uncatBtn.classList.toggle('d-none', baseCountsByCat.uncategorized === 0);
+                if (activeCategory === 'uncategorized' && baseCountsByCat.uncategorized === 0) {
+                    setActiveCategory('all');
+                }
+            }
+
+            // Update pill counts
+            document.querySelectorAll('.js-mo-cat-count').forEach(el => {
+                const key = el.dataset.catCount;
+                if (key && Object.prototype.hasOwnProperty.call(baseCountsByCat, key)) {
+                    el.textContent = String(baseCountsByCat[key]);
+                }
+            });
+
+            // Pass 2: show/hide cards & category sections
+            let visibleCount = 0;
+            const visibleBySection = { hair: 0, makeup: 0, skin: 0, combo: 0, uncategorized: 0 };
+
+            cards.forEach(card => {
+                const cCat = card.dataset.moCardCategory || 'uncategorized';
+                const show = Boolean(baseMatchMap.get(card)) && (activeCategory === 'all' || cCat === activeCategory);
                 card.style.display = show ? '' : 'none';
-                if (show) visibleCount++;
+                if (show) {
+                    visibleCount++;
+                    if (Object.prototype.hasOwnProperty.call(visibleBySection, cCat)) {
+                        visibleBySection[cCat]++;
+                    }
+                }
+            });
+
+            const showSectionHeadings = activeCategory === 'all';
+            catSections.forEach(section => {
+                const secKey = section.dataset.moSection;
+                const secCount = visibleBySection[secKey] || 0;
+                const shouldShowSection = secCount > 0 && (activeCategory === 'all' || activeCategory === secKey);
+                section.classList.toggle('d-none', !shouldShowSection);
+                const headEl = section.querySelector('.mo-cat-section-head');
+                if (headEl) {
+                    headEl.classList.toggle('d-none', !showSectionHeadings);
+                }
+                const countEl = section.querySelector('.js-mo-section-count');
+                if (countEl) {
+                    countEl.textContent = String(secCount);
+                }
             });
 
             if (emptyState) {
@@ -1713,8 +1974,100 @@
                 applyOfferFilters();
             });
         });
+        catBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                setActiveCategory(btn.dataset.moCat);
+                applyOfferFilters();
+            });
+        });
         branchSelect?.addEventListener('change', applyOfferFilters);
         searchInput?.addEventListener('input', applyOfferFilters);
+
+        // 1-Click Move to Category inside card overflow menu (Admin / full editors only)
+        document.querySelectorAll('.js-mo-move-cat').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (btn.disabled) return;
+
+                const offerId = btn.dataset.offerId;
+                const moveUrl = btn.dataset.moveUrl;
+                const targetCategory = btn.dataset.targetCategory;
+                const targetLabel = btn.dataset.targetLabel || targetCategory;
+                const cardCol = btn.closest('.mo-card-col');
+                if (!offerId || !moveUrl || !targetCategory || !cardCol) return;
+
+                const menuItems = Array.from(cardCol.querySelectorAll('.js-mo-move-cat'));
+                menuItems.forEach(item => { item.disabled = true; });
+
+                try {
+                    const res = await fetch(moveUrl, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: JSON.stringify({ category: targetCategory }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || !data.ok) {
+                        throw new Error(data.message || 'Could not move offer category.');
+                    }
+
+                    const newCat = data.category || targetCategory;
+                    const newLabel = data.category_label || targetLabel;
+
+                    // Move DOM card node smoothly into target category grid
+                    cardCol.dataset.moCardCategory = newCat;
+                    const targetGrid = document.querySelector(`[data-mo-section-grid="${newCat}"]`);
+                    if (targetGrid && cardCol.parentElement !== targetGrid) {
+                        targetGrid.appendChild(cardCol);
+                    }
+
+                    // Keep embedded JSON Playbook payload in sync for Drawer & Edit Modal
+                    const scriptEl = document.getElementById(`moOfferData-${offerId}`);
+                    if (scriptEl) {
+                        try {
+                            const payload = JSON.parse(scriptEl.textContent || '{}');
+                            payload.category = newCat;
+                            payload.category_label = newLabel;
+                            scriptEl.textContent = JSON.stringify(payload);
+                            if (activeDrawerOffer && String(activeDrawerOffer.id) === String(offerId)) {
+                                activeDrawerOffer.category = newCat;
+                                activeDrawerOffer.category_label = newLabel;
+                            }
+                        } catch (err) {}
+                    }
+
+                    // Sync checkmarks and current highlight inside the card's Move To menu
+                    menuItems.forEach(item => {
+                        const isCur = item.dataset.targetCategory === newCat;
+                        item.classList.toggle('is-current', isCur);
+                        item.disabled = isCur;
+                        if (isCur) {
+                            item.setAttribute('aria-current', 'true');
+                        } else {
+                            item.removeAttribute('aria-current');
+                        }
+                        item.querySelector('.mo-move-check')?.classList.toggle('d-none', !isCur);
+                    });
+
+                    closeAllCardMenus();
+                    applyOfferFilters();
+                    showMoToast(`Moved to ${newLabel}`);
+                } catch (err) {
+                    // Restore interactive state on failure
+                    const prevCat = cardCol.dataset.moCardCategory || '';
+                    menuItems.forEach(item => {
+                        const isCur = item.dataset.targetCategory === prevCat;
+                        item.disabled = isCur;
+                    });
+                    showMoToast(err?.message || 'Unable to move offer right now.');
+                }
+            });
+        });
 
         // Quick Copy buttons on Offer Cards (stops propagation so card Playbook does not open)
         document.querySelectorAll('.js-mo-copy').forEach(btn => {
@@ -1843,7 +2196,13 @@
             }
 
             document.getElementById('moDrawerTitle').textContent = offer.title || 'Offer Playbook';
-            document.getElementById('moDrawerMeta').textContent = `Valid ${offer.valid_range_label || ''}`;
+            const drawerMetaParts = [
+                offer.status_word || '',
+                offer.category_label || '',
+                offer.branch_label || '',
+                offer.date_short_cue || (offer.valid_range_label ? `Valid ${offer.valid_range_label}` : ''),
+            ].filter(Boolean);
+            document.getElementById('moDrawerMeta').textContent = drawerMetaParts.join(' · ');
             document.getElementById('moDrawerPrice').textContent = `${Number(offer.effective_price_qar || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} QAR`;
 
             // Update Playbook Drawer tab readiness indicators
@@ -2001,6 +2360,7 @@
         // ---------------- 3-TAB ADD / EDIT MODAL WIRING ----------------
         const modalEl = document.getElementById('monthlyOfferModal');
         const formEl = document.getElementById('monthlyOfferForm');
+        const categorySelect = document.getElementById('moCategory');
         const typeSelect = document.getElementById('moOfferType');
         const comboWrap = document.getElementById('moComboWrap');
         const freebieWrap = document.getElementById('moFreebieWrap');
@@ -2377,6 +2737,9 @@
             formEl.action = '{{ route('offers.store') }}';
             document.getElementById('moFormMethod').value = 'POST';
             document.getElementById('moTitle').value = '';
+            if (categorySelect) {
+                categorySelect.value = (activeCategory !== 'all' && activeCategory !== 'uncategorized') ? activeCategory : '';
+            }
             typeSelect.value = 'combo';
             if (comboSelect) comboSelect.value = '';
             if (freebieSelect) freebieSelect.value = '';
@@ -2407,6 +2770,9 @@
             formEl.action = `/monthly-offers/${offer.id}`;
             document.getElementById('moFormMethod').value = 'PUT';
             document.getElementById('moTitle').value = offer.title || '';
+            if (categorySelect) {
+                categorySelect.value = offer.category || '';
+            }
             typeSelect.value = offer.offer_type || 'standalone';
             if (comboSelect) comboSelect.value = offer.combo_id || '';
             if (freebieSelect) freebieSelect.value = offer.service_freebie_id || '';

@@ -109,6 +109,26 @@ class MonthlyOfferController extends Controller
             ->with('success', "Monthly offer {$label}.");
     }
 
+    public function moveCategory(Request $request, MonthlyOffer $monthlyOffer)
+    {
+        abort_unless($request->user()?->canEdit('services'), 403, 'You do not have permission to update monthly offers.');
+
+        $validated = $request->validate([
+            'category' => ['required', 'string', Rule::in(array_keys(MonthlyOffer::CATEGORIES))],
+        ]);
+
+        $monthlyOffer->update([
+            'category' => $validated['category'],
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'id' => $monthlyOffer->id,
+            'category' => $monthlyOffer->category,
+            'category_label' => $monthlyOffer->categoryLabel(),
+        ]);
+    }
+
     public function destroy(Request $request, MonthlyOffer $monthlyOffer)
     {
         abort_unless($request->user()?->canEdit('services'), 403, 'You do not have permission to delete monthly offers.');
@@ -132,6 +152,7 @@ class MonthlyOfferController extends Controller
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'offer_type' => ['required', Rule::in(array_keys(MonthlyOffer::OFFER_TYPES))],
+            'category' => ['required', 'string', Rule::in(array_keys(MonthlyOffer::CATEGORIES))],
             'combo_id' => ['nullable', 'required_if:offer_type,combo', 'integer', 'exists:combos,id'],
             'service_freebie_id' => ['nullable', 'required_if:offer_type,service_freebie', 'integer', 'exists:service_freebie_packages,id'],
             'service_ids' => ['nullable', 'array'],
@@ -189,6 +210,7 @@ class MonthlyOfferController extends Controller
         $attributes = array_merge([
             'title' => trim((string) $validated['title']),
             'offer_type' => $offerType,
+            'category' => $validated['category'],
             'combo_id' => $offerType === MonthlyOffer::TYPE_COMBO ? (int) $validated['combo_id'] : null,
             'service_freebie_id' => $offerType === MonthlyOffer::TYPE_SERVICE_FREEBIE ? (int) $validated['service_freebie_id'] : null,
             'promo_price_qar' => $offerType === MonthlyOffer::TYPE_STANDALONE

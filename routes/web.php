@@ -380,6 +380,9 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
         Route::patch('/monthly-offers/{monthlyOffer}/toggle', [MonthlyOfferController::class, 'toggle'])
             ->whereNumber('monthlyOffer')
             ->name('offers.toggle');
+        Route::patch('/monthly-offers/{monthlyOffer}/category', [MonthlyOfferController::class, 'moveCategory'])
+            ->whereNumber('monthlyOffer')
+            ->name('offers.move-category');
         Route::delete('/monthly-offers/{monthlyOffer}', [MonthlyOfferController::class, 'destroy'])
             ->whereNumber('monthlyOffer')
             ->name('offers.destroy');
