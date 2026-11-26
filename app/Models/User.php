@@ -501,6 +501,24 @@ class User extends Authenticatable
     }
 
     /**
+     * Whether this user may upload, replace, or delete promotional Graphic Posts on Monthly Offers.
+     * Granted to Admin, full `services` editors, Social Media Editor, and Marketing Specialist.
+     * Denied for Chat Agent, Salon Manager (read-only services), Salon Staff, and Legal Team.
+     */
+    public function canManageMonthlyOfferGraphics(): bool
+    {
+        if ($this->isLegalTeam() || $this->isSalonStaff()) {
+            return false;
+        }
+
+        $role = strtolower(trim((string) $this->role));
+
+        return $this->isAdmin()
+            || $this->canEdit('services')
+            || in_array($role, ['social_media_editor', 'marketing_specialist'], true);
+    }
+
+    /**
      * Whether this user may add, edit, or reorder treatment steps on catalog services
      * via PATCH /services/{service}/steps without exposing pricing or delete controls.
      */

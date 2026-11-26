@@ -28,6 +28,7 @@
         'monthlyOffers' => $monthlyOffers,
         'todayQatar' => $todayQatar,
         'canEditOffers' => $canEditOffers,
+        'canManageOfferGraphics' => $canManageOfferGraphics ?? false,
         'combos' => $combos,
         'freebiePackages' => $freebiePackages,
         'catalogServices' => $catalogServices ?? collect(),

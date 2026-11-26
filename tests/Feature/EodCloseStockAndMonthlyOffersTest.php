@@ -1469,4 +1469,235 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
             ->assertSee('data-move-url=', false)
             ->assertSee('data-mo-section="hair"', false);
     }
+
+    public function test_monthly_offers_graphic_post_upload_replace_remove_download_cleanup_rbac_and_validation(): void
+    {
+        Storage::fake('public');
+        $today = Carbon::now('Asia/Qatar');
+
+        $basePayload = array_merge([
+            'title' => 'Signature Haircut Offer',
+            'category' => 'hair',
+            'offer_type' => 'standalone',
+            'promo_price_qar' => 149,
+            'branch_scope' => 'all',
+            'valid_from' => $today->copy()->subDay()->toDateString(),
+            'valid_until' => $today->copy()->addDays(15)->toDateString(),
+            'terms_and_conditions' => 'Advance booking required',
+            'is_active' => '1',
+        ], $this->sampleOfferPillars());
+
+        // 1. Validation rejects non-image & oversized files on offers.store (422)
+        $badPdf = UploadedFile::fake()->create('flyer.pdf', 200, 'application/pdf');
+        $this->actingAs($this->admin)
+            ->postJson(route('offers.store'), array_merge($basePayload, ['graphic_post' => $badPdf]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['graphic_post']);
+
+        $oversizedImg = UploadedFile::fake()->image('huge.png', 100, 100)->size(11000);
+        $this->actingAs($this->admin)
+            ->postJson(route('offers.store'), array_merge($basePayload, ['graphic_post' => $oversizedImg]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['graphic_post']);
+
+        // 2. Creating an offer with a valid graphic_post stores on public disk under monthly-offers/graphics
+        $initialFile = UploadedFile::fake()->image('signature-flyer.png', 1080, 1350);
+        $this->actingAs($this->admin)
+            ->post(route('offers.store'), array_merge($basePayload, ['graphic_post' => $initialFile]))
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $offer = MonthlyOffer::where('title', 'Signature Haircut Offer')->firstOrFail();
+        $firstPath = $offer->graphic_post_path;
+        $this->assertNotNull($firstPath);
+        $this->assertStringStartsWith('monthly-offers/graphics/', $firstPath);
+        Storage::disk('public')->assertExists($firstPath);
+        $this->assertTrue($offer->hasGraphicPost());
+        $this->assertSame(Storage::disk('public')->url($firstPath), $offer->graphic_post_url);
+        $this->assertSame('signature-haircut-offer-graphic.png', $offer->graphicDownloadFilename());
+
+        $payload = $offer->toPlaybookPayload($today);
+        $this->assertTrue($payload['has_graphic_post']);
+        $this->assertSame($offer->graphic_post_url, $payload['graphic_post_url']);
+        $this->assertSame(route('offers.graphic.download', $offer), $payload['graphic_download_url']);
+
+        // 3. Dedicated upload endpoint replaces graphic and deletes old file from public disk
+        $socialEditor = User::factory()->create([
+            'name' => 'Maya Social Editor',
+            'role' => 'social_media_editor',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('social_media_editor'),
+        ]);
+        $marketingUser = User::factory()->create([
+            'name' => 'Sara Marketing',
+            'role' => 'marketing_specialist',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('marketing_specialist'),
+        ]);
+        $chatAgent = User::factory()->create([
+            'name' => 'Areeba Agent',
+            'role' => 'agent',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('agent'),
+        ]);
+        $salonStaffUser = User::factory()->create([
+            'name' => 'Noor Stylist',
+            'role' => 'salon_staff',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('salon_staff'),
+        ]);
+        $legalUser = User::factory()->create([
+            'name' => 'Legal Reviewer',
+            'role' => 'legal_team',
+            'is_active' => true,
+            'permissions' => User::defaultPermissionsForRole('legal_team'),
+        ]);
+
+        // Social Media Editor can replace graphic via POST /monthly-offers/{id}/graphic
+        $secondFile = UploadedFile::fake()->image('updated-flyer.jpg', 1080, 1080);
+        $this->actingAs($socialEditor)
+            ->postJson(route('offers.graphic.upload', $offer), ['graphic_post' => $secondFile])
+            ->assertOk()
+            ->assertJson([
+                'ok' => true,
+                'id' => $offer->id,
+                'download_url' => route('offers.graphic.download', $offer),
+                'graphic_filename' => 'signature-haircut-offer-graphic.jpg',
+            ]);
+
+        $offer->refresh();
+        $secondPath = $offer->graphic_post_path;
+        $this->assertNotSame($firstPath, $secondPath);
+        Storage::disk('public')->assertMissing($firstPath);
+        Storage::disk('public')->assertExists($secondPath);
+
+        // Marketing Specialist can also upload/replace via dedicated endpoint
+        $thirdFile = UploadedFile::fake()->image('marketing-flyer.png', 1080, 1350);
+        $this->actingAs($marketingUser)
+            ->postJson(route('offers.graphic.upload', $offer), ['graphic_post' => $thirdFile])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $offer->refresh();
+        $thirdPath = $offer->graphic_post_path;
+        Storage::disk('public')->assertMissing($secondPath);
+        Storage::disk('public')->assertExists($thirdPath);
+
+        // Validation on dedicated endpoint rejects non-image & oversized files (422)
+        $this->actingAs($socialEditor)
+            ->postJson(route('offers.graphic.upload', $offer), [
+                'graphic_post' => UploadedFile::fake()->create('script.txt', 50, 'text/plain'),
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['graphic_post']);
+
+        $this->actingAs($socialEditor)
+            ->postJson(route('offers.graphic.upload', $offer), [
+                'graphic_post' => UploadedFile::fake()->image('too-large.png', 50, 50)->size(10500),
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['graphic_post']);
+
+        // 4. Download endpoint: 200 attachment for Admin, Chat Agent, Salon Manager, Salon Staff; 403 for Legal Team
+        foreach ([$this->admin, $chatAgent, $this->oldAirportManager, $salonStaffUser] as $allowedViewer) {
+            $dlRes = $this->actingAs($allowedViewer)
+                ->get(route('offers.graphic.download', $offer))
+                ->assertOk();
+            $disposition = (string) $dlRes->headers->get('Content-Disposition');
+            $this->assertStringContainsString('attachment', $disposition);
+            $this->assertStringContainsString('signature-haircut-offer-graphic.png', $disposition);
+        }
+
+        $this->actingAs($legalUser)
+            ->get(route('offers.graphic.download', $offer))
+            ->assertForbidden();
+
+        // 5. RBAC: Chat Agent, Salon Manager, Salon Staff, Ops Lead, and Legal Team get 403 on upload & delete
+        foreach ([$chatAgent, $this->oldAirportManager, $salonStaffUser, $this->opsLead, $legalUser] as $blockedRole) {
+            $this->actingAs($blockedRole)
+                ->postJson(route('offers.graphic.upload', $offer), [
+                    'graphic_post' => UploadedFile::fake()->image('blocked.png', 200, 200),
+                ])
+                ->assertForbidden();
+
+            $this->actingAs($blockedRole)
+                ->deleteJson(route('offers.graphic.destroy', $offer))
+                ->assertForbidden();
+        }
+        Storage::disk('public')->assertExists($thirdPath);
+
+        // 6. UI RBAC rendering check: Social Media Editor sees upload controls (no Move To); Chat Agent sees viewer only
+        $this->actingAs($socialEditor)
+            ->get(route('offers.index'))
+            ->assertOk()
+            ->assertSee('Graphic Post')
+            ->assertSee('id="moGraphicLightbox"', false)
+            ->assertSee('data-graphic-upload-url=', false)
+            ->assertSee('id="moLightboxReplaceBtn"', false)
+            ->assertDontSee('data-move-url=', false);
+
+        $this->actingAs($chatAgent)
+            ->get(route('offers.index'))
+            ->assertOk()
+            ->assertSee('Graphic Post')
+            ->assertSee('id="moGraphicLightbox"', false)
+            ->assertSee('Pending creative upload')
+            ->assertDontSee('data-graphic-upload-url=', false)
+            ->assertDontSee('id="moLightboxReplaceBtn"', false)
+            ->assertDontSee('id="moQuickGraphicFileInput"', false);
+
+        // 7. Marketing Specialist can delete graphic via DELETE /monthly-offers/{id}/graphic -> file deleted, download returns 404
+        $this->actingAs($marketingUser)
+            ->deleteJson(route('offers.graphic.destroy', $offer))
+            ->assertOk()
+            ->assertJson([
+                'ok' => true,
+                'id' => $offer->id,
+                'graphic_post_url' => null,
+            ]);
+
+        $offer->refresh();
+        $this->assertNull($offer->graphic_post_path);
+        $this->assertFalse($offer->hasGraphicPost());
+        Storage::disk('public')->assertMissing($thirdPath);
+
+        $this->actingAs($this->admin)
+            ->get(route('offers.graphic.download', $offer))
+            ->assertNotFound();
+
+        // 8. Updating offer via offers.update attaches new graphic, then remove_graphic_post=1 removes it cleanly
+        $fourthFile = UploadedFile::fake()->image('modal-upload.png', 800, 800);
+        $this->actingAs($this->admin)
+            ->put(route('offers.update', $offer), array_merge($basePayload, ['graphic_post' => $fourthFile]))
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $offer->refresh();
+        $fourthPath = $offer->graphic_post_path;
+        $this->assertNotNull($fourthPath);
+        Storage::disk('public')->assertExists($fourthPath);
+
+        $this->actingAs($this->admin)
+            ->put(route('offers.update', $offer), array_merge($basePayload, ['remove_graphic_post' => '1']))
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $offer->refresh();
+        $this->assertNull($offer->graphic_post_path);
+        Storage::disk('public')->assertMissing($fourthPath);
+
+        // 9. Deleting the MonthlyOffer automatically deletes its stored graphic file from public disk
+        $fifthFile = UploadedFile::fake()->image('delete-me.png', 600, 600);
+        $this->actingAs($this->admin)
+            ->postJson(route('offers.graphic.upload', $offer), ['graphic_post' => $fifthFile])
+            ->assertOk();
+
+        $offer->refresh();
+        $fifthPath = $offer->graphic_post_path;
+        Storage::disk('public')->assertExists($fifthPath);
+
+        $this->actingAs($this->admin)
+            ->delete(route('offers.destroy', $offer))
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $this->assertDatabaseMissing('monthly_offers', ['id' => $offer->id]);
+        Storage::disk('public')->assertMissing($fifthPath);
+    }
 }

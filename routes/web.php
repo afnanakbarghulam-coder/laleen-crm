@@ -128,6 +128,15 @@ Route::middleware(['auth', 'active'])->group(function () {
     // ---- Universal Read-Only Company-Wide Monthly Offers Board (All operational roles incl. Salon Staff; 403 for Legal Team) ----
     Route::get('/monthly-offers', [MonthlyOfferController::class, 'index'])->name('offers.index');
     Route::get('/offers', [MonthlyOfferController::class, 'index']);
+    Route::get('/monthly-offers/{monthlyOffer}/graphic/download', [MonthlyOfferController::class, 'downloadGraphic'])
+        ->whereNumber('monthlyOffer')
+        ->name('offers.graphic.download');
+    Route::post('/monthly-offers/{monthlyOffer}/graphic', [MonthlyOfferController::class, 'uploadGraphic'])
+        ->whereNumber('monthlyOffer')
+        ->name('offers.graphic.upload');
+    Route::delete('/monthly-offers/{monthlyOffer}/graphic', [MonthlyOfferController::class, 'deleteGraphic'])
+        ->whereNumber('monthlyOffer')
+        ->name('offers.graphic.destroy');
 });
 
 Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {

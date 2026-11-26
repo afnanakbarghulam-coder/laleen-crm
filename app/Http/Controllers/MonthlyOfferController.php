@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class MonthlyOfferController extends Controller
@@ -41,6 +42,7 @@ class MonthlyOfferController extends Controller
             ->get();
 
         $canEditOffers = $user->canEdit('services');
+        $canManageOfferGraphics = $user->canManageMonthlyOfferGraphics();
         $combos = $canEditOffers ? Combo::with('services')->orderBy('name')->get() : collect();
         $freebiePackages = $canEditOffers
             ? ServiceFreebiePackage::with(['anchorService', 'eligibleServices'])->orderBy('name')->get()
@@ -55,6 +57,7 @@ class MonthlyOfferController extends Controller
             'monthlyOffers',
             'todayQatar',
             'canEditOffers',
+            'canManageOfferGraphics',
             'combos',
             'freebiePackages',
             'catalogServices',
@@ -70,10 +73,23 @@ class MonthlyOfferController extends Controller
         $attributes['created_by'] = Auth::id();
         $attributes['is_active'] = $request->boolean('is_active', true);
 
-        DB::transaction(function () use ($attributes, $serviceIds) {
-            $offer = MonthlyOffer::create($attributes);
-            $offer->services()->sync($serviceIds);
-        });
+        $storedGraphicPath = null;
+        if ($request->hasFile('graphic_post')) {
+            $storedGraphicPath = $request->file('graphic_post')->store('monthly-offers/graphics', 'public');
+            $attributes['graphic_post_path'] = $storedGraphicPath;
+        }
+
+        try {
+            DB::transaction(function () use ($attributes, $serviceIds) {
+                $offer = MonthlyOffer::create($attributes);
+                $offer->services()->sync($serviceIds);
+            });
+        } catch (\Throwable $e) {
+            if ($storedGraphicPath) {
+                Storage::disk('public')->delete($storedGraphicPath);
+            }
+            throw $e;
+        }
 
         return redirect()->route('services.index', ['tab' => 'offers'])
             ->with('success', 'Monthly offer published successfully.');
@@ -86,10 +102,34 @@ class MonthlyOfferController extends Controller
         [$attributes, $serviceIds] = $this->validateOffer($request);
         $attributes['is_active'] = $request->boolean('is_active', $monthlyOffer->is_active);
 
-        DB::transaction(function () use ($monthlyOffer, $attributes, $serviceIds) {
-            $monthlyOffer->update($attributes);
-            $monthlyOffer->services()->sync($serviceIds);
-        });
+        $oldGraphicPath = $monthlyOffer->graphic_post_path;
+        $newGraphicPath = null;
+        $shouldDeleteOldGraphic = false;
+
+        if ($request->hasFile('graphic_post')) {
+            $newGraphicPath = $request->file('graphic_post')->store('monthly-offers/graphics', 'public');
+            $attributes['graphic_post_path'] = $newGraphicPath;
+            $shouldDeleteOldGraphic = filled($oldGraphicPath);
+        } elseif ($request->boolean('remove_graphic_post')) {
+            $attributes['graphic_post_path'] = null;
+            $shouldDeleteOldGraphic = filled($oldGraphicPath);
+        }
+
+        try {
+            DB::transaction(function () use ($monthlyOffer, $attributes, $serviceIds) {
+                $monthlyOffer->update($attributes);
+                $monthlyOffer->services()->sync($serviceIds);
+            });
+        } catch (\Throwable $e) {
+            if ($newGraphicPath) {
+                Storage::disk('public')->delete($newGraphicPath);
+            }
+            throw $e;
+        }
+
+        if ($shouldDeleteOldGraphic && $oldGraphicPath && $oldGraphicPath !== $newGraphicPath) {
+            $monthlyOffer->deleteStoredGraphicFile($oldGraphicPath);
+        }
 
         return redirect()->route('services.index', ['tab' => 'offers'])
             ->with('success', 'Monthly offer updated successfully.');
@@ -127,6 +167,84 @@ class MonthlyOfferController extends Controller
             'category' => $monthlyOffer->category,
             'category_label' => $monthlyOffer->categoryLabel(),
         ]);
+    }
+
+    public function uploadGraphic(Request $request, MonthlyOffer $monthlyOffer)
+    {
+        abort_unless(
+            $request->user()?->canManageMonthlyOfferGraphics(),
+            403,
+            'You do not have permission to upload or replace offer graphics.'
+        );
+
+        $request->validate([
+            'graphic_post' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+        ]);
+
+        $oldPath = $monthlyOffer->graphic_post_path;
+        $newPath = $request->file('graphic_post')->store('monthly-offers/graphics', 'public');
+
+        $monthlyOffer->update([
+            'graphic_post_path' => $newPath,
+        ]);
+
+        if (filled($oldPath) && $oldPath !== $newPath) {
+            $monthlyOffer->deleteStoredGraphicFile($oldPath);
+        }
+
+        $monthlyOffer->refresh();
+
+        return response()->json([
+            'ok' => true,
+            'id' => $monthlyOffer->id,
+            'graphic_post_url' => $monthlyOffer->graphic_post_url,
+            'download_url' => route('offers.graphic.download', $monthlyOffer),
+            'graphic_filename' => $monthlyOffer->graphicDownloadFilename(),
+        ]);
+    }
+
+    public function deleteGraphic(Request $request, MonthlyOffer $monthlyOffer)
+    {
+        abort_unless(
+            $request->user()?->canManageMonthlyOfferGraphics(),
+            403,
+            'You do not have permission to remove offer graphics.'
+        );
+
+        $oldPath = $monthlyOffer->graphic_post_path;
+        $monthlyOffer->update([
+            'graphic_post_path' => null,
+        ]);
+
+        if (filled($oldPath)) {
+            $monthlyOffer->deleteStoredGraphicFile($oldPath);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'id' => $monthlyOffer->id,
+            'graphic_post_url' => null,
+            'download_url' => null,
+            'graphic_filename' => null,
+        ]);
+    }
+
+    public function downloadGraphic(Request $request, MonthlyOffer $monthlyOffer)
+    {
+        abort_unless(
+            $request->user()?->canViewMonthlyOffers(),
+            403,
+            'You do not have permission to view Monthly Offers.'
+        );
+
+        if (! $monthlyOffer->hasGraphicPost() || ! Storage::disk('public')->exists($monthlyOffer->graphic_post_path)) {
+            abort(404, 'No graphic post found for this offer.');
+        }
+
+        return Storage::disk('public')->download(
+            $monthlyOffer->graphic_post_path,
+            $monthlyOffer->graphicDownloadFilename()
+        );
     }
 
     public function destroy(Request $request, MonthlyOffer $monthlyOffer)
@@ -172,6 +290,8 @@ class MonthlyOfferController extends Controller
             'capacity_scarcity' => ['required', 'string', 'max:5000'],
             'whatsapp_script' => ['nullable', 'string', 'max:30000'],
             'video_shooting_script' => ['nullable', 'string', 'max:30000'],
+            'graphic_post' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+            'remove_graphic_post' => ['nullable', 'boolean'],
         ]);
 
         $offerType = $validated['offer_type'];

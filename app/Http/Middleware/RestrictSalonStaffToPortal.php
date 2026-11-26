@@ -34,6 +34,7 @@ class RestrictSalonStaffToPortal
             || str_starts_with($path, 'my-profile/')
             || str_starts_with($path, 'my-contract/')
             || ($request->isMethod('GET') && ($path === 'monthly-offers' || $path === 'offers'))
+            || ($request->isMethod('GET') && preg_match('#^monthly-offers/\d+/graphic/download$#', $path) === 1)
             || preg_match('#^staff-documents/\d+/download$#', $path) === 1
             || preg_match('#^staff-leaves/\d+/certificate$#', $path) === 1
             || $path === 'logout'

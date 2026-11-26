@@ -1,6 +1,9 @@
 @php
     $todayQatar = $todayQatar ?? \Illuminate\Support\Carbon::now('Asia/Qatar');
     $canEditOffers = isset($canEditOffers) ? (bool) $canEditOffers : (bool) (auth()->user()?->canEdit('services'));
+    $canManageOfferGraphics = isset($canManageOfferGraphics)
+        ? (bool) $canManageOfferGraphics
+        : (bool) (auth()->user()?->canManageMonthlyOfferGraphics());
     $isStandaloneOffersPage = (bool) ($isStandaloneOffersPage ?? false);
     $offersCollection = collect($monthlyOffers ?? []);
     $combosList = collect($combos ?? []);
@@ -43,7 +46,7 @@
 
     $offerFieldNamesTab1 = ['title', 'category', 'offer_type', 'combo_id', 'service_freebie_id', 'service_ids', 'promo_price_qar', 'branch_scope', 'valid_from', 'valid_until', 'terms_and_conditions', 'staff_notes'];
     $offerFieldNamesTab2 = array_column($pillarDefs, 'key');
-    $offerFieldNamesTab3 = ['whatsapp_script', 'video_shooting_script'];
+    $offerFieldNamesTab3 = ['whatsapp_script', 'video_shooting_script', 'graphic_post'];
     $hasOfferTab1Err = $errors->hasAny($offerFieldNamesTab1);
     $hasOfferTab2Err = $errors->hasAny($offerFieldNamesTab2);
     $hasOfferTab3Err = $errors->hasAny($offerFieldNamesTab3);
@@ -1122,7 +1125,7 @@
         position: fixed;
         top: 22px;
         right: 24px;
-        z-index: 1095;
+        z-index: 1110;
         background: #1b1315;
         border: 1px solid rgba(110, 231, 183, 0.44);
         color: #6ee7b7;
@@ -1134,6 +1137,205 @@
         display: flex;
         align-items: center;
         gap: 8px;
+    }
+
+    /* Graphic Post Ghost Button, Lightbox, Drawer Tab & Modal Dropzone */
+    .mo-ghost-graphic-btn:hover {
+        color: #DDA29E;
+    }
+
+    .mo-lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 1095;
+        background: rgba(8, 6, 7, 0.88);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.18s ease;
+    }
+
+    .mo-lightbox.is-open {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .mo-lightbox-panel {
+        width: min(94vw, 900px);
+        max-height: 94vh;
+        background: #150f11;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 18px;
+        box-shadow: 0 28px 80px rgba(0, 0, 0, 0.78);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        color: #f8efe6;
+    }
+
+    .mo-lightbox-head {
+        padding: 16px 22px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        background: #1a1214;
+    }
+
+    .mo-lightbox-body {
+        padding: 20px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0d090a;
+        overflow: auto;
+        flex: 1 1 auto;
+    }
+
+    .mo-lightbox-img {
+        max-height: 72vh;
+        max-width: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        display: block;
+        margin: 0 auto;
+        background: #140e10;
+    }
+
+    .mo-lightbox-foot {
+        padding: 14px 22px;
+        border-top: 1px solid rgba(255, 255, 255, 0.07);
+        background: #181113;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .mo-graphic-btn {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: #efe4de;
+        border-radius: 999px;
+        padding: 7px 14px;
+        font-size: 12.5px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.14s ease;
+    }
+
+    .mo-graphic-btn:hover {
+        border-color: rgba(221, 162, 158, 0.45);
+        color: #ffffff;
+        background: rgba(221, 162, 158, 0.10);
+    }
+
+    .mo-graphic-btn.is-primary {
+        background: linear-gradient(135deg, #d98f83, #c48479);
+        border-color: transparent;
+        color: #1b1315;
+    }
+
+    .mo-graphic-btn.is-primary:hover {
+        filter: brightness(1.06);
+        color: #1b1315;
+    }
+
+    .mo-graphic-btn.is-danger {
+        color: #fda4af;
+        border-color: rgba(251, 113, 133, 0.24);
+    }
+
+    .mo-graphic-btn.is-danger:hover {
+        background: rgba(251, 113, 133, 0.12);
+        border-color: rgba(251, 113, 133, 0.45);
+        color: #fecdd3;
+    }
+
+    .mo-graphic-preview-wrap {
+        position: relative;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        background: #0f0a0c;
+        padding: 14px;
+        text-align: center;
+        cursor: zoom-in;
+        transition: border-color 0.16s ease;
+    }
+
+    .mo-graphic-preview-wrap:hover {
+        border-color: rgba(221, 162, 158, 0.42);
+    }
+
+    .mo-graphic-preview-img {
+        max-height: 440px;
+        max-width: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        border-radius: 10px;
+        display: block;
+        margin: 0 auto;
+    }
+
+    .mo-graphic-preview-hint {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 10px;
+        font-size: 11.5px;
+        color: rgba(255, 255, 255, 0.48);
+    }
+
+    .mo-graphic-dropzone {
+        border: 1px dashed rgba(221, 162, 158, 0.30);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.02);
+        padding: 16px 18px;
+        text-align: center;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .mo-graphic-dropzone:hover,
+    .mo-graphic-dropzone.is-dragover {
+        border-color: rgba(221, 162, 158, 0.72);
+        background: rgba(221, 162, 158, 0.07);
+    }
+
+    .mo-modal-graphic-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+    }
+
+    .mo-modal-graphic-thumb {
+        width: 54px;
+        height: 54px;
+        border-radius: 9px;
+        object-fit: cover;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: #0f0a0c;
+        flex-shrink: 0;
     }
 </style>
 
@@ -1306,12 +1508,22 @@
 
                             {{-- TIER 3: MINIMAL UNCROWDED FOOTER --}}
                             <div class="mo-card-footer">
-                                <button type="button"
-                                    class="mo-ghost-copy-btn js-mo-copy"
-                                    data-copy-text="{{ $offer->whatsappCopyText() }}">
-                                    <i class="bx bxl-whatsapp fs-6"></i>
-                                    <span class="js-mo-copy-label">Copy WhatsApp</span>
-                                </button>
+                                <div class="d-flex align-items-center gap-3 flex-wrap min-w-0">
+                                    <button type="button"
+                                        class="mo-ghost-copy-btn js-mo-copy"
+                                        data-copy-text="{{ $offer->whatsappCopyText() }}">
+                                        <i class="bx bxl-whatsapp fs-6"></i>
+                                        <span class="js-mo-copy-label">Copy WhatsApp</span>
+                                    </button>
+
+                                    <button type="button"
+                                        class="mo-ghost-copy-btn mo-ghost-graphic-btn js-mo-open-graphic {{ $offer->hasGraphicPost() ? '' : 'd-none' }}"
+                                        data-offer-id="{{ $offer->id }}"
+                                        title="View promotional graphic post">
+                                        <i class="bx bx-image-alt fs-6"></i>
+                                        <span>Graphic</span>
+                                    </button>
+                                </div>
 
                                 <div class="d-flex align-items-center gap-3 flex-shrink-0">
                                     <button type="button"
@@ -1320,7 +1532,7 @@
                                         <span>Playbook &rarr;</span>
                                     </button>
 
-                                    @if ($canEditOffers)
+                                    @if ($canEditOffers || $canManageOfferGraphics)
                                         <div class="mo-card-menu js-mo-card-menu js-mo-stop-prop">
                                             <button type="button"
                                                 class="mo-menu-trigger js-mo-menu-trigger"
@@ -1331,48 +1543,62 @@
                                                 <i class="bx bx-dots-horizontal-rounded"></i>
                                             </button>
                                             <div class="mo-menu-popover js-mo-menu-popover d-none" role="menu">
-                                                <button type="button"
-                                                    class="mo-menu-item js-mo-edit-btn"
-                                                    role="menuitem"
-                                                    data-offer-id="{{ $offer->id }}">
-                                                    <i class="bi bi-pencil-square"></i>
-                                                    <span>Edit Offer</span>
-                                                </button>
-                                                <div class="mo-menu-divider"></div>
-                                                <div class="mo-menu-section-label">Move to</div>
-                                                @foreach ($offerCategories as $moveCatKey => $moveCatLabel)
-                                                    @php $isCurrentCat = ($sectionCatKey === $moveCatKey); @endphp
+                                                @if ($canEditOffers)
                                                     <button type="button"
-                                                        class="mo-menu-item mo-menu-move-item js-mo-move-cat {{ $isCurrentCat ? 'is-current' : '' }}"
+                                                        class="mo-menu-item js-mo-edit-btn"
+                                                        role="menuitem"
+                                                        data-offer-id="{{ $offer->id }}">
+                                                        <i class="bi bi-pencil-square"></i>
+                                                        <span>Edit Offer</span>
+                                                    </button>
+                                                @endif
+                                                @if ($canManageOfferGraphics)
+                                                    <button type="button"
+                                                        class="mo-menu-item js-mo-quick-upload-graphic"
                                                         role="menuitem"
                                                         data-offer-id="{{ $offer->id }}"
-                                                        data-move-url="{{ route('offers.move-category', $offer) }}"
-                                                        data-target-category="{{ $moveCatKey }}"
-                                                        data-target-label="{{ $moveCatLabel }}"
-                                                        {{ $isCurrentCat ? 'disabled aria-current=true' : '' }}>
-                                                        <span>{{ $moveCatLabel }}</span>
-                                                        <span class="mo-move-check {{ $isCurrentCat ? '' : 'd-none' }}" aria-hidden="true">&#10003;</span>
+                                                        data-graphic-upload-url="{{ route('offers.graphic.upload', $offer) }}">
+                                                        <i class="bx bx-image-add"></i>
+                                                        <span class="js-mo-upload-graphic-label">{{ $offer->hasGraphicPost() ? 'Change Graphic' : 'Upload Graphic' }}</span>
                                                     </button>
-                                                @endforeach
-                                                <div class="mo-menu-divider"></div>
-                                                <form method="POST" action="{{ route('offers.toggle', $offer) }}">
-                                                    @csrf
-                                                    @method('PATCH')
-                                                    <button type="submit" class="mo-menu-item" role="menuitem">
-                                                        <i class="bx {{ $offer->is_active ? 'bx-archive-in' : 'bx-revision' }}"></i>
-                                                        <span>{{ $offer->is_active ? 'Archive / Unpublish' : 'Activate Offer' }}</span>
-                                                    </button>
-                                                </form>
-                                                <div class="mo-menu-divider"></div>
-                                                <form method="POST" action="{{ route('offers.destroy', $offer) }}"
-                                                      onsubmit="return confirm('Delete monthly offer {{ addslashes($offer->title) }}?')">
-                                                    @csrf
-                                                    @method('DELETE')
-                                                    <button type="submit" class="mo-menu-item is-danger" role="menuitem">
-                                                        <i class="bi bi-trash"></i>
-                                                        <span>Delete</span>
-                                                    </button>
-                                                </form>
+                                                @endif
+                                                @if ($canEditOffers)
+                                                    <div class="mo-menu-divider"></div>
+                                                    <div class="mo-menu-section-label">Move to</div>
+                                                    @foreach ($offerCategories as $moveCatKey => $moveCatLabel)
+                                                        @php $isCurrentCat = ($sectionCatKey === $moveCatKey); @endphp
+                                                        <button type="button"
+                                                            class="mo-menu-item mo-menu-move-item js-mo-move-cat {{ $isCurrentCat ? 'is-current' : '' }}"
+                                                            role="menuitem"
+                                                            data-offer-id="{{ $offer->id }}"
+                                                            data-move-url="{{ route('offers.move-category', $offer) }}"
+                                                            data-target-category="{{ $moveCatKey }}"
+                                                            data-target-label="{{ $moveCatLabel }}"
+                                                            {{ $isCurrentCat ? 'disabled aria-current=true' : '' }}>
+                                                            <span>{{ $moveCatLabel }}</span>
+                                                            <span class="mo-move-check {{ $isCurrentCat ? '' : 'd-none' }}" aria-hidden="true">&#10003;</span>
+                                                        </button>
+                                                    @endforeach
+                                                    <div class="mo-menu-divider"></div>
+                                                    <form method="POST" action="{{ route('offers.toggle', $offer) }}">
+                                                        @csrf
+                                                        @method('PATCH')
+                                                        <button type="submit" class="mo-menu-item" role="menuitem">
+                                                            <i class="bx {{ $offer->is_active ? 'bx-archive-in' : 'bx-revision' }}"></i>
+                                                            <span>{{ $offer->is_active ? 'Archive / Unpublish' : 'Activate Offer' }}</span>
+                                                        </button>
+                                                    </form>
+                                                    <div class="mo-menu-divider"></div>
+                                                    <form method="POST" action="{{ route('offers.destroy', $offer) }}"
+                                                          onsubmit="return confirm('Delete monthly offer {{ addslashes($offer->title) }}?')">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit" class="mo-menu-item is-danger" role="menuitem">
+                                                            <i class="bi bi-trash"></i>
+                                                            <span>Delete</span>
+                                                        </button>
+                                                    </form>
+                                                @endif
                                             </div>
                                         </div>
                                     @endif
@@ -1432,6 +1658,10 @@
         <button type="button" class="mo-drawer-tab" data-drawer-tab="video">
             <span>Video Shooting Script</span>
             <span id="moDrawerTabVideoDot" class="mo-drawer-tab-dot" title="Video shooting script readiness"></span>
+        </button>
+        <button type="button" class="mo-drawer-tab" data-drawer-tab="graphic">
+            <span>Graphic Post</span>
+            <span id="moDrawerTabGraphicDot" class="mo-drawer-tab-dot" title="Graphic post readiness"></span>
         </button>
     </div>
 
@@ -1516,21 +1746,121 @@
                 @endif
             </div>
         </div>
+
+        {{-- Drawer Tab 5: Graphic Post --}}
+        <div class="mo-drawer-pane d-none" data-drawer-pane="graphic">
+            <div id="moDrawerGraphicHasImage" class="d-none">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                    <div class="small fw-semibold" style="color:#cbb8b0;">Promotional Graphic Post</div>
+                    <div class="d-flex align-items-center flex-wrap gap-2">
+                        <button type="button" id="moDrawerCopyGraphicBtn" class="mo-graphic-btn is-primary">
+                            <i class="bx bx-copy"></i>
+                            <span class="js-mo-graphic-copy-label">Copy Image</span>
+                        </button>
+                        <a href="#" id="moDrawerDownloadGraphicLink" class="mo-graphic-btn" download>
+                            <i class="bx bx-download"></i>
+                            <span>Download Graphic</span>
+                        </a>
+                        @if ($canManageOfferGraphics)
+                            <button type="button" id="moDrawerReplaceGraphicBtn" class="mo-graphic-btn">
+                                <i class="bx bx-refresh"></i>
+                                <span>Replace</span>
+                            </button>
+                            <button type="button" id="moDrawerRemoveGraphicBtn" class="mo-graphic-btn is-danger">
+                                <i class="bi bi-trash"></i>
+                                <span>Remove</span>
+                            </button>
+                        @endif
+                    </div>
+                </div>
+                <div id="moDrawerGraphicPreviewWrap" class="mo-graphic-preview-wrap" role="button" tabindex="0" aria-label="Expand graphic post in full-size viewer">
+                    <img id="moDrawerGraphicImg" class="mo-graphic-preview-img" src="" alt="Offer Graphic Post">
+                    <div class="mo-graphic-preview-hint">
+                        <i class="bx bx-expand-alt"></i>
+                        <span>Click image to open full-size lightbox</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="moDrawerGraphicEmpty" class="text-center py-5 d-none">
+                <i class="bx bx-image-alt fs-1 d-block mb-2" style="color:#8f7a73;"></i>
+                <div class="fw-semibold mb-1" style="color:#cbb8b0;">No graphic post uploaded yet</div>
+                @if ($canManageOfferGraphics)
+                    <div class="small mb-3" style="color:#8f7a73;">Upload the promotional flyer so chat agents and managers can view, copy, or download it in 1 click.</div>
+                    <div id="moDrawerGraphicDropzone" class="mo-graphic-dropzone mx-auto" style="max-width:420px;">
+                        <div class="d-inline-flex align-items-center gap-2 fw-semibold mb-1" style="color:#f3d9a4; font-size:13px;">
+                            <i class="bx bx-upload fs-5"></i>
+                            <span>+ Upload Graphic Post</span>
+                        </div>
+                        <div class="small" style="color:#8f7a73; font-size:11.5px;">Drop an image here or click to browse &middot; JPG, PNG, WEBP up to 10 MB</div>
+                    </div>
+                @else
+                    <div class="small" style="color:#8f7a73;">Pending creative upload</div>
+                @endif
+            </div>
+        </div>
     </div>
 </aside>
+
+{{-- SLEEK DARK GRAPHIC POST LIGHTBOX MODAL (ALL OPERATIONAL ROLES) --}}
+<div id="moGraphicLightbox" class="mo-lightbox" role="dialog" aria-modal="true" aria-labelledby="moLightboxTitle" aria-hidden="true">
+    <div class="mo-lightbox-panel">
+        <div class="mo-lightbox-head">
+            <div class="min-w-0">
+                <h5 id="moLightboxTitle" class="fw-semibold mb-1 text-truncate" style="color:#f8efe6; font-size:17px;">Offer Graphic</h5>
+                <div id="moLightboxMeta" class="small mo-num" style="color:#a8938b;"></div>
+            </div>
+            <div class="d-flex align-items-center gap-3 flex-shrink-0">
+                <div id="moLightboxPrice" class="mo-num fw-bold" style="color:#f3d9a4; font-size:18px;"></div>
+                <button type="button" id="moLightboxCloseBtn" class="btn-close btn-close-white" aria-label="Close Graphic Viewer"></button>
+            </div>
+        </div>
+        <div class="mo-lightbox-body">
+            <img id="moLightboxImg" class="mo-lightbox-img" src="" alt="Offer Graphic Post">
+        </div>
+        <div class="mo-lightbox-foot">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <button type="button" id="moLightboxCopyBtn" class="mo-graphic-btn is-primary">
+                    <i class="bx bx-copy"></i>
+                    <span class="js-mo-graphic-copy-label">Copy Image</span>
+                </button>
+                <a href="#" id="moLightboxDownloadLink" class="mo-graphic-btn" download>
+                    <i class="bx bx-download"></i>
+                    <span>Download</span>
+                </a>
+            </div>
+            @if ($canManageOfferGraphics)
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    <button type="button" id="moLightboxReplaceBtn" class="mo-graphic-btn">
+                        <i class="bx bx-refresh"></i>
+                        <span>Replace</span>
+                    </button>
+                    <button type="button" id="moLightboxRemoveBtn" class="mo-graphic-btn is-danger">
+                        <i class="bi bi-trash"></i>
+                        <span>Remove</span>
+                    </button>
+                </div>
+            @endif
+        </div>
+    </div>
+</div>
+
+@if ($canManageOfferGraphics)
+    <input type="file" id="moQuickGraphicFileInput" class="d-none" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+@endif
 
 {{-- 3-TAB ADD / EDIT MONTHLY OFFER MODAL (SERVICES FULL EDIT / ADMIN ONLY) --}}
 @if ($canEditOffers)
 <div class="modal fade mo-modal" id="monthlyOfferModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
         <div class="modal-content">
-            <form method="POST" action="{{ route('offers.store') }}" id="monthlyOfferForm" novalidate>
+            <form method="POST" action="{{ route('offers.store') }}" id="monthlyOfferForm" enctype="multipart/form-data" novalidate>
                 @csrf
                 <input type="hidden" name="_method" id="moFormMethod" value="POST">
                 <div class="modal-header">
                     <div>
                         <h5 class="modal-title fw-bold mb-0" id="moModalTitle">Add Monthly Offer</h5>
-                        <div class="small" style="color:#9e8780;">Master Offer Playbook &middot; Basics, 7-Pillar Architecture &amp; Team Scripts</div>
+                        <div class="small" style="color:#9e8780;">Master Offer Playbook &middot; Basics, 7-Pillar Architecture &amp; Scripts</div>
                     </div>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
@@ -1550,7 +1880,7 @@
                     </button>
                     <button type="button" class="mo-step-tab" data-mo-step="3">
                         <span class="mo-step-num">3</span>
-                        <span>WhatsApp &amp; Video Scripts</span>
+                        <span>Scripts &amp; Graphic</span>
                         <span class="mo-tab-err-dot {{ $hasOfferTab3Err ? '' : 'd-none' }}" data-step-err="3"></span>
                     </button>
                 </div>
@@ -1765,15 +2095,46 @@
                         </div>
                     </div>
 
-                    {{-- TAB 3: WHATSAPP & VIDEO SCRIPTS (OPTIONAL ON INITIAL SAVE) --}}
+                    {{-- TAB 3: SCRIPTS & GRAPHIC (OPTIONAL ON INITIAL SAVE) --}}
                     <div class="mo-step-pane d-none" data-mo-step-pane="3">
                         <div class="d-flex flex-column gap-3">
+                            <div>
+                                <label class="form-label small fw-bold mb-0" for="moGraphicFileInput" style="color:#f8efe6;">
+                                    Offer Graphic Post <span class="fw-normal" style="color:#9e8780;">(optional — flyer / social post for quick WhatsApp sharing)</span>
+                                </label>
+                                <div class="mo-pillar-hint">Upload the promotional flyer (JPG, PNG, or WEBP up to 10 MB). Team members can view, copy, or download it in 1 click.</div>
+                                <input type="file" name="graphic_post" id="moGraphicFileInput" class="d-none" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                                <input type="hidden" name="remove_graphic_post" id="moRemoveGraphicInput" value="0">
+
+                                <div id="moModalGraphicEmpty" class="mo-graphic-dropzone" role="button" tabindex="0" aria-label="Upload offer graphic post">
+                                    <div class="d-inline-flex align-items-center gap-2 fw-semibold" style="color:#f3d9a4; font-size:13px;">
+                                        <i class="bx bx-image-add fs-5"></i>
+                                        <span>Drag &amp; drop graphic post here or click to browse</span>
+                                    </div>
+                                    <div class="small mt-1" style="color:#8f7a73; font-size:11.5px;">JPG, PNG, WEBP &middot; up to 10 MB</div>
+                                </div>
+
+                                <div id="moModalGraphicPreview" class="mo-modal-graphic-card d-none">
+                                    <div class="d-flex align-items-center gap-3 min-w-0">
+                                        <img id="moModalGraphicThumb" class="mo-modal-graphic-thumb" src="" alt="Offer Graphic Thumbnail">
+                                        <div class="min-w-0">
+                                            <div id="moModalGraphicName" class="small fw-semibold text-truncate" style="color:#f8efe6;">offer-graphic.png</div>
+                                            <div id="moModalGraphicMeta" class="small" style="color:#9e8780; font-size:11.5px;">Current graphic post</div>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                        <button type="button" id="moModalGraphicChangeBtn" class="mo-graphic-btn" style="padding:5px 11px; font-size:12px;">Change</button>
+                                        <button type="button" id="moModalGraphicRemoveBtn" class="mo-graphic-btn is-danger" style="padding:5px 11px; font-size:12px;">Remove</button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div>
                                 <label class="form-label small fw-bold mb-0" for="moWhatsappScript" style="color:#f8efe6;">
                                     WhatsApp / DM Scripts <span class="fw-normal" style="color:#9e8780;">(optional — can paste now or right after saving)</span>
                                 </label>
                                 <div class="mo-pillar-hint">Ready-to-send replies for chat agents (First Inquiry Reply, Price Objection / Length Confirmation, Follow-up &amp; Booking Close).</div>
-                                <textarea name="whatsapp_script" id="moWhatsappScript" rows="7" class="form-control mo-input mo-script-textarea"
+                                <textarea name="whatsapp_script" id="moWhatsappScript" rows="5" class="form-control mo-input mo-script-textarea"
                                     placeholder="[1. First Inquiry Reply]&#10;Hi darling ✨ Our November Glass-Hair Experience is 299 QAR and includes...&#10;&#10;[2. Price Objection / Length Confirmation]&#10;We confirm your exact hair length tier upfront before we begin — zero chair surprises...&#10;&#10;[3. Follow-Up & Booking Close]&#10;We only have 6 slots left this week across Old Airport & Al Wakrah. Which branch suits you best?">{{ old('whatsapp_script') }}</textarea>
                             </div>
 
@@ -1782,7 +2143,7 @@
                                     Video Shooting Script <span class="fw-normal" style="color:#9e8780;">(optional — shoot brief for social media team)</span>
                                 </label>
                                 <div class="mo-pillar-hint">3-Second Hook, Before/Problem Shot, Consultation &amp; Value Stack Visuals, Guarantee &amp; Scarcity CTA.</div>
-                                <textarea name="video_shooting_script" id="moVideoScript" rows="7" class="form-control mo-input mo-script-textarea"
+                                <textarea name="video_shooting_script" id="moVideoScript" rows="5" class="form-control mo-input mo-script-textarea"
                                     placeholder="[0:00–0:03 Hook]&#10;Close-up hair flip under ring light: 'Doha humidity ruining your blowout in 20 minutes?'&#10;&#10;[0:03–0:10 Before / Problem]&#10;Show frizzy before strand + stylist scalp consultation...&#10;&#10;[0:10–0:22 Value Stack Visuals]&#10;Fast cuts of clarifying detox, steam treatment, and gloss finish...&#10;&#10;[0:22–0:30 Guarantee & Scarcity CTA]&#10;'Backed by our 7-Day Silk Promise — only 25 slots this week. DM GLOW to book.'">{{ old('video_shooting_script') }}</textarea>
                             </div>
                         </div>
@@ -2220,6 +2581,7 @@
                 tabVideoDot.classList.toggle('is-ready', Boolean(offer.has_video_script));
                 tabVideoDot.title = offer.has_video_script ? 'Video shooting script ready' : 'No video shooting script yet';
             }
+            renderDrawerGraphicState(offer);
 
             // Tab 1: 7-Pillar Architecture
             const pillarsListEl = document.getElementById('moDrawerPillarsList');
@@ -2341,11 +2703,6 @@
 
         document.getElementById('moDrawerCloseBtn')?.addEventListener('click', closePlaybookDrawer);
         drawerBackdrop?.addEventListener('click', closePlaybookDrawer);
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && drawerEl?.classList.contains('is-open')) {
-                closePlaybookDrawer();
-            }
-        });
 
         document.getElementById('moDrawerCopyWaBtn')?.addEventListener('click', () => {
             if (!activeDrawerOffer) return;
@@ -2355,6 +2712,372 @@
         document.getElementById('moDrawerCopyVideoBtn')?.addEventListener('click', () => {
             if (!activeDrawerOffer || !activeDrawerOffer.video_shooting_script) return;
             copyTextWithFeedback(activeDrawerOffer.video_shooting_script, 'Video shooting script copied to clipboard.');
+        });
+
+        // ---------------- GRAPHIC POST LIGHTBOX, DRAWER TAB & QUICK UPLOAD/REMOVE ----------------
+        const lightboxEl = document.getElementById('moGraphicLightbox');
+        if (lightboxEl && lightboxEl.parentElement !== document.body) {
+            document.body.appendChild(lightboxEl);
+        }
+        const quickGraphicInput = document.getElementById('moQuickGraphicFileInput');
+        let activeLightboxOffer = null;
+        let pendingQuickUploadOfferId = null;
+
+        function renderDrawerGraphicState(offer) {
+            if (!offer) return;
+            const hasGraphic = Boolean(offer.has_graphic_post && offer.graphic_post_url);
+            const tabGraphicDot = document.getElementById('moDrawerTabGraphicDot');
+            if (tabGraphicDot) {
+                tabGraphicDot.classList.toggle('is-ready', hasGraphic);
+                tabGraphicDot.title = hasGraphic ? 'Graphic post uploaded' : 'No graphic post uploaded yet';
+            }
+            const hasWrap = document.getElementById('moDrawerGraphicHasImage');
+            const emptyWrap = document.getElementById('moDrawerGraphicEmpty');
+            const imgEl = document.getElementById('moDrawerGraphicImg');
+            const dlLink = document.getElementById('moDrawerDownloadGraphicLink');
+            if (hasGraphic) {
+                hasWrap?.classList.remove('d-none');
+                emptyWrap?.classList.add('d-none');
+                if (imgEl) {
+                    imgEl.src = offer.graphic_post_url;
+                    imgEl.alt = `${offer.title || 'Offer'} Graphic Post`;
+                }
+                if (dlLink) {
+                    dlLink.href = offer.graphic_download_url || offer.graphic_post_url;
+                    if (offer.graphic_filename) {
+                        dlLink.setAttribute('download', offer.graphic_filename);
+                    }
+                }
+            } else {
+                hasWrap?.classList.add('d-none');
+                emptyWrap?.classList.remove('d-none');
+                if (imgEl) imgEl.removeAttribute('src');
+            }
+        }
+
+        function openGraphicLightbox(offer) {
+            if (!offer || !offer.has_graphic_post || !offer.graphic_post_url || !lightboxEl) return;
+            activeLightboxOffer = offer;
+            document.getElementById('moLightboxTitle').textContent = offer.title || 'Offer Graphic';
+            const metaParts = [
+                offer.category_label || '',
+                offer.branch_label || '',
+                offer.date_short_cue || (offer.valid_until ? `Valid until ${offer.valid_until}` : ''),
+            ].filter(Boolean);
+            document.getElementById('moLightboxMeta').textContent = metaParts.join(' · ');
+            document.getElementById('moLightboxPrice').textContent = `${Number(offer.effective_price_qar || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} QAR`;
+
+            const imgEl = document.getElementById('moLightboxImg');
+            if (imgEl) {
+                imgEl.src = offer.graphic_post_url;
+                imgEl.alt = `${offer.title || 'Offer'} Graphic Post`;
+            }
+            const dlLink = document.getElementById('moLightboxDownloadLink');
+            if (dlLink) {
+                dlLink.href = offer.graphic_download_url || offer.graphic_post_url;
+                if (offer.graphic_filename) {
+                    dlLink.setAttribute('download', offer.graphic_filename);
+                }
+            }
+
+            lightboxEl.classList.add('is-open');
+            lightboxEl.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeGraphicLightbox() {
+            if (!lightboxEl) return;
+            lightboxEl.classList.remove('is-open');
+            lightboxEl.setAttribute('aria-hidden', 'true');
+            activeLightboxOffer = null;
+            if (!drawerEl?.classList.contains('is-open')) {
+                document.body.style.overflow = '';
+            }
+        }
+
+        function syncOfferGraphicState(offerId, graphicData) {
+            const scriptEl = document.getElementById(`moOfferData-${offerId}`);
+            let updatedOffer = null;
+            if (scriptEl) {
+                try {
+                    const payload = JSON.parse(scriptEl.textContent || '{}');
+                    const hasImg = Boolean(graphicData && graphicData.graphic_post_url);
+                    payload.has_graphic_post = hasImg;
+                    payload.graphic_post_url = hasImg ? graphicData.graphic_post_url : null;
+                    payload.graphic_download_url = hasImg ? (graphicData.download_url || graphicData.graphic_download_url || null) : null;
+                    payload.graphic_filename = hasImg ? (graphicData.graphic_filename || null) : null;
+                    scriptEl.textContent = JSON.stringify(payload);
+                    updatedOffer = payload;
+                } catch (e) {}
+            }
+
+            const hasImg = Boolean(updatedOffer && updatedOffer.has_graphic_post);
+            const cardCol = document.querySelector(`.mo-card-col[data-mo-card-id="${offerId}"]`);
+            if (cardCol) {
+                cardCol.querySelector('.js-mo-open-graphic')?.classList.toggle('d-none', !hasImg);
+                const uploadLabel = cardCol.querySelector('.js-mo-upload-graphic-label');
+                if (uploadLabel) {
+                    uploadLabel.textContent = hasImg ? 'Change Graphic' : 'Upload Graphic';
+                }
+            }
+
+            if (activeDrawerOffer && String(activeDrawerOffer.id) === String(offerId) && updatedOffer) {
+                activeDrawerOffer = updatedOffer;
+                renderDrawerGraphicState(updatedOffer);
+            }
+
+            if (activeLightboxOffer && String(activeLightboxOffer.id) === String(offerId)) {
+                if (hasImg && updatedOffer) {
+                    openGraphicLightbox(updatedOffer);
+                } else {
+                    closeGraphicLightbox();
+                }
+            }
+
+            return updatedOffer;
+        }
+
+        function validateGraphicFileClient(file) {
+            if (!file) return 'Please select an image file.';
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+            const ext = (file.name.split('.').pop() || '').toLowerCase();
+            const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+            if (!allowedTypes.includes(file.type) && !allowedExts.includes(ext)) {
+                return 'Please choose a JPG, PNG, or WEBP image.';
+            }
+            if (file.size > 10 * 1024 * 1024) {
+                return 'Image exceeds the 10 MB limit.';
+            }
+            return null;
+        }
+
+        async function uploadOfferGraphicFile(offerId, file) {
+            const errMsg = validateGraphicFileClient(file);
+            if (errMsg) {
+                showMoToast(errMsg);
+                return;
+            }
+            const offer = getOfferPayloadById(offerId);
+            if (!offer || !offer.graphic_upload_url) return;
+
+            const wasReplacing = Boolean(offer.has_graphic_post);
+            const fd = new FormData();
+            fd.append('graphic_post', file);
+
+            try {
+                const res = await fetch(offer.graphic_upload_url, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: fd,
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) {
+                    const firstErr = data?.errors?.graphic_post?.[0] || data?.message || 'Unable to upload graphic post.';
+                    throw new Error(firstErr);
+                }
+
+                syncOfferGraphicState(offerId, data);
+                showMoToast(wasReplacing ? 'Graphic post updated' : 'Graphic post uploaded');
+            } catch (err) {
+                showMoToast(err?.message || 'Unable to upload graphic post.');
+            }
+        }
+
+        async function removeOfferGraphic(offer) {
+            if (!offer || !offer.graphic_delete_url) return;
+            if (!window.confirm('Remove the graphic post from this offer?')) return;
+
+            try {
+                const res = await fetch(offer.graphic_delete_url, {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) {
+                    throw new Error(data?.message || 'Unable to remove graphic post.');
+                }
+                syncOfferGraphicState(offer.id, null);
+                showMoToast('Graphic post removed');
+            } catch (err) {
+                showMoToast(err?.message || 'Unable to remove graphic post.');
+            }
+        }
+
+        async function convertBlobToPngBlob(blob) {
+            if (blob.type === 'image/png') return blob;
+            const objUrl = URL.createObjectURL(blob);
+            try {
+                const img = await new Promise((resolve, reject) => {
+                    const image = new Image();
+                    image.onload = () => resolve(image);
+                    image.onerror = reject;
+                    image.src = objUrl;
+                });
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth || img.width;
+                canvas.height = img.naturalHeight || img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                return await new Promise((resolve, reject) => {
+                    canvas.toBlob((out) => (out ? resolve(out) : reject(new Error('PNG export failed'))), 'image/png');
+                });
+            } finally {
+                URL.revokeObjectURL(objUrl);
+            }
+        }
+
+        async function copyOfferGraphicToClipboard(offer, triggerBtn) {
+            if (!offer || !offer.has_graphic_post) return;
+            const labelEl = triggerBtn?.querySelector('.js-mo-graphic-copy-label');
+            const origLabel = labelEl?.dataset.origLabel || labelEl?.textContent || 'Copy Image';
+            if (labelEl) {
+                labelEl.dataset.origLabel = origLabel;
+                labelEl.textContent = 'Copying...';
+            }
+
+            try {
+                if (!navigator.clipboard || typeof navigator.clipboard.write !== 'function' || typeof window.ClipboardItem === 'undefined') {
+                    throw new Error('Clipboard image API unavailable');
+                }
+                const fetchUrl = offer.graphic_download_url || offer.graphic_post_url;
+                const res = await fetch(fetchUrl, { credentials: 'same-origin' });
+                if (!res.ok) throw new Error('Image fetch failed');
+                const blob = await res.blob();
+                const pngBlob = await convertBlobToPngBlob(blob);
+                await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': pngBlob })]);
+
+                if (labelEl) {
+                    labelEl.textContent = 'Copied \u2713';
+                    clearTimeout(triggerBtn._copyImgTimer);
+                    triggerBtn._copyImgTimer = setTimeout(() => {
+                        labelEl.textContent = origLabel;
+                    }, 2000);
+                }
+                showMoToast('Graphic copied to clipboard — paste in WhatsApp');
+            } catch (err) {
+                if (labelEl) labelEl.textContent = origLabel;
+                showMoToast('Direct image copy is not supported in this browser — use Download instead.');
+            }
+        }
+
+        function triggerQuickGraphicPicker(offerId) {
+            if (!quickGraphicInput || !offerId) return;
+            pendingQuickUploadOfferId = String(offerId);
+            quickGraphicInput.value = '';
+            quickGraphicInput.click();
+        }
+
+        quickGraphicInput?.addEventListener('change', async () => {
+            const file = quickGraphicInput.files?.[0];
+            const targetOfferId = pendingQuickUploadOfferId;
+            pendingQuickUploadOfferId = null;
+            if (!file || !targetOfferId) return;
+            await uploadOfferGraphicFile(targetOfferId, file);
+        });
+
+        // Card footer quiet "Graphic" button -> opens Lightbox directly
+        document.querySelectorAll('.js-mo-open-graphic').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeAllCardMenus();
+                const payload = getOfferPayloadById(btn.dataset.offerId);
+                if (payload && payload.has_graphic_post) {
+                    openGraphicLightbox(payload);
+                }
+            });
+        });
+
+        // Card overflow "..." Upload / Change Graphic quick action
+        document.querySelectorAll('.js-mo-quick-upload-graphic').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                closeAllCardMenus();
+                triggerQuickGraphicPicker(btn.dataset.offerId);
+            });
+        });
+
+        // Lightbox controls
+        document.getElementById('moLightboxCloseBtn')?.addEventListener('click', closeGraphicLightbox);
+        lightboxEl?.addEventListener('click', (e) => {
+            if (e.target === lightboxEl) closeGraphicLightbox();
+        });
+        document.getElementById('moLightboxCopyBtn')?.addEventListener('click', (e) => {
+            if (activeLightboxOffer) copyOfferGraphicToClipboard(activeLightboxOffer, e.currentTarget);
+        });
+        document.getElementById('moLightboxReplaceBtn')?.addEventListener('click', () => {
+            if (activeLightboxOffer) triggerQuickGraphicPicker(activeLightboxOffer.id);
+        });
+        document.getElementById('moLightboxRemoveBtn')?.addEventListener('click', () => {
+            if (activeLightboxOffer) removeOfferGraphic(activeLightboxOffer);
+        });
+
+        // Drawer 5th Tab (Graphic Post) controls
+        const drawerGraphicPreviewWrap = document.getElementById('moDrawerGraphicPreviewWrap');
+        drawerGraphicPreviewWrap?.addEventListener('click', () => {
+            if (activeDrawerOffer && activeDrawerOffer.has_graphic_post) {
+                openGraphicLightbox(activeDrawerOffer);
+            }
+        });
+        drawerGraphicPreviewWrap?.addEventListener('keydown', (e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && activeDrawerOffer && activeDrawerOffer.has_graphic_post) {
+                e.preventDefault();
+                openGraphicLightbox(activeDrawerOffer);
+            }
+        });
+        document.getElementById('moDrawerCopyGraphicBtn')?.addEventListener('click', (e) => {
+            if (activeDrawerOffer) copyOfferGraphicToClipboard(activeDrawerOffer, e.currentTarget);
+        });
+        document.getElementById('moDrawerReplaceGraphicBtn')?.addEventListener('click', () => {
+            if (activeDrawerOffer) triggerQuickGraphicPicker(activeDrawerOffer.id);
+        });
+        document.getElementById('moDrawerRemoveGraphicBtn')?.addEventListener('click', () => {
+            if (activeDrawerOffer) removeOfferGraphic(activeDrawerOffer);
+        });
+
+        const drawerGraphicDropzone = document.getElementById('moDrawerGraphicDropzone');
+        if (drawerGraphicDropzone) {
+            drawerGraphicDropzone.addEventListener('click', () => {
+                if (activeDrawerOffer) triggerQuickGraphicPicker(activeDrawerOffer.id);
+            });
+            ['dragenter', 'dragover'].forEach(evtName => {
+                drawerGraphicDropzone.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    drawerGraphicDropzone.classList.add('is-dragover');
+                });
+            });
+            ['dragleave', 'drop'].forEach(evtName => {
+                drawerGraphicDropzone.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    drawerGraphicDropzone.classList.remove('is-dragover');
+                });
+            });
+            drawerGraphicDropzone.addEventListener('drop', (e) => {
+                const file = e.dataTransfer?.files?.[0];
+                if (file && activeDrawerOffer) {
+                    uploadOfferGraphicFile(activeDrawerOffer.id, file);
+                }
+            });
+        }
+
+        // Layered Escape key handling: Lightbox first, then Playbook Drawer
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (lightboxEl?.classList.contains('is-open')) {
+                closeGraphicLightbox();
+                return;
+            }
+            if (drawerEl?.classList.contains('is-open')) {
+                closePlaybookDrawer();
+            }
         });
 
         // ---------------- 3-TAB ADD / EDIT MODAL WIRING ----------------
@@ -2730,9 +3453,112 @@
             }
         });
 
+        // Modal Tab 3 Graphic Post Uploader
+        const modalGraphicFileInput = document.getElementById('moGraphicFileInput');
+        const modalRemoveGraphicInput = document.getElementById('moRemoveGraphicInput');
+        const modalGraphicEmpty = document.getElementById('moModalGraphicEmpty');
+        const modalGraphicPreview = document.getElementById('moModalGraphicPreview');
+        const modalGraphicThumb = document.getElementById('moModalGraphicThumb');
+        const modalGraphicName = document.getElementById('moModalGraphicName');
+        const modalGraphicMeta = document.getElementById('moModalGraphicMeta');
+        let modalGraphicObjectUrl = null;
+
+        function revokeModalGraphicUrl() {
+            if (modalGraphicObjectUrl) {
+                URL.revokeObjectURL(modalGraphicObjectUrl);
+                modalGraphicObjectUrl = null;
+            }
+        }
+
+        function renderModalGraphicState({ url = null, name = '', meta = '' } = {}) {
+            if (!modalGraphicEmpty || !modalGraphicPreview) return;
+            if (url) {
+                modalGraphicEmpty.classList.add('d-none');
+                modalGraphicPreview.classList.remove('d-none');
+                if (modalGraphicThumb) modalGraphicThumb.src = url;
+                if (modalGraphicName) modalGraphicName.textContent = name || 'offer-graphic.png';
+                if (modalGraphicMeta) modalGraphicMeta.textContent = meta || 'Current graphic post';
+            } else {
+                modalGraphicEmpty.classList.remove('d-none');
+                modalGraphicPreview.classList.add('d-none');
+                if (modalGraphicThumb) modalGraphicThumb.removeAttribute('src');
+            }
+        }
+
+        function handleModalGraphicFileSelection(file) {
+            if (!file) return;
+            const errMsg = validateGraphicFileClient(file);
+            if (errMsg) {
+                showMoToast(errMsg);
+                if (modalGraphicFileInput) modalGraphicFileInput.value = '';
+                return;
+            }
+            revokeModalGraphicUrl();
+            modalGraphicObjectUrl = URL.createObjectURL(file);
+            if (modalRemoveGraphicInput) modalRemoveGraphicInput.value = '0';
+            const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+            renderModalGraphicState({
+                url: modalGraphicObjectUrl,
+                name: file.name,
+                meta: `Ready to upload · ${sizeMb} MB`,
+            });
+        }
+
+        modalGraphicFileInput?.addEventListener('change', () => {
+            const file = modalGraphicFileInput.files?.[0];
+            if (file) handleModalGraphicFileSelection(file);
+        });
+
+        modalGraphicEmpty?.addEventListener('click', () => modalGraphicFileInput?.click());
+        modalGraphicEmpty?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                modalGraphicFileInput?.click();
+            }
+        });
+        if (modalGraphicEmpty) {
+            ['dragenter', 'dragover'].forEach(evtName => {
+                modalGraphicEmpty.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    modalGraphicEmpty.classList.add('is-dragover');
+                });
+            });
+            ['dragleave', 'drop'].forEach(evtName => {
+                modalGraphicEmpty.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    modalGraphicEmpty.classList.remove('is-dragover');
+                });
+            });
+            modalGraphicEmpty.addEventListener('drop', (e) => {
+                const file = e.dataTransfer?.files?.[0];
+                if (!file || !modalGraphicFileInput) return;
+                try {
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    modalGraphicFileInput.files = dt.files;
+                } catch (err) {}
+                handleModalGraphicFileSelection(file);
+            });
+        }
+
+        document.getElementById('moModalGraphicChangeBtn')?.addEventListener('click', () => {
+            modalGraphicFileInput?.click();
+        });
+
+        document.getElementById('moModalGraphicRemoveBtn')?.addEventListener('click', () => {
+            revokeModalGraphicUrl();
+            if (modalGraphicFileInput) modalGraphicFileInput.value = '';
+            if (modalRemoveGraphicInput) modalRemoveGraphicInput.value = '1';
+            renderModalGraphicState({});
+        });
+
         window.openMonthlyOfferCreateModal = function () {
             if (!modalEl || !formEl) return;
             clearModalErrors();
+            revokeModalGraphicUrl();
+            if (modalGraphicFileInput) modalGraphicFileInput.value = '';
+            if (modalRemoveGraphicInput) modalRemoveGraphicInput.value = '0';
+            renderModalGraphicState({});
             document.getElementById('moModalTitle').textContent = 'Add Monthly Offer';
             formEl.action = '{{ route('offers.store') }}';
             document.getElementById('moFormMethod').value = 'POST';
@@ -2758,7 +3584,7 @@
             document.getElementById('moWhatsappScript').value = '';
             document.getElementById('moVideoScript').value = '';
             syncOfferTypeFields();
-        renderSelectedServicesStrip();
+            renderSelectedServicesStrip();
             setModalStep(1);
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
         };
@@ -2766,6 +3592,18 @@
         function openMonthlyOfferEditModal(offer, initialStep = 1, focusFieldId = null) {
             if (!modalEl || !formEl || !offer) return;
             clearModalErrors();
+            revokeModalGraphicUrl();
+            if (modalGraphicFileInput) modalGraphicFileInput.value = '';
+            if (modalRemoveGraphicInput) modalRemoveGraphicInput.value = '0';
+            if (offer.has_graphic_post && offer.graphic_post_url) {
+                renderModalGraphicState({
+                    url: offer.graphic_post_url,
+                    name: offer.graphic_filename || 'offer-graphic.png',
+                    meta: 'Current graphic post',
+                });
+            } else {
+                renderModalGraphicState({});
+            }
             document.getElementById('moModalTitle').textContent = 'Edit Monthly Offer';
             formEl.action = `/monthly-offers/${offer.id}`;
             document.getElementById('moFormMethod').value = 'PUT';
@@ -2791,7 +3629,7 @@
             document.getElementById('moWhatsappScript').value = offer.whatsapp_script || '';
             document.getElementById('moVideoScript').value = offer.video_shooting_script || '';
             syncOfferTypeFields();
-        renderSelectedServicesStrip();
+            renderSelectedServicesStrip();
             setModalStep(initialStep);
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
             if (focusFieldId) {
