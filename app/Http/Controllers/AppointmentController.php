@@ -382,6 +382,22 @@ class AppointmentController extends Controller
         if (($rawBookingAgentInput === null || $rawBookingAgentInput === '') && $request->input('booking_agent_type') === Appointment::BOOKING_AGENT_SALON_STAFF) {
             $rawBookingAgentInput = Appointment::BOOKING_AGENT_SALON_STAFF;
         }
+
+        $defaultedSelfAgentSelection = null;
+        $storeActor = $request->user();
+        if (
+            ($rawBookingAgentInput === null || $rawBookingAgentInput === '')
+            && $storeActor
+            && $storeActor->role === 'agent'
+        ) {
+            $rawBookingAgentInput = (string) $storeActor->id;
+            $defaultedSelfAgentSelection = [
+                'booking_agent_id' => (int) $storeActor->id,
+                'booking_agent_type' => Appointment::BOOKING_AGENT_TYPE_AGENT,
+                'label' => Appointment::canonicalAgentShortName($storeActor->name) ?? $storeActor->name,
+            ];
+        }
+
         $request->merge(['booking_agent_id' => $rawBookingAgentInput ?? '']);
 
         $rules = [
@@ -410,7 +426,10 @@ class AppointmentController extends Controller
             'price' => 'nullable|numeric',
             'booking_agent_id' => [
                 'required',
-                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                function (string $attribute, mixed $value, \Closure $fail) use ($request, $defaultedSelfAgentSelection): void {
+                    if ($defaultedSelfAgentSelection !== null) {
+                        return;
+                    }
                     if (Appointment::resolveBookingAgentSelection($value, $request->input('booking_agent_type')) === null) {
                         $fail(Appointment::BOOKING_AGENT_VALIDATION_ERROR);
                     }
@@ -480,7 +499,7 @@ class AppointmentController extends Controller
 
         $request->validate($rules, $messages);
 
-        $bookingAgentSelection = Appointment::resolveBookingAgentSelection(
+        $bookingAgentSelection = $defaultedSelfAgentSelection ?? Appointment::resolveBookingAgentSelection(
             $request->input('booking_agent_id'),
             $request->input('booking_agent_type')
         );
@@ -1653,21 +1672,27 @@ class AppointmentController extends Controller
             $resolvedBookingAgentType = $appointment->booking_agent_type;
             if ($request->exists('booking_agent_id') || $request->exists('booking_agent') || $request->exists('booking_agent_type')) {
                 $actor = $request->user();
-                $resolvedSelection = Appointment::resolveBookingAgentSelection(
-                    $request->input('booking_agent_id', $request->input('booking_agent')),
-                    $request->input('booking_agent_type')
-                );
-                if ($resolvedSelection !== null) {
-                    $submittedAgentId = $resolvedSelection['booking_agent_id'];
-                    $submittedAgentType = $resolvedSelection['booking_agent_type'];
-                    $canAdminOrManagerEdit = $actor && ($actor->isAdmin() || $actor->role === 'manager');
-                    $canSelfAgentEdit = $actor && $actor->role === 'agent'
-                        && ($appointment->booking_agent_id === null || (int) $appointment->booking_agent_id === (int) $actor->id)
-                        && ($submittedAgentId === null || $submittedAgentId === (int) $actor->id);
+                $isAdminActor = (bool) ($actor && $actor->isAdmin());
+                $hasAttributedAgent = $appointment->booking_agent_id !== null
+                    || $appointment->booking_agent_type === Appointment::BOOKING_AGENT_TYPE_AGENT;
 
-                    if ($canAdminOrManagerEdit || $canSelfAgentEdit) {
-                        $resolvedBookingAgentId = $submittedAgentId;
-                        $resolvedBookingAgentType = $submittedAgentType;
+                if (! $hasAttributedAgent || $isAdminActor) {
+                    $resolvedSelection = Appointment::resolveBookingAgentSelection(
+                        $request->input('booking_agent_id', $request->input('booking_agent')),
+                        $request->input('booking_agent_type')
+                    );
+                    if ($resolvedSelection !== null) {
+                        $submittedAgentId = $resolvedSelection['booking_agent_id'];
+                        $submittedAgentType = $resolvedSelection['booking_agent_type'];
+                        $canAdminOrManagerEdit = $actor && ($actor->isAdmin() || $actor->role === 'manager');
+                        $canSelfAgentEdit = $actor && $actor->role === 'agent'
+                            && ($appointment->booking_agent_id === null || (int) $appointment->booking_agent_id === (int) $actor->id)
+                            && ($submittedAgentId === null || $submittedAgentId === (int) $actor->id);
+
+                        if ($canAdminOrManagerEdit || $canSelfAgentEdit) {
+                            $resolvedBookingAgentId = $submittedAgentId;
+                            $resolvedBookingAgentType = $submittedAgentType;
+                        }
                     }
                 }
             }
@@ -4170,6 +4195,12 @@ class AppointmentController extends Controller
             }
         }
 
+        $fullEditActor = $request->user();
+        $isAdminFullEditor = (bool) ($fullEditActor && $fullEditActor->isAdmin());
+        $hasLockedAttributedAgent = $appointment->booking_agent_id !== null
+            || $appointment->booking_agent_type === Appointment::BOOKING_AGENT_TYPE_AGENT;
+        $preserveLockedBookingAgent = $hasLockedAttributedAgent && ! $isAdminFullEditor;
+
         $rawBookingAgentInput = $request->input('booking_agent_id');
         if (($rawBookingAgentInput === null || $rawBookingAgentInput === '') && $request->filled('booking_agent')) {
             $rawBookingAgentInput = $request->input('booking_agent');
@@ -4177,7 +4208,9 @@ class AppointmentController extends Controller
         if (($rawBookingAgentInput === null || $rawBookingAgentInput === '') && $request->input('booking_agent_type') === Appointment::BOOKING_AGENT_SALON_STAFF) {
             $rawBookingAgentInput = Appointment::BOOKING_AGENT_SALON_STAFF;
         }
-        $request->merge(['booking_agent_id' => $rawBookingAgentInput ?? '']);
+        if (! $preserveLockedBookingAgent) {
+            $request->merge(['booking_agent_id' => $rawBookingAgentInput ?? '']);
+        }
 
         $rules = [
             'customer_name' => 'required|string|max:255',
@@ -4204,14 +4237,16 @@ class AppointmentController extends Controller
             'branch' => 'required|in:old_airport,wakrah',
             'price' => 'nullable|numeric',
             'notes' => 'nullable|string|max:5000',
-            'booking_agent_id' => [
-                'required',
-                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
-                    if (Appointment::resolveBookingAgentSelection($value, $request->input('booking_agent_type')) === null) {
-                        $fail(Appointment::BOOKING_AGENT_VALIDATION_ERROR);
-                    }
-                },
-            ],
+            'booking_agent_id' => $preserveLockedBookingAgent
+                ? ['nullable']
+                : [
+                    'required',
+                    function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                        if (Appointment::resolveBookingAgentSelection($value, $request->input('booking_agent_type')) === null) {
+                            $fail(Appointment::BOOKING_AGENT_VALIDATION_ERROR);
+                        }
+                    },
+                ],
             'staff_id' => 'nullable|exists:staff,id',
             'decide_in_salon' => 'nullable|boolean',
             'packages' => 'nullable|array',
@@ -4289,10 +4324,15 @@ class AppointmentController extends Controller
             }
         }
 
-        $bookingAgentSelection = Appointment::resolveBookingAgentSelection(
-            $request->input('booking_agent_id'),
-            $request->input('booking_agent_type')
-        );
+        $bookingAgentSelection = $preserveLockedBookingAgent
+            ? [
+                'booking_agent_id' => $appointment->booking_agent_id,
+                'booking_agent_type' => $appointment->booking_agent_type ?: Appointment::BOOKING_AGENT_TYPE_AGENT,
+            ]
+            : Appointment::resolveBookingAgentSelection(
+                $request->input('booking_agent_id'),
+                $request->input('booking_agent_type')
+            );
 
         $rawServiceNames = array_values(array_filter(
             array_map('trim', (array) $request->input('service_name', [])),

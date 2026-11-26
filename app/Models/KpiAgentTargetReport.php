@@ -164,8 +164,11 @@ class KpiAgentTargetReport extends Model
         return $agents->map(function (User $agent) use ($todayBounds, $daysElapsed, $daysInMonth, $dailyTarget, $todayShiftLogs, $mtdByAgent) {
             $agentAppointments = $mtdByAgent->get($agent->id, collect());
             $mtdBookings = $agentAppointments->count();
-            $todayBookings = $agentAppointments
-                ->filter(fn (Appointment $appt) => AgentBookingQuotaCalculator::isCreatedWithinBounds($appt, $todayBounds))
+            $todayAppointments = $agentAppointments
+                ->filter(fn (Appointment $appt) => AgentBookingQuotaCalculator::isCreatedWithinBounds($appt, $todayBounds));
+            $todayBookings = $todayAppointments->count();
+            $todayPendingTimeCount = $todayAppointments
+                ->filter(fn (Appointment $appt) => AgentBookingQuotaCalculator::isPendingTime($appt))
                 ->count();
 
             $mtdTarget = $dailyTarget * $daysElapsed;
@@ -179,6 +182,7 @@ class KpiAgentTargetReport extends Model
                 'name' => $agent->name,
                 'daily_target' => $dailyTarget,
                 'today_bookings' => $todayBookings,
+                'today_pending_time_count' => $todayPendingTimeCount,
                 'today_pct' => $todayPct,
                 'mtd_bookings' => $mtdBookings,
                 'mtd_target' => $mtdTarget,

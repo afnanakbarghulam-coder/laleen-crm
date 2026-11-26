@@ -25,7 +25,13 @@
                         <div class="text-muted mb-1" style="font-size:11.5px;">{{ \App\Support\AgentBookingQuotaCalculator::UI_TOOLTIP_COPY }}</div>
                         <div class="kpi-stat-value">{{ $card['mtd_bookings'] }} / {{ $card['mtd_target'] }} <span class="text-muted small fw-normal">Bookings MTD</span></div>
                         <div class="kpi-stat-sub d-flex flex-wrap align-items-center justify-content-between gap-2 mt-1">
-                            <span>Today: <strong>{{ $card['today_bookings'] }} / {{ $card['daily_target'] }}</strong> ({{ number_format($card['today_pct'], 1) }}%) &bull; Full Month: {{ $card['full_month_target'] }}</span>
+                            <span>
+                                Today: <strong>{{ $card['today_bookings'] }} / {{ $card['daily_target'] }}</strong> ({{ number_format($card['today_pct'], 1) }}%)
+                                @if (($card['today_pending_time_count'] ?? 0) > 0)
+                                    <span class="text-muted">&bull; incl. {{ $card['today_pending_time_count'] }} pending time</span>
+                                @endif
+                                &bull; Full Month: {{ $card['full_month_target'] }}
+                            </span>
                             @if ($card['shift_log'])
                                 <span class="text-muted small">
                                     Shift: {{ \App\Models\AgentShiftLog::SHIFTS[$card['shift_log']->shift] ?? $card['shift_log']->shift }}

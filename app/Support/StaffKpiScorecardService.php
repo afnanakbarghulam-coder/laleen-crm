@@ -1091,6 +1091,7 @@ class StaffKpiScorecardService
         $todayBounds = AgentBookingQuotaCalculator::qatarDayBounds($referenceDate);
 
         $todayBookings = 0;
+        $todayPendingTimeCount = 0;
         $mtdBookings = 0;
 
         if ($agentUserIds->isNotEmpty()) {
@@ -1100,8 +1101,11 @@ class StaffKpiScorecardService
                 $periodEnd
             );
             $mtdBookings = $dedupedMtdAppointments->count();
-            $todayBookings = $dedupedMtdAppointments
-                ->filter(fn (Appointment $appt) => AgentBookingQuotaCalculator::isCreatedWithinBounds($appt, $todayBounds))
+            $todayAppointments = $dedupedMtdAppointments
+                ->filter(fn (Appointment $appt) => AgentBookingQuotaCalculator::isCreatedWithinBounds($appt, $todayBounds));
+            $todayBookings = $todayAppointments->count();
+            $todayPendingTimeCount = $todayAppointments
+                ->filter(fn (Appointment $appt) => AgentBookingQuotaCalculator::isPendingTime($appt))
                 ->count();
         }
 
@@ -1116,6 +1120,7 @@ class StaffKpiScorecardService
             'role' => $role,
             'daily_target' => $dailyTarget,
             'today_bookings' => $todayBookings,
+            'today_pending_time_count' => $todayPendingTimeCount,
             'today_attainment_pct' => $todayAttainmentPct,
             'today_remaining_needed' => max(0, $dailyTarget - $todayBookings),
             'daily_avg_pace' => $dailyAvgPace,
@@ -2120,6 +2125,7 @@ class StaffKpiScorecardService
 
         $isCurrent = (bool) $ctx['is_current_month'];
         $todayBk = (int) ($agent['today_bookings'] ?? 0);
+        $todayPendingTime = (int) ($agent['today_pending_time_count'] ?? 0);
         $todayPct = (float) ($agent['today_attainment_pct'] ?? 0);
         $mtdBk = (int) ($agent['mtd_bookings'] ?? 0);
         $mtdTarget = (int) ($agent['mtd_target'] ?? (self::AGENT_DAILY_BOOKING_QUOTA * $ctx['days_elapsed']));
@@ -2189,10 +2195,13 @@ class StaffKpiScorecardService
                     'hero_main' => (string) ($isCurrent ? $todayBk : $dailyAvg),
                     'hero_unit' => '/ 13',
                     'delta_segments' => $isCurrent
-                        ? [
+                        ? array_values(array_filter([
                             ['text' => number_format($todayPct, 1) . '%', 'class' => $card2Pass ? 'hl-emerald' : 'hl-rose'],
                             ['text' => ' of Daily Quota (' . ($todayBk >= 13 ? 'Daily Quota Met!' : (max(0, 13 - $todayBk) . ' left today')) . ')'],
-                        ]
+                            $todayPendingTime > 0
+                                ? ['text' => " • incl. {$todayPendingTime} pending time"]
+                                : null,
+                        ]))
                         : [
                             ['text' => "{$dailyAvg} / 13 per day", 'class' => $card2Pass ? 'hl-emerald' : 'hl-rose'],
                             ['text' => " across {$ctx['month_label']}"],

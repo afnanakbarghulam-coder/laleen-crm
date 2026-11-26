@@ -272,20 +272,20 @@ class ChatAgentKpiPipelineAuditFixesTest extends TestCase
         }
     }
 
-    public function test_anti_gaming_deduplicates_same_client_same_day_splits_and_excludes_unscheduled_placeholders_until_scheduled(): void
+    public function test_anti_gaming_deduplicates_accidental_double_submits_and_counts_pending_time_bookings_on_creation_day(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-11-13 12:00:00', 'Asia/Qatar'));
 
         try {
-            // 1. Areeba splits the SAME customer (+974 5577 8899 / 97455778899 / 55778899) into 3 separate rows on 2026-11-15:
-            // 2:00 PM Haircut, 3:00 PM Manicure, 4:00 PM Pedicure -> MUST count as +1, NOT +3!
-            $splitPayloads = [
+            // 1. Areeba creates 3 separate appointments for the same client at DIFFERENT times on 2026-11-15:
+            //    2:00 PM Haircut, 3:00 PM Manicure, 4:00 PM Pedicure -> each distinct appointment counts (+3)
+            $separatePayloads = [
                 ['phone' => '+97455778899', 'time' => '2026-11-15 14:00:00', 'svc' => 'Haircut'],
                 ['phone' => '97455778899', 'time' => '2026-11-15 15:00:00', 'svc' => 'Manicure'],
                 ['phone' => '55778899', 'time' => '2026-11-15 16:00:00', 'svc' => 'Pedicure'],
             ];
 
-            foreach ($splitPayloads as $row) {
+            foreach ($separatePayloads as $row) {
                 $this->actingAs($this->areeba)
                     ->post(route('appointments.store'), [
                         'customer_name' => 'Split Gaming Client',
@@ -299,9 +299,28 @@ class ChatAgentKpiPipelineAuditFixesTest extends TestCase
                     ->assertRedirect();
             }
 
-            $this->assertSame(3, Appointment::where('booking_agent_id', $this->areeba->id)->count());
+            // Accidental double-submit (exact same customer, date, start_time=14:00:00, within 60 seconds) -> deduplicated!
+            $doubleSubmit = Appointment::create([
+                'customer_name' => 'Split Gaming Client',
+                'phone' => '+97455778899',
+                'customer_id' => Appointment::where('booking_agent_id', $this->areeba->id)->value('customer_id'),
+                'appointment_datetime' => Carbon::parse('2026-11-15 14:00:00', 'Asia/Qatar'),
+                'booking_date' => '2026-11-15',
+                'start_time' => '14:00:00',
+                'service_name' => 'Haircut',
+                'branch' => 'old_airport',
+                'staff_id' => $this->oaStylist->id,
+                'booking_agent_id' => $this->areeba->id,
+                'booking_agent_type' => Appointment::BOOKING_AGENT_TYPE_AGENT,
+                'created_by' => $this->areeba->id,
+                'status' => 'confirmed',
+                'price' => 180,
+            ]);
+            $doubleSubmit->forceFill(['created_at' => Carbon::parse('2026-11-13 12:00:25', 'Asia/Qatar')])->saveQuietly();
 
-            // 2. Booking that SAME client for a genuinely DIFFERENT appointment date (2026-11-22) awards +1 more (total = 2)
+            $this->assertSame(4, Appointment::where('booking_agent_id', $this->areeba->id)->count());
+
+            // 2. Booking that SAME client for a genuinely DIFFERENT appointment date (2026-11-22) awards +1 more (total = 4)
             $this->actingAs($this->areeba)
                 ->post(route('appointments.store'), [
                     'customer_name' => 'Split Gaming Client',
@@ -314,7 +333,7 @@ class ChatAgentKpiPipelineAuditFixesTest extends TestCase
                 ])
                 ->assertRedirect();
 
-            // 3. Zoya creates an UNSCHEDULED queue placeholder (`unscheduled = 1`, `start_time = null`, `staff_id = null`) -> scores 0!
+            // 3. Zoya creates an UNSCHEDULED / Pending Time booking (`unscheduled = 1`, `start_time = null`, `staff_id = null`) -> counts on day created (+1) with pending_time visibility!
             $this->actingAs($this->zoya)
                 ->post(route('appointments.store'), [
                     'customer_name' => 'Unscheduled Queue Lead',
@@ -336,12 +355,13 @@ class ChatAgentKpiPipelineAuditFixesTest extends TestCase
                 ->get(route('kpi.hub', ['month' => '2026-11']))
                 ->viewData('scorecard');
 
-            $this->assertSame(2, $scorecardBeforeSchedule['areeba']['today_bookings'], '3 same-day splits + 1 next-week booking must count as 2, not 4');
-            $this->assertSame(2, $scorecardBeforeSchedule['areeba']['mtd_bookings']);
-            $this->assertSame(0, $scorecardBeforeSchedule['zoya']['today_bookings'], 'Unscheduled queue placeholder must score 0 before placement');
-            $this->assertSame(2, $scorecardBeforeSchedule['laden']['today_bookings_count']);
+            $this->assertSame(4, $scorecardBeforeSchedule['areeba']['today_bookings'], '3 distinct times + 1 next-week booking (minus 1 accidental 60s double-submit) must count as 4');
+            $this->assertSame(4, $scorecardBeforeSchedule['areeba']['mtd_bookings']);
+            $this->assertSame(1, $scorecardBeforeSchedule['zoya']['today_bookings'], 'Pending Time booking counts on creation day');
+            $this->assertSame(1, $scorecardBeforeSchedule['zoya']['today_pending_time_count'], 'Pending Time count is surfaced transparently');
+            $this->assertSame(5, $scorecardBeforeSchedule['laden']['today_bookings_count']);
 
-            // 4. Now schedule Zoya's unscheduled placeholder onto the calendar via reschedule() -> Zoya immediately earns +1!
+            // 4. Scheduling Zoya's pending-time booking onto the calendar via reschedule() keeps total at 1 (never double-counted) and clears pending count to 0
             $this->actingAs($this->manager)
                 ->patchJson(route('appointments.reschedule', $unscheduledAppt), [
                     'appointment_datetime' => '2026-11-16 15:00:00',
@@ -354,8 +374,9 @@ class ChatAgentKpiPipelineAuditFixesTest extends TestCase
                 ->get(route('kpi.hub', ['month' => '2026-11']))
                 ->viewData('scorecard');
 
-            $this->assertSame(1, $scorecardAfterSchedule['zoya']['today_bookings'], 'Once scheduled onto calendar with time + staff, Zoya earns +1');
-            $this->assertSame(3, $scorecardAfterSchedule['laden']['today_bookings_count']);
+            $this->assertSame(1, $scorecardAfterSchedule['zoya']['today_bookings']);
+            $this->assertSame(0, $scorecardAfterSchedule['zoya']['today_pending_time_count']);
+            $this->assertSame(5, $scorecardAfterSchedule['laden']['today_bookings_count']);
         } finally {
             Carbon::setTestNow();
         }

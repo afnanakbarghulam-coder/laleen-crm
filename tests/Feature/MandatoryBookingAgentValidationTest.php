@@ -97,10 +97,17 @@ class MandatoryBookingAgentValidationTest extends TestCase
 
         $this->assertSame([
             ['', '-- Select Agent --'],
-            ['salon_staff', 'Salon Staff'],
             [(string) $this->areeba->id, 'Areeba'],
             [(string) $this->zoya->id, 'Zoya'],
+            ['salon_staff', 'Salon Staff'],
         ], $renderedOptions);
+
+        // When logged in as Chat Agent Areeba, the calendar auto-selects her own agent value
+        $agentHtml = $this->actingAs($this->areeba)
+            ->get(route('appointments.calendar'))
+            ->assertOk()
+            ->getContent();
+        $this->assertStringContainsString('const FB_AUTH_DEFAULT_AGENT_VALUE = "' . $this->areeba->id . '";', $agentHtml);
     }
 
     public function test_store_and_update_reject_missing_or_invalid_booking_agent_with_422(): void

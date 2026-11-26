@@ -118,20 +118,13 @@ class Appointment extends Model
 
     /**
      * Build the exact ordered Booking Agent options for the Enhanced Calendar dropdown:
-     * Salon Staff, Areeba, Zoya.
+     * Areeba, Zoya, Salon Staff (Chat Agents listed first so Salon Staff is never clicked accidentally).
      *
      * @return list<array{value: string, label: string, type: string, user_id: int|null}>
      */
     public static function bookingAgentOptions(): array
     {
-        $options = [
-            [
-                'value' => self::BOOKING_AGENT_SALON_STAFF,
-                'label' => self::BOOKING_AGENT_SALON_STAFF_LABEL,
-                'type' => self::BOOKING_AGENT_SALON_STAFF,
-                'user_id' => null,
-            ],
-        ];
+        $options = [];
 
         $agentUsers = User::where('role', 'agent')
             ->where(function ($q) {
@@ -153,6 +146,13 @@ class Appointment extends Model
                 ];
             }
         }
+
+        $options[] = [
+            'value' => self::BOOKING_AGENT_SALON_STAFF,
+            'label' => self::BOOKING_AGENT_SALON_STAFF_LABEL,
+            'type' => self::BOOKING_AGENT_SALON_STAFF,
+            'user_id' => null,
+        ];
 
         return $options;
     }
@@ -577,11 +577,11 @@ class Appointment extends Model
     }
 
     /**
-     * Scope to active scheduled Enhanced Calendar bookings eligible for Chat Agent quota credit:
+     * Scope to active Enhanced Calendar bookings eligible for Chat Agent quota credit:
      * - Explicit `booking_agent_id` belonging to a Chat Agent (`role = 'agent'`) ONLY
-     *   (no `created_by` fallback, never `Salon Staff`).
-     * - Scheduled onto the calendar (`start_time IS NOT NULL` and `staff_id IS NOT NULL`),
-     *   excluding unscheduled sidebar queue placeholders until placed on the grid.
+     *   (never `Salon Staff`).
+     * - Includes both scheduled bookings (including unassigned-staff / Decide in Salon holds)
+     *   and Pending Time / Unscheduled Queue bookings on the day created.
      * - Excludes cancelled and soft-deleted bookings consistently.
      */
     public function scopeScheduledForAgentQuota($query, iterable $agentUserIds)
@@ -597,8 +597,6 @@ class Appointment extends Model
                 $q->whereNull('booking_agent_type')
                     ->orWhere('booking_agent_type', '!=', self::BOOKING_AGENT_SALON_STAFF);
             })
-            ->whereNotNull('start_time')
-            ->whereNotNull('staff_id')
             ->where(function ($q) {
                 $q->whereNull('status')
                     ->orWhereRaw('LOWER(status) != ?', ['cancelled']);
@@ -612,11 +610,16 @@ class Appointment extends Model
     }
 
     /**
-     * Deduplicate Chat Agent quota appointments by `(booking_agent_id, customer_identity, appointment_date)`
-     * ordered chronologically (`created_at ASC, id ASC`) so:
-     * - Splitting 1 client into 3 separate same-day service rows counts as +1, not +3.
-     * - Cancelling and re-booking the same client on the same appointment date counts as +1, not +2.
-     * - Booking the same client for two genuine visits on different appointment dates counts as +2.
+     * Protect Chat Agent quota counts strictly against accidental double-submits
+     * without collapsing legitimate separate bookings:
+     * - Multi-service visits, 3-block combos, and stacked Service + Freebies are already
+     *   stored as 1 parent `appointments` row (1 appointment = 1 booking).
+     * - Only collapses two rows when they share the exact same `booking_agent_id`,
+     *   same customer/phone, same `booking_date`, same `start_time`, AND were created
+     *   within 60 seconds of each other.
+     * - Family/group bookings under one WhatsApp phone, two same-day appointments at
+     *   different times (e.g. 1:00 PM & 7:00 PM), and cross-day follow-on bookings for
+     *   the same future date all count accurately.
      *
      * @param  Collection<int, self>  $appointments
      * @return Collection<int, self>
@@ -637,39 +640,64 @@ class Appointment extends Model
             }
         }
 
-        return $appointments
+        $sorted = $appointments
             ->sortBy([
-                fn (self $a, self $b) => ($a->created_at?->getTimestamp() ?? 0) <=> ($b->created_at?->getTimestamp() ?? 0),
+                fn (self $a, self $b) => (\App\Support\AgentBookingQuotaCalculator::createdAtQatar($a)?->getTimestamp() ?? ($a->created_at?->getTimestamp() ?? 0))
+                    <=> (\App\Support\AgentBookingQuotaCalculator::createdAtQatar($b)?->getTimestamp() ?? ($b->created_at?->getTimestamp() ?? 0)),
                 fn (self $a, self $b) => ((int) $a->id) <=> ((int) $b->id),
             ])
-            ->unique(function (self $appt) use ($phoneToCustomerId): string {
-                $agentId = (int) $appt->booking_agent_id;
-                $normPhone = !empty($appt->phone) ? Customer::normalizePhone((string) $appt->phone) : '';
-
-                if (!empty($appt->customer_id)) {
-                    $customerKey = 'cid:' . (int) $appt->customer_id;
-                } elseif ($normPhone !== '' && isset($phoneToCustomerId[$normPhone])) {
-                    $customerKey = 'cid:' . $phoneToCustomerId[$normPhone];
-                } elseif ($normPhone !== '') {
-                    $customerKey = 'ph:' . $normPhone;
-                } elseif (trim((string) $appt->customer_name) !== '') {
-                    $customerKey = 'nm:' . mb_strtolower(trim((string) $appt->customer_name));
-                } else {
-                    $customerKey = 'id:' . (int) $appt->id;
-                }
-
-                if (!empty($appt->booking_date)) {
-                    $apptDate = Carbon::parse($appt->booking_date)->toDateString();
-                } elseif (!empty($appt->appointment_datetime)) {
-                    $apptDate = Carbon::parse($appt->appointment_datetime)->timezone('Asia/Qatar')->toDateString();
-                } elseif ($appt->created_at) {
-                    $apptDate = $appt->created_at->copy()->timezone('Asia/Qatar')->toDateString();
-                } else {
-                    $apptDate = now('Asia/Qatar')->toDateString();
-                }
-
-                return "{$agentId}|{$customerKey}|{$apptDate}";
-            })
             ->values();
+
+        $kept = collect();
+        /** @var array<string, int> $lastKeptTimestampBySignature */
+        $lastKeptTimestampBySignature = [];
+
+        foreach ($sorted as $appt) {
+            $agentId = (int) $appt->booking_agent_id;
+            $normPhone = !empty($appt->phone) ? Customer::normalizePhone((string) $appt->phone) : '';
+
+            if (!empty($appt->customer_id)) {
+                $customerKey = 'cid:' . (int) $appt->customer_id;
+            } elseif ($normPhone !== '' && isset($phoneToCustomerId[$normPhone])) {
+                $customerKey = 'cid:' . $phoneToCustomerId[$normPhone];
+            } elseif ($normPhone !== '') {
+                $customerKey = 'ph:' . $normPhone;
+            } elseif (trim((string) $appt->customer_name) !== '') {
+                $customerKey = 'nm:' . mb_strtolower(trim((string) $appt->customer_name));
+            } else {
+                $customerKey = 'id:' . (int) $appt->id;
+            }
+
+            if (!empty($appt->booking_date)) {
+                $apptDate = Carbon::parse($appt->booking_date)->toDateString();
+            } elseif (!empty($appt->appointment_datetime)) {
+                $apptDate = Carbon::parse($appt->appointment_datetime)->timezone('Asia/Qatar')->toDateString();
+            } elseif ($appt->created_at) {
+                $apptDate = $appt->created_at->copy()->timezone('Asia/Qatar')->toDateString();
+            } else {
+                $apptDate = now('Asia/Qatar')->toDateString();
+            }
+
+            $rawStartTime = $appt->getRawOriginal('start_time') ?? $appt->start_time;
+            $startTimeKey = ($rawStartTime !== null && trim((string) $rawStartTime) !== '')
+                ? substr(trim((string) $rawStartTime), 0, 8)
+                : 'pending';
+
+            $signature = "{$agentId}|{$customerKey}|{$apptDate}|{$startTimeKey}";
+            $createdTs = \App\Support\AgentBookingQuotaCalculator::createdAtQatar($appt)?->getTimestamp()
+                ?? ($appt->created_at?->getTimestamp() ?? 0);
+
+            if (
+                isset($lastKeptTimestampBySignature[$signature])
+                && ($createdTs - $lastKeptTimestampBySignature[$signature]) <= 60
+            ) {
+                continue;
+            }
+
+            $lastKeptTimestampBySignature[$signature] = $createdTs;
+            $kept->push($appt);
+        }
+
+        return $kept->values();
     }
 }

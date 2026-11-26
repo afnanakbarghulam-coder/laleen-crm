@@ -104,12 +104,27 @@ class AgentBookingQuotaCalculator
                 'phone',
                 'customer_name',
                 'booking_date',
+                'start_time',
                 'appointment_datetime',
                 'status',
                 'created_at',
             ]);
 
         return Appointment::deduplicateForAgentQuota($raw);
+    }
+
+    /**
+     * Determine whether an appointment is a Pending Time / Unscheduled Queue booking
+     * (`start_time IS NULL`).
+     */
+    public static function isPendingTime(Appointment $appt): bool
+    {
+        $raw = $appt->getRawOriginal('start_time');
+        if ($raw === null) {
+            return true;
+        }
+
+        return trim((string) $raw) === '';
     }
 
     /**

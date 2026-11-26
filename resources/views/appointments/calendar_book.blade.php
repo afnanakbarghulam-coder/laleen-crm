@@ -1472,6 +1472,10 @@
                             <option value="{{ $agentOpt['value'] }}">{{ $agentOpt['label'] }}</option>
                         @endforeach
                     </select>
+                    <input type="hidden" id="bookAgentLockedFallback" name="booking_agent_id" value="" disabled>
+                    <small id="bookAgentLockHint" class="text-muted d-none mt-1" style="font-size: 0.74rem; display: block;">
+                        <i class="bx bx-lock-alt me-1"></i>Attributed agent is locked &mdash; only Admin can reassign.
+                    </small>
                     <div id="bookAgentError" class="fb-agent-inline-error d-none" role="alert">
                         Please select a Booking Agent (Salon Staff, Areeba, or Zoya) before saving the appointment.
                     </div>
@@ -1668,6 +1672,14 @@
                 ? $s->services->pluck('name')->values()
                 : [],
         ])->values();
+
+    $fbAuthUser = auth()->user();
+    $fbAuthIsAdmin = (bool) ($fbAuthUser?->isAdmin());
+    $fbAuthIsChatAgent = (bool) ($fbAuthUser && $fbAuthUser->role === 'agent');
+    $fbAuthDefaultAgentValue = $fbAuthIsChatAgent ? (string) $fbAuthUser->id : '';
+    $fbAuthDefaultAgentLabel = $fbAuthIsChatAgent
+        ? (\App\Models\Appointment::canonicalAgentShortName($fbAuthUser->name) ?? $fbAuthUser->name)
+        : '';
 @endphp
 
 <script>
@@ -1677,6 +1689,9 @@
         const ALL_FREEBIE_PACKAGES = @json($freebiePackagesCatalog ?? []);
         const ALL_STAFFS = @json($bookableStaffCatalog);
         const SERVER_BOOKING_PREFILL = @json($bookingPrefill ?? null);
+        const FB_AUTH_IS_ADMIN = @json($fbAuthIsAdmin);
+        const FB_AUTH_DEFAULT_AGENT_VALUE = @json($fbAuthDefaultAgentValue);
+        const FB_AUTH_DEFAULT_AGENT_LABEL = @json($fbAuthDefaultAgentLabel);
         const FB_BRANCH_LABELS = { old_airport: 'Old Airport', wakrah: 'Al Wakrah' };
 
         function fbNormalizeBranch(raw) {
@@ -1728,6 +1743,36 @@
             const bookAgentEl = document.getElementById('bookAgent');
             if (!bookAgentEl) return false;
             return Array.from(bookAgentEl.options).some(opt => opt.value !== '' && opt.value === trimmed);
+        }
+
+        function fbResetBookAgentControl() {
+            const bookAgentEl = document.getElementById('bookAgent');
+            const lockedFallbackEl = document.getElementById('bookAgentLockedFallback');
+            const lockHintEl = document.getElementById('bookAgentLockHint');
+            if (bookAgentEl) {
+                bookAgentEl.querySelectorAll('option[data-preserved-agent="1"]').forEach(opt => opt.remove());
+                bookAgentEl.disabled = false;
+            }
+            if (lockedFallbackEl) {
+                lockedFallbackEl.value = '';
+                lockedFallbackEl.disabled = true;
+            }
+            if (lockHintEl) {
+                lockHintEl.classList.add('d-none');
+            }
+        }
+
+        function fbEnsureBookAgentOption(value, label) {
+            const bookAgentEl = document.getElementById('bookAgent');
+            const trimmed = String(value || '').trim();
+            if (!bookAgentEl || !trimmed) return;
+            if (!fbIsValidBookingAgentSelection(trimmed)) {
+                const opt = document.createElement('option');
+                opt.value = trimmed;
+                opt.textContent = label || `Agent #${trimmed}`;
+                opt.setAttribute('data-preserved-agent', '1');
+                bookAgentEl.appendChild(opt);
+            }
         }
 
         function fbShowAgentError(message, showToast = true) {
@@ -2264,7 +2309,13 @@
             document.getElementById('bookStaffHelp').classList.add('d-none');
             const bookAgentEl = document.getElementById('bookAgent');
             if (bookAgentEl) {
-                const prefillAgentVal = prefill.bookingAgentId ? String(prefill.bookingAgentId) : '';
+                fbResetBookAgentControl();
+                const prefillAgentVal = prefill.bookingAgentId
+                    ? String(prefill.bookingAgentId)
+                    : (FB_AUTH_DEFAULT_AGENT_VALUE || '');
+                if (prefillAgentVal && !fbIsValidBookingAgentSelection(prefillAgentVal) && prefillAgentVal === FB_AUTH_DEFAULT_AGENT_VALUE) {
+                    fbEnsureBookAgentOption(prefillAgentVal, FB_AUTH_DEFAULT_AGENT_LABEL);
+                }
                 bookAgentEl.value = fbIsValidBookingAgentSelection(prefillAgentVal) ? prefillAgentVal : '';
             }
             document.getElementById('bookNotes').value = '';
@@ -2405,8 +2456,28 @@
 
             const bookAgentEl = document.getElementById('bookAgent');
             if (bookAgentEl) {
-                const existingAgentVal = appt.booking_agent_select_value ? String(appt.booking_agent_select_value) : '';
+                fbResetBookAgentControl();
+                const existingAgentVal = appt.booking_agent_select_value
+                    ? String(appt.booking_agent_select_value)
+                    : (appt.booking_agent_id ? String(appt.booking_agent_id) : '');
+                if (existingAgentVal) {
+                    fbEnsureBookAgentOption(existingAgentVal, appt.booking_agent_label || appt.agent_name || '');
+                }
                 bookAgentEl.value = fbIsValidBookingAgentSelection(existingAgentVal) ? existingAgentVal : '';
+
+                const hasAttributedAgent = Boolean(appt.booking_agent_id) || appt.booking_agent_type === 'agent';
+                if (hasAttributedAgent && !FB_AUTH_IS_ADMIN) {
+                    bookAgentEl.disabled = true;
+                    const lockedFallbackEl = document.getElementById('bookAgentLockedFallback');
+                    if (lockedFallbackEl) {
+                        lockedFallbackEl.value = existingAgentVal;
+                        lockedFallbackEl.disabled = false;
+                    }
+                    const lockHintEl = document.getElementById('bookAgentLockHint');
+                    if (lockHintEl) {
+                        lockHintEl.classList.remove('d-none');
+                    }
+                }
             }
 
             document.getElementById('bookNotes').value = appt.notes || '';
@@ -5675,7 +5746,9 @@
             }
 
             const bookAgentEl = document.getElementById('bookAgent');
-            if (!bookAgentEl || !fbIsValidBookingAgentSelection(bookAgentEl.value)) {
+            const bookAgentLockedEl = document.getElementById('bookAgentLockedFallback');
+            const isLockedAgentActive = Boolean(bookAgentEl && bookAgentEl.disabled && bookAgentLockedEl && !bookAgentLockedEl.disabled && bookAgentLockedEl.value);
+            if (!isLockedAgentActive && (!bookAgentEl || !fbIsValidBookingAgentSelection(bookAgentEl.value))) {
                 document.getElementById('bookThen').value = '';
                 fbShowAgentError(FB_BOOKING_AGENT_ERROR_MSG, true);
                 return;
