@@ -504,13 +504,15 @@
         border: 1px solid rgba(52, 211, 153, 0.30);
         color: #6ee7b7;
         border-radius: 999px;
-        padding: 6px 13px;
+        padding: 5px 10px;
         font-size: 12px;
-        font-weight: 700;
+        font-weight: 600;
         display: inline-flex;
         align-items: center;
         gap: 5px;
         cursor: pointer;
+        line-height: 1.25;
+        white-space: nowrap;
     }
 
     .mo-copy-btn:hover {
@@ -519,37 +521,27 @@
     }
 
     .mo-drawer-tab-meta {
-        display: inline-flex;
-        align-items: center;
         font-size: 10.5px;
-        font-weight: 700;
-        padding: 1px 6px;
-        border-radius: 999px;
-        margin-left: 5px;
-        background: rgba(255, 255, 255, 0.08);
+        font-weight: 600;
+        opacity: 0.65;
         color: inherit;
     }
 
     .mo-drawer-tab.active .mo-drawer-tab-meta {
-        background: rgba(27, 19, 21, 0.20);
+        opacity: 0.78;
         color: #1b1315;
     }
 
     .mo-drawer-tab-dot {
-        width: 6px;
-        height: 6px;
+        width: 5px;
+        height: 5px;
         border-radius: 50%;
         display: inline-block;
-        margin-left: 6px;
-        background: rgba(255, 255, 255, 0.22);
-        vertical-align: middle;
-    }
-
-    .mo-drawer-tab-dot.is-ready {
         background: #34d399;
+        flex-shrink: 0;
     }
 
-    .mo-drawer-tab.active .mo-drawer-tab-dot.is-ready {
+    .mo-drawer-tab.active .mo-drawer-tab-dot {
         background: #1b1315;
     }
 
@@ -1014,15 +1006,15 @@
         top: 0;
         right: 0;
         bottom: 0;
-        width: min(94vw, 720px);
+        width: min(100vw, 512px);
         background: #171012;
-        border-left: 1px solid rgba(229, 184, 168, 0.24);
+        border-left: 1px solid rgba(229, 184, 168, 0.20);
         box-shadow: -20px 0 60px rgba(0, 0, 0, 0.75);
         z-index: 1080;
         display: flex;
         flex-direction: column;
         transform: translateX(102%);
-        transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+        transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
         color: #f8efe6;
     }
 
@@ -1031,37 +1023,111 @@
     }
 
     .mo-drawer-head {
-        padding: 20px 24px 16px;
+        padding: 14px 20px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.07);
         background: #1c1316;
         flex-shrink: 0;
     }
 
+    .mo-drawer-title {
+        color: #f8efe6;
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1.35;
+        margin: 0;
+    }
+
+    .mo-drawer-price {
+        color: #f3d9a4;
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1.3;
+        white-space: nowrap;
+    }
+
+    .mo-drawer-meta {
+        margin-top: 6px;
+        font-size: 11px;
+        line-height: 1.4;
+        color: rgba(255, 255, 255, 0.50);
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .mo-drawer-icon-btn {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        background: rgba(255, 255, 255, 0.03);
+        color: rgba(255, 255, 255, 0.72);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        line-height: 1;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: all 0.14s ease;
+    }
+
+    .mo-drawer-icon-btn:hover {
+        color: #ffffff;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(221, 162, 158, 0.40);
+    }
+
+    .mo-drawer-icon-btn.is-edit {
+        color: #f3d9a4;
+        border-color: rgba(243, 217, 164, 0.24);
+    }
+
+    .mo-drawer-icon-btn.is-edit:hover {
+        background: rgba(243, 217, 164, 0.12);
+        border-color: rgba(243, 217, 164, 0.45);
+        color: #fce7bc;
+    }
+
     .mo-drawer-tabs {
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 10px 24px;
+        gap: 4px;
+        padding: 8px 20px;
         background: #130d0f;
         border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         overflow-x: auto;
+        scrollbar-width: none;
         flex-shrink: 0;
+    }
+
+    .mo-drawer-tabs::-webkit-scrollbar {
+        display: none;
     }
 
     .mo-drawer-tab {
         border: 1px solid rgba(255, 255, 255, 0.08);
         background: transparent;
-        color: #b8a29a;
+        color: rgba(255, 255, 255, 0.62);
         border-radius: 999px;
-        padding: 6px 14px;
-        font-size: 12.5px;
+        padding: 5px 10px;
+        font-size: 12px;
         font-weight: 600;
+        line-height: 1.25;
         white-space: nowrap;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        flex-shrink: 0;
+        transition: all 0.14s ease;
     }
 
     .mo-drawer-tab:hover {
         color: #f8efe6;
+        border-color: rgba(221, 162, 158, 0.34);
     }
 
     .mo-drawer-tab.active {
@@ -1072,16 +1138,13 @@
     }
 
     .mo-drawer-body {
-        padding: 22px 24px 32px;
+        padding: 16px 20px 24px;
         overflow-y: auto;
         flex: 1 1 auto;
     }
 
     .mo-pillar-row {
-        display: flex;
-        align-items: flex-start;
-        gap: 14px;
-        padding: 14px 0;
+        padding: 10px 0;
         border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     }
 
@@ -1091,39 +1154,65 @@
 
     .mo-pillar-row:last-child {
         border-bottom: none;
+        padding-bottom: 0;
+    }
+
+    .mo-pillar-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 
     .mo-pillar-circle {
-        width: 28px;
-        height: 28px;
+        width: 20px;
+        height: 20px;
         border-radius: 50%;
-        background: rgba(217, 143, 131, 0.16);
-        border: 1px solid rgba(217, 143, 131, 0.38);
+        background: rgba(217, 143, 131, 0.15);
+        border: 1px solid rgba(217, 143, 131, 0.36);
         color: #f3d9a4;
-        font-size: 12.5px;
+        font-size: 11px;
         font-weight: 700;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        margin-top: 1px;
+    }
+
+    .mo-pillar-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.90);
+        line-height: 1.3;
+    }
+
+    .mo-pillar-text {
+        margin-top: 4px;
+        padding-left: 28px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: rgba(255, 255, 255, 0.75);
+        white-space: pre-line;
+    }
+
+    .mo-pillar-text.is-empty {
+        color: rgba(255, 255, 255, 0.35);
     }
 
     .mo-script-box {
         background: #110b0d;
-        border: 1px solid rgba(229, 184, 168, 0.16);
-        border-radius: 12px;
-        padding: 16px 18px;
+        border: 1px solid rgba(229, 184, 168, 0.14);
+        border-radius: 10px;
+        padding: 14px;
         font-size: 13px;
-        line-height: 1.65;
-        color: #f2e6e1;
+        line-height: 1.55;
+        color: rgba(255, 255, 255, 0.82);
         white-space: pre-wrap;
         word-break: break-word;
     }
 
     .mo-toast {
         position: fixed;
-        top: 22px;
+        bottom: 24px;
         right: 24px;
         z-index: 1110;
         background: #1b1315;
@@ -1227,14 +1316,16 @@
         border: 1px solid rgba(255, 255, 255, 0.12);
         color: #efe4de;
         border-radius: 999px;
-        padding: 7px 14px;
-        font-size: 12.5px;
+        padding: 5px 10px;
+        font-size: 12px;
         font-weight: 600;
+        line-height: 1.25;
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: 5px;
         cursor: pointer;
         text-decoration: none;
+        white-space: nowrap;
         transition: all 0.14s ease;
     }
 
@@ -1268,10 +1359,10 @@
 
     .mo-graphic-preview-wrap {
         position: relative;
-        border-radius: 14px;
+        border-radius: 12px;
         border: 1px solid rgba(255, 255, 255, 0.10);
         background: #0f0a0c;
-        padding: 14px;
+        padding: 12px;
         text-align: center;
         cursor: zoom-in;
         transition: border-color 0.16s ease;
@@ -1282,12 +1373,12 @@
     }
 
     .mo-graphic-preview-img {
-        max-height: 440px;
+        max-height: 45vh;
         max-width: 100%;
         width: auto;
         height: auto;
         object-fit: contain;
-        border-radius: 10px;
+        border-radius: 9px;
         display: block;
         margin: 0 auto;
     }
@@ -1296,8 +1387,8 @@
         display: inline-flex;
         align-items: center;
         gap: 5px;
-        margin-top: 10px;
-        font-size: 11.5px;
+        margin-top: 8px;
+        font-size: 11px;
         color: rgba(255, 255, 255, 0.48);
     }
 
@@ -1621,125 +1712,125 @@
     <div class="small mt-1">Switch filter tabs above{{ $canEditOffers ? ' or publish a new Master Offer.' : '.' }}</div>
 </div>
 
-{{-- EXECUTIVE OFFER PLAYBOOK SLIDE-OVER DRAWER (4 TABS — ALL OPERATIONAL ROLES) --}}
+{{-- EXECUTIVE OFFER PLAYBOOK SLIDE-OVER DRAWER (5 COMPACT TABS — ALL OPERATIONAL ROLES) --}}
 <div id="moPlaybookBackdrop" class="mo-drawer-backdrop" aria-hidden="true"></div>
 <aside id="moPlaybookDrawer" class="mo-drawer" role="dialog" aria-modal="true" aria-labelledby="moDrawerTitle" aria-hidden="true">
     <div class="mo-drawer-head">
         <div class="d-flex align-items-start justify-content-between gap-3">
-            <div class="min-w-0">
-                <div class="d-flex align-items-center flex-wrap gap-1 mb-2" id="moDrawerBadges"></div>
-                <h4 class="fw-bold mb-1" id="moDrawerTitle" style="color:#f8efe6; font-size:20px; line-height:1.25;">Offer Playbook</h4>
-                <div class="small mo-num" id="moDrawerMeta" style="color:#a8938b;"></div>
-            </div>
+            <h4 class="mo-drawer-title min-w-0 flex-grow-1" id="moDrawerTitle">Offer Playbook</h4>
             <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                <div class="text-end mo-num me-2">
-                    <div id="moDrawerPrice" style="font-size:22px; font-weight:800; color:#f3d9a4; line-height:1.1;"></div>
-                </div>
+                <div id="moDrawerPrice" class="mo-drawer-price mo-num"></div>
                 @if ($canEditOffers)
-                    <button type="button" id="moDrawerEditBtn" class="btn btn-sm btn-outline-warning px-2 py-1" title="Edit Master Offer">
+                    <button type="button" id="moDrawerEditBtn" class="mo-drawer-icon-btn is-edit" title="Edit Master Offer" aria-label="Edit Offer">
                         <i class="bi bi-pencil-square"></i>
                     </button>
                 @endif
-                <button type="button" id="moDrawerCloseBtn" class="btn-close btn-close-white" aria-label="Close Playbook"></button>
+                <button type="button" id="moDrawerCloseBtn" class="mo-drawer-icon-btn" title="Close Playbook" aria-label="Close Playbook">
+                    <i class="bx bx-x" style="font-size:18px;"></i>
+                </button>
             </div>
         </div>
+        <div class="mo-drawer-meta mo-num" id="moDrawerMeta"></div>
     </div>
 
     <div class="mo-drawer-tabs" role="tablist" aria-label="Offer Playbook Sections">
-        <button type="button" class="mo-drawer-tab active" data-drawer-tab="pillars">
-            <span>7-Pillar Architecture</span>
+        <button type="button" class="mo-drawer-tab active" data-drawer-tab="pillars" role="tab" aria-label="7-Pillar Architecture" title="7-Pillar Architecture">
+            <span>7 Pillars</span>
             <span id="moDrawerTabPillarsCount" class="mo-drawer-tab-meta mo-num">7/7</span>
         </button>
-        <button type="button" class="mo-drawer-tab" data-drawer-tab="terms">Terms &amp; Conditions</button>
-        <button type="button" class="mo-drawer-tab" data-drawer-tab="whatsapp">
-            <span>WhatsApp Scripts</span>
-            <span id="moDrawerTabWaDot" class="mo-drawer-tab-dot" title="Custom WhatsApp script readiness"></span>
+        <button type="button" class="mo-drawer-tab" data-drawer-tab="terms" role="tab" aria-label="Terms &amp; Conditions" title="Terms &amp; Conditions">
+            <span>T&amp;Cs</span>
         </button>
-        <button type="button" class="mo-drawer-tab" data-drawer-tab="video">
-            <span>Video Shooting Script</span>
-            <span id="moDrawerTabVideoDot" class="mo-drawer-tab-dot" title="Video shooting script readiness"></span>
+        <button type="button" class="mo-drawer-tab" data-drawer-tab="whatsapp" role="tab" aria-label="WhatsApp Scripts" title="WhatsApp Scripts">
+            <span>WhatsApp</span>
+            <span id="moDrawerTabWaDot" class="mo-drawer-tab-dot d-none" title="Custom WhatsApp script ready"></span>
         </button>
-        <button type="button" class="mo-drawer-tab" data-drawer-tab="graphic">
-            <span>Graphic Post</span>
-            <span id="moDrawerTabGraphicDot" class="mo-drawer-tab-dot" title="Graphic post readiness"></span>
+        <button type="button" class="mo-drawer-tab" data-drawer-tab="video" role="tab" aria-label="Video Shooting Script" title="Video Shooting Script">
+            <span>Video</span>
+            <span id="moDrawerTabVideoDot" class="mo-drawer-tab-dot d-none" title="Video shooting script ready"></span>
+        </button>
+        <button type="button" class="mo-drawer-tab" data-drawer-tab="graphic" role="tab" aria-label="Graphic Post" title="Graphic Post">
+            <span>Graphic</span>
+            <span id="moDrawerTabGraphicDot" class="mo-drawer-tab-dot d-none" title="Graphic post uploaded"></span>
         </button>
     </div>
 
     <div class="mo-drawer-body">
-        {{-- Drawer Tab 1: 7-Pillar Architecture --}}
+        {{-- Drawer Tab 1: 7 Pillars --}}
         <div class="mo-drawer-pane" data-drawer-pane="pillars">
             <div id="moDrawerPillarsList"></div>
-            <div id="moDrawerIncludedWrap" class="mt-4 pt-3 d-none" style="border-top:1px solid rgba(255,255,255,0.08);">
-                <div class="small fw-bold text-uppercase mb-2" style="letter-spacing:0.05em; color:#a8938b;">Included Services</div>
-                <div id="moDrawerIncludedList" class="d-flex flex-column gap-2"></div>
+            <div id="moDrawerIncludedWrap" class="mt-3 pt-3 d-none" style="border-top:1px solid rgba(255,255,255,0.07);">
+                <div class="text-uppercase fw-semibold mb-2" style="font-size:10.5px; letter-spacing:0.06em; color:rgba(255,255,255,0.48);">Included Services</div>
+                <div id="moDrawerIncludedList" class="d-flex flex-column gap-1"></div>
             </div>
         </div>
 
-        {{-- Drawer Tab 2: Terms & Conditions --}}
+        {{-- Drawer Tab 2: T&Cs --}}
         <div class="mo-drawer-pane d-none" data-drawer-pane="terms">
-            <div class="d-flex align-items-center flex-wrap gap-3 mb-4 pb-3" style="border-bottom:1px solid rgba(255,255,255,0.07);">
+            <div class="d-flex align-items-center flex-wrap gap-3 mb-3 pb-2.5" style="border-bottom:1px solid rgba(255,255,255,0.07);">
                 <div>
-                    <div class="small text-uppercase fw-bold" style="font-size:10.5px; letter-spacing:0.05em; color:#9e8780;">Branch Scope</div>
-                    <div class="fw-semibold" id="moDrawerTermsBranch" style="color:#f8efe6;"></div>
+                    <div class="text-uppercase fw-semibold" style="font-size:10px; letter-spacing:0.06em; color:rgba(255,255,255,0.45);">Branch Scope</div>
+                    <div class="fw-semibold" id="moDrawerTermsBranch" style="color:#f8efe6; font-size:13px;"></div>
                 </div>
-                <div style="width:1px; height:28px; background:rgba(255,255,255,0.08);"></div>
+                <div style="width:1px; height:24px; background:rgba(255,255,255,0.08);"></div>
                 <div>
-                    <div class="small text-uppercase fw-bold" style="font-size:10.5px; letter-spacing:0.05em; color:#9e8780;">Validity Window (Qatar)</div>
-                    <div class="fw-semibold mo-num" id="moDrawerTermsDates" style="color:#f8efe6;"></div>
+                    <div class="text-uppercase fw-semibold" style="font-size:10px; letter-spacing:0.06em; color:rgba(255,255,255,0.45);">Validity Window (Qatar)</div>
+                    <div class="fw-semibold mo-num" id="moDrawerTermsDates" style="color:#f8efe6; font-size:13px;"></div>
                 </div>
             </div>
 
-            <div class="small text-uppercase fw-bold mb-2" style="font-size:11px; letter-spacing:0.05em; color:#a8938b;">Terms &amp; Conditions</div>
-            <ul id="moDrawerTermsList" class="mb-4" style="padding-left:18px; color:#e6d6d0; line-height:1.65; font-size:13.5px;"></ul>
+            <div class="text-uppercase fw-semibold mb-2" style="font-size:10.5px; letter-spacing:0.06em; color:rgba(255,255,255,0.48);">Terms &amp; Conditions</div>
+            <ul id="moDrawerTermsList" class="mb-3" style="padding-left:16px; color:rgba(255,255,255,0.78); line-height:1.55; font-size:13px;"></ul>
 
             <div id="moDrawerNotesWrap" class="d-none pt-3" style="border-top:1px solid rgba(255,255,255,0.07);">
-                <div class="small text-uppercase fw-bold mb-2" style="font-size:11px; letter-spacing:0.05em; color:#d4a373;">
+                <div class="text-uppercase fw-semibold mb-2" style="font-size:10.5px; letter-spacing:0.06em; color:#d4a373;">
                     <i class="bx bx-info-circle me-1"></i> Internal Staff Notes
                 </div>
                 <div id="moDrawerNotesText" class="mo-script-box" style="color:#e8cfa9;"></div>
             </div>
         </div>
 
-        {{-- Drawer Tab 3: WhatsApp Scripts --}}
+        {{-- Drawer Tab 3: WhatsApp --}}
         <div class="mo-drawer-pane d-none" data-drawer-pane="whatsapp">
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                <div class="small fw-semibold" id="moDrawerWaHeading" style="color:#cbb8b0;">Ready-to-send WhatsApp / DM Sales Script</div>
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2.5">
+                <div class="fw-semibold" id="moDrawerWaHeading" style="color:rgba(255,255,255,0.65); font-size:12px;">WhatsApp / DM Sales Script</div>
                 <div class="d-flex align-items-center gap-2">
                     @if ($canEditOffers)
-                        <button type="button" id="moDrawerAddWaBtn" class="btn btn-sm btn-outline-warning d-none" style="border-radius:999px; font-size:12px;">
-                            <i class="bx bx-edit-alt me-1"></i> Add Custom Script
+                        <button type="button" id="moDrawerAddWaBtn" class="mo-graphic-btn d-none" style="color:#f3d9a4; border-color:rgba(243,217,164,0.28);">
+                            <i class="bx bx-edit-alt"></i>
+                            <span>Add Custom</span>
                         </button>
                     @endif
                     <button type="button" id="moDrawerCopyWaBtn" class="mo-copy-btn">
-                        <i class="bx bxl-whatsapp fs-5"></i>
-                        <span>Copy WhatsApp Script</span>
+                        <i class="bx bxl-whatsapp" style="font-size:15px;"></i>
+                        <span>Copy Script</span>
                     </button>
                 </div>
             </div>
-            <div id="moDrawerWaFallbackNotice" class="small mb-3 px-3 py-2 d-none" style="border-radius:10px; background:rgba(212,163,115,0.10); border:1px solid rgba(212,163,115,0.26); color:#f3d9a4;">
+            <div id="moDrawerWaFallbackNotice" class="mb-2.5 px-3 py-2 d-none" style="border-radius:9px; background:rgba(212,163,115,0.10); border:1px solid rgba(212,163,115,0.24); color:#f3d9a4; font-size:12px; line-height:1.45;">
                 No custom WhatsApp script saved yet &mdash; showing auto-formatted client pitch from the Offer Playbook.
             </div>
             <div id="moDrawerWaContent" class="mo-script-box"></div>
         </div>
 
-        {{-- Drawer Tab 4: Video Shooting Script --}}
+        {{-- Drawer Tab 4: Video --}}
         <div class="mo-drawer-pane d-none" data-drawer-pane="video">
             <div id="moDrawerVideoHasScript">
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                    <div class="small fw-semibold" style="color:#cbb8b0;">Production Shoot Brief &amp; Script</div>
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2.5">
+                    <div class="fw-semibold" style="color:rgba(255,255,255,0.65); font-size:12px;">Video Shoot Brief &amp; Script</div>
                     <button type="button" id="moDrawerCopyVideoBtn" class="mo-copy-btn">
                         <i class="bx bx-copy"></i>
-                        <span>Copy Video Script</span>
+                        <span>Copy Script</span>
                     </button>
                 </div>
                 <div id="moDrawerVideoContent" class="mo-script-box"></div>
             </div>
-            <div id="moDrawerVideoEmpty" class="text-center py-5 d-none">
-                <i class="bx bx-video fs-1 d-block mb-2" style="color:#8f7a73;"></i>
-                <div class="fw-semibold mb-1" style="color:#cbb8b0;">No video shooting script added yet</div>
-                <div class="small mb-3" style="color:#8f7a73;">Paste the 3-second hook, before/after shots, value stack visuals, and booking CTA here.</div>
+            <div id="moDrawerVideoEmpty" class="text-center py-4 d-none">
+                <i class="bx bx-video fs-2 d-block mb-2" style="color:#8f7a73;"></i>
+                <div class="fw-semibold mb-1" style="color:#cbb8b0; font-size:13.5px;">No video shooting script added yet</div>
+                <div class="mb-3" style="color:#8f7a73; font-size:12px;">Paste the 3-second hook, before/after shots, value stack visuals, and booking CTA here.</div>
                 @if ($canEditOffers)
-                    <button type="button" id="moDrawerAddVideoBtn" class="mo-playbook-btn">
+                    <button type="button" id="moDrawerAddVideoBtn" class="mo-graphic-btn is-primary">
                         <i class="bx bx-plus"></i>
                         <span>Add Script</span>
                     </button>
@@ -1747,19 +1838,19 @@
             </div>
         </div>
 
-        {{-- Drawer Tab 5: Graphic Post --}}
+        {{-- Drawer Tab 5: Graphic --}}
         <div class="mo-drawer-pane d-none" data-drawer-pane="graphic">
             <div id="moDrawerGraphicHasImage" class="d-none">
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                    <div class="small fw-semibold" style="color:#cbb8b0;">Promotional Graphic Post</div>
-                    <div class="d-flex align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2.5">
+                    <div class="fw-semibold" style="color:rgba(255,255,255,0.65); font-size:12px;">Promotional Graphic Post</div>
+                    <div class="d-flex align-items-center flex-wrap gap-1.5">
                         <button type="button" id="moDrawerCopyGraphicBtn" class="mo-graphic-btn is-primary">
                             <i class="bx bx-copy"></i>
-                            <span class="js-mo-graphic-copy-label">Copy Image</span>
+                            <span class="js-mo-graphic-copy-label">Copy</span>
                         </button>
                         <a href="#" id="moDrawerDownloadGraphicLink" class="mo-graphic-btn" download>
                             <i class="bx bx-download"></i>
-                            <span>Download Graphic</span>
+                            <span>Download</span>
                         </a>
                         @if ($canManageOfferGraphics)
                             <button type="button" id="moDrawerReplaceGraphicBtn" class="mo-graphic-btn">
@@ -1777,25 +1868,25 @@
                     <img id="moDrawerGraphicImg" class="mo-graphic-preview-img" src="" alt="Offer Graphic Post">
                     <div class="mo-graphic-preview-hint">
                         <i class="bx bx-expand-alt"></i>
-                        <span>Click image to open full-size lightbox</span>
+                        <span>Click to open full-size lightbox</span>
                     </div>
                 </div>
             </div>
 
-            <div id="moDrawerGraphicEmpty" class="text-center py-5 d-none">
-                <i class="bx bx-image-alt fs-1 d-block mb-2" style="color:#8f7a73;"></i>
-                <div class="fw-semibold mb-1" style="color:#cbb8b0;">No graphic post uploaded yet</div>
+            <div id="moDrawerGraphicEmpty" class="text-center py-4 d-none">
+                <i class="bx bx-image-alt fs-2 d-block mb-2" style="color:#8f7a73;"></i>
+                <div class="fw-semibold mb-1" style="color:#cbb8b0; font-size:13.5px;">No graphic post uploaded yet</div>
                 @if ($canManageOfferGraphics)
-                    <div class="small mb-3" style="color:#8f7a73;">Upload the promotional flyer so chat agents and managers can view, copy, or download it in 1 click.</div>
-                    <div id="moDrawerGraphicDropzone" class="mo-graphic-dropzone mx-auto" style="max-width:420px;">
-                        <div class="d-inline-flex align-items-center gap-2 fw-semibold mb-1" style="color:#f3d9a4; font-size:13px;">
+                    <div class="mb-3" style="color:#8f7a73; font-size:12px;">Upload the promotional flyer so the team can view, copy, or download it in 1 click.</div>
+                    <div id="moDrawerGraphicDropzone" class="mo-graphic-dropzone mx-auto" style="max-width:380px;">
+                        <div class="d-inline-flex align-items-center gap-2 fw-semibold mb-1" style="color:#f3d9a4; font-size:12.5px;">
                             <i class="bx bx-upload fs-5"></i>
                             <span>+ Upload Graphic Post</span>
                         </div>
-                        <div class="small" style="color:#8f7a73; font-size:11.5px;">Drop an image here or click to browse &middot; JPG, PNG, WEBP up to 10 MB</div>
+                        <div style="color:#8f7a73; font-size:11px;">Drop an image here or click to browse &middot; JPG, PNG, WEBP up to 10 MB</div>
                     </div>
                 @else
-                    <div class="small" style="color:#8f7a73;">Pending creative upload</div>
+                    <div style="color:#8f7a73; font-size:12px;">Pending creative upload</div>
                 @endif
             </div>
         </div>
@@ -2536,66 +2627,49 @@
             if (!offer || !drawerEl) return;
             activeDrawerOffer = offer;
 
-            const toneColors = {
-                emerald: 'background:rgba(52,211,153,0.14); border:1px solid rgba(52,211,153,0.34); color:#6ee7b7;',
-                amber: 'background:rgba(245,158,11,0.14); border:1px solid rgba(245,158,11,0.34); color:#fbbf24;',
-                muted: 'background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#b8a29a;',
-            };
-            const typeColors = {
-                combo: 'background:rgba(212,163,115,0.14); border:1px solid rgba(212,163,115,0.34); color:#f3d9a4;',
-                service_freebie: 'background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.30); color:#6ee7b7;',
-                standalone: 'background:rgba(217,143,131,0.15); border:1px solid rgba(217,143,131,0.34); color:#e79a91;',
-            };
-
-            const badgesEl = document.getElementById('moDrawerBadges');
-            if (badgesEl) {
-                badgesEl.innerHTML = `
-                    <span class="mo-badge" style="${typeColors[offer.offer_type] || typeColors.standalone}">${escapeHtml(offer.type_label)}</span>
-                    <span class="mo-badge" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#d6c3bc;"><i class="bx bx-map-pin"></i> ${escapeHtml(offer.branch_label)}</span>
-                    <span class="mo-badge mo-num" style="${toneColors[offer.status?.tone] || toneColors.muted}">${escapeHtml(offer.status?.label || '')}</span>
-                `;
-            }
-
             document.getElementById('moDrawerTitle').textContent = offer.title || 'Offer Playbook';
-            const drawerMetaParts = [
-                offer.status_word || '',
-                offer.category_label || '',
-                offer.branch_label || '',
-                offer.date_short_cue || (offer.valid_range_label ? `Valid ${offer.valid_range_label}` : ''),
-            ].filter(Boolean);
-            document.getElementById('moDrawerMeta').textContent = drawerMetaParts.join(' · ');
             document.getElementById('moDrawerPrice').textContent = `${Number(offer.effective_price_qar || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} QAR`;
 
-            // Update Playbook Drawer tab readiness indicators
+            const metaEl = document.getElementById('moDrawerMeta');
+            if (metaEl) {
+                const statusTone = ['emerald', 'amber', 'muted'].includes(offer.status?.tone) ? offer.status.tone : 'muted';
+                const statusWord = offer.status_word || 'Active';
+                const trailingParts = [
+                    offer.category_label || '',
+                    offer.branch_label || '',
+                    offer.date_short_cue || (offer.valid_range_label ? `Valid ${offer.valid_range_label}` : ''),
+                    offer.type_label || '',
+                ].filter(Boolean);
+
+                metaEl.innerHTML = `<span class="d-inline-flex align-items-center gap-1"><span class="mo-status-dot is-${statusTone}"></span><span>${escapeHtml(statusWord)}</span></span>`
+                    + trailingParts.map(part => `<span aria-hidden="true">&middot;</span><span>${escapeHtml(part)}</span>`).join('');
+            }
+
+            // Update Playbook Drawer tab readiness indicators (show dot only when present)
             const tabPillarsCount = document.getElementById('moDrawerTabPillarsCount');
             if (tabPillarsCount) {
                 tabPillarsCount.textContent = `${offer.filled_pillars_count ?? 0}/7`;
             }
             const tabWaDot = document.getElementById('moDrawerTabWaDot');
             if (tabWaDot) {
-                tabWaDot.classList.toggle('is-ready', Boolean(offer.has_whatsapp_script));
-                tabWaDot.title = offer.has_whatsapp_script ? 'Custom WhatsApp script ready' : 'Using auto-formatted pitch';
+                tabWaDot.classList.toggle('d-none', !offer.has_whatsapp_script);
             }
             const tabVideoDot = document.getElementById('moDrawerTabVideoDot');
             if (tabVideoDot) {
-                tabVideoDot.classList.toggle('is-ready', Boolean(offer.has_video_script));
-                tabVideoDot.title = offer.has_video_script ? 'Video shooting script ready' : 'No video shooting script yet';
+                tabVideoDot.classList.toggle('d-none', !offer.has_video_script);
             }
             renderDrawerGraphicState(offer);
 
-            // Tab 1: 7-Pillar Architecture
+            // Tab 1: 7 Pillars (compact scannable blocks, zero helper hints)
             const pillarsListEl = document.getElementById('moDrawerPillarsList');
             if (pillarsListEl) {
                 pillarsListEl.innerHTML = (offer.pillars || []).map(p => `
                     <div class="mo-pillar-row">
-                        <span class="mo-pillar-circle mo-num">${p.number}</span>
-                        <div class="min-w-0 flex-grow-1">
-                            <div class="fw-bold" style="color:#f8efe6; font-size:14px;">${escapeHtml(p.label)}</div>
-                            <div class="small mb-1" style="color:#8f7a73; font-size:11.5px;">${escapeHtml(p.hint)}</div>
-                            <div style="color:${p.value ? '#eadbd6' : '#705c56'}; font-size:13.5px; line-height:1.55; white-space:pre-line;">
-                                ${p.value ? escapeHtml(p.value) : 'Not added yet.'}
-                            </div>
+                        <div class="mo-pillar-head">
+                            <span class="mo-pillar-circle mo-num">${p.number}</span>
+                            <span class="mo-pillar-title">${escapeHtml(p.label)}</span>
                         </div>
+                        <div class="mo-pillar-text ${p.value ? '' : 'is-empty'}">${p.value ? escapeHtml(p.value) : 'Not added yet.'}</div>
                     </div>
                 `).join('');
             }
@@ -2608,14 +2682,14 @@
                 if (items.length > 0) {
                     incWrap.classList.remove('d-none');
                     incList.innerHTML = items.map(inc => `
-                        <div class="d-flex align-items-center justify-content-between gap-2 py-1" style="border-bottom:1px solid rgba(255,255,255,0.04); font-size:13px;">
+                        <div class="d-flex align-items-center justify-content-between gap-2 py-1" style="border-bottom:1px solid rgba(255,255,255,0.04); font-size:12.5px;">
                             <span class="d-flex align-items-center gap-2">
                                 <i class="bx ${inc.is_free ? 'bx-gift' : 'bx-check'}" style="color:${inc.is_free ? '#6ee7b7' : '#d98f83'};"></i>
                                 <span>${escapeHtml(inc.name)}</span>
                             </span>
                             ${inc.is_free
-                                ? '<span class="mo-badge" style="background:rgba(52,211,153,0.14); border:1px solid rgba(52,211,153,0.34); color:#6ee7b7;">FREE</span>'
-                                : (inc.meta ? `<span class="small mo-num" style="color:#9e8780;">${escapeHtml(inc.meta)}</span>` : '')}
+                                ? '<span class="mo-badge" style="background:rgba(52,211,153,0.14); border:1px solid rgba(52,211,153,0.34); color:#6ee7b7; font-size:10px; padding:1px 7px;">FREE</span>'
+                                : (inc.meta ? `<span class="mo-num" style="color:rgba(255,255,255,0.45); font-size:11.5px;">${escapeHtml(inc.meta)}</span>` : '')}
                         </div>
                     `).join('');
                 } else {
@@ -2728,8 +2802,7 @@
             const hasGraphic = Boolean(offer.has_graphic_post && offer.graphic_post_url);
             const tabGraphicDot = document.getElementById('moDrawerTabGraphicDot');
             if (tabGraphicDot) {
-                tabGraphicDot.classList.toggle('is-ready', hasGraphic);
-                tabGraphicDot.title = hasGraphic ? 'Graphic post uploaded' : 'No graphic post uploaded yet';
+                tabGraphicDot.classList.toggle('d-none', !hasGraphic);
             }
             const hasWrap = document.getElementById('moDrawerGraphicHasImage');
             const emptyWrap = document.getElementById('moDrawerGraphicEmpty');

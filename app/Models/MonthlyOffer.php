@@ -359,7 +359,13 @@ class MonthlyOffer extends Model
             return null;
         }
 
-        return Storage::disk('public')->url($this->graphic_post_path);
+        $url = Storage::disk('public')->url($this->graphic_post_path);
+        $path = parse_url($url, PHP_URL_PATH);
+        if (is_string($path) && str_starts_with($path, '/storage/')) {
+            return $path;
+        }
+
+        return $url;
     }
 
     public function graphicDownloadFilename(): string
