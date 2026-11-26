@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class StockController extends Controller
 {
@@ -183,35 +184,64 @@ class StockController extends Controller
 
         $qty = round((float) $validated['quantity'], 2);
         $item = StockItem::findOrFail((int) $validated['stock_item_id']);
+        $note = isset($validated['reference_note']) && trim((string) $validated['reference_note']) !== ''
+            ? trim((string) $validated['reference_note'])
+            : null;
 
-        DB::transaction(function () use ($week, $item, $branch, $qty, $validated, $actor) {
+        /** @var StockWeekEntry $updatedEntry */
+        $updatedEntry = null;
+        /** @var StockMovement $createdMovement */
+        $createdMovement = null;
+
+        DB::transaction(function () use ($week, $item, $branch, $qty, $note, $actor, &$updatedEntry, &$createdMovement) {
             $entry = StockWeekEntry::firstOrCreate(
                 ['stock_week_id' => $week->id, 'stock_item_id' => $item->id],
-                ['opening_qty' => 0, 'received_qty' => 0, 'transfer_net_qty' => 0, 'retail_sold_qty' => 0]
+                ['opening_qty' => 0, 'received_qty' => 0, 'transfer_net_qty' => 0, 'used_qty' => 0, 'closing_qty' => 0, 'retail_sold_qty' => 0]
             );
 
             $entry->received_qty = round((float) $entry->received_qty + $qty, 2);
-            $entry->used_qty = $entry->computeUsedQty();
+            $entry->syncBalanceFromUsage();
             $entry->save();
+            $updatedEntry = $entry;
 
-            StockMovement::create([
+            $createdMovement = StockMovement::create([
                 'stock_week_id' => $week->id,
                 'stock_item_id' => $item->id,
                 'branch' => $branch,
                 'type' => StockMovement::TYPE_RECEIVED,
                 'quantity' => $qty,
-                'reference_note' => isset($validated['reference_note']) && trim((string) $validated['reference_note']) !== ''
-                    ? trim((string) $validated['reference_note'])
-                    : null,
+                'reference_note' => $note,
                 'created_by' => $actor->id,
             ]);
         });
+
+        $message = "Added +" . StockWeekEntry::formatQty($qty) . " {$item->unit} to {$item->name}.";
+
+        if ($request->expectsJson() || $request->ajax()) {
+            $updatedEntry->load('item');
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'entry' => $this->serializeEntryPayload($updatedEntry, $branch),
+                'movement' => [
+                    'date_label' => $createdMovement->created_at?->timezone('Asia/Qatar')->format('j M, g:i A') ?? now('Asia/Qatar')->format('j M, g:i A'),
+                    'item_name' => $item->name,
+                    'unit' => $item->unit,
+                    'type_label' => $createdMovement->typeLabel(),
+                    'qty_label' => '+' . StockWeekEntry::formatQty($qty) . ' ' . $item->unit,
+                    'note' => $note ?? '—',
+                ],
+                'movements_count' => StockMovement::where('stock_week_id', $week->id)->count(),
+                'total_order_count' => $this->computeTotalOrderCount($actor, $bounds['start_str']),
+            ]);
+        }
 
         return redirect()->route('stock.index', [
             'tab' => 'audit',
             'branch' => $branch,
             'week' => $bounds['start_str'],
-        ])->with('success', "Logged +" . StockWeekEntry::formatQty($qty) . " {$item->unit} received for {$item->name}.");
+        ])->with('success', $message);
     }
 
     /**
@@ -268,10 +298,10 @@ class StockController extends Controller
         DB::transaction(function () use ($sourceWeek, $destWeek, $item, $fromBranch, $toBranch, $qty, $note, $actor) {
             $srcEntry = StockWeekEntry::firstOrCreate(
                 ['stock_week_id' => $sourceWeek->id, 'stock_item_id' => $item->id],
-                ['opening_qty' => 0, 'received_qty' => 0, 'transfer_net_qty' => 0, 'retail_sold_qty' => 0]
+                ['opening_qty' => 0, 'received_qty' => 0, 'transfer_net_qty' => 0, 'used_qty' => 0, 'closing_qty' => 0, 'retail_sold_qty' => 0]
             );
             $srcEntry->transfer_net_qty = round((float) $srcEntry->transfer_net_qty - $qty, 2);
-            $srcEntry->used_qty = $srcEntry->computeUsedQty();
+            $srcEntry->syncBalanceFromUsage();
             $srcEntry->save();
 
             StockMovement::create([
@@ -287,10 +317,10 @@ class StockController extends Controller
 
             $dstEntry = StockWeekEntry::firstOrCreate(
                 ['stock_week_id' => $destWeek->id, 'stock_item_id' => $item->id],
-                ['opening_qty' => 0, 'received_qty' => 0, 'transfer_net_qty' => 0, 'retail_sold_qty' => 0]
+                ['opening_qty' => 0, 'received_qty' => 0, 'transfer_net_qty' => 0, 'used_qty' => 0, 'closing_qty' => 0, 'retail_sold_qty' => 0]
             );
             $dstEntry->transfer_net_qty = round((float) $dstEntry->transfer_net_qty + $qty, 2);
-            $dstEntry->used_qty = $dstEntry->computeUsedQty();
+            $dstEntry->syncBalanceFromUsage();
             $dstEntry->save();
 
             StockMovement::create([
@@ -310,6 +340,110 @@ class StockController extends Controller
             'branch' => $fromBranch,
             'week' => $bounds['start_str'],
         ])->with('success', 'Transferred ' . StockWeekEntry::formatQty($qty) . " {$item->unit} of {$item->name} from " . StockWeek::branchLabel($fromBranch) . ' to ' . StockWeek::branchLabel($toBranch) . '.');
+    }
+
+    /**
+     * Live per-row auto-save for Opening (Week 1), Used, or Remaining on an open Sat–Fri week.
+     * Enforces branch isolation, lock checks (403), and bi-directional balance validation (422).
+     */
+    public function updateEntry(Request $request, StockWeek $stockWeek, StockWeekEntry $stockWeekEntry)
+    {
+        /** @var User $actor */
+        $actor = $request->user();
+        $this->authorizeWeekCountMutation($actor, $stockWeek);
+
+        abort_unless(
+            (int) $stockWeekEntry->stock_week_id === (int) $stockWeek->id,
+            404,
+            'Stock entry does not belong to this week.'
+        );
+
+        $validated = $request->validate([
+            'changed_field' => ['required', Rule::in(['opening', 'used', 'remaining'])],
+            'opening_qty' => ['nullable', 'numeric', 'min:0', 'max:999999'],
+            'used_qty' => ['nullable', 'numeric', 'min:0', 'max:999999'],
+            'closing_qty' => ['nullable', 'numeric', 'min:0', 'max:999999'],
+        ]);
+
+        $field = $validated['changed_field'];
+
+        $hasPriorApproved = StockWeek::query()
+            ->where('branch', $stockWeek->branch)
+            ->where('status', StockWeek::STATUS_APPROVED)
+            ->whereDate('week_start_date', '<', $stockWeek->week_start_date->toDateString())
+            ->exists();
+        $allowOpeningEdit = !$hasPriorApproved || $actor->isAdmin();
+
+        if ($field === 'opening' && !$allowOpeningEdit) {
+            abort(403, 'Opening balance is auto-carried forward from the previous approved week.');
+        }
+
+        DB::transaction(function () use ($field, $validated, $stockWeek, $stockWeekEntry, $actor) {
+            if ($field === 'opening') {
+                $newOpening = round((float) ($validated['opening_qty'] ?? 0), 2);
+                $oldOpening = round((float) $stockWeekEntry->opening_qty, 2);
+                $newTotal = round($newOpening + (float) $stockWeekEntry->received_qty + (float) $stockWeekEntry->transfer_net_qty, 2);
+                $currentUsed = round(max(0.0, (float) ($stockWeekEntry->used_qty ?? 0)), 2);
+
+                if ($newTotal + 0.005 < $currentUsed) {
+                    throw ValidationException::withMessages([
+                        'opening_qty' => ['Cannot be lower than Used balance'],
+                    ]);
+                }
+
+                $stockWeekEntry->opening_qty = $newOpening;
+                $stockWeekEntry->used_qty = $currentUsed;
+                $stockWeekEntry->closing_qty = round(max(0.0, $newTotal - $currentUsed), 2);
+                $stockWeekEntry->save();
+
+                if (abs($newOpening - $oldOpening) >= 0.01) {
+                    StockMovement::create([
+                        'stock_week_id' => $stockWeek->id,
+                        'stock_item_id' => $stockWeekEntry->stock_item_id,
+                        'branch' => $stockWeek->branch,
+                        'type' => StockMovement::TYPE_OPENING_ADJUSTMENT,
+                        'quantity' => round($newOpening - $oldOpening, 2),
+                        'reference_note' => 'Opening balance set',
+                        'created_by' => $actor->id,
+                    ]);
+                }
+            } elseif ($field === 'used') {
+                $total = $stockWeekEntry->totalAvailableQty();
+                $newUsed = round((float) ($validated['used_qty'] ?? 0), 2);
+
+                if ($newUsed > $total + 0.005) {
+                    throw ValidationException::withMessages([
+                        'used_qty' => ['Cannot exceed Total balance'],
+                    ]);
+                }
+
+                $stockWeekEntry->used_qty = $newUsed;
+                $stockWeekEntry->closing_qty = round(max(0.0, $total - $newUsed), 2);
+                $stockWeekEntry->save();
+            } else {
+                // 'remaining'
+                $total = $stockWeekEntry->totalAvailableQty();
+                $newClosing = round((float) ($validated['closing_qty'] ?? 0), 2);
+
+                if ($newClosing > $total + 0.005) {
+                    throw ValidationException::withMessages([
+                        'closing_qty' => ['Cannot exceed Total balance'],
+                    ]);
+                }
+
+                $stockWeekEntry->closing_qty = $newClosing;
+                $stockWeekEntry->used_qty = round(max(0.0, $total - $newClosing), 2);
+                $stockWeekEntry->save();
+            }
+        });
+
+        $freshEntry = $stockWeekEntry->fresh('item');
+
+        return response()->json([
+            'success' => true,
+            'entry' => $this->serializeEntryPayload($freshEntry, $stockWeek->branch),
+            'total_order_count' => $this->computeTotalOrderCount($actor, $stockWeek->week_start_date->toDateString()),
+        ]);
     }
 
     /**
@@ -347,6 +481,8 @@ class StockController extends Controller
             $this->persistEntriesFromRequest($request, $stockWeek, $actor);
         }
 
+        $this->finalizeUntouchedEntries($stockWeek);
+
         $stockWeek->update([
             'status' => StockWeek::STATUS_SUBMITTED,
             'submitted_by' => $actor->id,
@@ -380,6 +516,8 @@ class StockController extends Controller
         $adminNote = $request->filled('admin_note') ? trim((string) $request->input('admin_note')) : $stockWeek->admin_note;
 
         DB::transaction(function () use ($stockWeek, $actor, $adminNote) {
+            $this->finalizeUntouchedEntries($stockWeek);
+
             $stockWeek->update([
                 'status' => StockWeek::STATUS_APPROVED,
                 'approved_by' => $actor->id,
@@ -418,13 +556,15 @@ class StockController extends Controller
                         'opening_qty' => $carryOpening,
                         'received_qty' => 0,
                         'transfer_net_qty' => 0,
+                        'used_qty' => 0,
+                        'closing_qty' => $carryOpening,
                         'retail_sold_qty' => 0,
                     ]
                 );
 
                 if (!$nextWeek->isApproved()) {
                     $nextEntry->opening_qty = $carryOpening;
-                    $nextEntry->used_qty = $nextEntry->computeUsedQty();
+                    $nextEntry->syncBalanceFromUsage();
                     $nextEntry->save();
                 }
             }
@@ -625,6 +765,7 @@ class StockController extends Controller
         $validated = $request->validate([
             'entries' => ['required', 'array'],
             'entries.*.opening_qty' => ['nullable', 'numeric', 'min:0', 'max:999999'],
+            'entries.*.used_qty' => ['nullable', 'numeric', 'min:0', 'max:999999'],
             'entries.*.closing_qty' => ['nullable', 'numeric', 'min:0', 'max:999999'],
             'entries.*.notes' => ['nullable', 'string', 'max:255'],
         ]);
@@ -663,10 +804,16 @@ class StockController extends Controller
                     }
                 }
 
-                if (array_key_exists('closing_qty', $row)) {
-                    $entry->closing_qty = ($row['closing_qty'] !== null && $row['closing_qty'] !== '')
-                        ? round((float) $row['closing_qty'], 2)
-                        : null;
+                if (array_key_exists('closing_qty', $row) && $row['closing_qty'] !== null && $row['closing_qty'] !== '') {
+                    $entry->closing_qty = round((float) $row['closing_qty'], 2);
+                    $entry->used_qty = $entry->computeUsedQty();
+                } elseif (array_key_exists('used_qty', $row) && $row['used_qty'] !== null && $row['used_qty'] !== '') {
+                    $entry->used_qty = round((float) $row['used_qty'], 2);
+                    $entry->closing_qty = round(max(0.0, $entry->totalAvailableQty() - (float) $entry->used_qty), 2);
+                } elseif (array_key_exists('closing_qty', $row) && ($row['closing_qty'] === null || $row['closing_qty'] === '')) {
+                    $entry->syncBalanceFromUsage();
+                } else {
+                    $entry->syncBalanceFromUsage();
                 }
 
                 if (array_key_exists('notes', $row)) {
@@ -674,7 +821,6 @@ class StockController extends Controller
                     $entry->notes = $trimmedNote !== '' ? $trimmedNote : null;
                 }
 
-                $entry->used_qty = $entry->computeUsedQty();
                 $entry->save();
             }
         });
@@ -732,8 +878,8 @@ class StockController extends Controller
                     'opening_qty' => $opening,
                     'received_qty' => 0,
                     'transfer_net_qty' => 0,
-                    'closing_qty' => null,
-                    'used_qty' => null,
+                    'closing_qty' => $opening,
+                    'used_qty' => 0,
                     'retail_sold_qty' => $soldQty,
                 ]);
             } elseif (!$week->isApproved() && abs((float) $entry->retail_sold_qty - $soldQty) >= 0.01) {
@@ -789,5 +935,74 @@ class StockController extends Controller
         }
 
         return implode("\n", $lines);
+    }
+
+    private function finalizeUntouchedEntries(StockWeek $stockWeek): void
+    {
+        $untouched = $stockWeek->entries()->whereNull('closing_qty')->get();
+        foreach ($untouched as $entry) {
+            $entry->syncBalanceFromUsage();
+            $entry->save();
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeEntryPayload(StockWeekEntry $entry, string $branch): array
+    {
+        $item = $entry->item;
+        $par = $item ? $item->parForBranch($branch) : 0.0;
+        $received = round((float) $entry->received_qty, 2);
+        $transfer = round((float) $entry->transfer_net_qty, 2);
+        $added = $entry->netAddedQty();
+        $total = $entry->totalAvailableQty();
+        $used = $entry->effectiveUsedQty();
+        $remaining = $entry->currentEffectiveQty();
+        $need = $entry->needToOrderQty($par);
+
+        return [
+            'id' => $entry->id,
+            'stock_item_id' => $entry->stock_item_id,
+            'opening_qty' => round((float) $entry->opening_qty, 2),
+            'received_qty' => $received,
+            'transfer_net_qty' => $transfer,
+            'added_qty' => $added,
+            'total_qty' => $total,
+            'used_qty' => $used,
+            'closing_qty' => $remaining,
+            'retail_sold_qty' => round((float) $entry->retail_sold_qty, 2),
+            'par_level' => $par,
+            'need_to_order_qty' => $need,
+            'is_retail' => $item?->item_type === StockItem::TYPE_RETAIL,
+            'has_retail_shrinkage' => $entry->hasRetailShrinkage(),
+        ];
+    }
+
+    private function computeTotalOrderCount(User $actor, string $weekStartStr): int
+    {
+        $scopedBranch = $actor->isSalonManager() ? $actor->managedCanonicalBranch() : null;
+        $branches = $scopedBranch ? [$scopedBranch] : array_keys(StockWeek::BRANCHES);
+        $count = 0;
+
+        foreach ($branches as $b) {
+            $w = StockWeek::with('entries.item')
+                ->where('branch', $b)
+                ->whereDate('week_start_date', $weekStartStr)
+                ->first();
+            if (!$w) {
+                continue;
+            }
+            foreach ($w->entries as $entry) {
+                if (!$entry->item || !$entry->item->is_active) {
+                    continue;
+                }
+                if ($entry->needToOrderQty($entry->item->parForBranch($b)) > 0) {
+                    $count++;
+                }
+            }
+        }
+
+        return $count;
     }
 }

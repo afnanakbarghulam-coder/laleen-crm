@@ -392,6 +392,9 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
         Route::middleware('module:stock,edit')->group(function () {
             Route::post('/movements', [StockController::class, 'storeMovement'])->name('movements.store');
             Route::post('/transfer', [StockController::class, 'transfer'])->name('transfer');
+            Route::patch('/weeks/{stockWeek}/entries/{stockWeekEntry}', [StockController::class, 'updateEntry'])
+                ->whereNumber(['stockWeek', 'stockWeekEntry'])
+                ->name('weeks.entries.update');
             Route::post('/weeks/{stockWeek}/save-counts', [StockController::class, 'saveCounts'])
                 ->whereNumber('stockWeek')
                 ->name('weeks.save-counts');

@@ -554,6 +554,282 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
         $this->actingAs($legalUser)->get(route('stock.index'))->assertForbidden();
     }
 
+    public function test_stock_minimal_ui_empty_state_six_columns_and_context_aware_actions_for_admin_and_manager(): void
+    {
+        $bounds = StockWeek::weekBoundsFor('2026-11-25');
+
+        // 1. 0-item empty state: clean empty state, + Add First Item, no footer action bar, collapsed movements disclosure
+        $emptyAdminResp = $this->actingAs($this->admin)
+            ->get(route('stock.index', ['branch' => 'old_airport', 'week' => $bounds['start_str']]))
+            ->assertOk();
+
+        $emptyAdminResp->assertSee('Weekly Saturday&ndash;Friday stock counts per branch.', false);
+        $emptyAdminResp->assertSeeInOrder(['Weekly Count', 'To Order', 'Items']);
+        $emptyAdminResp->assertSee('No stock items added yet');
+        $emptyAdminResp->assertSee('Add First Item');
+        $emptyAdminResp->assertSee('Deliveries &amp; Transfers This Week (<span id="stkMovementsCount">0</span>)', false);
+        $emptyAdminResp->assertDontSee('Save Draft');
+        $emptyAdminResp->assertDontSee('Request Revision');
+        $emptyAdminResp->assertDontSee('Approve &amp; Close Week', false);
+        $emptyAdminResp->assertDontSee('Formula:');
+
+        // 2. Seed 5 mixed Backbar (3) + Retail (2) items + 2 retail bottles sold in week
+        $bb1 = StockItem::create([
+            'name' => 'Majirel 7.1 Hair Color',
+            'item_type' => StockItem::TYPE_BACKBAR,
+            'category' => 'hair_color',
+            'unit' => 'Tube',
+            'par_level_old_airport' => 6,
+            'par_level_al_wakrah' => 4,
+            'is_active' => true,
+        ]);
+        $bb2 = StockItem::create([
+            'name' => 'Hair Botox Treatment',
+            'item_type' => StockItem::TYPE_BACKBAR,
+            'category' => 'treatments',
+            'unit' => 'Bottle',
+            'par_level_old_airport' => 4,
+            'par_level_al_wakrah' => 3,
+            'is_active' => true,
+        ]);
+        $bb3 = StockItem::create([
+            'name' => 'Azulene Wax Tin',
+            'item_type' => StockItem::TYPE_BACKBAR,
+            'category' => 'waxing',
+            'unit' => 'Tin',
+            'par_level_old_airport' => 5,
+            'par_level_al_wakrah' => 5,
+            'is_active' => true,
+        ]);
+
+        $retProd1 = Product::create([
+            'name' => 'Argan Shine Serum',
+            'sku' => 'ARG-01',
+            'price' => 140,
+            'stock_quantity' => 10,
+            'low_stock_threshold' => 5,
+        ]);
+        $retProd2 = Product::create([
+            'name' => 'Silk Repair Shampoo',
+            'sku' => 'SLK-02',
+            'price' => 120,
+            'stock_quantity' => 8,
+            'low_stock_threshold' => 4,
+        ]);
+        $ret1 = StockItem::where('product_id', $retProd1->id)->firstOrFail();
+        $ret2 = StockItem::where('product_id', $retProd2->id)->firstOrFail();
+
+        $saleTime = Carbon::parse('2026-11-24 14:00:00', 'Asia/Qatar');
+        $this->createSaleWithPayments('old_airport', $saleTime, ['card' => 280], [
+            [
+                'product_id' => $retProd1->id,
+                'name' => $retProd1->name,
+                'quantity' => 2,
+                'unit_price' => 140,
+            ],
+        ]);
+
+        // Load week to seed all 5 entries, then save decimal count (3.5) and Retail shrinkage mismatch (Used 3 vs 2 sold)
+        $this->actingAs($this->oldAirportManager)
+            ->get(route('stock.index', ['branch' => 'old_airport', 'week' => $bounds['start_str']]))
+            ->assertOk();
+
+        $oaWeek = StockWeek::where('branch', 'old_airport')->whereDate('week_start_date', $bounds['start_str'])->firstOrFail();
+
+        $this->actingAs($this->oldAirportManager)->post(route('stock.weeks.save-counts', $oaWeek), [
+            'entries' => [
+                $bb1->id => ['opening_qty' => 8, 'closing_qty' => 3.5],
+                $bb2->id => ['opening_qty' => 5, 'closing_qty' => 4],
+                $bb3->id => ['opening_qty' => 6, 'closing_qty' => 5],
+                $ret1->id => ['opening_qty' => 6, 'closing_qty' => 3],
+                $ret2->id => ['opening_qty' => 5, 'closing_qty' => 4],
+            ],
+        ])->assertRedirect();
+
+        // 3. Open state: Salon Manager sees 6 live balance columns, decimal 3.5, retail "2 sold" mismatch, Order +2.5, single Submit button (no Save Draft / Request Revision / Approve)
+        $mgrOpenResp = $this->actingAs($this->oldAirportManager)
+            ->get(route('stock.index', ['branch' => 'old_airport', 'week' => $bounds['start_str']]))
+            ->assertOk();
+
+        $mgrOpenResp->assertSeeInOrder(['Item', 'Opening', 'Added', 'Total', 'Used', 'Remaining']);
+        $mgrOpenResp->assertDontSee('Next Sat');
+        $mgrOpenResp->assertDontSee('Formula:');
+        $mgrOpenResp->assertDontSee('Save Draft');
+        $mgrOpenResp->assertSee('3.5');
+        $mgrOpenResp->assertSee('Order +2.5');
+        $mgrOpenResp->assertSee('2 sold');
+        $mgrOpenResp->assertSee('Submit Friday Count for Approval');
+        $mgrOpenResp->assertDontSee('Request Revision');
+        $mgrOpenResp->assertDontSee('Approve &amp; Carry Forward to Next Week', false);
+
+        // 4. Open state: Admin sees Approve & Carry Forward to Next Week (NO Save Draft or Request Revision while Open)
+        $adminOpenResp = $this->actingAs($this->admin)
+            ->get(route('stock.index', ['branch' => 'old_airport', 'week' => $bounds['start_str']]))
+            ->assertOk();
+
+        $adminOpenResp->assertDontSee('Save Draft');
+        $adminOpenResp->assertSee('Approve &amp; Carry Forward to Next Week', false);
+        $adminOpenResp->assertDontSee('Request Revision');
+
+        // 5. Submitted state: Manager sees calm locked notice; Admin sees Request Revision + Approve & Carry Forward
+        $this->actingAs($this->oldAirportManager)->post(route('stock.weeks.submit', $oaWeek))->assertRedirect();
+
+        $mgrSubResp = $this->actingAs($this->oldAirportManager)
+            ->get(route('stock.index', ['branch' => 'old_airport', 'week' => $bounds['start_str']]))
+            ->assertOk();
+        $mgrSubResp->assertSee('Pending Approval');
+        $mgrSubResp->assertSee('Submitted for Admin approval');
+        $mgrSubResp->assertDontSee('Submit Friday Count for Approval');
+
+        $adminSubResp = $this->actingAs($this->admin)
+            ->get(route('stock.index', ['branch' => 'old_airport', 'week' => $bounds['start_str']]))
+            ->assertOk();
+        $adminSubResp->assertSee('Request Revision');
+        $adminSubResp->assertSee('Approve &amp; Carry Forward', false);
+
+        // 6. Approved state: calm approved line, and Week 2 Opening is read-only text (no opening_qty input)
+        $this->actingAs($this->admin)->post(route('stock.weeks.approve', $oaWeek))->assertRedirect();
+
+        $approvedResp = $this->actingAs($this->oldAirportManager)
+            ->get(route('stock.index', ['branch' => 'old_airport', 'week' => $bounds['start_str']]))
+            ->assertOk();
+        $approvedResp->assertSee('Remaining balances carried forward to next Saturday');
+        $approvedResp->assertDontSee('Submit Friday Count for Approval');
+
+        $nextWeekResp = $this->actingAs($this->oldAirportManager)
+            ->get(route('stock.index', ['branch' => 'old_airport', 'week' => '2026-11-28']))
+            ->assertOk();
+        $nextWeekResp->assertDontSee('[opening_qty]', false);
+        $nextWeekResp->assertSee('3.5');
+    }
+
+    public function test_stock_live_balance_sheet_autosave_bidirectional_sync_restock_validation_and_guards(): void
+    {
+        $bounds = StockWeek::weekBoundsFor('2026-11-25');
+
+        $product = Product::create([
+            'name' => 'Argan Oil Hair Serum',
+            'sku' => 'ARG-SER-01',
+            'price' => 150,
+            'stock_quantity' => 10,
+            'low_stock_threshold' => 6,
+        ]);
+        $item = StockItem::where('product_id', $product->id)->firstOrFail();
+
+        // Seed Old Airport week
+        $this->actingAs($this->oldAirportManager)
+            ->get(route('stock.index', ['branch' => 'old_airport', 'week' => $bounds['start_str']]))
+            ->assertOk();
+
+        $oaWeek = StockWeek::where('branch', 'old_airport')->whereDate('week_start_date', $bounds['start_str'])->firstOrFail();
+        $entry = StockWeekEntry::where('stock_week_id', $oaWeek->id)->where('stock_item_id', $item->id)->firstOrFail();
+        $entryUrl = route('stock.weeks.entries.update', ['stockWeek' => $oaWeek->id, 'stockWeekEntry' => $entry->id]);
+
+        // Step 1: Set Opening = 4 -> auto-saves, Total = 4, Remaining = 4, Used = 0
+        $this->actingAs($this->oldAirportManager)
+            ->patchJson($entryUrl, [
+                'changed_field' => 'opening',
+                'opening_qty' => 4,
+            ])
+            ->assertOk()
+            ->assertJsonPath('entry.opening_qty', 4)
+            ->assertJsonPath('entry.total_qty', 4)
+            ->assertJsonPath('entry.used_qty', 0)
+            ->assertJsonPath('entry.closing_qty', 4);
+
+        // Step 2: Inline + add 2 -> Added = +2, Total = 6, Remaining = 6, Used = 0
+        $this->actingAs($this->oldAirportManager)
+            ->postJson(route('stock.movements.store'), [
+                'branch' => 'old_airport',
+                'week_start_date' => $bounds['start_str'],
+                'stock_item_id' => $item->id,
+                'quantity' => 2,
+                'reference_note' => 'Morning delivery',
+            ])
+            ->assertOk()
+            ->assertJsonPath('entry.added_qty', 2)
+            ->assertJsonPath('entry.total_qty', 6)
+            ->assertJsonPath('entry.used_qty', 0)
+            ->assertJsonPath('entry.closing_qty', 6);
+
+        // Step 3: Enter Used = 2 -> Remaining immediately becomes 4 and auto-saves
+        $this->actingAs($this->oldAirportManager)
+            ->patchJson($entryUrl, [
+                'changed_field' => 'used',
+                'used_qty' => 2,
+            ])
+            ->assertOk()
+            ->assertJsonPath('entry.total_qty', 6)
+            ->assertJsonPath('entry.used_qty', 2)
+            ->assertJsonPath('entry.closing_qty', 4);
+
+        // Step 4: Add another 3 via + -> Added = +5, Total = 9, Used stays 2, Remaining auto-updates to 7
+        $this->actingAs($this->oldAirportManager)
+            ->postJson(route('stock.movements.store'), [
+                'branch' => 'old_airport',
+                'week_start_date' => $bounds['start_str'],
+                'stock_item_id' => $item->id,
+                'quantity' => 3,
+                'reference_note' => 'Afternoon restock',
+            ])
+            ->assertOk()
+            ->assertJsonPath('entry.added_qty', 5)
+            ->assertJsonPath('entry.total_qty', 9)
+            ->assertJsonPath('entry.used_qty', 2)
+            ->assertJsonPath('entry.closing_qty', 7);
+
+        // Step 5: Enter Remaining = 5 -> Used immediately becomes 4 and auto-saves
+        $this->actingAs($this->oldAirportManager)
+            ->patchJson($entryUrl, [
+                'changed_field' => 'remaining',
+                'closing_qty' => 5,
+            ])
+            ->assertOk()
+            ->assertJsonPath('entry.total_qty', 9)
+            ->assertJsonPath('entry.used_qty', 4)
+            ->assertJsonPath('entry.closing_qty', 5);
+
+        // Validation: Used > Total (10 > 9) or Remaining > Total (10 > 9) returns 422 "Cannot exceed Total balance"
+        $this->actingAs($this->oldAirportManager)
+            ->patchJson($entryUrl, ['changed_field' => 'used', 'used_qty' => 10])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['used_qty']);
+
+        $this->actingAs($this->oldAirportManager)
+            ->patchJson($entryUrl, ['changed_field' => 'remaining', 'closing_qty' => 10])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['closing_qty']);
+
+        // Cross-branch Manager & Ops Lead receive 403 on per-row auto-save
+        $this->actingAs($this->wakrahManager)
+            ->patchJson($entryUrl, ['changed_field' => 'used', 'used_qty' => 1])
+            ->assertForbidden();
+
+        $this->actingAs($this->opsLead)
+            ->patchJson($entryUrl, ['changed_field' => 'used', 'used_qty' => 1])
+            ->assertForbidden();
+
+        // Manager submitting locks per-row auto-save for Manager (403)
+        $this->actingAs($this->oldAirportManager)->post(route('stock.weeks.submit', $oaWeek))->assertRedirect();
+        $this->actingAs($this->oldAirportManager)
+            ->patchJson($entryUrl, ['changed_field' => 'used', 'used_qty' => 1])
+            ->assertForbidden();
+
+        // Step 6: Admin Approve & Carry Forward -> Next week Opening starts at 5, Remaining = 5, Used = 0
+        $this->actingAs($this->admin)->post(route('stock.weeks.approve', $oaWeek))->assertRedirect();
+
+        // Approved week blocks per-row auto-save even for Admin (403)
+        $this->actingAs($this->admin)
+            ->patchJson($entryUrl, ['changed_field' => 'used', 'used_qty' => 1])
+            ->assertForbidden();
+
+        $nextWeek = StockWeek::where('branch', 'old_airport')->whereDate('week_start_date', '2026-11-28')->firstOrFail();
+        $nextEntry = StockWeekEntry::where('stock_week_id', $nextWeek->id)->where('stock_item_id', $item->id)->firstOrFail();
+        $this->assertEquals(5.0, $nextEntry->opening_qty);
+        $this->assertEquals(5.0, $nextEntry->closing_qty);
+        $this->assertEquals(0.0, $nextEntry->used_qty);
+    }
+
     /* =========================================================================
      * UPGRADE 3 — SERVICES MODULE: COMPANY-WIDE MONTHLY OFFERS BOARD
      * ========================================================================= */
