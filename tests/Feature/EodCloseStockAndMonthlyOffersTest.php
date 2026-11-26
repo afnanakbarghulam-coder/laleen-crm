@@ -831,8 +831,21 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
     }
 
     /* =========================================================================
-     * UPGRADE 3 — SERVICES MODULE: COMPANY-WIDE MONTHLY OFFERS BOARD
+     * UPGRADE 3 — SERVICES MODULE: COMPANY-WIDE MONTHLY OFFERS BOARD & PLAYBOOK
      * ========================================================================= */
+
+    private function sampleOfferPillars(array $overrides = []): array
+    {
+        return array_merge([
+            'dream_outcome' => 'Silky, frizz-free mirror-shine hair that stays sleek for up to 12 weeks in Qatar humidity.',
+            'problem_solved' => 'Eliminates daily flat-iron heat damage, puffiness, and 45-minute morning styling frustration.',
+            'core_value_additions' => 'Includes strand porosity diagnostic, organic formaldehyde-free infusion, and thermal sealing.',
+            'value_stack_bonuses' => 'Complimentary scalp detox massage (120 QAR value) + travel sulfate-free mask (85 QAR value).',
+            'conditional_guarantee' => 'Complimentary 7-day smoothness touch-up if you follow the sulfate-free home care guide.',
+            'transparent_pricing' => 'Short 299 QAR · Medium 349 QAR · Long 399 QAR — zero hidden chair surcharges.',
+            'capacity_scarcity' => 'Strictly limited to 25 slots per week across senior specialists.',
+        ], $overrides);
+    }
 
     public function test_monthly_offers_live_syncs_combos_and_freebies_requires_tcs_and_evaluates_qatar_dates(): void
     {
@@ -863,7 +876,7 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
 
         // 1. Blank Terms & Conditions must fail validation (422)
         $this->actingAs($this->admin)
-            ->postJson(route('offers.store'), [
+            ->postJson(route('offers.store'), array_merge([
                 'title' => 'Missing TCs Promo',
                 'offer_type' => 'standalone',
                 'promo_price_qar' => 199,
@@ -871,12 +884,12 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
                 'valid_from' => $today->copy()->subDay()->toDateString(),
                 'valid_until' => $today->copy()->addDays(10)->toDateString(),
                 'terms_and_conditions' => '   ',
-            ])
+            ], $this->sampleOfferPillars()))
             ->assertStatus(422)
             ->assertJsonValidationErrors(['terms_and_conditions']);
 
         // 2. Create Active Combo Offer, Upcoming Service+Freebie Offer, and Expired Standalone Offer
-        $this->actingAs($this->admin)->post(route('offers.store'), [
+        $this->actingAs($this->admin)->post(route('offers.store'), array_merge([
             'title' => 'Monthly Glow Combo Promo',
             'offer_type' => 'combo',
             'combo_id' => $combo->id,
@@ -886,9 +899,9 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
             'terms_and_conditions' => "Valid Sunday to Wednesday only\nAdvance booking required",
             'staff_notes' => 'Upsell hair mask add-on.',
             'is_active' => '1',
-        ])->assertRedirect(route('services.index', ['tab' => 'offers']));
+        ], $this->sampleOfferPillars()))->assertRedirect(route('services.index', ['tab' => 'offers']));
 
-        $this->actingAs($this->admin)->post(route('offers.store'), [
+        $this->actingAs($this->admin)->post(route('offers.store'), array_merge([
             'title' => 'Next Week Freebie Special',
             'offer_type' => 'service_freebie',
             'service_freebie_id' => $freebie->id,
@@ -897,19 +910,18 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
             'valid_until' => $today->copy()->addDays(15)->toDateString(),
             'terms_and_conditions' => 'Old Airport branch only',
             'is_active' => '1',
-        ])->assertRedirect(route('services.index', ['tab' => 'offers']));
+        ], $this->sampleOfferPillars()))->assertRedirect(route('services.index', ['tab' => 'offers']));
 
-        $this->actingAs($this->admin)->post(route('offers.store'), [
+        $this->actingAs($this->admin)->post(route('offers.store'), array_merge([
             'title' => 'Last Month Flash Deal',
             'offer_type' => 'standalone',
             'promo_price_qar' => 99,
-            'original_value_qar' => 160,
             'branch_scope' => 'al_wakrah',
             'valid_from' => $today->copy()->subDays(20)->toDateString(),
             'valid_until' => $today->copy()->subDays(2)->toDateString(),
             'terms_and_conditions' => 'Walk-ins welcome',
             'is_active' => '1',
-        ])->assertRedirect(route('services.index', ['tab' => 'offers']));
+        ], $this->sampleOfferPillars()))->assertRedirect(route('services.index', ['tab' => 'offers']));
 
         $activeOffer = MonthlyOffer::where('title', 'Monthly Glow Combo Promo')->with('combo.services')->firstOrFail();
         $upcomingOffer = MonthlyOffer::where('title', 'Next Week Freebie Special')->with(['freebiePackage.anchorService', 'freebiePackage.eligibleServices'])->firstOrFail();
@@ -932,7 +944,9 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
             ->assertSee('275')
             ->assertSee('Signature Blowdry')
             ->assertSee('Valid Sunday to Wednesday only')
-            ->assertSee('Copy for Client');
+            ->assertSee('Open Playbook')
+            ->assertSee('Copy WhatsApp Script')
+            ->assertSee('7/7 Pillars');
 
         // Toggle archive & delete
         $this->actingAs($this->admin)->patch(route('offers.toggle', $activeOffer))->assertRedirect();
@@ -943,21 +957,126 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
         $this->assertDatabaseMissing('monthly_offers', ['id' => $expiredOffer->id]);
     }
 
+    public function test_master_offer_playbook_requires_all_seven_pillars_persists_scripts_and_falls_back_cleanly(): void
+    {
+        $today = Carbon::now('Asia/Qatar');
+        $basePayload = array_merge([
+            'title' => 'Silk Glass Hair Master Playbook',
+            'offer_type' => 'standalone',
+            'promo_price_qar' => 349,
+            'branch_scope' => 'all',
+            'valid_from' => $today->copy()->subDay()->toDateString(),
+            'valid_until' => $today->copy()->addDays(14)->toDateString(),
+            'terms_and_conditions' => "Advance booking required\nValid Sunday to Thursday",
+            'staff_notes' => 'Confirm hair length tier before starting.',
+            'is_active' => '1',
+        ], $this->sampleOfferPillars());
+
+        $pillarKeys = array_column(MonthlyOffer::PILLAR_DEFINITIONS, 'key');
+        $this->assertCount(7, $pillarKeys);
+
+        // 1. Omitting or blanking ANY of the 7 required pillars on store must return 422 on that exact field
+        foreach ($pillarKeys as $missingKey) {
+            $invalidPayload = $basePayload;
+            $invalidPayload[$missingKey] = '   ';
+
+            $this->actingAs($this->admin)
+                ->postJson(route('offers.store'), $invalidPayload)
+                ->assertStatus(422)
+                ->assertJsonValidationErrors([$missingKey]);
+        }
+
+        // 2. Creating with all 7 pillars and NO optional scripts succeeds and falls back to structured WhatsApp pitch
+        $this->actingAs($this->admin)
+            ->post(route('offers.store'), $basePayload)
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $offer = MonthlyOffer::where('title', 'Silk Glass Hair Master Playbook')->firstOrFail();
+        $this->assertSame(7, $offer->filledPillarsCount());
+        $this->assertFalse($offer->hasWhatsappScript());
+        $this->assertFalse($offer->hasVideoScript());
+        $this->assertNull($offer->whatsapp_script);
+        $this->assertNull($offer->video_shooting_script);
+
+        $fallbackPitch = $offer->whatsappCopyText();
+        $this->assertSame($offer->autoGeneratedWhatsappPitch(), $fallbackPitch);
+        $this->assertStringContainsString('Silk Glass Hair Master Playbook', $fallbackPitch);
+        $this->assertStringContainsString('349 QAR', $fallbackPitch);
+        $this->assertStringContainsString($basePayload['dream_outcome'], $fallbackPitch);
+        $this->assertStringContainsString($basePayload['conditional_guarantee'], $fallbackPitch);
+        $this->assertStringContainsString($basePayload['capacity_scarcity'], $fallbackPitch);
+        $this->assertStringContainsString('Advance booking required', $fallbackPitch);
+
+        // 3. Updating with any blank required pillar must also return 422
+        foreach ($pillarKeys as $missingKey) {
+            $invalidUpdate = $basePayload;
+            $invalidUpdate[$missingKey] = '';
+
+            $this->actingAs($this->admin)
+                ->putJson(route('offers.update', $offer), $invalidUpdate)
+                ->assertStatus(422)
+                ->assertJsonValidationErrors([$missingKey]);
+        }
+
+        // 4. Updating with custom WhatsApp / DM Script and Video Shooting Script persists cleanly
+        $customWaScript = "Hi lovely! Our Silk Glass Hair Playbook is 349 QAR this month.\nObjection Reply: Zero hidden surcharges — length tier is confirmed up front.\nWould you like Old Airport or Al Wakrah?";
+        $customVideoScript = "HOOK (0-3s): Tired of Qatar humidity ruining your blowout?\nBODY: Show mirror-shine before/after + transparent pricing card.\nCTA: Comment SILK or tap WhatsApp to grab 1 of 25 weekly slots.";
+
+        $this->actingAs($this->admin)
+            ->put(route('offers.update', $offer), array_merge($basePayload, [
+                'whatsapp_script' => $customWaScript,
+                'video_shooting_script' => $customVideoScript,
+            ]))
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $offer->refresh();
+        $this->assertTrue($offer->hasWhatsappScript());
+        $this->assertTrue($offer->hasVideoScript());
+        $this->assertSame($customWaScript, $offer->whatsapp_script);
+        $this->assertSame($customVideoScript, $offer->video_shooting_script);
+        $this->assertSame($customWaScript, $offer->whatsappCopyText());
+
+        $payload = $offer->toPlaybookPayload($today);
+        $this->assertSame(7, $payload['filled_pillars_count']);
+        $this->assertCount(7, $payload['pillars']);
+        $this->assertTrue($payload['has_whatsapp_script']);
+        $this->assertTrue($payload['has_video_script']);
+        $this->assertSame($customWaScript, $payload['whatsapp_copy_text']);
+        $this->assertSame($customVideoScript, $payload['video_shooting_script']);
+
+        // 5. Services -> Offers renders the 3-tab modal structure, 4-tab Playbook Drawer, and saved Playbook content
+        $this->actingAs($this->admin)
+            ->get(route('services.index', ['tab' => 'offers']))
+            ->assertOk()
+            ->assertSee('Master Offer Playbook')
+            ->assertSee('7-Pillar Architecture')
+            ->assertSee('Video Shooting Script')
+            ->assertSee('WhatsApp Scripts')
+            ->assertSee('Silk Glass Hair Master Playbook')
+            ->assertSee('7/7 Pillars')
+            ->assertSee('Comment SILK or tap WhatsApp', false)
+            ->assertSee('Zero hidden surcharges', false);
+    }
+
     public function test_monthly_offers_accessible_to_all_operational_roles_and_blocked_for_legal_team(): void
     {
         $today = Carbon::now('Asia/Qatar');
-        $offer = MonthlyOffer::create([
+        $waScript = 'DM Closer Script: Reply GLOW to lock your 299 QAR slot at Old Airport or Al Wakrah.';
+        $videoScript = 'Reel Shot 1: Close-up silk finish under ring light. Shot 2: Reveal 7-day guarantee badge.';
+
+        $offer = MonthlyOffer::create(array_merge([
             'title' => 'Laleen Signature Monthly Glow',
             'offer_type' => MonthlyOffer::TYPE_STANDALONE,
             'promo_price_qar' => 299,
-            'original_value_qar' => 420,
             'branch_scope' => 'all',
             'valid_from' => $today->copy()->subDay()->toDateString(),
             'valid_until' => $today->copy()->addDays(10)->toDateString(),
             'terms_and_conditions' => "Valid all days\nCannot be combined with other offers",
+            'whatsapp_script' => $waScript,
+            'video_shooting_script' => $videoScript,
             'is_active' => true,
             'created_by' => $this->admin->id,
-        ]);
+        ], $this->sampleOfferPillars()));
 
         // Create salon_staff linked to a Staff row for /my-profile verification
         $salonStaffUser = User::factory()->create([
@@ -996,13 +1115,18 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
             ]);
         }
 
-        // All 8 operational roles can view /monthly-offers (200) and read title + T&Cs
+        // All 8 operational roles can view /monthly-offers (200) and read full 7-Pillar Playbook + T&Cs + Scripts
         foreach ($operationalUsers as $u) {
             $this->actingAs($u)
                 ->get(route('offers.index'))
                 ->assertOk()
                 ->assertSee('Laleen Signature Monthly Glow')
-                ->assertSee('Cannot be combined with other offers');
+                ->assertSee('Cannot be combined with other offers')
+                ->assertSee('7/7 Pillars')
+                ->assertSee('Open Playbook')
+                ->assertSee('Copy WhatsApp Script')
+                ->assertSee('Reply GLOW to lock your 299 QAR slot', false)
+                ->assertSee('Reveal 7-day guarantee badge', false);
         }
 
         // Salon Staff sees Monthly Offers shortcut in /my-profile & stays isolated from /services
@@ -1014,12 +1138,12 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
 
         $this->actingAs($salonStaffUser)->get(route('services.index'))->assertForbidden();
 
-        // Non-editors cannot create, toggle, or delete offers (403)
-        foreach ([$salonStaffUser, $this->opsLead, $this->oldAirportManager] as $nonEditor) {
+        // Non-editors cannot create, update, toggle, or delete offers (403)
+        foreach ($operationalUsers as $nonEditor) {
             if ($nonEditor->canEdit('services')) {
                 continue;
             }
-            $this->actingAs($nonEditor)->post(route('offers.store'), [
+            $this->actingAs($nonEditor)->post(route('offers.store'), array_merge([
                 'title' => 'Unauthorized Promo',
                 'offer_type' => 'standalone',
                 'promo_price_qar' => 100,
@@ -1027,7 +1151,17 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
                 'valid_from' => $today->toDateString(),
                 'valid_until' => $today->copy()->addDays(5)->toDateString(),
                 'terms_and_conditions' => 'None',
-            ])->assertForbidden();
+            ], $this->sampleOfferPillars()))->assertForbidden();
+
+            $this->actingAs($nonEditor)->put(route('offers.update', $offer), array_merge([
+                'title' => 'Unauthorized Edit',
+                'offer_type' => 'standalone',
+                'promo_price_qar' => 100,
+                'branch_scope' => 'all',
+                'valid_from' => $today->toDateString(),
+                'valid_until' => $today->copy()->addDays(5)->toDateString(),
+                'terms_and_conditions' => 'None',
+            ], $this->sampleOfferPillars()))->assertForbidden();
 
             $this->actingAs($nonEditor)->patch(route('offers.toggle', $offer))->assertForbidden();
             $this->actingAs($nonEditor)->delete(route('offers.destroy', $offer))->assertForbidden();
@@ -1041,5 +1175,164 @@ class EodCloseStockAndMonthlyOffersTest extends TestCase
         ]);
         $this->actingAs($legalUser)->get('/monthly-offers')->assertForbidden();
         $this->actingAs($legalUser)->get('/offers')->assertForbidden();
+    }
+
+    public function test_monthly_offers_multi_service_picker_sync_rename_tcs_bar_and_no_original_value(): void
+    {
+        $hairCat = \App\Models\ServiceCategory::create(['name' => 'Hair Color', 'sort_order' => 1]);
+        $spaCat = \App\Models\ServiceCategory::create(['name' => 'Hair Treatments', 'sort_order' => 2]);
+
+        $svc1 = Service::create(['name' => 'Global Hair Color', 'category_id' => $hairCat->id, 'price' => 320, 'duration' => 90]);
+        $svc2 = Service::create(['name' => 'Deep Hydration Hair Spa', 'category_id' => $spaCat->id, 'price' => 180, 'duration' => 45]);
+        $svc3 = Service::create(['name' => 'Classic Blowdry Finish', 'category_id' => $hairCat->id, 'price' => 120, 'duration' => 30]);
+
+        $today = Carbon::now('Asia/Qatar');
+
+        $basePayload = array_merge([
+            'offer_type' => 'standalone',
+            'promo_price_qar' => 299,
+            'branch_scope' => 'all',
+            'valid_from' => $today->copy()->subDay()->toDateString(),
+            'valid_until' => $today->copy()->addDays(14)->toDateString(),
+            'terms_and_conditions' => "Global hair color shades: Standard single-process shades only\nPending free services must be redeemed within 14 days",
+            'is_active' => '1',
+        ], $this->sampleOfferPillars());
+
+        // 1. Validation rejects non-existent service_id (422)
+        $this->actingAs($this->admin)
+            ->postJson(route('offers.store'), array_merge($basePayload, [
+                'title' => 'Invalid Service Offer',
+                'service_ids' => [999999],
+            ]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['service_ids.0']);
+
+        // 2. Create offer with a SINGLE attached catalog service (and NO original_value_qar)
+        $this->actingAs($this->admin)
+            ->post(route('offers.store'), array_merge($basePayload, [
+                'title' => 'Single Service Color Spotlight',
+                'service_ids' => [$svc1->id],
+            ]))
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $singleOffer = MonthlyOffer::where('title', 'Single Service Color Spotlight')
+            ->with('services.category')
+            ->firstOrFail();
+
+        $this->assertDatabaseHas('monthly_offer_service', [
+            'monthly_offer_id' => $singleOffer->id,
+            'service_id' => $svc1->id,
+        ]);
+        $this->assertSame([$svc1->id], $singleOffer->services->pluck('id')->all());
+        $this->assertSame('Selected Service', $singleOffer->typeBadgeLabel());
+        $this->assertStringContainsString('Global Hair Color', $singleOffer->autoGeneratedWhatsappPitch());
+
+        // 3. Create offer with MULTIPLE attached catalog services
+        $this->actingAs($this->admin)
+            ->post(route('offers.store'), array_merge($basePayload, [
+                'title' => 'Color + Spa Luxury Duo',
+                'promo_price_qar' => 389,
+                'service_ids' => [$svc1->id, $svc2->id],
+            ]))
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $multiOffer = MonthlyOffer::where('title', 'Color + Spa Luxury Duo')
+            ->with('services.category')
+            ->firstOrFail();
+
+        $this->assertDatabaseHas('monthly_offer_service', [
+            'monthly_offer_id' => $multiOffer->id,
+            'service_id' => $svc1->id,
+        ]);
+        $this->assertDatabaseHas('monthly_offer_service', [
+            'monthly_offer_id' => $multiOffer->id,
+            'service_id' => $svc2->id,
+        ]);
+        $this->assertSame('Selected Services', $multiOffer->typeBadgeLabel());
+
+        // Confirm original_value_qar is absent from Playbook payload even if legacy column has a value
+        \Illuminate\Support\Facades\DB::table('monthly_offers')
+            ->where('id', $multiOffer->id)
+            ->update(['original_value_qar' => 777]);
+        $multiOffer->refresh()->load('services.category');
+        $payload = $multiOffer->toPlaybookPayload($today);
+        $this->assertArrayNotHasKey('original_value_qar', $payload);
+        $this->assertArrayNotHasKey('effective_original_value_qar', $payload);
+        $this->assertEqualsCanonicalizing([$svc1->id, $svc2->id], $payload['service_ids']);
+        $this->assertCount(2, $payload['included_services']);
+
+        // 4. Offers Board renders attached services, searchable picker, T&Cs info bar & chips, and NO Original Value (QAR)
+        $boardRes = $this->actingAs($this->admin)
+            ->get(route('services.index', ['tab' => 'offers']))
+            ->assertOk()
+            ->assertSee('Color + Spa Luxury Duo')
+            ->assertSee('Global Hair Color')
+            ->assertSee('Deep Hydration Hair Spa')
+            ->assertSee('Selected Service(s) / Standalone Offer')
+            ->assertSee('Select Service(s) from Catalog')
+            ->assertSee('Make sure to specify (if applicable):')
+            ->assertSee('Free Services List:')
+            ->assertSee('Global Hair Color Shades:')
+            ->assertSee('Pending Free Services Timeframe:')
+            ->assertSee('+ Free Services')
+            ->assertSee('+ Color Shades')
+            ->assertSee('+ Freebie Timeframe')
+            ->assertDontSee('Original Value (QAR)')
+            ->assertDontSee('name="original_value_qar"', false)
+            ->assertDontSee('777 QAR');
+
+        // 5. Renaming a service in Services catalog updates displayed name on the Offer automatically
+        $svc2->update(['name' => 'Silk Deep Hydration Hair Spa']);
+        $multiOffer->refresh()->load('services.category');
+        $this->assertStringContainsString('Silk Deep Hydration Hair Spa', $multiOffer->autoGeneratedWhatsappPitch());
+        $this->actingAs($this->admin)
+            ->get(route('offers.index'))
+            ->assertOk()
+            ->assertSee('Silk Deep Hydration Hair Spa');
+
+        // 6. Editing offer syncs added & removed services cleanly
+        $this->actingAs($this->admin)
+            ->put(route('offers.update', $multiOffer), array_merge($basePayload, [
+                'title' => 'Color + Spa Luxury Duo',
+                'promo_price_qar' => 399,
+                'service_ids' => [$svc2->id, $svc3->id],
+            ]))
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $this->assertDatabaseMissing('monthly_offer_service', [
+            'monthly_offer_id' => $multiOffer->id,
+            'service_id' => $svc1->id,
+        ]);
+        $this->assertDatabaseHas('monthly_offer_service', [
+            'monthly_offer_id' => $multiOffer->id,
+            'service_id' => $svc2->id,
+        ]);
+        $this->assertDatabaseHas('monthly_offer_service', [
+            'monthly_offer_id' => $multiOffer->id,
+            'service_id' => $svc3->id,
+        ]);
+
+        // 7. Switching offer_type to Linked Combo clears directly attached catalog service_ids cleanly
+        $combo = Combo::create([
+            'name' => 'Color Combo',
+            'price' => 350,
+            'quantity_included' => 2,
+            'validity_days' => 14,
+            'status' => 'active',
+        ]);
+        $combo->services()->sync([$svc1->id]);
+
+        $this->actingAs($this->admin)
+            ->put(route('offers.update', $multiOffer), array_merge($basePayload, [
+                'title' => 'Color + Spa Luxury Duo',
+                'offer_type' => 'combo',
+                'combo_id' => $combo->id,
+                'service_ids' => [$svc2->id],
+            ]))
+            ->assertRedirect(route('services.index', ['tab' => 'offers']));
+
+        $this->assertDatabaseMissing('monthly_offer_service', [
+            'monthly_offer_id' => $multiOffer->id,
+        ]);
     }
 }

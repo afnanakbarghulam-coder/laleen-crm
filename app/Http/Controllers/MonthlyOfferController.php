@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Combo;
 use App\Models\MonthlyOffer;
+use App\Models\Service;
 use App\Models\ServiceFreebiePackage;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class MonthlyOfferController extends Controller
@@ -29,6 +31,8 @@ class MonthlyOfferController extends Controller
             'combo.services:id,name,price,duration',
             'freebiePackage.anchorService:id,name,price,duration',
             'freebiePackage.eligibleServices:id,name,price,duration',
+            'services:id,name,category_id,price,duration',
+            'services.category:id,name',
             'creator:id,name',
         ])
             ->orderByDesc('is_active')
@@ -41,6 +45,9 @@ class MonthlyOfferController extends Controller
         $freebiePackages = $canEditOffers
             ? ServiceFreebiePackage::with(['anchorService', 'eligibleServices'])->orderBy('name')->get()
             : collect();
+        $catalogServices = $canEditOffers
+            ? Service::with('category:id,name')->orderBy('name')->get(['id', 'name', 'category_id', 'price', 'duration'])
+            : collect();
 
         $layoutView = $user->isSalonStaff() ? 'layouts.portal' : 'layouts.app';
 
@@ -50,6 +57,7 @@ class MonthlyOfferController extends Controller
             'canEditOffers',
             'combos',
             'freebiePackages',
+            'catalogServices',
             'layoutView'
         ));
     }
@@ -58,11 +66,14 @@ class MonthlyOfferController extends Controller
     {
         abort_unless($request->user()?->canEdit('services'), 403, 'You do not have permission to create monthly offers.');
 
-        $validated = $this->validateOffer($request);
-        $validated['created_by'] = Auth::id();
-        $validated['is_active'] = $request->boolean('is_active', true);
+        [$attributes, $serviceIds] = $this->validateOffer($request);
+        $attributes['created_by'] = Auth::id();
+        $attributes['is_active'] = $request->boolean('is_active', true);
 
-        MonthlyOffer::create($validated);
+        DB::transaction(function () use ($attributes, $serviceIds) {
+            $offer = MonthlyOffer::create($attributes);
+            $offer->services()->sync($serviceIds);
+        });
 
         return redirect()->route('services.index', ['tab' => 'offers'])
             ->with('success', 'Monthly offer published successfully.');
@@ -72,10 +83,13 @@ class MonthlyOfferController extends Controller
     {
         abort_unless($request->user()?->canEdit('services'), 403, 'You do not have permission to edit monthly offers.');
 
-        $validated = $this->validateOffer($request);
-        $validated['is_active'] = $request->boolean('is_active', $monthlyOffer->is_active);
+        [$attributes, $serviceIds] = $this->validateOffer($request);
+        $attributes['is_active'] = $request->boolean('is_active', $monthlyOffer->is_active);
 
-        $monthlyOffer->update($validated);
+        DB::transaction(function () use ($monthlyOffer, $attributes, $serviceIds) {
+            $monthlyOffer->update($attributes);
+            $monthlyOffer->services()->sync($serviceIds);
+        });
 
         return redirect()->route('services.index', ['tab' => 'offers'])
             ->with('success', 'Monthly offer updated successfully.');
@@ -105,6 +119,9 @@ class MonthlyOfferController extends Controller
             ->with('success', 'Monthly offer deleted.');
     }
 
+    /**
+     * @return array{0: array<string, mixed>, 1: list<int>}
+     */
     private function validateOffer(Request $request): array
     {
         $rawScope = strtolower(trim((string) $request->input('branch_scope', 'all')));
@@ -117,24 +134,59 @@ class MonthlyOfferController extends Controller
             'offer_type' => ['required', Rule::in(array_keys(MonthlyOffer::OFFER_TYPES))],
             'combo_id' => ['nullable', 'required_if:offer_type,combo', 'integer', 'exists:combos,id'],
             'service_freebie_id' => ['nullable', 'required_if:offer_type,service_freebie', 'integer', 'exists:service_freebie_packages,id'],
+            'service_ids' => ['nullable', 'array'],
+            'service_ids.*' => ['required', 'integer', 'exists:services,id'],
             'promo_price_qar' => ['nullable', 'required_if:offer_type,standalone', 'numeric', 'min:0', 'max:999999.99'],
-            'original_value_qar' => ['nullable', 'numeric', 'min:0', 'max:999999.99'],
             'branch_scope' => ['required', Rule::in(array_keys(MonthlyOffer::BRANCH_SCOPES))],
             'valid_from' => ['required', 'date'],
             'valid_until' => ['required', 'date', 'after_or_equal:valid_from'],
             'terms_and_conditions' => ['required', 'string', 'max:5000'],
             'staff_notes' => ['nullable', 'string', 'max:2000'],
+            'dream_outcome' => ['required', 'string', 'max:5000'],
+            'problem_solved' => ['required', 'string', 'max:5000'],
+            'core_value_additions' => ['required', 'string', 'max:5000'],
+            'value_stack_bonuses' => ['required', 'string', 'max:5000'],
+            'conditional_guarantee' => ['required', 'string', 'max:5000'],
+            'transparent_pricing' => ['required', 'string', 'max:5000'],
+            'capacity_scarcity' => ['required', 'string', 'max:5000'],
+            'whatsapp_script' => ['nullable', 'string', 'max:30000'],
+            'video_shooting_script' => ['nullable', 'string', 'max:30000'],
         ]);
 
         $offerType = $validated['offer_type'];
+        $blankErrors = [];
+
         $terms = trim((string) $validated['terms_and_conditions']);
         if ($terms === '') {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'terms_and_conditions' => ['Terms & Conditions are required for every monthly offer.'],
-            ]);
+            $blankErrors['terms_and_conditions'] = ['Terms & Conditions are required for every monthly offer.'];
         }
 
-        return [
+        $cleanedPillars = [];
+        foreach (MonthlyOffer::PILLAR_DEFINITIONS as $pillar) {
+            $key = $pillar['key'];
+            $val = trim((string) ($validated[$key] ?? ''));
+            if ($val === '') {
+                $blankErrors[$key] = ["Pillar {$pillar['number']} ({$pillar['label']}) is required."];
+            }
+            $cleanedPillars[$key] = $val;
+        }
+
+        if (!empty($blankErrors)) {
+            throw \Illuminate\Validation\ValidationException::withMessages($blankErrors);
+        }
+
+        $waScript = isset($validated['whatsapp_script']) && trim((string) $validated['whatsapp_script']) !== ''
+            ? trim((string) $validated['whatsapp_script'])
+            : null;
+        $videoScript = isset($validated['video_shooting_script']) && trim((string) $validated['video_shooting_script']) !== ''
+            ? trim((string) $validated['video_shooting_script'])
+            : null;
+
+        $serviceIds = $offerType === MonthlyOffer::TYPE_STANDALONE
+            ? array_values(array_unique(array_map('intval', $validated['service_ids'] ?? [])))
+            : [];
+
+        $attributes = array_merge([
             'title' => trim((string) $validated['title']),
             'offer_type' => $offerType,
             'combo_id' => $offerType === MonthlyOffer::TYPE_COMBO ? (int) $validated['combo_id'] : null,
@@ -142,9 +194,6 @@ class MonthlyOfferController extends Controller
             'promo_price_qar' => $offerType === MonthlyOffer::TYPE_STANDALONE
                 ? round((float) $validated['promo_price_qar'], 2)
                 : (isset($validated['promo_price_qar']) && $validated['promo_price_qar'] !== '' ? round((float) $validated['promo_price_qar'], 2) : null),
-            'original_value_qar' => isset($validated['original_value_qar']) && $validated['original_value_qar'] !== ''
-                ? round((float) $validated['original_value_qar'], 2)
-                : null,
             'branch_scope' => $validated['branch_scope'],
             'valid_from' => Carbon::parse($validated['valid_from'], 'Asia/Qatar')->toDateString(),
             'valid_until' => Carbon::parse($validated['valid_until'], 'Asia/Qatar')->toDateString(),
@@ -152,6 +201,10 @@ class MonthlyOfferController extends Controller
             'staff_notes' => isset($validated['staff_notes']) && trim((string) $validated['staff_notes']) !== ''
                 ? trim((string) $validated['staff_notes'])
                 : null,
-        ];
+            'whatsapp_script' => $waScript,
+            'video_shooting_script' => $videoScript,
+        ], $cleanedPillars);
+
+        return [$attributes, $serviceIds];
     }
 }

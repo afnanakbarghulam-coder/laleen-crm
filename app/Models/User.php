@@ -501,6 +501,23 @@ class User extends Authenticatable
     }
 
     /**
+     * Whether this user may add, edit, or reorder treatment steps on catalog services
+     * via PATCH /services/{service}/steps without exposing pricing or delete controls.
+     */
+    public function canEditServiceSteps(): bool
+    {
+        if ($this->isLegalTeam() || $this->isSalonStaff()) {
+            return false;
+        }
+
+        return $this->isAdmin()
+            || $this->canEdit('services')
+            || $this->isSalesCoordinator()
+            || $this->isChatAgent()
+            || $this->isSalonManager();
+    }
+
+    /**
      * Admins and branch-assigned Salon Managers can access Blind End-of-Day Close in Finance -> Sales Ledger.
      */
     public function canAccessBlindEodClose(): bool

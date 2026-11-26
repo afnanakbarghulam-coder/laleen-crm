@@ -352,6 +352,7 @@ Route::middleware(['auth', 'active', 'portal-isolated'])->group(function () {
         Route::get('/combos', [ComboController::class, 'index'])->name('combos.index');
         Route::get('/service-freebie-packages', [ServiceFreebiePackageController::class, 'index'])->name('service-freebies.index');
     });
+    Route::patch('/services/{service}/steps', [ServiceController::class, 'updateSteps'])->name('services.steps.update');
     Route::middleware('module:services,edit')->group(function () {
         Route::post('/services/bulk-category', [ServiceController::class, 'bulkUpdateCategory'])->name('services.bulk-category');
         Route::post('/services', [ServiceController::class, 'store'])->name('services.store');

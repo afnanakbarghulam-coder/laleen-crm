@@ -10,6 +10,7 @@ class Service extends Model
         'name',
         'category_id',
         'description',
+        'steps',
         'treatment_type',
         'photo',
         'price',
@@ -17,6 +18,43 @@ class Service extends Model
         'duration',
         'rebooking_interval_days',
     ];
+
+    protected $casts = [
+        'steps' => 'array',
+    ];
+
+    /**
+     * Normalize an incoming steps list into a clean, ordered array of non-empty strings.
+     *
+     * @return list<string>
+     */
+    public static function normalizeSteps(mixed $rawSteps): array
+    {
+        if (!is_array($rawSteps)) {
+            return [];
+        }
+
+        $clean = [];
+        foreach ($rawSteps as $step) {
+            if (!is_scalar($step)) {
+                continue;
+            }
+            $trimmed = trim((string) $step);
+            if ($trimmed !== '') {
+                $clean[] = $trimmed;
+            }
+        }
+
+        return array_values($clean);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function normalizedSteps(): array
+    {
+        return self::normalizeSteps($this->steps);
+    }
 
     public function category()
     {
@@ -66,5 +104,11 @@ class Service extends Model
     public function freebieCredits()
     {
         return $this->hasMany(ClientFreebieCredit::class, 'redeemed_service_id');
+    }
+
+    public function monthlyOffers()
+    {
+        return $this->belongsToMany(MonthlyOffer::class, 'monthly_offer_service', 'service_id', 'monthly_offer_id')
+            ->withTimestamps();
     }
 }

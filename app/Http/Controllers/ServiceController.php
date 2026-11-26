@@ -53,6 +53,8 @@ class ServiceController extends Controller
             'combo.services:id,name,price,duration',
             'freebiePackage.anchorService:id,name,price,duration',
             'freebiePackage.eligibleServices:id,name,price,duration',
+            'services:id,name,category_id,price,duration',
+            'services.category:id,name',
             'creator:id,name',
         ])
             ->orderByDesc('is_active')
@@ -131,7 +133,7 @@ class ServiceController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $this->validated($request);
+        $validated = $this->validated($request, true);
         $photoPath = $this->handlePhoto($request);
 
         $service = Service::create(array_merge($validated, ['photo' => $photoPath]));
@@ -142,7 +144,7 @@ class ServiceController extends Controller
 
     public function update(Request $request, Service $service)
     {
-        $validated = $this->validated($request);
+        $validated = $this->validated($request, false);
         $oldName = trim((string) $service->name);
         $oldPhoto = $service->photo;
 
@@ -162,6 +164,43 @@ class ServiceController extends Controller
         });
 
         return back()->with('success', 'Service updated successfully.');
+    }
+
+    /**
+     * Dedicated endpoint allowing Admin, full Services editors, Sales Coordinators,
+     * Chat Agents, and Salon Managers to add, update, or reorder treatment steps
+     * without exposing price, duration, team, or catalog-delete permissions.
+     */
+    public function updateSteps(Request $request, Service $service)
+    {
+        abort_unless(
+            $request->user()?->canEditServiceSteps(),
+            403,
+            'You do not have permission to update service steps.'
+        );
+
+        $validated = $request->validate([
+            'steps' => ['nullable', 'array', 'max:50'],
+            'steps.*' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $cleanSteps = Service::normalizeSteps($validated['steps'] ?? []);
+
+        $service->update([
+            'steps' => empty($cleanSteps) ? null : $cleanSteps,
+        ]);
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Service steps updated successfully.',
+                'service_id' => $service->id,
+                'steps' => $cleanSteps,
+                'steps_count' => count($cleanSteps),
+            ]);
+        }
+
+        return back()->with('success', 'Service steps updated successfully.');
     }
 
     public function destroy(Service $service)
@@ -285,7 +324,7 @@ class ServiceController extends Controller
         }
     }
 
-    private function validated(Request $request): array
+    private function validated(Request $request, bool $isCreate = false): array
     {
         $data = $request->validate([
             'name' => 'required|string|max:255',
@@ -295,7 +334,16 @@ class ServiceController extends Controller
             'price' => 'required|numeric|min:0',
             'duration' => 'required|integer|min:1',
             'rebooking_interval_days' => 'nullable|integer|min:1|max:730',
+            'steps' => ['nullable', 'array', 'max:50'],
+            'steps.*' => ['nullable', 'string', 'max:255'],
         ]);
+
+        if ($isCreate || $request->has('steps') || $request->boolean('steps_submitted')) {
+            $cleanSteps = Service::normalizeSteps($data['steps'] ?? []);
+            $data['steps'] = empty($cleanSteps) ? null : $cleanSteps;
+        } else {
+            unset($data['steps']);
+        }
 
         $data['price_type'] = 'fixed';
 

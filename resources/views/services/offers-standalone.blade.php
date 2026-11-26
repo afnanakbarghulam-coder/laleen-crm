@@ -30,6 +30,7 @@
         'canEditOffers' => $canEditOffers,
         'combos' => $combos,
         'freebiePackages' => $freebiePackages,
+        'catalogServices' => $catalogServices ?? collect(),
         'isStandaloneOffersPage' => true,
     ])
 </div>

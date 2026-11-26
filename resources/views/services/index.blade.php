@@ -187,6 +187,41 @@
         border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     }
 
+    .svc-steps-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11.5px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        padding: 3px 10px;
+        border-radius: 999px;
+        margin-top: 6px;
+        border: 1px solid rgba(212, 163, 115, 0.34);
+        background: rgba(212, 163, 115, 0.12);
+        color: #f3d9a4;
+        cursor: pointer;
+        transition: all 0.14s ease;
+    }
+
+    .svc-steps-pill:hover {
+        background: rgba(212, 163, 115, 0.24);
+        border-color: rgba(212, 163, 115, 0.58);
+        color: #ffffff;
+    }
+
+    .svc-steps-pill.is-empty {
+        border-color: rgba(217, 143, 131, 0.28);
+        background: rgba(217, 143, 131, 0.08);
+        color: #d9a79f;
+    }
+
+    .svc-steps-pill.is-empty:hover {
+        background: rgba(217, 143, 131, 0.20);
+        border-color: rgba(217, 143, 131, 0.50);
+        color: #f8efe6;
+    }
+
     /* Sticky / Fixed Bottom-Center Dark Luxury Bulk Action Bar */
     .svc-bulk-bar {
         position: fixed;
@@ -647,7 +682,15 @@
                     @endmoduleEdit
                 </div>
 
+                @php
+                    $canEditServiceSteps = (bool) (auth()->user()?->canEditServiceSteps());
+                @endphp
                 @foreach ($groupServices as $service)
+                    @php
+                        $svcSteps = $service->normalizedSteps();
+                        $svcStepsCount = count($svcSteps);
+                        $svcStaffIds = $service->staff->pluck('id')->values();
+                    @endphp
                     <div class="svc-card" data-service-card="{{ $service->id }}">
                         @moduleEdit('services')
                             <label class="svc-check-wrap" title="Select {{ $service->name }}" onclick="event.stopPropagation();">
@@ -679,12 +722,29 @@
                             @if ($service->description)
                                 <div class="svc-desc">{{ $service->description }}</div>
                             @endif
-                            @if ($service->treatment_type)
-                                <span class="treatment-badge">{{ $service->treatment_type }}</span>
-                            @endif
-                            @if ($service->rebooking_interval_days)
-                                <span class="treatment-badge"><i class="bx bx-refresh"></i> Re-book every {{ $service->rebooking_interval_days }}d</span>
-                            @endif
+                            <div class="d-flex align-items-center flex-wrap gap-1">
+                                <button type="button"
+                                    class="svc-steps-pill js-svc-steps-pill {{ $svcStepsCount === 0 ? 'is-empty' : '' }}"
+                                    data-service-id="{{ $service->id }}"
+                                    data-service='@json($service)'
+                                    data-staff-ids='@json($svcStaffIds)'
+                                    title="{{ $svcStepsCount > 0 ? 'View or edit treatment steps' : ($canEditServiceSteps ? 'Add treatment steps' : 'View treatment steps') }}">
+                                    <i class="bx bx-list-ol"></i>
+                                    <span class="js-svc-steps-pill-label">
+                                        @if ($svcStepsCount > 0)
+                                            {{ $svcStepsCount }} {{ $svcStepsCount === 1 ? 'step' : 'steps' }}
+                                        @else
+                                            {{ $canEditServiceSteps ? '+ Steps' : '0 steps' }}
+                                        @endif
+                                    </span>
+                                </button>
+                                @if ($service->treatment_type)
+                                    <span class="treatment-badge">{{ $service->treatment_type }}</span>
+                                @endif
+                                @if ($service->rebooking_interval_days)
+                                    <span class="treatment-badge"><i class="bx bx-refresh"></i> Re-book every {{ $service->rebooking_interval_days }}d</span>
+                                @endif
+                            </div>
                         </div>
 
                         <div class="text-end">
@@ -692,8 +752,9 @@
                             @moduleEdit('services')
                                 <div class="mt-2">
                                     <button type="button" class="btn btn-sm btn-outline-warning edit-btn"
+                                        data-service-id="{{ $service->id }}"
                                         data-service='@json($service)'
-                                        data-staff-ids='@json($service->staff->pluck("id"))'
+                                        data-staff-ids='@json($svcStaffIds)'
                                         title="Edit">
                                         <i class="bi bi-pencil-square"></i>
                                     </button>
@@ -885,13 +946,15 @@
             'canEditOffers' => (bool) (auth()->user()?->canEdit('services')),
             'combos' => $combos ?? collect(),
             'freebiePackages' => $freebiePackages ?? collect(),
+            'catalogServices' => $allServices ?? collect(),
             'isStandaloneOffersPage' => false,
         ])
     </div>
     <!-- /TAB: MONTHLY OFFERS -->
 
-    @moduleEdit('services')
     @include('services.main-form')
+
+    @moduleEdit('services')
     @include('services.combo-form')
     @include('services.freebie-form')
 
@@ -929,40 +992,48 @@
         document.querySelectorAll('.edit-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 const service = JSON.parse(this.dataset.service);
-                const staffIds = JSON.parse(this.dataset.staffIds);
-                editService(service, staffIds);
+                const staffIds = JSON.parse(this.dataset.staffIds || '[]');
+                window.openServiceModal(service, staffIds, 'basic');
             });
         });
 
-        function editService(service, staffIds) {
-            const modalEl = document.getElementById('serviceModal');
-            const modal = new bootstrap.Modal(modalEl);
-
-            document.getElementById('modalTitle').innerText = 'Edit Service';
-            document.getElementById('serviceForm').action = `/services/${service.id}`;
-            document.getElementById('formMethod').value = 'PUT';
-
-            document.getElementById('serviceName').value = service.name;
-            document.getElementById('serviceCategory').value = service.category_id || '';
-            document.getElementById('serviceTreatmentType').value = service.treatment_type || '';
-            document.getElementById('serviceDescription').value = service.description || '';
-            document.getElementById('servicePrice').value = service.price;
-            document.getElementById('serviceDuration').value = service.duration;
-            document.getElementById('serviceRebookingInterval').value = service.rebooking_interval_days || '';
-
-            if (service.photo) {
-                const preview = document.getElementById('photoPreview');
-                preview.src = `/${service.photo}`;
-                preview.classList.remove('d-none');
-            }
-
-            modalEl.querySelectorAll('.team-checkbox').forEach(cb => {
-                cb.checked = staffIds.includes(Number(cb.value));
+        document.querySelectorAll('.js-svc-steps-pill').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const service = JSON.parse(this.dataset.service);
+                const staffIds = JSON.parse(this.dataset.staffIds || '[]');
+                window.openServiceModal(service, staffIds, 'steps');
             });
-            document.getElementById('teamCountBadge').textContent = staffIds.length;
+        });
 
-            modal.show();
-        }
+        window.syncServiceStepsCard = function(serviceId, savedSteps) {
+            const stepsArr = Array.isArray(savedSteps) ? savedSteps : [];
+            const count = stepsArr.length;
+            const canEditSteps = @json((bool) (auth()->user()?->canEditServiceSteps()));
+
+            document.querySelectorAll(`.js-svc-steps-pill[data-service-id="${serviceId}"]`).forEach(pill => {
+                try {
+                    const data = JSON.parse(pill.dataset.service || '{}');
+                    data.steps = stepsArr;
+                    pill.dataset.service = JSON.stringify(data);
+                } catch (e) {}
+
+                pill.classList.toggle('is-empty', count === 0);
+                const labelEl = pill.querySelector('.js-svc-steps-pill-label');
+                if (labelEl) {
+                    labelEl.textContent = count > 0
+                        ? `${count} ${count === 1 ? 'step' : 'steps'}`
+                        : (canEditSteps ? '+ Steps' : '0 steps');
+                }
+            });
+
+            document.querySelectorAll(`.edit-btn[data-service-id="${serviceId}"]`).forEach(btn => {
+                try {
+                    const data = JSON.parse(btn.dataset.service || '{}');
+                    data.steps = stepsArr;
+                    btn.dataset.service = JSON.stringify(data);
+                } catch (e) {}
+            });
+        };
 
         /* ---------------- TOP TABS (Services / Combos / Service + Freebies / Offers) ---------------- */
         document.querySelectorAll('.svc-top-tab').forEach(tabBtn => {
